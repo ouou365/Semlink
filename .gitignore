@@ -1,0 +1,11 @@
+# 本地配置（含 API Key，绝不提交）
+data.json
+
+# 本地向量索引数据
+data/
+
+# 依赖（通过 npm install 重建）
+node_modules/
+
+# 构建产物（可选：如果想让别人直接用就保留 main.js）
+# main.js

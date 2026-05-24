@@ -1,0 +1,22 @@
+{
+	"name": "smart-vault-mcp",
+	"version": "0.1.0",
+	"description": "Obsidian plugin: vectorize notes with SiliconFlow BAAI/bge-m3 and serve semantic search over MCP",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "node esbuild.config.mjs production",
+		"copy-wasm": "node copy-wasm.mjs"
+	},
+	"keywords": ["obsidian", "mcp", "embedding", "semantic-search", "bge-m3"],
+	"devDependencies": {
+		"@types/node": "^20.0.0",
+		"builtin-modules": "^3.3.0",
+		"esbuild": "^0.20.0",
+		"obsidian": "latest",
+		"typescript": "^5.4.0"
+	},
+	"dependencies": {
+		"sql.js": "^1.11.0"
+	}
+}
