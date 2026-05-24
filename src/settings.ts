@@ -217,13 +217,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			{
 				mcpServers: {
 					"smart-vault": {
-						transport: {
-							type: "http",
-							url: mcpUrl,
-							...(this.plugin.settings.mcpApiKey
-								? { headers: { Authorization: `Bearer ${this.plugin.settings.mcpApiKey}` } }
-								: {}),
-						},
+						type: "http",
+						url: mcpUrl,
+						...(this.plugin.settings.mcpApiKey
+							? { headers: { Authorization: `Bearer ${this.plugin.settings.mcpApiKey}` } }
+							: {}),
 					},
 				},
 			},

@@ -329,6 +329,28 @@ export class McpServer {
 						},
 					},
 				},
+				{
+					name: "get_section",
+					description: "获取笔记中指定标题下的章节内容。支持按标题名称匹配，返回该标题到下一个同级或更高级标题之间的所有内容。适用于大文件时只读取特定章节。",
+					inputSchema: {
+						type: "object",
+						properties: {
+							path: {
+								type: "string",
+								description: "笔记在 Vault 中的路径",
+							},
+							heading: {
+								type: "string",
+								description: "要读取的标题名称（不需要包含 # 符号）",
+							},
+							maxDepth: {
+								type: "number",
+								description: "包含的子标题最大深度，如目标标题是 ## 级(maxDepth=2)，则只包含 ## 及其内容，不包含 ### 及更深层。不传则包含所有子内容。",
+							},
+						},
+						required: ["path", "heading"],
+					},
+				},
 			],
 		};
 	}
@@ -350,6 +372,8 @@ export class McpServer {
 				return this.toolIndexStatus();
 			case "reindex":
 				return this.toolReindex(args.path, args.force);
+			case "get_section":
+				return await this.toolGetSection(args.path, args.heading, args.maxDepth);
 			default:
 				throw new Error(`Unknown tool: ${toolName}`);
 		}
@@ -532,7 +556,86 @@ export class McpServer {
 		};
 	}
 
-	// ──── Helpers ────
+	private async toolGetSection(path: string, heading: string, maxDepth?: number) {
+    try {
+        const file = this.vault.getAbstractFileByPath(path);
+        if (!file) {
+            return {
+                content: [{ type: "text", text: "File not found: " + path }],
+                isError: true,
+            };
+        }
+        const content = await this.vault.read(file);
+        const section = this.extractSection(content, heading, maxDepth);
+        if (!section) {
+            const headings = this.extractHeadings(content);
+            return {
+                content: [{ type: "text", text: "Heading not found: " + heading + "\n\nAvailable headings:\n" + headings.join("\n") }],
+                isError: true,
+            };
+        }
+        return {
+            content: [{ type: "text", text: section }],
+        };
+    } catch (e) {
+        return {
+            content: [{ type: "text", text: "Error reading section: " + e }],
+            isError: true,
+        };
+    }
+}
+
+    private extractSection(content: string, heading: string, maxDepth?: number): string | null {
+        const lines = content.split("\n");
+        const HEADING_RE = /^(#{1,6})\s+(.+)$/;
+        let targetLevel = -1;
+        let startIdx = -1;
+
+        // Find the target heading
+        for (let i = 0; i < lines.length; i++) {
+            const match = lines[i].match(HEADING_RE);
+            if (match && match[2].trim() === heading.trim()) {
+                targetLevel = match[1].length;
+                startIdx = i;
+                break;
+            }
+        }
+
+        if (startIdx === -1) return null;
+
+        // Collect lines until the next heading of same or higher level
+        const collected: string[] = [];
+        for (let i = startIdx; i < lines.length; i++) {
+            const match = lines[i].match(HEADING_RE);
+            if (i > startIdx && match) {
+                const level = match[1].length;
+                // Stop at same or higher level heading
+                if (level <= targetLevel) break;
+            }
+            // If maxDepth specified, skip headings and their content that are too deep
+            if (maxDepth !== undefined && match && match[1].length > maxDepth) {
+                continue;
+            }
+            collected.push(lines[i]);
+        }
+
+        return collected.join("\n");
+    }
+
+    private extractHeadings(content: string): string[] {
+        const lines = content.split("\n");
+        const HEADING_RE = /^(#{1,6})\s+(.+)$/;
+        const headings: string[] = [];
+        for (const line of lines) {
+            const match = line.match(HEADING_RE);
+            if (match) {
+                headings.push("#".repeat(match[1].length) + " " + match[2].trim());
+            }
+        }
+        return headings;
+    }
+
+    // ──── Helpers ────
 
 	private readBody(req: IncomingMessage): Promise<string> {
 		return new Promise((resolve, reject) => {

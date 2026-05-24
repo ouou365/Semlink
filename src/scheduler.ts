@@ -175,7 +175,12 @@ export class Scheduler {
 		this.progress.setNetworkStatus(this.client.networkStatus);
 
 		const texts = chunks.map((c) => c.content);
-		const result = await this.client.embed(texts);
+		const embedResult = await this.client.embedAll(texts);
+		// Flatten batched embeddings into a single array matching chunks order
+		const allEmbeddings: number[][] = [];
+		for (const batch of embedResult.embeddings) {
+			allEmbeddings.push(...batch);
+		}
 
 		// Insert chunk metadata first (so UPDATE in saveEmbeddings can find them)
 		const chunkIds = chunks.map((c) => c.id);
@@ -195,7 +200,7 @@ export class Scheduler {
 		}
 
 		// Save embeddings (UPDATE chunks SET vector_offset = ... WHERE id = ?)
-		this.store.saveEmbeddings(chunkIds, result.embeddings);
+		this.store.saveEmbeddings(chunkIds, allEmbeddings);
 
 		// Delete stale chunks for this note (if update)
 		if (action === "update") {
