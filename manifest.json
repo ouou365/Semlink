@@ -1,9 +1,9 @@
 {
-	"id": "smart-vault-mcp",
-	"name": "Smart Vault MCP",
+	"id": "semlink",
+	"name": "Semlink",
 	"version": "0.1.0",
 	"minAppVersion": "1.0.0",
-	"description": "Vectorize vault notes via SiliconFlow BAAI/bge-m3 and expose semantic search as an MCP server.",
-	"author": "Smart Vault",
+	"description": "Semantic search for Obsidian Vault via MCP",
+	"author": "Ouzhongyuan",
 	"isDesktopOnly": true
 }

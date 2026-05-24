@@ -1,5 +1,5 @@
 // ========================================
-// Smart Vault MCP - Markdown Chunker
+// Semlink - Markdown Chunker
 // ========================================
 
 export interface ChunkResult {

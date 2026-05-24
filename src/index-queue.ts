@@ -1,5 +1,5 @@
 // ========================================
-// Smart Vault MCP - Index Queue (Persistent)
+// Semlink - Index Queue (Persistent)
 // ========================================
 
 import type { QueueItem, QueueAction, QueueItemStatus } from "./types";

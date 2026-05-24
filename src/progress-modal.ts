@@ -1,5 +1,5 @@
 // ========================================
-// Smart Vault MCP - Progress Modal
+// Semlink - Progress Modal
 // ========================================
 
 import { App, Modal, Setting } from "obsidian";
@@ -20,7 +20,7 @@ export class ProgressModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: "Smart Vault 索引进度" });
+		contentEl.createEl("h2", { text: "Semlink 索引进度" });
 
 		this.container = contentEl.createDiv();
 		this.render(this.progress.current);

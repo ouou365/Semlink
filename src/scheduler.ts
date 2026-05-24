@@ -1,5 +1,5 @@
 // ========================================
-// Smart Vault MCP - Index Scheduler
+// Semlink - Index Scheduler
 // ========================================
 
 import { App, Vault, TFile } from "obsidian";
@@ -83,7 +83,7 @@ export class Scheduler {
 
 		this.queue.enqueueMany(items);
 		this.progress.incrementProcessed(0); // trigger UI update
-		console.log(`[SmartVault] Scan complete: ${items.length} files to index, ${this.progress.current.skippedChunks} unchanged`);
+		console.log(`[Semlink] Scan complete: ${items.length} files to index, ${this.progress.current.skippedChunks} unchanged`);
 	}
 
 	/**
@@ -245,7 +245,7 @@ export class Scheduler {
 			this.progress.incrementProcessed();
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : String(error);
-			console.error(`[SmartVault] Error processing ${notePath}:`, msg);
+			console.error(`[Semlink] Error processing ${notePath}:`, msg);
 
 			for (const item of items) {
 				if (item.id != null) this.queue.fail(item.id, msg);

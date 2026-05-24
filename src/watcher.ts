@@ -1,5 +1,5 @@
 // ========================================
-// Smart Vault MCP - Vault File Watcher
+// Semlink - Vault File Watcher
 // ========================================
 
 import { App, Vault, TFile, TAbstractFile } from "obsidian";
@@ -47,7 +47,7 @@ export class VaultWatcher {
 		// Grace period: ignore vault-loading events that fire at startup
 		setTimeout(() => {
 			this.ready = true;
-			console.log("[SmartVault] Watcher ready, listening for file changes");
+			console.log("[Semlink] Watcher ready, listening for file changes");
 		}, STARTUP_GRACE_MS);
 	}
 

@@ -1,5 +1,5 @@
 // ========================================
-// Smart Vault MCP - HTTP MCP Server
+// Semlink - HTTP MCP Server
 // ========================================
 
 import { createServer, IncomingMessage, ServerResponse, Server } from "http";
@@ -60,7 +60,7 @@ export class McpServer {
 
 			this.server.on("error", (err: any) => {
 				if (err.code === "EADDRINUSE") {
-					console.warn(`[SmartVault MCP] Port ${this.settings.mcpPort} in use, trying ${this.settings.mcpPort + 1}`);
+					console.warn(`[Semlink] Port ${this.settings.mcpPort} in use, trying ${this.settings.mcpPort + 1}`);
 					this.settings.mcpPort++;
 					this.server!.listen(this.settings.mcpPort, "127.0.0.1");
 				} else {
@@ -69,7 +69,7 @@ export class McpServer {
 			});
 
 			this.server.listen(this.settings.mcpPort, "127.0.0.1", () => {
-				console.log(`[SmartVault MCP] Server listening on http://127.0.0.1:${this.settings.mcpPort}`);
+				console.log(`[Semlink] Server listening on http://127.0.0.1:${this.settings.mcpPort}`);
 				resolve();
 			});
 		});
@@ -219,7 +219,7 @@ export class McpServer {
 				tools: { listChanged: false },
 			},
 			serverInfo: {
-				name: "smart-vault-mcp",
+				name: "semlink",
 				version: "0.1.0",
 			},
 		};

@@ -1,5 +1,5 @@
 // ========================================
-// Smart Vault MCP - Settings Tab
+// Semlink - Settings Tab
 // ========================================
 
 import { App, PluginSettingTab, Setting } from "obsidian";
@@ -19,7 +19,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		containerEl.empty();
 		containerEl.addClass("smart-vault-settings");
 
-		containerEl.createEl("h2", { text: "Smart Vault MCP 设置" });
+		containerEl.createEl("h2", { text: "Semlink 设置" });
 
 		// API Key
 		new Setting(containerEl)

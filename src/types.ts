@@ -1,5 +1,5 @@
 // ========================================
-// Smart Vault MCP - Core Type Definitions
+// Semlink - Core Type Definitions
 // ========================================
 
 /** Plugin settings persisted via Obsidian loadData/saveData */

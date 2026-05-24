@@ -1,7 +1,7 @@
 {
-	"name": "smart-vault-mcp",
+	"name": "semlink",
 	"version": "0.1.0",
-	"description": "Obsidian plugin: vectorize notes with SiliconFlow BAAI/bge-m3 and serve semantic search over MCP",
+	"description": "Semlink: Semantic search for Obsidian Vault via MCP",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",

@@ -1,5 +1,5 @@
 // ========================================
-// Smart Vault MCP - Vector Store (SQLite + Binary Vectors)
+// Semlink - Vector Store (SQLite + Binary Vectors)
 // ========================================
 
 import initSqlJs, { Database } from "sql.js";
@@ -263,7 +263,7 @@ export class VectorStore {
 		for (let i = 0; i < embeddings.length; i++) {
 			const vec = embeddings[i];
 			if (vec.length !== EMBEDDING_DIM) {
-				console.warn(`[SmartVault] Embedding dimension mismatch: ${vec.length} vs ${EMBEDDING_DIM}`);
+				console.warn(`[Semlink] Embedding dimension mismatch: ${vec.length} vs ${EMBEDDING_DIM}`);
 			}
 			for (let j = 0; j < Math.min(vec.length, EMBEDDING_DIM); j++) {
 				newVectors[i * EMBEDDING_DIM + j] = vec[j];
@@ -337,7 +337,7 @@ export class VectorStore {
 		this.allVectorOffsets = offsets;
 		this.cacheLoaded = true;
 
-		console.log(`[SmartVault] Loaded ${ids.length} vectors into cache (${(buf.length / 1024 / 1024).toFixed(1)}MB)`);
+		console.log(`[Semlink] Loaded ${ids.length} vectors into cache (${(buf.length / 1024 / 1024).toFixed(1)}MB)`);
 	}
 
 	/**

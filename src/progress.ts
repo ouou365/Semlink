@@ -1,5 +1,5 @@
 // ========================================
-// Smart Vault MCP - Progress Tracker
+// Semlink - Progress Tracker
 // ========================================
 
 import type { IndexProgress, ProgressEvent, ProgressCallback, IndexPhase, NetworkStatus } from "./types";

@@ -1,5 +1,5 @@
 // ========================================
-// Smart Vault MCP - Plugin Entry Point
+// Semlink - Plugin Entry Point
 // ========================================
 
 import { Notice, Plugin, TFile, FileSystemAdapter } from "obsidian";
@@ -38,15 +38,15 @@ export default class SmartVaultPlugin extends Plugin {
 		const vaultBasePath = adapter instanceof FileSystemAdapter
 			? adapter.getBasePath()
 			: (adapter as any).basePath as string;
-		this.pluginDir = join(vaultBasePath, this.manifest.dir || ".obsidian/plugins/smart-vault-mcp");
+		this.pluginDir = join(vaultBasePath, this.manifest.dir || ".obsidian/plugins/semlink");
 
 		const dataDir = join(this.pluginDir, "data");
 		const wasmPath = join(this.pluginDir, "sql-wasm.wasm");
 
 		if (!existsSync(wasmPath)) {
-			new Notice("Smart Vault: sql-wasm.wasm not found. Run npm run build first.", 10000);
-			console.error("[SmartVault] WASM file missing:", wasmPath);
-			console.error("[SmartVault] Plugin dir:", this.pluginDir);
+			new Notice("Semlink: sql-wasm.wasm not found. Run npm run build first.", 10000);
+			console.error("[Semlink] WASM file missing:", wasmPath);
+			console.error("[Semlink] Plugin dir:", this.pluginDir);
 		}
 
 		// Initialize components
@@ -73,7 +73,7 @@ export default class SmartVaultPlugin extends Plugin {
 		this.statusBarEl = this.addStatusBarItem();
 		this.statusBarEl.addClass("smart-vault-status-bar");
 		this.statusBarEl.createSpan({ cls: "status-dot" });
-		this.statusBarEl.createSpan({ text: "Smart Vault: 初始化中..." });
+		this.statusBarEl.createSpan({ text: "Semlink: 初始化中..." });
 		this.statusBarEl.onClickEvent(() => {
 			this.showProgressModal();
 		});
@@ -117,7 +117,7 @@ export default class SmartVaultPlugin extends Plugin {
 			name: "恢复索引",
 			callback: () => {
 				this.scheduler.resume();
-				new Notice("Smart Vault: 索引已恢复");
+				new Notice("Semlink: 索引已恢复");
 			},
 		});
 
@@ -126,7 +126,7 @@ export default class SmartVaultPlugin extends Plugin {
 			name: "暂停索引",
 			callback: () => {
 				this.scheduler.pause();
-				new Notice("Smart Vault: 索引已暂停");
+				new Notice("Semlink: 索引已暂停");
 			},
 		});
 
@@ -134,20 +134,20 @@ export default class SmartVaultPlugin extends Plugin {
 		this.registerEvent(
 			(this.app.workspace as any).on("smart-vault:pause" as any, () => {
 				this.scheduler.pause();
-				new Notice("Smart Vault: 索引已暂停");
+				new Notice("Semlink: 索引已暂停");
 			})
 		);
 		this.registerEvent(
 			(this.app.workspace as any).on("smart-vault:resume" as any, () => {
 				this.scheduler.resume();
-				new Notice("Smart Vault: 索引已恢复");
+				new Notice("Semlink: 索引已恢复");
 			})
 		);
 
 		// Update initial status bar
 		this.updateInitialStatusBar();
 
-		console.log("[SmartVault] Plugin loaded");
+		console.log("[Semlink] Plugin loaded");
 	}
 
 	onunload() {
@@ -155,7 +155,7 @@ export default class SmartVaultPlugin extends Plugin {
 		try { this.watcher?.stop(); } catch {}
 		try { this.mcpServer?.stop(); } catch {}
 		try { this.store?.close(); } catch {}
-		console.log("[SmartVault] Plugin unloaded");
+		console.log("[Semlink] Plugin unloaded");
 	}
 
 	async loadSettings() {
@@ -187,10 +187,10 @@ export default class SmartVaultPlugin extends Plugin {
 
 		try {
 			await this.mcpServer.start();
-			new Notice(`Smart Vault MCP: 服务已启动 (端口 ${this.mcpServer.port})`);
+			new Notice(`Semlink MCP: 服务已启动 (端口 ${this.mcpServer.port})`);
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
-			new Notice(`Smart Vault MCP: 启动失败 - ${msg}`);
+			new Notice(`Semlink MCP: 启动失败 - ${msg}`);
 			this.mcpServer = null;
 		}
 	}
@@ -199,7 +199,7 @@ export default class SmartVaultPlugin extends Plugin {
 		if (this.mcpServer) {
 			await this.mcpServer.stop();
 			this.mcpServer = null;
-			new Notice("Smart Vault MCP: 服务已停止");
+			new Notice("Semlink MCP: 服务已停止");
 		}
 	}
 
@@ -220,16 +220,16 @@ export default class SmartVaultPlugin extends Plugin {
 
 	startFullIndex() {
 		if (this.scheduler.isRunning) {
-			new Notice("Smart Vault: 索引正在进行中");
+			new Notice("Semlink: 索引正在进行中");
 			return;
 		}
 
 		if (!this.settings.siliconFlowApiKey) {
-			new Notice("Smart Vault: 请先配置 SiliconFlow API Key");
+			new Notice("Semlink: 请先配置 SiliconFlow API Key");
 			return;
 		}
 
-		new Notice("Smart Vault: 开始全量索引...");
+		new Notice("Semlink: 开始全量索引...");
 		this.scheduler.run();
 	}
 
@@ -253,17 +253,17 @@ export default class SmartVaultPlugin extends Plugin {
 		if (text) {
 			switch (p.phase) {
 				case "idle":
-					text.textContent = `Smart Vault: 就绪`;
+					text.textContent = `Semlink: 就绪`;
 					break;
 				case "completed":
-					text.textContent = `Smart Vault: 索引完成 ✓`;
+					text.textContent = `Semlink: 索引完成 ✓`;
 					break;
 				default: {
 					const pct = p.totalNotes > 0
 						? ((p.processedNotes / p.totalNotes) * 100).toFixed(0)
 						: "?";
 					const paused = p.isPaused ? " ⏸" : "";
-					text.textContent = `Smart Vault: ${pct}% (${p.processedNotes}/${p.totalNotes})${paused}`;
+					text.textContent = `Semlink: ${pct}% (${p.processedNotes}/${p.totalNotes})${paused}`;
 					break;
 				}
 			}
@@ -275,7 +275,7 @@ export default class SmartVaultPlugin extends Plugin {
 		if (this.statusBarEl) {
 			const text = this.statusBarEl.querySelector("span:last-child");
 			if (text) {
-				text.textContent = `Smart Vault: ${stats.indexedNotes} 笔记已索引`;
+				text.textContent = `Semlink: ${stats.indexedNotes} 笔记已索引`;
 			}
 		}
 	}

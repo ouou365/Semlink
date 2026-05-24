@@ -1,5 +1,5 @@
 // ========================================
-// Smart Vault MCP - SiliconFlow Embedding Client
+// Semlink - SiliconFlow Embedding Client
 // ========================================
 
 import { requestUrl, RequestUrlParam } from "obsidian";
@@ -116,19 +116,19 @@ export class EmbeddingClient {
 					// Rate limited → longer backoff
 					this.onFailure(true);
 					const waitMs = Math.min(60000, 5000 * Math.pow(2, this.consecutiveFailures));
-					console.warn(`[SmartVault] Rate limited (429), waiting ${waitMs}ms`);
+					console.warn(`[Semlink] Rate limited (429), waiting ${waitMs}ms`);
 					await this.sleep(waitMs);
 				} else if (status && status >= 500) {
 					// Server error → retry with backoff
 					this.onFailure(false);
 					const waitMs = 1000 * Math.pow(2, attempt);
-					console.warn(`[SmartVault] Server error ${status}, retry ${attempt + 1}/${this.maxRetries}`);
+					console.warn(`[Semlink] Server error ${status}, retry ${attempt + 1}/${this.maxRetries}`);
 					await this.sleep(waitMs);
 				} else if (!status) {
 					// Network error (DNS, timeout, etc.)
 					this.onFailure(false);
 					const waitMs = 2000 * Math.pow(2, attempt);
-					console.warn(`[SmartVault] Network error, retry ${attempt + 1}/${this.maxRetries}: ${lastError.message}`);
+					console.warn(`[Semlink] Network error, retry ${attempt + 1}/${this.maxRetries}: ${lastError.message}`);
 					await this.sleep(waitMs);
 				} else {
 					// Client error (4xx not 429) → don't retry
@@ -219,7 +219,7 @@ export class EmbeddingClient {
 			const backoffSec = Math.min(300, 10 * Math.pow(2, this.consecutiveFailures - 3));
 			this.backoffUntil = Date.now() + backoffSec * 1000;
 			console.warn(
-				`[SmartVault] Auto-paused after ${this.consecutiveFailures} failures, backoff ${backoffSec}s`
+				`[Semlink] Auto-paused after ${this.consecutiveFailures} failures, backoff ${backoffSec}s`
 			);
 		}
 	}
