@@ -3,6 +3,7 @@
 // ========================================
 
 import initSqlJs, { Database } from "sql.js";
+import wasmBase64 from "sql.js/dist/sql-wasm.wasm";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
 import type { NoteChunk, SearchResult } from "./types";
@@ -15,24 +16,22 @@ const VECTORS_FILE_LEGACY = "vectors.bin";
 export class VectorStore {
 	private db: Database | null = null;
 	private dataDir: string;
-	private wasmPath: string;
 
 	// In-memory vector cache for fast search
 	private allVectors: Float32Array | null = null;
 	private allVectorIds: string[] = [];
 	private cacheLoaded = false;
 
-	constructor(dataDir: string, wasmPath: string) {
+	constructor(dataDir: string) {
 		this.dataDir = dataDir;
-		this.wasmPath = wasmPath;
 		if (!existsSync(dataDir)) {
 			mkdirSync(dataDir, { recursive: true });
 		}
 	}
 
 	async init(): Promise<void> {
-		// Read WASM binary via Node.js fs (Electron renderer blocks file:// URLs)
-		const wasmBinary = readFileSync(this.wasmPath);
+		// Decode inline WASM base64
+		const wasmBinary = Buffer.from(wasmBase64, "base64");
 		const SQL = await initSqlJs({ wasmBinary });
 
 		const dbPath = join(this.dataDir, DB_FILE);

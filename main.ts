@@ -4,7 +4,6 @@
 
 import { Notice, Plugin, TFile, FileSystemAdapter } from "obsidian";
 import { join } from "path";
-import { existsSync } from "fs";
 import { DEFAULT_SETTINGS, type SmartVaultSettings } from "./src/types";
 import { VectorStore } from "./src/vector-store";
 import { IndexQueue } from "./src/index-queue";
@@ -45,17 +44,10 @@ export default class SmartVaultPlugin extends Plugin {
 		this.pluginDir = join(vaultBasePath, this.manifest.dir || ".obsidian/plugins/semlink");
 
 		const dataDir = join(this.pluginDir, "data");
-		const wasmPath = join(this.pluginDir, "sql-wasm.wasm");
-
-		if (!existsSync(wasmPath)) {
-			new Notice("Semlink: sql-wasm.wasm not found. Run npm run build first.", 10000);
-			console.error("[Semlink] WASM file missing:", wasmPath);
-			console.error("[Semlink] Plugin dir:", this.pluginDir);
-		}
 
 		// Initialize components
 		this.progress = new ProgressTracker();
-		this.store = new VectorStore(dataDir, wasmPath);
+		this.store = new VectorStore(dataDir);
 		await this.store.init();
 
 		this.queue = new IndexQueue((this.store as any).db);
