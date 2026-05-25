@@ -5,6 +5,7 @@
 import { App, Modal, Setting } from "obsidian";
 import type { IndexProgress } from "./types";
 import { ProgressTracker } from "./progress";
+import { t } from "./i18n";
 
 export class ProgressModal extends Modal {
 	private progress: ProgressTracker;
@@ -20,7 +21,7 @@ export class ProgressModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: "Semlink 索引进度" });
+		contentEl.createEl("h2", { text: t("progressTitle") });
 
 		this.container = contentEl.createDiv();
 		this.render(this.progress.current);
@@ -43,16 +44,16 @@ export class ProgressModal extends Modal {
 
 		// Phase indicator
 		const phaseNames: Record<string, string> = {
-			idle: "空闲",
-			scanning: "扫描文件",
-			chunking: "文本分块",
-			embedding: "嵌入向量",
-			building_index: "构建索引",
-			completed: "完成",
+			idle: t("phaseIdle"),
+			scanning: t("phaseScanning"),
+			chunking: t("phaseChunking"),
+			embedding: t("phaseEmbedding"),
+			building_index: t("phaseBuilding"),
+			completed: t("phaseCompleted"),
 		};
 
 		this.container.createEl("p", {
-			text: `当前阶段: ${phaseNames[p.phase] || p.phase}`,
+			text: `${t("phaseCurrent")}: ${phaseNames[p.phase] || p.phase}`,
 			cls: "progress-phase",
 		});
 
@@ -67,7 +68,7 @@ export class ProgressModal extends Modal {
 			text: `${p.processedNotes.toLocaleString()} / ${p.totalNotes.toLocaleString()} (${pct.toFixed(1)}%)`,
 		});
 		statsLine.createSpan({
-			text: `预计剩余: ${ProgressTracker.formatEta(p.estimatedRemainingSec)}`,
+			text: `${t("etaRemaining")}: ${ProgressTracker.formatEta(p.estimatedRemainingSec)}`,
 		});
 
 		// Detail grid
@@ -78,36 +79,36 @@ export class ProgressModal extends Modal {
 			details.createSpan({ text: value, cls: "value" });
 		};
 
-		addItem("已嵌入 chunks:", p.embeddedChunks.toLocaleString());
-		addItem("失败:", String(p.failedChunks));
-		addItem("跳过(未变更):", p.skippedChunks.toLocaleString());
-		addItem("当前文件:", p.currentFile || "-");
-		addItem("平均响应:", `${p.avgResponseMs}ms`);
+		addItem(t("embeddedChunks"), p.embeddedChunks.toLocaleString());
+		addItem(t("failedChunks"), String(p.failedChunks));
+		addItem(t("skippedChunks"), p.skippedChunks.toLocaleString());
+		addItem(t("currentFile"), p.currentFile || "-");
+		addItem(t("avgResponse"), `${p.avgResponseMs}ms`);
 
 		// Network status
 		const networkDiv = this.container.createDiv({ cls: "network-status" });
 		const statusColors: Record<string, string> = {
-			healthy: "🟢 正常",
-			degraded: "🟡 降速",
-			paused: "🔴 已暂停",
+			healthy: t("networkHealthy"),
+			degraded: t("networkDegraded"),
+			paused: t("networkPaused"),
 		};
-		networkDiv.createSpan({ text: `网络: ${statusColors[p.networkStatus] || p.networkStatus}` });
+		networkDiv.createSpan({ text: `${t("networkLabel")} ${statusColors[p.networkStatus] || p.networkStatus}` });
 
 		if (p.isPaused) {
 			networkDiv.createSpan({
-				text: p.isAutoPaused ? "(自动暂停)" : "(手动暂停)",
+				text: p.isAutoPaused ? t("autoPaused") : t("manualPaused"),
 			});
 		}
 
 		if (p.consecutiveFailures > 0) {
 			networkDiv.createSpan({
-				text: `连续失败: ${p.consecutiveFailures}`,
+				text: `${t("consecutiveFailures")} ${p.consecutiveFailures}`,
 			});
 		}
 
 		if (p.backoffRemainingSec > 0) {
 			networkDiv.createSpan({
-				text: `退避剩余: ${p.backoffRemainingSec}s`,
+				text: `${t("backoffRemaining")} ${p.backoffRemainingSec}s`,
 			});
 		}
 
@@ -116,14 +117,13 @@ export class ProgressModal extends Modal {
 
 		if (p.isPaused || p.phase === "idle") {
 			new Setting(btnGroup).addButton((btn) =>
-				btn.setButtonText("▶ 恢复索引").onClick(() => {
-					// Trigger resume through the plugin
+				btn.setButtonText(t("btnResume")).onClick(() => {
 					this.app.workspace.trigger("smart-vault:resume");
 				})
 			);
 		} else if (p.phase !== "completed" && p.phase !== "idle" as string) {
 			new Setting(btnGroup).addButton((btn) =>
-				btn.setButtonText("⏸ 暂停索引").onClick(() => {
+				btn.setButtonText(t("btnPause")).onClick(() => {
 					this.app.workspace.trigger("smart-vault:pause");
 				})
 			);

@@ -13,6 +13,7 @@ export interface EmbedResult {
 
 export class EmbeddingClient {
 	private apiKey: string;
+	private apiBase: string;
 	private model: string;
 	private batchSize: number;
 	private requestDelayMs: number;
@@ -26,6 +27,7 @@ export class EmbeddingClient {
 
 	constructor(settings: SmartVaultSettings) {
 		this.apiKey = settings.siliconFlowApiKey;
+		this.apiBase = settings.apiBase;
 		this.model = settings.embeddingModel;
 		this.batchSize = settings.batchSize;
 		this.requestDelayMs = settings.requestDelayMs;
@@ -34,6 +36,7 @@ export class EmbeddingClient {
 
 	updateSettings(settings: SmartVaultSettings) {
 		this.apiKey = settings.siliconFlowApiKey;
+		this.apiBase = settings.apiBase;
 		this.model = settings.embeddingModel;
 		this.batchSize = settings.batchSize;
 		this.requestDelayMs = settings.requestDelayMs;
@@ -174,7 +177,7 @@ export class EmbeddingClient {
 
 	private async callApi(input: string[]): Promise<EmbeddingResponse> {
 		const params: RequestUrlParam = {
-			url: "https://api.siliconflow.cn/v1/embeddings",
+			url: `${this.apiBase}/v1/embeddings`,
 			method: "POST",
 			headers: {
 				"Authorization": `Bearer ${this.apiKey}`,

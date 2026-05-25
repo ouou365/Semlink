@@ -4,7 +4,9 @@
 
 /** Plugin settings persisted via Obsidian loadData/saveData */
 export interface SmartVaultSettings {
+	language: "zh" | "en";
 	siliconFlowApiKey: string;
+	apiBase: string;
 	embeddingModel: string;
 	mcpPort: number;
 	mcpApiKey: string;
@@ -18,7 +20,9 @@ export interface SmartVaultSettings {
 }
 
 export const DEFAULT_SETTINGS: SmartVaultSettings = {
+	language: "zh",
 	siliconFlowApiKey: "",
+	apiBase: "https://api.siliconflow.cn",
 	embeddingModel: "BAAI/bge-m3",
 	mcpPort: 3001,
 	mcpApiKey: "",

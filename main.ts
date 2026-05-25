@@ -15,6 +15,7 @@ import { McpServer } from "./src/mcp-server";
 import { VaultWatcher } from "./src/watcher";
 import { SmartVaultSettingTab } from "./src/settings";
 import { ProgressModal } from "./src/progress-modal";
+import { setLang, t } from "./src/i18n";
 
 export default class SmartVaultPlugin extends Plugin {
 	settings: SmartVaultSettings = { ...DEFAULT_SETTINGS };
@@ -32,6 +33,9 @@ export default class SmartVaultPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+
+		// Initialize i18n
+		setLang(this.settings.language);
 
 		// Resolve plugin directory (manifest.dir is relative to vault root)
 		const adapter = this.app.vault.adapter;
@@ -73,7 +77,7 @@ export default class SmartVaultPlugin extends Plugin {
 		this.statusBarEl = this.addStatusBarItem();
 		this.statusBarEl.addClass("smart-vault-status-bar");
 		this.statusBarEl.createSpan({ cls: "status-dot" });
-		this.statusBarEl.createSpan({ text: "Semlink: 初始化中..." });
+		this.statusBarEl.createSpan({ text: t("statusInit") });
 		this.statusBarEl.onClickEvent(() => {
 			this.showProgressModal();
 		});
@@ -96,37 +100,37 @@ export default class SmartVaultPlugin extends Plugin {
 		// Commands
 		this.addCommand({
 			id: "smart-vault-full-index",
-			name: "全量重建索引",
+			name: t("cmdFullReindex"),
 			callback: () => this.startFullIndex(),
 		});
 
 		this.addCommand({
 			id: "smart-vault-toggle-mcp",
-			name: "启动/停止 MCP 服务",
+			name: t("cmdToggleMcp"),
 			callback: () => this.toggleMcpServer(),
 		});
 
 		this.addCommand({
 			id: "smart-vault-show-progress",
-			name: "查看索引进度",
+			name: t("cmdShowProgress"),
 			callback: () => this.showProgressModal(),
 		});
 
 		this.addCommand({
 			id: "smart-vault-resume-index",
-			name: "恢复索引",
+			name: t("cmdResumeIndex"),
 			callback: () => {
 				this.scheduler.resume();
-				new Notice("Semlink: 索引已恢复");
+				new Notice(`Semlink: ${t("noticeIndexResumed")}`);
 			},
 		});
 
 		this.addCommand({
 			id: "smart-vault-pause-index",
-			name: "暂停索引",
+			name: t("cmdPauseIndex"),
 			callback: () => {
 				this.scheduler.pause();
-				new Notice("Semlink: 索引已暂停");
+				new Notice(`Semlink: ${t("noticeIndexPaused")}`);
 			},
 		});
 
@@ -134,13 +138,13 @@ export default class SmartVaultPlugin extends Plugin {
 		this.registerEvent(
 			(this.app.workspace as any).on("smart-vault:pause" as any, () => {
 				this.scheduler.pause();
-				new Notice("Semlink: 索引已暂停");
+				new Notice(`Semlink: ${t("noticeIndexPaused")}`);
 			})
 		);
 		this.registerEvent(
 			(this.app.workspace as any).on("smart-vault:resume" as any, () => {
 				this.scheduler.resume();
-				new Notice("Semlink: 索引已恢复");
+				new Notice(`Semlink: ${t("noticeIndexResumed")}`);
 			})
 		);
 
@@ -165,6 +169,7 @@ export default class SmartVaultPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+		setLang(this.settings.language);
 		this.client?.updateSettings(this.settings);
 		this.scheduler?.updateSettings(this.settings);
 		this.mcpServer?.updateSettings(this.settings);
@@ -187,10 +192,10 @@ export default class SmartVaultPlugin extends Plugin {
 
 		try {
 			await this.mcpServer.start();
-			new Notice(`Semlink MCP: 服务已启动 (端口 ${this.mcpServer.port})`);
+			new Notice(`Semlink MCP: ${t("noticeMcpStarted")} (端口 ${this.mcpServer.port})`);
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
-			new Notice(`Semlink MCP: 启动失败 - ${msg}`);
+			new Notice(`Semlink MCP: ${t("noticeMcpFailed")} - ${msg}`);
 			this.mcpServer = null;
 		}
 	}
@@ -199,7 +204,7 @@ export default class SmartVaultPlugin extends Plugin {
 		if (this.mcpServer) {
 			await this.mcpServer.stop();
 			this.mcpServer = null;
-			new Notice("Semlink MCP: 服务已停止");
+			new Notice(`Semlink MCP: ${t("noticeMcpStopped")}`);
 		}
 	}
 
@@ -220,16 +225,16 @@ export default class SmartVaultPlugin extends Plugin {
 
 	startFullIndex() {
 		if (this.scheduler.isRunning) {
-			new Notice("Semlink: 索引正在进行中");
+			new Notice(`Semlink: ${t("noticeIndexRunning")}`);
 			return;
 		}
 
 		if (!this.settings.siliconFlowApiKey) {
-			new Notice("Semlink: 请先配置 SiliconFlow API Key");
+			new Notice(`Semlink: ${t("noticeNoApiKey")}`);
 			return;
 		}
 
-		new Notice("Semlink: 开始全量索引...");
+		new Notice(`Semlink: ${t("noticeStartIndex")}`);
 		this.scheduler.run();
 	}
 
@@ -253,10 +258,10 @@ export default class SmartVaultPlugin extends Plugin {
 		if (text) {
 			switch (p.phase) {
 				case "idle":
-					text.textContent = `Semlink: 就绪`;
+					text.textContent = t("statusReady");
 					break;
 				case "completed":
-					text.textContent = `Semlink: 索引完成 ✓`;
+					text.textContent = t("statusCompleted");
 					break;
 				default: {
 					const pct = p.totalNotes > 0
@@ -275,7 +280,7 @@ export default class SmartVaultPlugin extends Plugin {
 		if (this.statusBarEl) {
 			const text = this.statusBarEl.querySelector("span:last-child");
 			if (text) {
-				text.textContent = `Semlink: ${stats.indexedNotes} 笔记已索引`;
+				text.textContent = `Semlink: ${stats.indexedNotes} ${t("statusIndexed")}`;
 			}
 		}
 	}
