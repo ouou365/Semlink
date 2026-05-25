@@ -1,27 +1,25 @@
 // ========================================
-// Semlink - Vector Store (SQLite + Binary Vectors)
+// Semlink - Vector Store (SQLite BLOB)
 // ========================================
 
 import initSqlJs, { Database } from "sql.js";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, statSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
 import type { NoteChunk, SearchResult } from "./types";
 
 const EMBEDDING_DIM = 1024;
 const BYTES_PER_FLOAT = 4;
-const VECTORS_FILE = "vectors.bin";
 const DB_FILE = "vault.db";
+const VECTORS_FILE_LEGACY = "vectors.bin";
 
 export class VectorStore {
 	private db: Database | null = null;
 	private dataDir: string;
 	private wasmPath: string;
 
-	// In-memory vector cache: notePath -> { chunkId -> Float32Array }
-	private vectorCache: Map<string, Map<string, Float32Array>> = new Map();
+	// In-memory vector cache for fast search
 	private allVectors: Float32Array | null = null;
 	private allVectorIds: string[] = [];
-	private allVectorOffsets: number[] = [];
 	private cacheLoaded = false;
 
 	constructor(dataDir: string, wasmPath: string) {
@@ -46,6 +44,7 @@ export class VectorStore {
 		}
 
 		this.createTables();
+		await this.migrateIfNeeded();
 	}
 
 	private createTables() {
@@ -58,7 +57,7 @@ export class VectorStore {
 				content_preview TEXT DEFAULT '',
 				mtime INTEGER NOT NULL,
 				status TEXT NOT NULL DEFAULT 'pending_embed',
-				vector_offset INTEGER DEFAULT -1,
+				vector BLOB DEFAULT NULL,
 				created_at INTEGER NOT NULL
 			);
 		`);
@@ -83,10 +82,95 @@ export class VectorStore {
 			);
 		`);
 
-		// Create indexes separately (SQLite does not support inline INDEX in CREATE TABLE)
+		// Create indexes
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_note_path ON chunks (note_path)");
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_status ON chunks (status)");
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_queue_status ON queue (status, priority)");
+	}
+
+	/** Migrate from old vector_offset + vectors.bin to BLOB storage */
+	private async migrateIfNeeded(): Promise<void> {
+		// Check if old vector_offset column exists
+		const colCheck = this.db!.exec("PRAGMA table_info(chunks)");
+		if (colCheck.length === 0) return;
+
+		const columns = colCheck[0].values.map(row => row[1] as string);
+		const hasVectorOffset = columns.includes("vector_offset");
+		const hasVectorBlob = columns.includes("vector");
+
+		if (!hasVectorOffset) return; // New schema, no migration needed
+
+		console.log("[Semlink] Migrating from vectors.bin to SQLite BLOB...");
+
+		// Add vector BLOB column if not present
+		if (!hasVectorBlob) {
+			this.db!.run("ALTER TABLE chunks ADD COLUMN vector BLOB DEFAULT NULL");
+		}
+
+		// Migrate data from vectors.bin if it exists
+		const vecPath = join(this.dataDir, VECTORS_FILE_LEGACY);
+		if (existsSync(vecPath)) {
+			const buf = readFileSync(vecPath);
+			const allVecData = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / BYTES_PER_FLOAT);
+
+			// Get all chunks with valid vector_offset
+			const results = this.db!.exec(
+				"SELECT id, vector_offset FROM chunks WHERE vector_offset >= 0"
+			);
+
+			if (results.length > 0) {
+				for (const row of results[0].values) {
+					const id = row[0] as string;
+					const offset = row[1] as number;
+					const start = offset * EMBEDDING_DIM;
+					const end = start + EMBEDDING_DIM;
+					if (end <= allVecData.length) {
+						const vecBuf = Buffer.from(allVecData.buffer, start * BYTES_PER_FLOAT, EMBEDDING_DIM * BYTES_PER_FLOAT);
+						this.db!.run(
+							"UPDATE chunks SET vector = ? WHERE id = ?",
+							[vecBuf, id]
+						);
+					}
+				}
+			}
+
+			// Delete legacy vectors.bin
+			unlinkSync(vecPath);
+			console.log("[Semlink] Migration complete, vectors.bin deleted");
+		}
+
+		// Drop old column by recreating table (SQLite doesn't support DROP COLUMN reliably)
+		this.rebuildTableWithoutVectorOffset();
+		this.save();
+	}
+
+	/** Recreate chunks table without vector_offset column */
+	private rebuildTableWithoutVectorOffset(): void {
+		this.db!.run("ALTER TABLE chunks RENAME TO chunks_old");
+
+		this.db!.run(`
+			CREATE TABLE chunks (
+				id TEXT PRIMARY KEY,
+				note_path TEXT NOT NULL,
+				heading TEXT DEFAULT '',
+				content TEXT NOT NULL,
+				content_preview TEXT DEFAULT '',
+				mtime INTEGER NOT NULL,
+				status TEXT NOT NULL DEFAULT 'pending_embed',
+				vector BLOB DEFAULT NULL,
+				created_at INTEGER NOT NULL
+			);
+		`);
+
+		this.db!.run(`
+			INSERT INTO chunks (id, note_path, heading, content, content_preview, mtime, status, vector, created_at)
+			SELECT id, note_path, heading, content, content_preview, mtime, status, vector, created_at
+			FROM chunks_old
+		`);
+
+		this.db!.run("DROP TABLE chunks_old");
+		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_note_path ON chunks (note_path)");
+		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_status ON chunks (status)");
 	}
 
 	save(): void {
@@ -102,14 +186,12 @@ export class VectorStore {
 		this.db.run("DELETE FROM chunks");
 		this.db.run("DELETE FROM queue");
 		this.db.run("DELETE FROM meta");
-		this.vectorCache.clear();
 		this.allVectors = null;
 		this.allVectorIds = [];
-		this.allVectorOffsets = [];
 		this.cacheLoaded = false;
 
-		// Delete vectors binary file
-		const vecPath = join(this.dataDir, VECTORS_FILE);
+		// Delete legacy vectors.bin if it still exists
+		const vecPath = join(this.dataDir, VECTORS_FILE_LEGACY);
 		if (existsSync(vecPath)) {
 			unlinkSync(vecPath);
 		}
@@ -117,11 +199,17 @@ export class VectorStore {
 		this.save();
 	}
 
+	/** Compact database to reclaim disk space */
+	compact(): void {
+		if (!this.db) return;
+		this.db.run("VACUUM");
+		this.save();
+	}
+
 	close(): void {
 		this.save();
 		this.db?.close();
 		this.db = null;
-		this.vectorCache.clear();
 		this.allVectors = null;
 		this.cacheLoaded = false;
 	}
@@ -131,15 +219,15 @@ export class VectorStore {
 	insertChunk(chunk: NoteChunk): void {
 		const preview = chunk.contentPreview || chunk.content.slice(0, 200);
 		this.db!.run(
-			`INSERT OR REPLACE INTO chunks (id, note_path, heading, content, content_preview, mtime, status, vector_offset, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, -1, ?)`,
+			`INSERT OR REPLACE INTO chunks (id, note_path, heading, content, content_preview, mtime, status, vector, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
 			[chunk.id, chunk.notePath, chunk.heading, chunk.content, preview, chunk.mtime, chunk.status, chunk.createdAt]
 		);
 	}
 
 	getChunksByNotePath(notePath: string): NoteChunk[] {
 		const results = this.db!.exec(
-			"SELECT id, note_path, heading, content, content_preview, mtime, status, vector_offset, created_at FROM chunks WHERE note_path = ?",
+			"SELECT id, note_path, heading, content, content_preview, mtime, status, created_at FROM chunks WHERE note_path = ?",
 			[notePath]
 		);
 		return this.mapChunks(results);
@@ -147,14 +235,14 @@ export class VectorStore {
 
 	getActiveChunks(): NoteChunk[] {
 		const results = this.db!.exec(
-			"SELECT id, note_path, heading, content, content_preview, mtime, status, vector_offset, created_at FROM chunks WHERE status = 'active' AND vector_offset >= 0"
+			"SELECT id, note_path, heading, content, content_preview, mtime, status, created_at FROM chunks WHERE status = 'active' AND vector IS NOT NULL"
 		);
 		return this.mapChunks(results);
 	}
 
 	getChunkById(id: string): NoteChunk | null {
 		const results = this.db!.exec(
-			"SELECT id, note_path, heading, content, content_preview, mtime, status, vector_offset, created_at FROM chunks WHERE id = ?",
+			"SELECT id, note_path, heading, content, content_preview, mtime, status, created_at FROM chunks WHERE id = ?",
 			[id]
 		);
 		const chunks = this.mapChunks(results);
@@ -170,22 +258,11 @@ export class VectorStore {
 	}
 
 	deleteChunksByNotePath(notePath: string): number {
-		// Get vector offsets to free
-		const offsets = this.db!.exec(
-			"SELECT id, vector_offset FROM chunks WHERE note_path = ? AND vector_offset >= 0",
-			[notePath]
-		);
-
-		// Delete from DB
 		const result = this.db!.run(
 			"DELETE FROM chunks WHERE note_path = ?",
 			[notePath]
 		);
-
-		// Invalidate vector cache for this note
-		this.vectorCache.delete(notePath);
 		this.cacheLoaded = false;
-
 		return result.changes;
 	}
 
@@ -194,7 +271,6 @@ export class VectorStore {
 			"DELETE FROM chunks WHERE note_path = ? AND status = 'stale'",
 			[notePath]
 		);
-		this.vectorCache.delete(notePath);
 		this.cacheLoaded = false;
 		return result.changes;
 	}
@@ -240,109 +316,69 @@ export class VectorStore {
 		return { totalChunks, activeChunks, indexedNotes, dbSizeMb: Math.round(dbSizeMb * 10) / 10 };
 	}
 
-	// ──── Vector Storage (Binary File) ────
+	// ──── Vector Storage (SQLite BLOB) ────
 
 	/**
-	 * Save embeddings to binary file and update chunk records.
+	 * Save embeddings directly to SQLite BLOB.
 	 * Each embedding = EMBEDDING_DIM × Float32 = 4096 bytes.
 	 */
 	saveEmbeddings(chunkIds: string[], embeddings: number[][]): void {
-		const vecPath = join(this.dataDir, VECTORS_FILE);
-		let existingData: Float32Array;
-
-		if (existsSync(vecPath)) {
-			const buf = readFileSync(vecPath);
-			existingData = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / BYTES_PER_FLOAT);
-		} else {
-			existingData = new Float32Array(0);
-		}
-
-		const startOffset = existingData.length / EMBEDDING_DIM;
-		const newVectors = new Float32Array(embeddings.length * EMBEDDING_DIM);
-
-		for (let i = 0; i < embeddings.length; i++) {
-			const vec = embeddings[i];
-			if (vec.length !== EMBEDDING_DIM) {
-				console.warn(`[Semlink] Embedding dimension mismatch: ${vec.length} vs ${EMBEDDING_DIM}`);
-			}
-			for (let j = 0; j < Math.min(vec.length, EMBEDDING_DIM); j++) {
-				newVectors[i * EMBEDDING_DIM + j] = vec[j];
-			}
-		}
-
-		// Append new vectors
-		const combined = new Float32Array(existingData.length + newVectors.length);
-		combined.set(existingData);
-		combined.set(newVectors, existingData.length);
-
-		const buf = Buffer.from(combined.buffer);
-		writeFileSync(vecPath, buf);
-
-		// Update chunk records with vector offsets
 		for (let i = 0; i < chunkIds.length; i++) {
-			const offset = startOffset + i;
+			const vec = new Float32Array(EMBEDDING_DIM);
+			for (let j = 0; j < Math.min(embeddings[i].length, EMBEDDING_DIM); j++) {
+				vec[j] = embeddings[i][j];
+			}
+			const blob = Buffer.from(vec.buffer);
 			this.db!.run(
-				"UPDATE chunks SET status = 'active', vector_offset = ? WHERE id = ?",
-				[offset, chunkIds[i]]
+				"UPDATE chunks SET status = 'active', vector = ? WHERE id = ?",
+				[blob, chunkIds[i]]
 			);
 		}
-
-		// Invalidate cache
 		this.cacheLoaded = false;
 	}
 
 	/**
-	 * Load all vectors into memory for fast search.
-	 * For 100K × 1024-dim Float32 = ~400MB.
+	 * Load all vectors into a contiguous Float32Array for fast search.
 	 */
 	loadVectorCache(): void {
 		if (this.cacheLoaded) return;
 
-		const vecPath = join(this.dataDir, VECTORS_FILE);
-		if (!existsSync(vecPath)) {
+		const results = this.db!.exec(
+			"SELECT id, vector FROM chunks WHERE status = 'active' AND vector IS NOT NULL"
+		);
+
+		if (results.length === 0 || results[0].values.length === 0) {
 			this.allVectors = new Float32Array(0);
 			this.allVectorIds = [];
-			this.allVectorOffsets = [];
 			this.cacheLoaded = true;
 			return;
 		}
 
-		const buf = readFileSync(vecPath);
-		this.allVectors = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / BYTES_PER_FLOAT);
-
-		// Build ordered ID list from DB (include vector_offset for correct lookup)
-		const results = this.db!.exec(
-			"SELECT id, note_path, vector_offset FROM chunks WHERE status = 'active' AND vector_offset >= 0 ORDER BY vector_offset"
-		);
-
-		this.vectorCache.clear();
+		const rows = results[0].values;
+		const numVectors = rows.length;
 		const ids: string[] = [];
-		const offsets: number[] = [];
+		const allVec = new Float32Array(numVectors * EMBEDDING_DIM);
 
-		if (results.length > 0) {
-			for (const row of results[0].values) {
-				const id = row[0] as string;
-				const notePath = row[1] as string;
-				const offset = row[2] as number;
-				ids.push(id);
-				offsets.push(offset);
+		for (let i = 0; i < numVectors; i++) {
+			const id = rows[i][0] as string;
+			const blob = rows[i][1] as Uint8Array;
+			ids.push(id);
 
-				if (!this.vectorCache.has(notePath)) {
-					this.vectorCache.set(notePath, new Map());
-				}
-			}
+			// Copy blob bytes into the contiguous array
+			const vecView = new Float32Array(blob.buffer, blob.byteOffset, EMBEDDING_DIM);
+			allVec.set(vecView, i * EMBEDDING_DIM);
 		}
 
+		this.allVectors = allVec;
 		this.allVectorIds = ids;
-		this.allVectorOffsets = offsets;
 		this.cacheLoaded = true;
 
-		console.log(`[Semlink] Loaded ${ids.length} vectors into cache (${(buf.length / 1024 / 1024).toFixed(1)}MB)`);
+		console.log(`[Semlink] Loaded ${numVectors} vectors into cache (${(numVectors * EMBEDDING_DIM * BYTES_PER_FLOAT / 1024 / 1024).toFixed(1)}MB)`);
 	}
 
 	/**
 	 * Semantic search: find top-K chunks most similar to the query vector.
-	 * Uses brute-force cosine similarity (optimized with pre-normalized vectors).
+	 * Uses brute-force cosine similarity.
 	 */
 	search(queryEmbedding: number[], limit = 10, threshold = 0.3): SearchResult[] {
 		this.loadVectorCache();
@@ -374,13 +410,12 @@ export class VectorStore {
 			const batchEnd = Math.min(batchStart + BATCH, numVectors);
 
 			for (let i = batchStart; i < batchEnd; i++) {
-				const vecOffset = this.allVectorOffsets[i];
-				const offset = vecOffset * dim;
+				const offset = i * dim;
 				let dot = 0;
 				let normB = 0;
 
 				for (let j = 0; j < dim; j++) {
-					const v = this.allVectors[offset + j];
+					const v = this.allVectors![offset + j];
 					dot += query[j] * v;
 					normB += v * v;
 				}

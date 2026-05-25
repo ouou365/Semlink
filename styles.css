@@ -42,9 +42,23 @@
 }
 
 .smart-vault-status-bar .status-dot {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
+    background-color: var(--text-faint);
+    transition: background-color 0.3s ease;
+}
+
+.smart-vault-status-bar .status-dot.idle {
+    background-color: var(--text-faint);
+}
+
+.smart-vault-status-bar .status-dot.running {
+    background-color: var(--color-green);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.smart-vault-status-bar .status-dot.completed {
     background-color: var(--color-green);
 }
 
@@ -54,6 +68,11 @@
 
 .smart-vault-status-bar .status-dot.paused {
     background-color: var(--color-red);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
 }
 
 /* Progress Modal */

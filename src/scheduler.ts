@@ -22,7 +22,7 @@ export class Scheduler {
 	private running = false;
 	private aborted = false;
 	private concurrency = 5; // 并发 embedding 请求数
-	private saveInterval = 50; // 每处理 N 个笔记存盘一次
+	private saveInterval = 10; // 每处理 N 个笔记存盘一次
 	private processedSinceSave = 0;
 
 	constructor(
@@ -66,6 +66,7 @@ export class Scheduler {
 		this.progress.setTotalNotes(filteredFiles.length);
 
 		const items: Array<{ notePath: string; action: QueueAction; priority: number }> = [];
+		let alreadyIndexed = 0;
 
 		for (const file of filteredFiles) {
 			const storedMtime = this.store.getNoteMtime(file.path);
@@ -76,14 +77,18 @@ export class Scheduler {
 				// Modified file
 				items.push({ notePath: file.path, action: "update", priority: 3 });
 			} else {
-				// Unchanged
-				this.progress.incrementSkipped();
+				// Unchanged - already indexed
+				alreadyIndexed++;
 			}
 		}
 
+		// Restore processed count from already-indexed notes
+		this.progress.current.processedNotes = alreadyIndexed;
+		this.progress.current.skippedChunks = alreadyIndexed;
+
 		this.queue.enqueueMany(items);
 		this.progress.incrementProcessed(0); // trigger UI update
-		console.log(`[Semlink] Scan complete: ${items.length} files to index, ${this.progress.current.skippedChunks} unchanged`);
+		console.log(`[Semlink] Scan complete: ${items.length} files to index, ${alreadyIndexed} unchanged`);
 	}
 
 	/**
@@ -97,8 +102,8 @@ export class Scheduler {
 		this.aborted = false;
 
 		try {
-			// If queue is empty and scan requested, do a full scan first
-			if (scan && this.queue.pendingCount === 0) {
+			// Always scan to set totalNotes count, even if queue has items
+			if (scan) {
 				await this.scanVault();
 			}
 
@@ -132,16 +137,14 @@ export class Scheduler {
 
 				// Process notes concurrently
 				await this.processConcurrently(noteEntries);
-
-				// Periodic save
-				this.maybeSave();
 			}
 
 			if (!this.aborted) {
 				this.progress.complete();
-				this.store.save();
 			}
 		} finally {
+			// Always save on loop exit (normal completion, pause, or abort)
+			this.store.save();
 			this.running = false;
 		}
 	}
@@ -243,6 +246,8 @@ export class Scheduler {
 				if (item.id != null) this.queue.complete(item.id);
 			}
 			this.progress.incrementProcessed();
+			// Periodic save — counted per note, not per batch
+			this.maybeSave();
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : String(error);
 			console.error(`[Semlink] Error processing ${notePath}:`, msg);
@@ -278,23 +283,23 @@ export class Scheduler {
 		this.run(false);
 	}
 
-	/** Pause indexing */
+	/** Pause indexing (synchronous — run() finally block handles save) */
 	pause(): void {
 		this.progress.setPaused(true);
 		this.aborted = true;
 	}
 
-	/** Resume indexing */
+	/** Resume indexing from where it was paused */
 	resume(): void {
 		this.client.forceResume();
 		this.progress.setPaused(false);
 		this.progress.setNetworkStatus("healthy");
 		this.aborted = false;
-		// Restart the run loop
-		this.run();
+		// Re-scan to restore totalNotes and already-indexed count, then continue
+		this.run(true);
 	}
 
-	/** Abort indexing completely */
+	/** Abort indexing — synchronous, caller must call store.save()/close() to persist */
 	abort(): void {
 		this.aborted = true;
 		this.progress.setPhase("idle");

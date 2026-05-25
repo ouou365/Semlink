@@ -76,8 +76,9 @@ export default class SmartVaultPlugin extends Plugin {
 		// Status bar
 		this.statusBarEl = this.addStatusBarItem();
 		this.statusBarEl.addClass("smart-vault-status-bar");
+		this.statusBarEl.createSpan({ text: "Semlink" });
 		this.statusBarEl.createSpan({ cls: "status-dot" });
-		this.statusBarEl.createSpan({ text: t("statusInit") });
+		this.statusBarEl.createSpan({ cls: "status-count" });
 		this.statusBarEl.onClickEvent(() => {
 			this.showProgressModal();
 		});
@@ -155,9 +156,11 @@ export default class SmartVaultPlugin extends Plugin {
 	}
 
 	onunload() {
+		// All synchronous — Obsidian does NOT await async onunload
 		try { this.scheduler?.abort(); } catch {}
 		try { this.watcher?.stop(); } catch {}
 		try { this.mcpServer?.stop(); } catch {}
+		// store.close() calls save() internally — flushes in-memory SQLite to disk
 		try { this.store?.close(); } catch {}
 		console.log("[Semlink] Plugin unloaded");
 	}
@@ -249,38 +252,41 @@ export default class SmartVaultPlugin extends Plugin {
 		if (!this.statusBarEl) return;
 
 		const dot = this.statusBarEl.querySelector(".status-dot");
-		const text = this.statusBarEl.querySelector("span:last-child");
+		const count = this.statusBarEl.querySelector(".status-count");
 
 		if (dot) {
-			dot.className = `status-dot ${p.networkStatus}`;
-		}
-
-		if (text) {
 			switch (p.phase) {
 				case "idle":
-					text.textContent = t("statusReady");
+					dot.className = "status-dot idle";
 					break;
 				case "completed":
-					text.textContent = t("statusCompleted");
+					dot.className = "status-dot completed";
 					break;
-				default: {
-					const pct = p.totalNotes > 0
-						? ((p.processedNotes / p.totalNotes) * 100).toFixed(0)
-						: "?";
-					const paused = p.isPaused ? " ⏸" : "";
-					text.textContent = `Semlink: ${pct}% (${p.processedNotes}/${p.totalNotes})${paused}`;
+				default:
+					if (p.isPaused) {
+						dot.className = "status-dot paused";
+					} else if (p.networkStatus === "degraded") {
+						dot.className = "status-dot degraded";
+					} else {
+						dot.className = "status-dot running";
+					}
 					break;
-				}
 			}
+		}
+
+		if (count) {
+			count.textContent = `${p.processedNotes}`;
 		}
 	}
 
 	private updateInitialStatusBar() {
-		const stats = this.store.getStats();
 		if (this.statusBarEl) {
-			const text = this.statusBarEl.querySelector("span:last-child");
-			if (text) {
-				text.textContent = `Semlink: ${stats.indexedNotes} ${t("statusIndexed")}`;
+			const dot = this.statusBarEl.querySelector(".status-dot");
+			if (dot) dot.className = "status-dot idle";
+			const count = this.statusBarEl.querySelector(".status-count");
+			if (count) {
+				const stats = this.store.getStats();
+				count.textContent = `${stats.indexedNotes}`;
 			}
 		}
 	}

@@ -117,6 +117,7 @@ const S: Strings = {
 	backoffRemaining: { zh: "退避剩余:", en: "Backoff remaining:" },
 	btnResume: { zh: "▶ 恢复索引", en: "▶ Resume Index" },
 	btnPause: { zh: "⏸ 暂停索引", en: "⏸ Pause Index" },
+	btnLoading: { zh: "处理中...", en: "Processing..." },
 	reportBug: { zh: "报告 Bug", en: "Report Bug" },
 };
 
