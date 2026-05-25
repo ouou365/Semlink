@@ -62,7 +62,7 @@ const S: Strings = {
 	startService: { zh: "启动服务", en: "Start" },
 	fullReindex: { zh: "全量重建索引", en: "Full Reindex" },
 	fullReindexDesc: { zh: "重新扫描所有文件并生成向量（耗时较长）", en: "Re-scan all files and rebuild vectors (may take a while)" },
-	startFullIndex: { zh: "开始全量索引", en: "Start Full Index" },
+	startFullIndex: { zh: "▶ 开始索引", en: "▶ Start Index" },
 	clientConfig: { zh: "客户端配置", en: "Client Configuration" },
 	claudeDesktopConfig: { zh: "Claude Desktop / Cursor 配置", en: "Claude Desktop / Cursor Config" },
 	claudeDesktopDesc: { zh: "复制以下 JSON 到 MCP 客户端配置文件中", en: "Copy the JSON below to your MCP client config file" },
@@ -81,7 +81,7 @@ const S: Strings = {
 	noticeMcpStopped: { zh: "服务已停止", en: "Service stopped" },
 	noticeIndexRunning: { zh: "索引正在进行中", en: "Indexing in progress" },
 	noticeNoApiKey: { zh: "请先配置 SiliconFlow API Key", en: "Please configure SiliconFlow API Key first" },
-	noticeStartIndex: { zh: "开始全量索引...", en: "Starting full index..." },
+	noticeStartIndex: { zh: "开始索引...", en: "Starting index..." },
 	noticeIndexPaused: { zh: "索引已暂停", en: "Index paused" },
 	noticeIndexResumed: { zh: "索引已恢复", en: "Index resumed" },
 
@@ -89,7 +89,7 @@ const S: Strings = {
 	cmdFullReindex: { zh: "全量重建索引", en: "Full Reindex" },
 	cmdToggleMcp: { zh: "启动/停止 MCP 服务", en: "Start/Stop MCP Service" },
 	cmdShowProgress: { zh: "查看索引进度", en: "View Index Progress" },
-	cmdResumeIndex: { zh: "恢复索引", en: "Resume Index" },
+	cmdResumeIndex: { zh: "开始索引", en: "Start Index" },
 	cmdPauseIndex: { zh: "暂停索引", en: "Pause Index" },
 
 	// ──── Progress Modal ────
@@ -115,9 +115,10 @@ const S: Strings = {
 	manualPaused: { zh: "(手动暂停)", en: "(Manually paused)" },
 	consecutiveFailures: { zh: "连续失败:", en: "Consecutive failures:" },
 	backoffRemaining: { zh: "退避剩余:", en: "Backoff remaining:" },
-	btnResume: { zh: "▶ 恢复索引", en: "▶ Resume Index" },
+	btnResume: { zh: "▶ 开始索引", en: "▶ Start Index" },
 	btnPause: { zh: "⏸ 暂停索引", en: "⏸ Pause Index" },
-	btnLoading: { zh: "处理中...", en: "Processing..." },
+	btnLoading: { zh: "启动中...", en: "Starting..." },
+	btnPausing: { zh: "暂停中...", en: "Pausing..." },
 	reportBug: { zh: "报告 Bug", en: "Report Bug" },
 };
 

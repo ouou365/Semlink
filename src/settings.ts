@@ -2,13 +2,18 @@
 // Semlink - Settings Tab
 // ========================================
 
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, ButtonComponent, PluginSettingTab, Setting } from "obsidian";
 import type SmartVaultPlugin from "../main";
 import { DEFAULT_SETTINGS } from "./types";
+import type { IndexProgress } from "./types";
 import { t } from "./i18n";
 
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
+	private indexBtn: ButtonComponent | null = null;
+	private indexBtnUnsubscribe: (() => void) | null = null;
+	private indexBtnCurrentState: "resume" | "pause" | "none" = "none";
+	private indexBtnLoading = false;
 
 	constructor(app: App, plugin: SmartVaultPlugin) {
 		super(app, plugin);
@@ -16,6 +21,12 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
+		this.indexBtnUnsubscribe?.();
+		this.indexBtnUnsubscribe = null;
+		this.indexBtn = null;
+		this.indexBtnLoading = false;
+		this.indexBtnCurrentState = "none";
+
 		const { containerEl } = this;
 		containerEl.empty();
 		containerEl.addClass("smart-vault-settings");
@@ -238,14 +249,16 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName(t("fullReindex"))
 			.setDesc(t("fullReindexDesc"))
-			.addButton((btn) =>
-				btn
-					.setButtonText(t("startFullIndex"))
-					.setWarning()
-					.onClick(() => {
-						this.plugin.startFullIndex();
-					})
-			);
+			.addButton((btn) => {
+				this.indexBtn = btn;
+				this.indexBtnCurrentState = "none";
+				this.applyIndexBtnState(this.plugin.progress.current);
+				this.indexBtnUnsubscribe = this.plugin.progress.onProgress((event) => {
+					if (event.type === "progress") {
+						this.applyIndexBtnState(event.progress);
+					}
+				});
+			});
 
 		// ══════════════════════════════════════
 		// Section: Embedding Parameters
@@ -307,5 +320,52 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+	}
+
+	private applyIndexBtnState(p: IndexProgress) {
+		const btn = this.indexBtn;
+		if (!btn) return;
+
+		let desired: "resume" | "pause" | "none";
+		if (p.isPaused || p.phase === "idle" || p.phase === "completed") {
+			desired = "resume";
+		} else {
+			desired = "pause";
+		}
+
+		if (this.indexBtnLoading) {
+			if (desired === this.indexBtnCurrentState) return;
+			this.indexBtnLoading = false;
+		}
+
+		if (desired === this.indexBtnCurrentState) return;
+		this.indexBtnCurrentState = desired;
+
+		const el = btn.buttonEl;
+		el.style.minWidth = "";
+		btn.setDisabled(false);
+		el.removeClass("mod-cta");
+
+		if (desired === "resume") {
+			btn.setButtonText(t("startFullIndex")).setClass("mod-cta");
+			btn.onClick(() => {
+				this.indexBtnLoading = true;
+				el.style.minWidth = el.offsetWidth + "px";
+				btn.setButtonText(t("btnLoading")).setDisabled(true);
+				setTimeout(() => {
+					this.plugin.startFullIndex();
+				}, 300);
+			});
+		} else if (desired === "pause") {
+			btn.setButtonText(t("btnPause"));
+			btn.onClick(() => {
+				this.indexBtnLoading = true;
+				el.style.minWidth = el.offsetWidth + "px";
+				btn.setButtonText(t("btnPausing")).setDisabled(true);
+				setTimeout(() => {
+					this.app.workspace.trigger("smart-vault:pause");
+				}, 300);
+			});
+		}
 	}
 }

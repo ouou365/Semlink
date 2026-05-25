@@ -49,6 +49,14 @@ export class ProgressTracker {
 
 	// ──── Counters ────
 
+	/** Sync existing store stats so progress modal shows current data when idle */
+	initFromStats(indexedNotes: number, activeChunks: number, totalNotes: number) {
+		this.progress.processedNotes = indexedNotes;
+		this.progress.embeddedChunks = activeChunks;
+		this.progress.totalNotes = totalNotes;
+		this.emitProgress();
+	}
+
 	setTotalNotes(n: number) {
 		this.progress.totalNotes = n;
 		this.emitProgress();

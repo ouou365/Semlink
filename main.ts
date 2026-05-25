@@ -90,6 +90,9 @@ export default class SmartVaultPlugin extends Plugin {
 			}
 		});
 
+		// Show initial status bar with existing index data
+		this.updateInitialStatusBar();
+
 		// Start MCP server
 		if (this.settings.siliconFlowApiKey) {
 			await this.startMcpServer();
@@ -244,6 +247,12 @@ export default class SmartVaultPlugin extends Plugin {
 	// ──── UI ────
 
 	showProgressModal() {
+		// Sync store stats to progress tracker before opening
+		if (this.progress.current.phase === "idle") {
+			const stats = this.store.getStats();
+			const totalNotes = this.app.vault.getMarkdownFiles().length;
+			this.progress.initFromStats(stats.indexedNotes, stats.activeChunks, totalNotes);
+		}
 		const modal = new ProgressModal(this.app, this.progress);
 		modal.open();
 	}

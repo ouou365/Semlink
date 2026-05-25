@@ -148,16 +148,24 @@ export class ProgressModal extends Modal {
 			new Setting(this.btnContainer).addButton((btn) => {
 				btn.setButtonText(t("btnResume")).setClass("mod-cta").onClick(() => {
 					this.buttonLoading = true;
+					const el = btn.buttonEl;
+					el.style.minWidth = el.offsetWidth + "px";
 					btn.setButtonText(t("btnLoading")).setDisabled(true);
-					this.app.workspace.trigger("smart-vault:resume");
+					setTimeout(() => {
+						this.app.workspace.trigger("smart-vault:resume");
+					}, 300);
 				});
 			});
 		} else if (desired === "pause") {
 			new Setting(this.btnContainer).addButton((btn) => {
 				btn.setButtonText(t("btnPause")).onClick(() => {
 					this.buttonLoading = true;
-					btn.setButtonText(t("btnLoading")).setDisabled(true);
-					this.app.workspace.trigger("smart-vault:pause");
+					const el = btn.buttonEl;
+					el.style.minWidth = el.offsetWidth + "px";
+					btn.setButtonText(t("btnPausing")).setDisabled(true);
+					setTimeout(() => {
+						this.app.workspace.trigger("smart-vault:pause");
+					}, 300);
 				});
 			});
 		}
