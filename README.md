@@ -1,112 +1,112 @@
-# Semlink / 语义连接
+# Semlink
 
-[English](README_EN.md)
+[中文](README_CN.md)
 
-一个 Obsidian 插件，将你的 Vault 笔记进行向量化处理，并通过 MCP（Model Context Protocol）服务对外提供语义搜索能力。
+An Obsidian plugin that vectorizes your Vault notes and exposes semantic search via MCP (Model Context Protocol).
 
-让 Claude Desktop、Claude Code、Cursor 等 AI 工具能够直接搜索和读取你的 Obsidian 笔记。
+Let Claude Desktop, Claude Code, Cursor and other AI tools directly search and read your Obsidian notes.
 
-### 功能特性
+### Features
 
-- **语义搜索**：用自然语言查询 Vault 笔记，基于向量相似度返回最相关的结果
-- **实时索引**：文件变更时自动检测并更新向量索引
-- **MCP 服务**：通过 HTTP 协议暴露搜索能力，供 AI 客户端调用
+- **Semantic Search**: Query your Vault notes in natural language, return the most relevant results based on vector similarity
+- **Real-time Indexing**: Automatically detect file changes and update the vector index
+- **MCP Server**: Expose search capabilities via HTTP protocol for AI clients
 
-### MCP 工具列表
+### MCP Tools
 
-| 工具 | 说明 |
-|------|------|
-| `search_notes` | 语义搜索笔记，用自然语言查询，返回最相关的笔记片段 |
-| `get_note` | 获取笔记的完整内容 |
-| `get_similar_notes` | 查找与指定笔记语义相似的其他笔记 |
-| `get_section` | 获取笔记中指定标题下的章节内容 |
-| `list_indexed` | 列出已索引的笔记 |
-| `index_status` | 获取当前索引状态和进度 |
-| `reindex` | 触发重新索引（可指定单个文件或全量） |
+| Tool | Description |
+|------|-------------|
+| `search_notes` | Semantic search notes using natural language queries, returns the most relevant note chunks |
+| `get_note` | Get the full content of a note |
+| `get_similar_notes` | Find notes semantically similar to a specified note |
+| `get_section` | Get the content under a specific heading in a note |
+| `list_indexed` | List all indexed notes |
+| `index_status` | Get current indexing status and progress |
+| `reindex` | Trigger re-indexing (single file or full) |
 
-### 工作原理
+### How It Works
 
 ```
-Obsidian Vault 笔记
+Obsidian Vault Notes
         │
         ▼
-   文本分块 (Chunking)
+   Text Chunking
         │
         ▼
-  SiliconFlow API (BGE-M3)  ──→  向量嵌入
+  SiliconFlow API (BGE-M3)  ──→  Vector Embedding
         │
         ▼
-  本地存储 (SQLite + Binary)
+  Local Storage (SQLite + Binary)
         │
         ▼
   MCP HTTP Server (:3001)
         │
         ▼
-  Claude / Cursor / 其他 AI 客户端
+  Claude / Cursor / Other AI Clients
 ```
 
-### 安装
+### Installation
 
-#### 方式一：从源码构建（开发者）
+#### Option 1: Build from Source (Developers)
 
 ```bash
-# 克隆仓库
+# Clone the repo
 git clone https://github.com/ouou365/Semlink.git
 cd semlink
 
-# 安装依赖
+# Install dependencies
 npm install
 
-# 构建
+# Build
 npm run build
 
-# 将整个目录复制到你的 Obsidian Vault 插件目录
-# 例如: MyVault/.obsidian/plugins/semlink/
+# Copy the entire directory to your Obsidian Vault plugins folder
+# e.g. MyVault/.obsidian/plugins/semlink/
 ```
 
-#### 方式二：直接下载
+#### Option 2: Direct Download
 
-从 Release 页面下载 `main.js`、`manifest.json`、`styles.css`、`sql-wasm.wasm`，放入：
+Download `main.js`, `manifest.json`, `styles.css`, `sql-wasm.wasm` from the Release page and place them in:
 
 ```
-你的Vault/.obsidian/plugins/semlink/
+YourVault/.obsidian/plugins/semlink/
 ```
 
-#### 启用插件
+#### Enable the Plugin
 
-1. 打开 Obsidian → 设置 → 社区插件
-2. 找到 **Semlink** 并启用
+1. Open Obsidian → Settings → Community plugins
+2. Find **Semlink** and enable it
 
-### 配置
+### Configuration
 
-启用插件后，进入 **设置 → Semlink** 进行配置：
+After enabling the plugin, go to **Settings → Semlink**:
 
-| 设置项 | 说明 | 默认值 |
-|--------|------|--------|
-| **SiliconFlow API Key** | 在 [siliconflow.cn](https://siliconflow.cn) 注册获取的 API 密钥 | （必填） |
-| **嵌入模型** | 向量化使用的模型 | BAAI/bge-m3 |
-| **MCP 服务端口** | HTTP 服务监听端口 | 3001 |
-| **MCP 访问密钥** | 客户端连接时的认证密钥（留空不验证） | 空 |
-| **分块大小** | 每个文本块的最大字符数 | 800 |
-| **分块重叠** | 相邻块之间的重叠字符数 | 100 |
-| **批量嵌入大小** | 每次 API 调用包含的文本数量 | 64 |
-| **请求间隔** | API 请求之间的延迟（毫秒） | 200 |
-| **排除路径** | 不参与索引的路径（每行一个） | templates/ 等 |
-| **自动索引** | 文件变更时自动更新 | 开启 |
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **SiliconFlow API Key** | API key from [siliconflow.cn](https://siliconflow.cn) | (Required) |
+| **Embedding Model** | Model used for vectorization | BAAI/bge-m3 |
+| **MCP Port** | HTTP server listening port | 3001 |
+| **MCP Access Key** | Authentication key for MCP clients (leave empty to disable) | Empty |
+| **Chunk Size** | Maximum characters per text chunk | 800 |
+| **Chunk Overlap** | Overlap characters between adjacent chunks | 100 |
+| **Batch Size** | Number of texts per API call | 64 |
+| **Request Delay** | Delay between API requests (ms) | 200 |
+| **Exclude Paths** | Paths excluded from indexing (one per line) | templates/ etc. |
+| **Auto Index** | Automatically update on file changes | On |
 
-#### 获取 API Key
+#### Getting an API Key
 
-1. 前往 [siliconflow.cn](https://siliconflow.cn) 注册账号
-2. 在控制台创建 API Key
-3. 将 Key 填入插件设置
+1. Register at [siliconflow.cn](https://siliconflow.cn)
+2. Create an API Key in the console
+3. Enter the key in plugin settings
 
-### 连接 AI 客户端
+### Connect AI Clients
 
-配置完成后，在插件设置页面底部会自动生成客户端配置，直接复制即可。
+After configuration, client configs are auto-generated at the bottom of the plugin settings page.
 
 #### Claude Desktop / Cursor
 
-将以下 JSON 添加到 MCP 配置文件中：
+Add the following JSON to your MCP configuration file:
 
 ```json
 {
@@ -119,7 +119,7 @@ npm run build
 }
 ```
 
-如果设置了 MCP 访问密钥：
+With MCP access key:
 
 ```json
 {
@@ -128,7 +128,7 @@ npm run build
       "type": "http",
       "url": "http://127.0.0.1:3001/mcp",
       "headers": {
-        "Authorization": "Bearer 你的密钥"
+        "Authorization": "Bearer your-key"
       }
     }
   }
@@ -137,81 +137,81 @@ npm run build
 
 #### Claude Code
 
-在终端运行：
+Run in terminal:
 
 ```bash
-# 无密钥
+# Without key
 claude mcp add --transport http semlink http://127.0.0.1:3001/mcp
 
-# 有密钥
-claude mcp add --transport http semlink http://127.0.0.1:3001/mcp --header "Authorization: Bearer 你的密钥"
+# With key
+claude mcp add --transport http semlink http://127.0.0.1:3001/mcp --header "Authorization: Bearer your-key"
 ```
 
-### 使用
+### Usage
 
-#### 首次索引
+#### First Indexing
 
-1. 配置好 API Key
-2. 打开命令面板（`Ctrl/Cmd + P`），搜索 **"Semlink: 开始索引"**
-3. 点击状态栏的 **Semlink** 可查看索引进度
+1. Configure your API Key
+2. Open command palette (`Ctrl/Cmd + P`), search for **"Semlink: Start Index"**
+3. Click **Semlink** in the status bar to view indexing progress
 
-#### 日常使用
+#### Daily Use
 
-- 插件会自动监听文件变更并增量更新索引
-- 在 AI 客户端中直接提问即可搜索你的笔记
+- The plugin automatically watches for file changes and incrementally updates the index
+- Ask questions in your AI client to search your notes
 
-#### 命令
+#### Commands
 
-| 命令 | 说明 |
-|------|------|
-| `Semlink: 全量重建索引` | 重新扫描所有文件 |
-| `Semlink: 开始索引` | 开始索引任务 |
-| `Semlink: 暂停索引` | 暂停当前索引任务 |
-| `Semlink: 启动/停止 MCP 服务` | 切换 MCP 服务状态 |
-| `Semlink: 查看索引进度` | 打开进度面板 |
+| Command | Description |
+|---------|-------------|
+| `Semlink: Full Reindex` | Re-scan all files |
+| `Semlink: Start Index` | Start indexing |
+| `Semlink: Pause Index` | Pause current indexing |
+| `Semlink: Start/Stop MCP Service` | Toggle MCP server |
+| `Semlink: View Index Progress` | Open progress panel |
 
-### 数据存储
+### Data Storage
 
-所有数据仅存储在本地：
+All data is stored locally only:
 
-| 文件 | 说明 |
-|------|------|
-| `data/vault.db` | SQLite 数据库，存储文本块元数据 |
-| `data/vectors.bin` | 向量索引二进制文件 |
+| File | Description |
+|------|-------------|
+| `data/vault.db` | SQLite database for chunk metadata |
+| `data/vectors.bin` | Vector index binary file |
 
-这些文件位于插件目录下，不会上传到任何服务器。
+These files are located in the plugin directory and are never uploaded to any server.
 
-### 嵌入模型选择
+### Embedding Models
 
-| 模型 | 特点 | 最大 Token |
-|------|------|-----------|
-| BAAI/bge-m3 | 推荐，多语言支持 | 8192 |
-| Pro/BAAI/bge-m3 | 增强版，效果更好 | 8192 |
-| BAAI/bge-large-zh-v1.5 | 中文优化 | 512 |
-| BAAI/bge-large-en-v1.5 | 英文优化 | 512 |
+| Model | Feature | Max Tokens |
+|-------|---------|-----------|
+| BAAI/bge-m3 | Recommended, multilingual | 8192 |
+| Pro/BAAI/bge-m3 | Enhanced version | 8192 |
+| BAAI/bge-large-zh-v1.5 | Chinese optimized | 512 |
+| BAAI/bge-large-en-v1.5 | English optimized | 512 |
 
-### 技术栈
+### Tech Stack
 
-- **向量嵌入**：SiliconFlow API (BGE-M3, 1024 维)
-- **本地存储**：sql.js (SQLite WASM) + 二进制向量文件
-- **搜索算法**：暴力余弦相似度
-- **通信协议**：MCP over HTTP (JSON-RPC 2.0)
+- **Embedding**: SiliconFlow API (BGE-M3, 1024-dim)
+- **Storage**: sql.js (SQLite WASM) + binary vector file
+- **Search**: Brute-force cosine similarity
+- **Protocol**: MCP over HTTP (JSON-RPC 2.0)
 
-### 开发
+### Development
 
 ```bash
-# 开发模式（监听文件变化自动构建）
+# Dev mode (watch and auto-rebuild)
 npm run dev
 
-# 生产构建
+# Production build
 npm run build
 ```
 
-### 注意事项
+### Notes
 
-- 首次全量索引会消耗 SiliconFlow API 额度，笔记较多时注意用量
-- 向量搜索在本地内存中执行，大量笔记（10 万+）可能占用较多内存
-- MCP 服务默认监听 `127.0.0.1`，仅本机可访问
+- Full indexing consumes SiliconFlow API credits; watch your usage for large Vaults
+- Vector search runs in local memory; 100K+ notes may use significant memory
+- MCP server listens on `127.0.0.1` by default, accessible only from localhost
 
 ### License
 
