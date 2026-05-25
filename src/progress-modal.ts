@@ -11,11 +11,20 @@ export class ProgressModal extends Modal {
 	private progress: ProgressTracker;
 	private unsubscribe: (() => void) | null = null;
 
-	// Separate containers: info area refreshes freely, buttons persist
-	private infoContainer!: HTMLElement;
+	// Buttons
 	private btnContainer!: HTMLElement;
 	private currentBtnState: "resume" | "pause" | "none" = "none";
 	private buttonLoading = false;
+
+	// Fixed layout elements (created once, text updated in place)
+	private phaseEl!: HTMLElement;
+	private statsEl!: HTMLElement;
+	private embeddedChunksValue!: HTMLElement;
+	private failedChunksValue!: HTMLElement;
+	private skippedChunksValue!: HTMLElement;
+	private currentFileValue!: HTMLElement;
+	private avgResponseValue!: HTMLElement;
+	private networkEl!: HTMLElement;
 
 	constructor(app: App, progress: ProgressTracker) {
 		super(app);
@@ -28,9 +37,34 @@ export class ProgressModal extends Modal {
 		contentEl.empty();
 		contentEl.createEl("h2", { text: t("progressTitle") });
 
-		this.infoContainer = contentEl.createDiv({ cls: "progress-info" });
+		// Phase
+		this.phaseEl = contentEl.createEl("p", { cls: "progress-phase" });
+
+		// Stats
+		this.statsEl = contentEl.createDiv({ cls: "progress-stats" });
+
+		// Detail grid (fixed layout)
+		const details = contentEl.createDiv({ cls: "detail-grid" });
+
+		const makeRow = (labelKey: string): HTMLElement => {
+			details.createSpan({ text: t(labelKey), cls: "label" });
+			const value = details.createSpan({ cls: "value" });
+			return value;
+		};
+
+		this.embeddedChunksValue = makeRow("embeddedChunks");
+		this.failedChunksValue = makeRow("failedChunks");
+		this.skippedChunksValue = makeRow("skippedChunks");
+		this.currentFileValue = makeRow("currentFile");
+		this.avgResponseValue = makeRow("avgResponse");
+
+		// Network status
+		this.networkEl = contentEl.createDiv({ cls: "network-status" });
+
+		// Button container
 		this.btnContainer = contentEl.createDiv({ cls: "btn-group" });
 
+		// Initial render
 		this.renderInfo(this.progress.current);
 		this.renderButtons(this.progress.current);
 
@@ -49,9 +83,7 @@ export class ProgressModal extends Modal {
 	}
 
 	private renderInfo(p: IndexProgress) {
-		this.infoContainer.empty();
-
-		// Phase indicator
+		// Phase
 		const phaseNames: Record<string, string> = {
 			idle: t("phaseIdle"),
 			scanning: t("phaseScanning"),
@@ -60,63 +92,39 @@ export class ProgressModal extends Modal {
 			building_index: t("phaseBuilding"),
 			completed: t("phaseCompleted"),
 		};
+		this.phaseEl.textContent = `${t("phaseCurrent")}: ${phaseNames[p.phase] || p.phase}`;
 
-		this.infoContainer.createEl("p", {
-			text: `${t("phaseCurrent")}: ${phaseNames[p.phase] || p.phase}`,
-			cls: "progress-phase",
-		});
-
-		// Stats line
+		// Stats
 		const pct = p.totalNotes > 0 ? (p.processedNotes / p.totalNotes) * 100 : 0;
-		const statsLine = this.infoContainer.createDiv({ cls: "progress-stats" });
-		statsLine.createSpan({
-			text: `${p.processedNotes.toLocaleString()} / ${p.totalNotes.toLocaleString()} (${pct.toFixed(1)}%)`,
-		});
+		this.statsEl.textContent = `${p.processedNotes.toLocaleString()} / ${p.totalNotes.toLocaleString()} (${pct.toFixed(1)}%)`;
 
-		// Detail grid
-		const details = this.infoContainer.createDiv({ cls: "detail-grid" });
-
-		const addItem = (label: string, value: string) => {
-			details.createSpan({ text: label, cls: "label" });
-			details.createSpan({ text: value, cls: "value" });
-		};
-
-		addItem(t("embeddedChunks"), p.embeddedChunks.toLocaleString());
-		addItem(t("failedChunks"), String(p.failedChunks));
-		addItem(t("skippedChunks"), p.skippedChunks.toLocaleString());
-		addItem(t("currentFile"), p.currentFile || "-");
-		addItem(t("avgResponse"), `${p.avgResponseMs}ms`);
+		// Detail values
+		this.embeddedChunksValue.textContent = p.embeddedChunks.toLocaleString();
+		this.failedChunksValue.textContent = String(p.failedChunks);
+		this.skippedChunksValue.textContent = p.skippedChunks.toLocaleString();
+		this.currentFileValue.textContent = p.currentFile || "-";
+		this.avgResponseValue.textContent = `${p.avgResponseMs}ms`;
 
 		// Network status
-		const networkDiv = this.infoContainer.createDiv({ cls: "network-status" });
 		const statusLabels: Record<string, string> = {
 			healthy: t("networkHealthy"),
 			degraded: t("networkDegraded"),
 			paused: t("networkPaused"),
 		};
-		networkDiv.createSpan({ text: `${t("networkLabel")} ${statusLabels[p.networkStatus] || p.networkStatus}` });
-
+		let networkText = `${t("networkLabel")} ${statusLabels[p.networkStatus] || p.networkStatus}`;
 		if (p.isPaused) {
-			networkDiv.createSpan({
-				text: p.isAutoPaused ? t("autoPaused") : t("manualPaused"),
-			});
+			networkText += ` ${p.isAutoPaused ? t("autoPaused") : t("manualPaused")}`;
 		}
-
 		if (p.consecutiveFailures > 0) {
-			networkDiv.createSpan({
-				text: `${t("consecutiveFailures")} ${p.consecutiveFailures}`,
-			});
+			networkText += ` ${t("consecutiveFailures")} ${p.consecutiveFailures}`;
 		}
-
 		if (p.backoffRemainingSec > 0) {
-			networkDiv.createSpan({
-				text: `${t("backoffRemaining")} ${p.backoffRemainingSec}s`,
-			});
+			networkText += ` ${t("backoffRemaining")} ${p.backoffRemainingSec}s`;
 		}
+		this.networkEl.textContent = networkText;
 	}
 
 	private renderButtons(p: IndexProgress) {
-		// Determine desired button state
 		let desired: "resume" | "pause" | "none";
 		if (p.isPaused || p.phase === "idle") {
 			desired = "resume";
@@ -126,15 +134,11 @@ export class ProgressModal extends Modal {
 			desired = "none";
 		}
 
-		// While button is in loading/transitioning state, skip all rebuilds
-		// until the state actually changes (e.g. idle → scanning)
 		if (this.buttonLoading) {
 			if (desired === this.currentBtnState) return;
-			// State changed → transition complete
 			this.buttonLoading = false;
 		}
 
-		// Only rebuild buttons when the state actually changes
 		if (desired === this.currentBtnState) return;
 		this.currentBtnState = desired;
 
