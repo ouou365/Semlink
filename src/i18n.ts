@@ -74,6 +74,7 @@ const S: Strings = {
 	statusReady: { zh: "Semlink: 就绪", en: "Semlink: Ready" },
 	statusCompleted: { zh: "Semlink: 索引完成 ✓", en: "Semlink: Index complete ✓" },
 	statusIndexed: { zh: "笔记已索引", en: "notes indexed" },
+	statusFilesCount: { zh: "个文件", en: "files" },
 
 	// ──── Notices ────
 	noticeMcpStarted: { zh: "服务已启动", en: "Service started" },
@@ -84,6 +85,8 @@ const S: Strings = {
 	noticeStartIndex: { zh: "开始索引...", en: "Starting index..." },
 	noticeIndexPaused: { zh: "索引已暂停", en: "Index paused" },
 	noticeIndexResumed: { zh: "索引已恢复", en: "Index resumed" },
+	noticeAuthFailed: { zh: "API Key 无效或未配置，请在设置中填写有效的 SiliconFlow API Key", en: "API Key is invalid or not configured. Please set a valid SiliconFlow API Key in Settings" },
+	noticeAuthFailedShort: { zh: "API Key 认证失败，索引已暂停", en: "API Key authentication failed, indexing paused" },
 
 	// ──── Commands ────
 	cmdFullReindex: { zh: "全量重建索引", en: "Full Reindex" },
@@ -107,6 +110,7 @@ const S: Strings = {
 	skippedChunks: { zh: "跳过(未变更):", en: "Skipped (unchanged):" },
 	currentFile: { zh: "当前文件:", en: "Current file:" },
 	avgResponse: { zh: "平均响应:", en: "Avg response:" },
+	chunkProgress: { zh: "文件分片:", en: "File batches:" },
 	networkLabel: { zh: "网络:", en: "Network:" },
 	networkHealthy: { zh: "🟢 正常", en: "🟢 Healthy" },
 	networkDegraded: { zh: "🟡 降速", en: "🟡 Degraded" },
@@ -120,6 +124,7 @@ const S: Strings = {
 	btnLoading: { zh: "启动中...", en: "Starting..." },
 	btnPausing: { zh: "暂停中...", en: "Pausing..." },
 	reportBug: { zh: "报告 Bug", en: "Report Bug" },
+	errorAuthFailed: { zh: "⚠ API Key 无效或未配置，请前往插件设置填写 API Key", en: "⚠ API Key invalid or missing. Please configure it in plugin Settings" },
 };
 
 export function t(key: string): string {

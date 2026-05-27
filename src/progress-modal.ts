@@ -24,7 +24,9 @@ export class ProgressModal extends Modal {
 	private skippedChunksValue!: HTMLElement;
 	private currentFileValue!: HTMLElement;
 	private avgResponseValue!: HTMLElement;
+	private chunkProgressValue!: HTMLElement;
 	private networkEl!: HTMLElement;
+	private errorEl!: HTMLElement;
 
 	constructor(app: App, progress: ProgressTracker) {
 		super(app);
@@ -57,9 +59,13 @@ export class ProgressModal extends Modal {
 		this.skippedChunksValue = makeRow("skippedChunks");
 		this.currentFileValue = makeRow("currentFile");
 		this.avgResponseValue = makeRow("avgResponse");
+		this.chunkProgressValue = makeRow("chunkProgress");
 
 		// Network status
 		this.networkEl = contentEl.createDiv({ cls: "network-status" });
+
+		// Error message
+		this.errorEl = contentEl.createDiv({ cls: "progress-error" });
 
 		// Button container
 		this.btnContainer = contentEl.createDiv({ cls: "btn-group" });
@@ -104,6 +110,7 @@ export class ProgressModal extends Modal {
 		this.skippedChunksValue.textContent = p.skippedChunks.toLocaleString();
 		this.currentFileValue.textContent = p.currentFile || "-";
 		this.avgResponseValue.textContent = `${p.avgResponseMs}ms`;
+		this.chunkProgressValue.textContent = p.fileChunkProgress || "-";
 
 		// Network status
 		const statusLabels: Record<string, string> = {
@@ -122,6 +129,15 @@ export class ProgressModal extends Modal {
 			networkText += ` ${t("backoffRemaining")} ${p.backoffRemainingSec}s`;
 		}
 		this.networkEl.textContent = networkText;
+
+		// Error message
+		if (p.lastError) {
+			this.errorEl.textContent = p.lastError;
+			this.errorEl.style.display = "block";
+		} else {
+			this.errorEl.textContent = "";
+			this.errorEl.style.display = "none";
+		}
 	}
 
 	private renderButtons(p: IndexProgress) {

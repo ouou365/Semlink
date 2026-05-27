@@ -215,6 +215,18 @@ export class VectorStore {
 
 	// ──── Chunk CRUD ────
 
+	beginTransaction(): void {
+		this.db!.run("BEGIN TRANSACTION");
+	}
+
+	commitTransaction(): void {
+		this.db!.run("COMMIT");
+	}
+
+	rollbackTransaction(): void {
+		this.db!.run("ROLLBACK");
+	}
+
 	insertChunk(chunk: NoteChunk): void {
 		const preview = chunk.contentPreview || chunk.content.slice(0, 200);
 		this.db!.run(
@@ -271,6 +283,18 @@ export class VectorStore {
 			[notePath]
 		);
 		this.cacheLoaded = false;
+		return result.changes;
+	}
+
+	/** Rename all chunks from oldPath to newPath (no re-embedding needed) */
+	renameNotePath(oldPath: string, newPath: string): number {
+		const result = this.db!.run(
+			"UPDATE chunks SET note_path = ? WHERE note_path = ?",
+			[newPath, oldPath]
+		);
+		if (result.changes > 0) {
+			this.cacheLoaded = false;
+		}
 		return result.changes;
 	}
 

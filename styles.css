@@ -149,3 +149,14 @@
     border-radius: 4px;
     cursor: pointer;
 }
+
+.smart-vault-progress-modal .progress-error {
+    display: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--background-modifier-error);
+    color: var(--text-error);
+    font-size: 13px;
+    margin: 8px 0;
+    line-height: 1.4;
+}

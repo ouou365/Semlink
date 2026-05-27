@@ -2,13 +2,14 @@
 // Semlink - Index Scheduler
 // ========================================
 
-import { App, Vault, TFile } from "obsidian";
+import { App, Vault, TFile, Notice } from "obsidian";
 import type { SmartVaultSettings, QueueAction } from "./types";
 import { VectorStore } from "./vector-store";
 import { IndexQueue } from "./index-queue";
 import { EmbeddingClient } from "./embedding-client";
 import { ProgressTracker } from "./progress";
 import { chunkMarkdown, makePreview } from "./chunker";
+import { t } from "./i18n";
 
 export class Scheduler {
 	private app: App;
@@ -68,7 +69,8 @@ export class Scheduler {
 		const items: Array<{ notePath: string; action: QueueAction; priority: number }> = [];
 		let alreadyIndexed = 0;
 
-		for (const file of filteredFiles) {
+		for (let fi = 0; fi < filteredFiles.length; fi++) {
+			const file = filteredFiles[fi];
 			const storedMtime = this.store.getNoteMtime(file.path);
 			if (storedMtime === null) {
 				// New file
@@ -79,6 +81,10 @@ export class Scheduler {
 			} else {
 				// Unchanged - already indexed
 				alreadyIndexed++;
+			}
+			// Yield every 200 files to keep UI responsive
+			if (fi > 0 && fi % 200 === 0) {
+				await this.yieldControl();
 			}
 		}
 
@@ -100,6 +106,7 @@ export class Scheduler {
 		if (this.running) return;
 		this.running = true;
 		this.aborted = false;
+		this.authErrorShown = false;
 
 		try {
 			// Always scan to set totalNotes count, even if queue has items
@@ -130,6 +137,9 @@ export class Scheduler {
 					// No more items
 					break;
 				}
+
+				// Yield after synchronous dequeue to keep UI responsive
+				await this.yieldControl();
 
 				// Group by note for efficient processing
 				const byNote = this.groupByNote(batch);
@@ -167,61 +177,70 @@ export class Scheduler {
 			this.store.markChunksStale(notePath);
 		}
 
-		// Chunk the note
+		// Chunk the note (sync but usually fast)
 		this.progress.setPhase("chunking");
 		const chunks = chunkMarkdown(content, notePath, this.settings.chunkSize, this.settings.chunkOverlap);
 
 		if (chunks.length === 0) return;
 
-		// Embed the chunks
+		// Embed the chunks (async network call — yields naturally)
 		this.progress.setPhase("embedding");
 		this.progress.setNetworkStatus(this.client.networkStatus);
 
 		const texts = chunks.map((c) => c.content);
-		const embedResult = await this.client.embedAll(texts);
+		const embedResult = await this.client.embedAll(texts, (batchIdx, totalBatches) => {
+			this.progress.setFileChunkProgress(`${batchIdx + 1}/${totalBatches}`);
+		});
 		// Flatten batched embeddings into a single array matching chunks order
 		const allEmbeddings: number[][] = [];
 		for (const batch of embedResult.embeddings) {
 			allEmbeddings.push(...batch);
 		}
 
-		// Insert chunk metadata first (so UPDATE in saveEmbeddings can find them)
-		const chunkIds = chunks.map((c) => c.id);
-		const now = Date.now();
-		for (let i = 0; i < chunks.length; i++) {
-			this.store.insertChunk({
-				id: chunks[i].id,
-				notePath,
-				heading: chunks[i].heading,
-				content: chunks[i].content,
-				contentPreview: makePreview(chunks[i].content),
-				mtime,
-				status: "active",
-				embedding: null, // stored in binary file
-				createdAt: now,
-			});
-		}
+		// Yield before heavy synchronous DB writes
+		await this.yieldControl();
 
-		// Save embeddings (UPDATE chunks SET vector_offset = ... WHERE id = ?)
-		this.store.saveEmbeddings(chunkIds, allEmbeddings);
+		// Wrap all DB writes for this note in a single transaction
+		this.store.beginTransaction();
+		try {
+			// Insert chunk metadata first (so UPDATE in saveEmbeddings can find them)
+			const chunkIds = chunks.map((c) => c.id);
+			const now = Date.now();
+			for (let i = 0; i < chunks.length; i++) {
+				this.store.insertChunk({
+					id: chunks[i].id,
+					notePath,
+					heading: chunks[i].heading,
+					content: chunks[i].content,
+					contentPreview: makePreview(chunks[i].content),
+					mtime,
+					status: "active",
+					embedding: null, // stored in binary file
+					createdAt: now,
+				});
+			}
 
-		// Delete stale chunks for this note (if update)
-		if (action === "update") {
-			this.store.deleteStaleChunks(notePath);
+			// Save embeddings (UPDATE chunks SET vector = ... WHERE id = ?)
+			this.store.saveEmbeddings(chunkIds, allEmbeddings);
+
+			// Delete stale chunks for this note (if update)
+			if (action === "update") {
+				this.store.deleteStaleChunks(notePath);
+			}
+
+			this.store.commitTransaction();
+		} catch (e) {
+			this.store.rollbackTransaction();
+			throw e;
 		}
 
 		this.progress.incrementEmbedded(chunks.length);
 		this.progress.setAvgResponseMs(this.client.avgResponseMs);
-
-		// Update stats
-		const stats = this.store.getStats();
-		this.progress.setDbSizeMb(stats.dbSizeMb);
+		this.progress.setFileChunkProgress("");
 	}
 
 	/** Process multiple notes concurrently with limited parallelism */
 	private async processConcurrently(noteEntries: [string, any[]][]): Promise<void> {
-		const results = new Array(noteEntries.length);
-
 		// Process in chunks of concurrency
 		for (let i = 0; i < noteEntries.length; i += this.concurrency) {
 			if (this.aborted) break;
@@ -232,6 +251,8 @@ export class Scheduler {
 			);
 
 			await Promise.all(promises);
+			// Yield to the browser so scrolling/rendering can happen between batches
+			await this.yieldControl();
 		}
 	}
 
@@ -246,10 +267,11 @@ export class Scheduler {
 				if (item.id != null) this.queue.complete(item.id);
 			}
 			this.progress.incrementProcessed();
-			// Periodic save — counted per note, not per batch
-			this.maybeSave();
+			// Periodic async save — counted per note, not per batch
+			await this.maybeSaveAsync();
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : String(error);
+			const status = (error as any)?.status;
 			console.error(`[Semlink] Error processing ${notePath}:`, msg);
 
 			for (const item of items) {
@@ -258,14 +280,41 @@ export class Scheduler {
 			this.progress.incrementFailed(items.length);
 			this.progress.setConsecutiveFailures(this.client.consecutiveFailures);
 			this.progress.setNetworkStatus(this.client.networkStatus);
+
+			// Detect authentication errors (missing key, 401, 403)
+			if (
+				msg.includes("API key not configured") ||
+				status === 401 ||
+				status === 403 ||
+				(typeof msg === "string" && msg.toLowerCase().includes("unauthorized"))
+			) {
+				this.handleAuthError();
+			}
 		}
 	}
 
-	/** Save only every N notes to reduce disk I/O */
-	private maybeSave(): void {
+	/** Handle API key authentication errors: show Notice, set error, and abort */
+	private authErrorShown = false;
+	private handleAuthError() {
+		this.progress.setLastError(t("errorAuthFailed"));
+		if (!this.authErrorShown) {
+			this.authErrorShown = true;
+			new Notice(`Semlink: ${t("noticeAuthFailed")}`, 8000);
+		}
+		// Abort the indexing loop — no point retrying without a valid key
+		this.aborted = true;
+		this.progress.setPaused(true);
+		this.progress.setNetworkStatus("paused");
+	}
+
+	/** Periodic save with yield: yields before the sync save to let the browser breathe */
+	private async maybeSaveAsync(): Promise<void> {
 		this.processedSinceSave++;
 		if (this.processedSinceSave >= this.saveInterval) {
+			await this.yieldControl();
 			this.store.save();
+			const stats = this.store.getStats();
+			this.progress.setDbSizeMb(stats.dbSizeMb);
 			this.processedSinceSave = 0;
 		}
 	}
@@ -273,6 +322,11 @@ export class Scheduler {
 	/** Enqueue a single file for indexing (from watcher) */
 	enqueueFile(notePath: string, action: QueueAction): void {
 		this.queue.enqueue(notePath, action, action === "update" ? 3 : 2);
+	}
+
+	/** Rename a note's path in the index without re-embedding (from watcher) */
+	renamePath(oldPath: string, newPath: string): void {
+		this.store.renameNotePath(oldPath, newPath);
 	}
 
 	/**
@@ -343,5 +397,10 @@ export class Scheduler {
 			}
 		}
 		return false;
+	}
+
+	/** Yield control to the browser so UI events (scroll, render) can be handled */
+	private yieldControl(): Promise<void> {
+		return new Promise(resolve => setTimeout(resolve, 0));
 	}
 }

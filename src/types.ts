@@ -98,6 +98,8 @@ export interface IndexProgress {
 	isAutoPaused: boolean;
 	hnswNodeCount: number;
 	dbSizeMb: number;
+	lastError: string;
+	fileChunkProgress: string;
 }
 
 export const EMPTY_PROGRESS: IndexProgress = {
@@ -119,6 +121,8 @@ export const EMPTY_PROGRESS: IndexProgress = {
 	isAutoPaused: false,
 	hnswNodeCount: 0,
 	dbSizeMb: 0,
+	lastError: "",
+	fileChunkProgress: "",
 };
 
 /** SiliconFlow Embedding API types */

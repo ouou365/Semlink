@@ -9,6 +9,7 @@ export class ProgressTracker {
 	private progress: IndexProgress;
 	private listeners: Set<ProgressCallback> = new Set();
 	private speedSamples: number[] = [];
+	private rafId: number | null = null;
 
 	constructor() {
 		this.progress = { ...EMPTY_PROGRESS };
@@ -29,6 +30,15 @@ export class ProgressTracker {
 		}
 	}
 
+	/** Force immediate synchronous emit of current progress (used for critical state changes) */
+	flush() {
+		if (this.rafId != null) {
+			cancelAnimationFrame(this.rafId);
+			this.rafId = null;
+		}
+		this.emit({ type: "progress", progress: { ...this.progress } });
+	}
+
 	// ──── Phase management ────
 
 	setPhase(phase: IndexPhase) {
@@ -38,13 +48,13 @@ export class ProgressTracker {
 			this.progress.startedAt = Date.now();
 		}
 		this.emit({ type: "phase_change", phase });
-		this.emit({ type: "progress", progress: { ...this.progress } });
+		this.emitProgress();
 	}
 
 	reset() {
 		this.progress = { ...EMPTY_PROGRESS };
 		this.speedSamples = [];
-		this.emit({ type: "progress", progress: { ...this.progress } });
+		this.flush(); // ensure reset state is rendered immediately
 	}
 
 	// ──── Counters ────
@@ -129,6 +139,16 @@ export class ProgressTracker {
 		this.emitProgress();
 	}
 
+	setLastError(msg: string) {
+		this.progress.lastError = msg;
+		this.emitProgress();
+	}
+
+	setFileChunkProgress(progress: string) {
+		this.progress.fileChunkProgress = progress;
+		this.emitProgress();
+	}
+
 	// ──── Pause/Resume ────
 
 	setPaused(isPaused: boolean, isAuto = false) {
@@ -167,7 +187,7 @@ export class ProgressTracker {
 		this.progress.phase = "completed";
 		this.progress.currentFile = "";
 		this.emit({ type: "complete" });
-		this.emitProgress();
+		this.flush(); // ensure final state is rendered immediately
 	}
 
 	error(msg: string) {
@@ -175,7 +195,14 @@ export class ProgressTracker {
 	}
 
 	private emitProgress() {
-		this.emit({ type: "progress", progress: { ...this.progress } });
+		// Throttle via requestAnimationFrame — batch all mid-frame state changes
+		// into a single UI update per frame (~60fps max).
+		if (this.rafId == null) {
+			this.rafId = requestAnimationFrame(() => {
+				this.rafId = null;
+				this.emit({ type: "progress", progress: { ...this.progress } });
+			});
+		}
 	}
 
 	// ──── Formatting helpers ────

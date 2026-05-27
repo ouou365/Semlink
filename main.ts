@@ -276,7 +276,7 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 
 		if (count) {
-			count.textContent = `${p.processedNotes}`;
+			count.textContent = `${p.processedNotes} ${t("statusFilesCount")}`;
 		}
 	}
 
@@ -287,7 +287,7 @@ export default class SmartVaultPlugin extends Plugin {
 			const count = this.statusBarEl.querySelector(".status-count");
 			if (count) {
 				const stats = this.store.getStats();
-				count.textContent = `${stats.indexedNotes}`;
+				count.textContent = `${stats.indexedNotes} ${t("statusFilesCount")}`;
 			}
 		}
 	}

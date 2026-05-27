@@ -2,9 +2,10 @@
 // Semlink - Vault File Watcher
 // ========================================
 
-import { App, Vault, TFile, TAbstractFile } from "obsidian";
+import { App, Vault, TFile, TAbstractFile, Notice } from "obsidian";
 import type { Scheduler } from "./scheduler";
 import type { SmartVaultSettings } from "./types";
+import { t } from "./i18n";
 
 /** Grace period (ms) after startup during which events are ignored */
 const STARTUP_GRACE_MS = 5000;
@@ -103,16 +104,28 @@ export class VaultWatcher {
 		if (!(file instanceof TFile)) return;
 		if (file.extension !== "md") return;
 
-		this.scheduler.enqueueFile(oldPath, "delete");
-		if (!this.isExcluded(file.path)) {
-			this.scheduler.enqueueFile(file.path, "add");
+		if (this.isExcluded(file.path)) {
+			// Moved to excluded location — delete old index entries
+			this.scheduler.enqueueFile(oldPath, "delete");
+			this.ensureSchedulerRunning();
+		} else {
+			// Just update the path in-place, no re-embedding needed
+			this.scheduler.renamePath(oldPath, file.path);
 		}
-		this.ensureSchedulerRunning();
 	}
 
 	/** Start the scheduler in incremental mode (no full scan) */
+	private noKeyNoticeShown = false;
 	private ensureSchedulerRunning() {
+		if (!this.settings.siliconFlowApiKey) {
+			if (!this.noKeyNoticeShown) {
+				this.noKeyNoticeShown = true;
+				new Notice(`Semlink: ${t("noticeNoApiKey")}`, 6000);
+			}
+			return;
+		}
 		if (!this.scheduler.isRunning) {
+			this.noKeyNoticeShown = false;
 			this.scheduler.runIncremental();
 		}
 	}
