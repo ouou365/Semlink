@@ -186,6 +186,9 @@ export class ProgressTracker {
 	complete() {
 		this.progress.phase = "completed";
 		this.progress.currentFile = "";
+		// Sync totalNotes to match processedNotes — files may have been enqueued
+		// by the watcher after scanVault set totalNotes, causing a mismatch.
+		this.progress.totalNotes = this.progress.processedNotes;
 		this.emit({ type: "complete" });
 		this.flush(); // ensure final state is rendered immediately
 	}

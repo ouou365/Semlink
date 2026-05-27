@@ -155,7 +155,12 @@ export default class SmartVaultPlugin extends Plugin {
 		try { this.scheduler?.abort(); } catch {}
 		try { this.watcher?.stop(); } catch {}
 		try { this.mcpServer?.stop(); } catch {}
-		// store.close() calls save() internally — flushes in-memory SQLite to disk
+		// Explicit save before close: the async run()'s finally block may not
+		// execute before the process exits. This ensures all in-memory data
+		// (including notes that haven't reached the 10-note save threshold)
+		// is flushed to disk.
+		try { this.store?.save(); } catch {}
+		// store.close() calls save() again internally — redundant but safe
 		try { this.store?.close(); } catch {}
 		console.log("[Semlink] Plugin unloaded");
 	}
@@ -240,10 +245,13 @@ export default class SmartVaultPlugin extends Plugin {
 
 	showProgressModal() {
 		// Sync store stats to progress tracker before opening
-		if (this.progress.current.phase === "idle") {
+		// Both "idle" and "completed" phases need DB stats — the in-memory
+		// progress values may be stale (e.g. after an incremental/watcher run
+		// only processed a handful of files).
+		const phase = this.progress.current.phase;
+		if (phase === "idle" || phase === "completed") {
 			const stats = this.store.getStats();
-			const totalNotes = this.app.vault.getMarkdownFiles().length;
-			this.progress.initFromStats(stats.indexedNotes, stats.activeChunks, totalNotes);
+			this.progress.initFromStats(stats.indexedNotes, stats.activeChunks, stats.indexedNotes);
 		}
 		const modal = new ProgressModal(this.app, this.progress);
 		modal.open();

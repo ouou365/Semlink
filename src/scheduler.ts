@@ -64,13 +64,14 @@ export class Scheduler {
 
 		const filteredFiles = files.filter((f) => !this.isExcluded(f.path, excludePatterns));
 
-		this.progress.setTotalNotes(filteredFiles.length);
-
 		const items: Array<{ notePath: string; action: QueueAction; priority: number }> = [];
 		let alreadyIndexed = 0;
 
 		for (let fi = 0; fi < filteredFiles.length; fi++) {
 			const file = filteredFiles[fi];
+			// Skip empty files — they produce no chunks and would never be counted
+			if (file.stat.size === 0) continue;
+
 			const storedMtime = this.store.getNoteMtime(file.path);
 			if (storedMtime === null) {
 				// New file
@@ -87,6 +88,9 @@ export class Scheduler {
 				await this.yieldControl();
 			}
 		}
+
+		// totalNotes = already indexed + to be indexed (excluding empty files)
+		this.progress.setTotalNotes(alreadyIndexed + items.length);
 
 		// Restore processed count from already-indexed notes
 		this.progress.current.processedNotes = alreadyIndexed;
@@ -134,7 +138,8 @@ export class Scheduler {
 				// Dequeue next batch
 				const batch = this.queue.dequeue(this.settings.batchSize);
 				if (batch.length === 0) {
-					// No more items
+					// Queue empty — flush any remaining unsaved notes (tail < saveInterval)
+					this.flushSave();
 					break;
 				}
 
@@ -159,13 +164,13 @@ export class Scheduler {
 		}
 	}
 
-	/** Process a single note's queue items */
-	private async processNote(notePath: string, items: any[]): Promise<void> {
+	/** Process a single note's queue items. Returns true if chunks were actually indexed. */
+	private async processNote(notePath: string, items: any[]): Promise<boolean> {
 		const file = this.vault.getAbstractFileByPath(notePath);
 		if (!file || !(file instanceof TFile)) {
 			// File deleted
 			this.store.deleteChunksByNotePath(notePath);
-			return;
+			return false;
 		}
 
 		const action = items[0]?.action || "add";
@@ -181,7 +186,7 @@ export class Scheduler {
 		this.progress.setPhase("chunking");
 		const chunks = chunkMarkdown(content, notePath, this.settings.chunkSize, this.settings.chunkOverlap);
 
-		if (chunks.length === 0) return;
+		if (chunks.length === 0) return false;
 
 		// Embed the chunks (async network call — yields naturally)
 		this.progress.setPhase("embedding");
@@ -197,10 +202,9 @@ export class Scheduler {
 			allEmbeddings.push(...batch);
 		}
 
-		// Yield before heavy synchronous DB writes
-		await this.yieldControl();
-
 		// Wrap all DB writes for this note in a single transaction
+		// IMPORTANT: do NOT yield before DB writes — if close() fires during yield,
+		// the in-memory DB won't contain this note's data and it will be lost.
 		this.store.beginTransaction();
 		try {
 			// Insert chunk metadata first (so UPDATE in saveEmbeddings can find them)
@@ -234,9 +238,14 @@ export class Scheduler {
 			throw e;
 		}
 
+		// Yield AFTER DB writes — data is now in the in-memory DB,
+		// so close()/save() will capture it even if Obsidian exits during yield
+		await this.yieldControl();
+
 		this.progress.incrementEmbedded(chunks.length);
 		this.progress.setAvgResponseMs(this.client.avgResponseMs);
 		this.progress.setFileChunkProgress("");
+		return true;
 	}
 
 	/** Process multiple notes concurrently with limited parallelism */
@@ -261,14 +270,17 @@ export class Scheduler {
 		this.progress.setCurrentFile(notePath);
 
 		try {
-			await this.processNote(notePath, items);
+			const indexed = await this.processNote(notePath, items);
 			// Mark queue items as completed
 			for (const item of items) {
 				if (item.id != null) this.queue.complete(item.id);
 			}
-			this.progress.incrementProcessed();
-			// Periodic async save — counted per note, not per batch
-			await this.maybeSaveAsync();
+			// Only count notes that actually produced chunks
+			if (indexed) {
+				this.progress.incrementProcessed();
+				// Periodic async save — counted per note, not per batch
+				await this.maybeSaveAsync();
+			}
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : String(error);
 			const status = (error as any)?.status;
@@ -315,6 +327,14 @@ export class Scheduler {
 			this.store.save();
 			const stats = this.store.getStats();
 			this.progress.setDbSizeMb(stats.dbSizeMb);
+			this.processedSinceSave = 0;
+		}
+	}
+
+	/** Flush any remaining unsaved notes to disk (called when queue is empty) */
+	private flushSave(): void {
+		if (this.processedSinceSave > 0) {
+			this.store.save();
 			this.processedSinceSave = 0;
 		}
 	}
