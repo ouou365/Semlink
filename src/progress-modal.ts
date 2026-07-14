@@ -133,10 +133,10 @@ export class ProgressModal extends Modal {
 		// Error message
 		if (p.lastError) {
 			this.errorEl.textContent = p.lastError;
-			this.errorEl.style.display = "block";
+			this.errorEl.addClass("is-visible");
 		} else {
 			this.errorEl.textContent = "";
-			this.errorEl.style.display = "none";
+			this.errorEl.removeClass("is-visible");
 		}
 	}
 
@@ -164,10 +164,9 @@ export class ProgressModal extends Modal {
 			new Setting(this.btnContainer).addButton((btn) => {
 				btn.setButtonText(t("btnResume")).setClass("mod-cta").onClick(() => {
 					this.buttonLoading = true;
-					const el = btn.buttonEl;
-					el.style.minWidth = el.offsetWidth + "px";
+					btn.buttonEl.setCssStyles({ minWidth: btn.buttonEl.offsetWidth + "px" });
 					btn.setButtonText(t("btnLoading")).setDisabled(true);
-					setTimeout(() => {
+					window.setTimeout(() => {
 						this.app.workspace.trigger("smart-vault:resume");
 					}, 300);
 				});
@@ -176,10 +175,9 @@ export class ProgressModal extends Modal {
 			new Setting(this.btnContainer).addButton((btn) => {
 				btn.setButtonText(t("btnPause")).onClick(() => {
 					this.buttonLoading = true;
-					const el = btn.buttonEl;
-					el.style.minWidth = el.offsetWidth + "px";
+					btn.buttonEl.setCssStyles({ minWidth: btn.buttonEl.offsetWidth + "px" });
 					btn.setButtonText(t("btnPausing")).setDisabled(true);
-					setTimeout(() => {
+					window.setTimeout(() => {
 						this.app.workspace.trigger("smart-vault:pause");
 					}, 300);
 				});

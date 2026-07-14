@@ -46,7 +46,7 @@ export class VaultWatcher {
 		this.vault.on("rename", this.renameHandler);
 
 		// Grace period: ignore vault-loading events that fire at startup
-		setTimeout(() => {
+		window.setTimeout(() => {
 			this.ready = true;
 			console.log("[Semlink] Watcher ready, listening for file changes");
 		}, STARTUP_GRACE_MS);
@@ -152,9 +152,9 @@ export class VaultWatcher {
 
 	private debounce(path: string, fn: () => void, delay = 5000) {
 		const existing = this.debounceTimers.get(path);
-		if (existing) clearTimeout(existing);
+		if (existing) window.clearTimeout(existing);
 
-		this.debounceTimers.set(path, setTimeout(() => {
+		this.debounceTimers.set(path, window.setTimeout(() => {
 			this.debounceTimers.delete(path);
 			fn();
 		}, delay));

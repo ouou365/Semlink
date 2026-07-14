@@ -151,10 +151,10 @@ export class McpServer {
 			});
 			res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
 			// Keep alive
-			const interval = setInterval(() => {
-				res.write(`data: ${JSON.stringify({ type: "ping" })}\n\n`);
-			}, 30000);
-			req.on("close", () => clearInterval(interval));
+				const interval = window.setInterval(() => {
+					res.write(`data: ${JSON.stringify({ type: "ping" })}\n\n`);
+				}, 30000);
+				req.on("close", () => window.clearInterval(interval));
 			return;
 		}
 

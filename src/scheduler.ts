@@ -437,7 +437,7 @@ export class Scheduler {
 					return;
 				}
 				this.progress.setBackoffRemaining(this.client.backoffRemainingSec);
-				setTimeout(check, 1000);
+				window.setTimeout(check, 1000);
 			};
 			check();
 		});
@@ -465,6 +465,6 @@ export class Scheduler {
 
 	/** Yield control to the browser so UI events (scroll, render) can be handled */
 	private yieldControl(): Promise<void> {
-		return new Promise(resolve => setTimeout(resolve, 0));
+		return new Promise(resolve => window.setTimeout(resolve, 0));
 	}
 }

@@ -201,7 +201,7 @@ export class ProgressTracker {
 		// Throttle via requestAnimationFrame — batch all mid-frame state changes
 		// into a single UI update per frame (~60fps max).
 		if (this.rafId == null) {
-			this.rafId = requestAnimationFrame(() => {
+			this.rafId = window.requestAnimationFrame(() => {
 				this.rafId = null;
 				this.emit({ type: "progress", progress: { ...this.progress } });
 			});

@@ -160,3 +160,19 @@
     margin: 8px 0;
     line-height: 1.4;
 }
+
+.smart-vault-progress-modal .progress-error.is-visible {
+    display: block;
+}
+
+/* Settings helpers */
+.smart-vault-settings .semlink-monospace {
+    font-family: var(--font-monospace);
+    font-size: 12px;
+}
+
+.smart-vault-settings .semlink-bug-link {
+    float: right;
+    font-size: 14px;
+    opacity: 0.7;
+}

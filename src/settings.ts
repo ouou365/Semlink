@@ -2,7 +2,7 @@
 // Semlink - Settings Tab
 // ========================================
 
-import { App, ButtonComponent, PluginSettingTab, Setting } from "obsidian";
+import { App, ButtonComponent, PluginSettingTab, Setting, activeDocument } from "obsidian";
 import type SmartVaultPlugin from "../main";
 import { DEFAULT_SETTINGS } from "./types";
 import type { IndexProgress } from "./types";
@@ -36,10 +36,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// Report Bug (top right of title)
 		const titleEl = containerEl.querySelector("h2");
 		if (titleEl) {
-			const bugLink = document.createElement("a");
+			const bugLink = activeDocument.createElement("a");
 			bugLink.setText(t("reportBug"));
 			bugLink.href = "mailto:ozy2013xm@gmail.com?subject=Semlink Bug Report";
-			bugLink.style.cssText = "float:right;font-size:14px;opacity:0.7;";
+			bugLink.addClass("semlink-bug-link");
 			titleEl.appendChild(bugLink);
 		}
 
@@ -61,7 +61,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// ══════════════════════════════════════
 		// Section: Model Settings
 		// ══════════════════════════════════════
-		containerEl.createEl("h3", { text: t("sectionModel") });
+		new Setting(containerEl).setName(t("sectionModel")).setHeading();
 
 		// Provider selection
 		new Setting(containerEl)
@@ -181,7 +181,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// ══════════════════════════════════════
 		// Section: MCP Service
 		// ══════════════════════════════════════
-		containerEl.createEl("h3", { text: t("sectionMcp") });
+		new Setting(containerEl).setName(t("sectionMcp")).setHeading();
 
 		new Setting(containerEl)
 			.setName(t("mcpPort"))
@@ -240,8 +240,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				text.setValue(cmd).then((t) => {
 					t.inputEl.rows = 2;
 					t.inputEl.readOnly = true;
-					t.inputEl.style.fontFamily = "monospace";
-					t.inputEl.style.fontSize = "12px";
+					t.inputEl.addClass("semlink-monospace");
 				});
 			});
 
@@ -269,15 +268,14 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					const textarea = t.inputEl;
 					textarea.rows = 12;
 					textarea.readOnly = true;
-					textarea.style.fontFamily = "monospace";
-					textarea.style.fontSize = "12px";
+					textarea.addClass("semlink-monospace");
 				});
 			});
 
 		// ══════════════════════════════════════
 		// Section: Index Management
 		// ══════════════════════════════════════
-		containerEl.createEl("h3", { text: t("sectionIndex") });
+		new Setting(containerEl).setName(t("sectionIndex")).setHeading();
 
 		new Setting(containerEl)
 			.setName(t("excludePaths"))
@@ -324,7 +322,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// ══════════════════════════════════════
 		// Section: Embedding Parameters
 		// ══════════════════════════════════════
-		containerEl.createEl("h3", { text: t("sectionEmbedding") });
+		new Setting(containerEl).setName(t("sectionEmbedding")).setHeading();
 
 		new Setting(containerEl)
 			.setName(t("chunkSize"))
@@ -403,7 +401,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		this.indexBtnCurrentState = desired;
 
 		const el = btn.buttonEl;
-		el.style.minWidth = "";
+		el.setCssStyles({ minWidth: "" });
 		btn.setDisabled(false);
 		el.removeClass("mod-cta");
 
@@ -411,9 +409,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			btn.setButtonText(t("startFullIndex")).setClass("mod-cta");
 			btn.onClick(() => {
 				this.indexBtnLoading = true;
-				el.style.minWidth = el.offsetWidth + "px";
+				el.setCssStyles({ minWidth: el.offsetWidth + "px" });
 				btn.setButtonText(t("btnLoading")).setDisabled(true);
-				setTimeout(() => {
+				window.setTimeout(() => {
 					this.plugin.startFullIndex();
 				}, 300);
 			});
@@ -421,9 +419,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			btn.setButtonText(t("btnPause"));
 			btn.onClick(() => {
 				this.indexBtnLoading = true;
-				el.style.minWidth = el.offsetWidth + "px";
+				el.setCssStyles({ minWidth: el.offsetWidth + "px" });
 				btn.setButtonText(t("btnPausing")).setDisabled(true);
-				setTimeout(() => {
+				window.setTimeout(() => {
 					this.app.workspace.trigger("smart-vault:pause");
 				}, 300);
 			});
