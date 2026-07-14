@@ -1,8 +1,8 @@
 {
 	"id": "semlink",
 	"name": "Semlink",
-	"version": "0.6.0",
-	"minAppVersion": "1.0.0",
+	"version": "0.7.0",
+	"minAppVersion": "1.6.0",
 	"description": "Semantic search for Vault notes via MCP, enabling AI tools to search and read your notes.",
 	"author": "Ouzhongyuan",
 	"isDesktopOnly": true
