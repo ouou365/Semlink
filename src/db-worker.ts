@@ -20,6 +20,7 @@
 
 import { parentPort } from "worker_threads";
 import { DbEngine } from "./db-engine";
+import { chunkMarkdown } from "./chunker";
 
 let engine: DbEngine | null = null;
 
@@ -36,6 +37,7 @@ async function handle(op: string, args: any[]): Promise<any> {
 	}
 
 	switch (op) {
+		case "chunk": return chunkMarkdown(args[0], args[1], args[2], args[3]);
 		case "save": return engine.save();
 		case "clearAll": return engine.clearAll();
 		case "compact": return engine.compact();

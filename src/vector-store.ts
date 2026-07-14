@@ -14,6 +14,7 @@
 import { join } from "path";
 import type { NoteChunk, SearchResult, QueueAction, QueueItem } from "./types";
 import { DbEngine } from "./db-engine";
+import { chunkMarkdown, ChunkResult } from "./chunker";
 
 // Lazy require so that environments without worker_threads don't crash at
 // import time — we detect availability at runtime instead.
@@ -116,6 +117,7 @@ export class VectorStore {
 	private callEngineSync(op: string, args: any[]): any {
 		const e = this.engine!;
 		switch (op) {
+			case "chunk": return chunkMarkdown(args[0], args[1], args[2], args[3]);
 			case "save": return e.save();
 			case "clearAll": return e.clearAll();
 			case "compact": return e.compact();
@@ -227,6 +229,12 @@ export class VectorStore {
 
 	async search(queryEmbedding: number[], limit = 10, threshold = 0.3): Promise<SearchResult[]> {
 		return await this.call("search", [queryEmbedding, limit, threshold]);
+	}
+
+	/** Chunk a markdown document. Runs in the worker thread so large-file
+	 *  string processing doesn't block the UI while typing. */
+	async chunk(content: string, notePath: string, chunkSize: number, chunkOverlap: number): Promise<ChunkResult[]> {
+		return await this.call("chunk", [content, notePath, chunkSize, chunkOverlap]);
 	}
 
 	// ──── Queue operations (proxy to worker; IndexQueue delegates here) ────

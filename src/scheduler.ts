@@ -8,7 +8,7 @@ import { VectorStore } from "./vector-store";
 import { IndexQueue } from "./index-queue";
 import { EmbeddingClient } from "./embedding-client";
 import { ProgressTracker } from "./progress";
-import { chunkMarkdown, makePreview } from "./chunker";
+import { makePreview } from "./chunker";
 import { t } from "./i18n";
 
 export class Scheduler {
@@ -219,9 +219,10 @@ export class Scheduler {
 			await this.store.markChunksStale(notePath);
 		}
 
-		// Chunk the note (sync but usually fast)
+		// Chunk the note — runs in the worker thread so large-file string
+		// processing doesn't block the UI while typing.
 		this.progress.setPhase("chunking");
-		const chunks = chunkMarkdown(content, notePath, this.settings.chunkSize, this.settings.chunkOverlap);
+		const chunks = await this.store.chunk(content, notePath, this.settings.chunkSize, this.settings.chunkOverlap);
 
 		if (chunks.length === 0) return false;
 

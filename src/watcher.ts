@@ -144,10 +144,13 @@ export class VaultWatcher {
 		return false;
 	}
 
-	// Debounce per-path to avoid excessive indexing during saves
+	// Debounce per-path to avoid excessive indexing during saves.
+	// 5s is long enough that a brief pause while typing won't trigger an
+	// embedding round-trip (which churns progress events / UI updates), but
+	// short enough that a real edit is picked up promptly.
 	private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
-	private debounce(path: string, fn: () => void, delay = 2000) {
+	private debounce(path: string, fn: () => void, delay = 5000) {
 		const existing = this.debounceTimers.get(path);
 		if (existing) clearTimeout(existing);
 

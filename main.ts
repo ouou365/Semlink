@@ -29,6 +29,7 @@ export default class SmartVaultPlugin extends Plugin {
 	pluginDir: string = "";
 
 	private statusBarEl: HTMLElement | null = null;
+	private lastStatusBarUpdate = 0;
 
 	async onload() {
 		await this.loadSettings();
@@ -75,10 +76,21 @@ export default class SmartVaultPlugin extends Plugin {
 			this.showProgressModal();
 		});
 
-		// Subscribe to progress for status bar updates
+		// Subscribe to progress for status bar updates.
+		// Throttle to once per 500ms — the progress tracker can emit dozens of
+		// updates per second during indexing, but the status bar only needs a
+		// coarse refresh. This avoids per-frame DOM writes while typing.
 		this.progress.onProgress((event) => {
-			if (event.type === "progress") {
-				this.updateStatusBar(event.progress);
+			if (event.type === "complete") {
+				// Always refresh on completion so the final count is shown.
+				this.lastStatusBarUpdate = Date.now();
+				this.updateStatusBar(this.progress.current);
+			} else if (event.type === "progress") {
+				const now = Date.now();
+				if (now - this.lastStatusBarUpdate >= 500) {
+					this.lastStatusBarUpdate = now;
+					this.updateStatusBar(event.progress);
+				}
 			}
 		});
 
