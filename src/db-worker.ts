@@ -53,6 +53,7 @@ async function handle(op: string, args: any[]): Promise<any> {
 		case "renameNotePath": return engine.renameNotePath(args[0], args[1]);
 		case "getNoteMtime": return engine.getNoteMtime(args[0]);
 		case "getAllIndexedPaths": return engine.getAllIndexedPaths();
+		case "pruneOrphanedPaths": return engine.pruneOrphanedPaths(args[0]);
 		case "getStats": return engine.getStats();
 		case "saveEmbeddings": return engine.saveEmbeddings(args[0], args[1]);
 		case "loadVectorCache": return engine.loadVectorCache();

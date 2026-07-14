@@ -132,6 +132,7 @@ export class VectorStore {
 			case "renameNotePath": return e.renameNotePath(args[0], args[1]);
 			case "getNoteMtime": return e.getNoteMtime(args[0]);
 			case "getAllIndexedPaths": return e.getAllIndexedPaths();
+			case "pruneOrphanedPaths": return e.pruneOrphanedPaths(args[0]);
 			case "getStats": return e.getStats();
 			case "saveEmbeddings": return e.saveEmbeddings(args[0], args[1]);
 			case "loadVectorCache": return e.loadVectorCache();
@@ -211,6 +212,9 @@ export class VectorStore {
 	}
 	async getAllIndexedPaths(): Promise<Set<string>> {
 		return await this.call("getAllIndexedPaths");
+	}
+	async pruneOrphanedPaths(existingPaths: Set<string>): Promise<number> {
+		return await this.call("pruneOrphanedPaths", [existingPaths]);
 	}
 	async getStats(): Promise<{ totalChunks: number; activeChunks: number; indexedNotes: number; dbSizeMb: number }> {
 		return await this.call("getStats");

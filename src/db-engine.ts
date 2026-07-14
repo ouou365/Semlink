@@ -339,6 +339,31 @@ export class DbEngine {
 		return paths;
 	}
 
+	/**
+	 * Remove chunks for note paths that no longer exist in the vault.
+	 * Called after a full scan with the set of currently-existing paths:
+	 * any indexed path NOT in that set is a "ghost" left over from a file
+	 * that was moved, renamed, or deleted without the watcher catching it
+	 * (e.g. moves done while the plugin was disabled). Deleting them keeps
+	 * the DB from ballooning (seen: 397MB→802MB after reorganizing files)
+	 * and stops search from returning dead paths.
+	 * Returns the number of removed paths.
+	 */
+	pruneOrphanedPaths(existingPaths: Set<string>): number {
+		const indexed = this.getAllIndexedPaths();
+		let removed = 0;
+		for (const path of indexed) {
+			if (!existingPaths.has(path)) {
+				this.db!.run("DELETE FROM chunks WHERE note_path = ?", [path]);
+				removed++;
+			}
+		}
+		if (removed > 0) {
+			this.cacheLoaded = false;
+		}
+		return removed;
+	}
+
 	getStats(): { totalChunks: number; activeChunks: number; indexedNotes: number; dbSizeMb: number } {
 		let totalChunks = 0, activeChunks = 0;
 		const r1 = this.db!.exec("SELECT COUNT(*) FROM chunks");

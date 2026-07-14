@@ -66,11 +66,14 @@ export class Scheduler {
 
 		const items: Array<{ notePath: string; action: QueueAction; priority: number }> = [];
 		let alreadyIndexed = 0;
+		const existingPaths = new Set<string>();
 
 		for (let fi = 0; fi < filteredFiles.length; fi++) {
 			const file = filteredFiles[fi];
 			// Skip empty files — they produce no chunks and would never be counted
 			if (file.stat.size === 0) continue;
+
+			existingPaths.add(file.path);
 
 			const storedMtime = await this.store.getNoteMtime(file.path);
 			if (storedMtime === null) {
@@ -87,6 +90,15 @@ export class Scheduler {
 			if (fi > 0 && fi % 200 === 0) {
 				await this.yieldControl();
 			}
+		}
+
+		// Prune "ghost" paths: chunks left over from files that were moved,
+		// renamed, or deleted while the plugin (or its watcher) wasn't active.
+		// Without this the DB grows unbounded (seen: 397MB→802MB after
+		// reorganizing the vault) and search returns dead paths.
+		const pruned = await this.store.pruneOrphanedPaths(existingPaths);
+		if (pruned > 0) {
+			console.log(`[Semlink] Pruned ${pruned} orphaned note paths from index`);
 		}
 
 		// totalNotes = already indexed + to be indexed (excluding empty files)
