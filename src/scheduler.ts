@@ -25,6 +25,10 @@ export class Scheduler {
 	private concurrency = 5; // 并发 embedding 请求数
 	private saveInterval = 10; // 每处理 N 个笔记存盘一次
 	private processedSinceSave = 0;
+	/** Note-count baseline for the current run. 0 = full scan (increment each
+	 *  note); >0 = incremental run (only "add" actions raise the real total,
+	 *  "update"/"delete" keep the status-bar count steady to avoid flicker). */
+	private incrementalBase = 0;
 
 	constructor(
 		app: App,
@@ -124,6 +128,19 @@ export class Scheduler {
 		this.aborted = false;
 		this.authErrorShown = false;
 
+		// In incremental mode (watcher-triggered), processedNotes carries the
+		// stale total from the last full run. Processing a single "update"
+		// would increment it (6016→6017) even though the note count didn't
+		// change, causing the status bar to flicker. Snapshot the real DB
+		// count up front so we can hold processedNotes steady for updates and
+		// only bump it for genuine "add"s.
+		this.incrementalBase = 0;
+		if (!scan) {
+			const stats = await this.store.getStats();
+			this.incrementalBase = stats.indexedNotes;
+			this.progress.initFromStats(stats.indexedNotes, stats.activeChunks, stats.indexedNotes);
+		}
+
 		try {
 			// Always scan to set totalNotes count, even if queue has items
 			if (scan) {
@@ -167,6 +184,14 @@ export class Scheduler {
 			}
 
 			if (!this.aborted) {
+				// For incremental runs (no scan), processedNotes was incremented per
+				// file on top of a stale baseline — it no longer reflects the real
+				// note count. Re-sync from the DB so the status bar shows the true
+				// number instead of flickering (e.g. 6016 → 6017 → back).
+				if (!scan) {
+					const stats = await this.store.getStats();
+					this.progress.initFromStats(stats.indexedNotes, stats.activeChunks, stats.indexedNotes);
+				}
 				this.progress.complete();
 			}
 		} finally {
@@ -287,9 +312,15 @@ export class Scheduler {
 			for (const item of items) {
 				if (item.id != null) await this.queue.complete(item.id);
 			}
-			// Only count notes that actually produced chunks
+			// Only count notes that actually produced chunks.
+			// In incremental mode the base already counts existing notes, so
+			// an "update" must NOT increment (it would flicker the count);
+			// only a genuine "add" raises the real total.
 			if (indexed) {
-				this.progress.incrementProcessed();
+				const action = items[0]?.action;
+				if (action === "add" || this.incrementalBase === 0) {
+					this.progress.incrementProcessed();
+				}
 				// Periodic async save — counted per note, not per batch
 				await this.maybeSaveAsync();
 			}
