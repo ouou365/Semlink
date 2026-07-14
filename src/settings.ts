@@ -2,7 +2,7 @@
 // Semlink - Settings Tab
 // ========================================
 
-import { App, ButtonComponent, PluginSettingTab, Setting, activeDocument } from "obsidian";
+import { App, ButtonComponent, PluginSettingTab, Setting } from "obsidian";
 import type SmartVaultPlugin from "../main";
 import { DEFAULT_SETTINGS } from "./types";
 import type { IndexProgress } from "./types";
@@ -31,17 +31,13 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		containerEl.empty();
 		containerEl.addClass("smart-vault-settings");
 
-		containerEl.createEl("h2", { text: t("settingsTitle") });
-
-		// Report Bug (top right of title)
-		const titleEl = containerEl.querySelector("h2");
-		if (titleEl) {
-			const bugLink = activeDocument.createElement("a");
-			bugLink.setText(t("reportBug"));
-			bugLink.href = "mailto:ozy2013xm@gmail.com?subject=Semlink Bug Report";
-			bugLink.addClass("semlink-bug-link");
-			titleEl.appendChild(bugLink);
-		}
+		// Title heading with inline bug-report link
+		const titleSetting = new Setting(containerEl).setName(t("settingsTitle")).setHeading();
+		const nameEl = titleSetting.nameEl;
+		const bugLink = nameEl.createEl("a");
+		bugLink.setText(t("reportBug"));
+		bugLink.href = "mailto:ozy2013xm@gmail.com?subject=Semlink Bug Report";
+		bugLink.addClass("semlink-bug-link");
 
 		// Language
 		new Setting(containerEl)
