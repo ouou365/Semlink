@@ -63,59 +63,120 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// ══════════════════════════════════════
 		containerEl.createEl("h3", { text: t("sectionModel") });
 
+		// Provider selection
 		new Setting(containerEl)
-			.setName(t("apiBase"))
-			.setDesc(t("apiBaseDesc"))
+			.setName(t("provider"))
+			.setDesc(t("providerDesc"))
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOptions({
-						"https://api.siliconflow.cn": t("apiBaseCN"),
-						"https://api.siliconflow.com": t("apiBaseGlobal"),
+						"siliconflow": t("providerSiliconFlow"),
+						"huggingface": t("providerHuggingFace"),
 					})
-					.setValue(this.plugin.settings.apiBase)
+					.setValue(this.plugin.settings.provider || "siliconflow")
 					.onChange(async (value) => {
-						this.plugin.settings.apiBase = value;
+						this.plugin.settings.provider = value as "siliconflow" | "huggingface";
 						await this.plugin.saveSettings();
 						this.display();
 					})
 			);
 
-		const apiSite = this.plugin.settings.apiBase.includes("siliconflow.com") ? "siliconflow.com" : "siliconflow.cn";
+		const provider = this.plugin.settings.provider || "siliconflow";
 
-		new Setting(containerEl)
-			.setName(t("apiKey"))
-			.setDesc(t("apiKeyDesc").replace("{site}", apiSite))
-			.addText((text) =>
-				text
-					.setPlaceholder("sk-...")
-					.setValue(this.plugin.settings.siliconFlowApiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.siliconFlowApiKey = value;
-						await this.plugin.saveSettings();
-					})
-			)
-			.then((setting) => {
-				const input = setting.controlEl.querySelector("input") as HTMLInputElement | null;
-				if (input) input.type = "password";
-			});
+		if (provider === "siliconflow") {
+			// SiliconFlow: API Region
+			new Setting(containerEl)
+				.setName(t("apiBase"))
+				.setDesc(t("apiBaseDesc"))
+				.addDropdown((dropdown) =>
+					dropdown
+						.addOptions({
+							"https://api.siliconflow.cn": t("apiBaseCN"),
+							"https://api.siliconflow.com": t("apiBaseGlobal"),
+						})
+						.setValue(this.plugin.settings.apiBase)
+						.onChange(async (value) => {
+							this.plugin.settings.apiBase = value;
+							await this.plugin.saveSettings();
+							this.display();
+						})
+				);
 
-		new Setting(containerEl)
-			.setName(t("embeddingModel"))
-			.setDesc(t("embeddingModelDesc"))
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOptions({
-						"BAAI/bge-m3": `BAAI/bge-m3 (${t("modelRecommended")})`,
-						"Pro/BAAI/bge-m3": `Pro/BAAI/bge-m3 (${t("modelEnhanced")})`,
-						"BAAI/bge-large-zh-v1.5": `BAAI/bge-large-zh-v1.5 (${t("modelZhOptimized")})`,
-						"BAAI/bge-large-en-v1.5": `BAAI/bge-large-en-v1.5 (${t("modelEnOptimized")})`,
-					})
-					.setValue(this.plugin.settings.embeddingModel)
-					.onChange(async (value) => {
-						this.plugin.settings.embeddingModel = value;
-						await this.plugin.saveSettings();
-					})
-			);
+			// SiliconFlow: API Key
+			const apiSite = this.plugin.settings.apiBase.includes("siliconflow.com") ? "siliconflow.com" : "siliconflow.cn";
+			new Setting(containerEl)
+				.setName(t("apiKey"))
+				.setDesc(t("apiKeyDesc").replace("{site}", apiSite))
+				.addText((text) =>
+					text
+						.setPlaceholder("sk-...")
+						.setValue(this.plugin.settings.siliconFlowApiKey)
+						.onChange(async (value) => {
+							this.plugin.settings.siliconFlowApiKey = value;
+							await this.plugin.saveSettings();
+						})
+				)
+				.then((setting) => {
+					const input = setting.controlEl.querySelector("input") as HTMLInputElement | null;
+					if (input) input.type = "password";
+				});
+
+			// SiliconFlow: Model selection
+			new Setting(containerEl)
+				.setName(t("embeddingModel"))
+				.setDesc(t("embeddingModelDesc"))
+				.addDropdown((dropdown) =>
+					dropdown
+						.addOptions({
+							"BAAI/bge-m3": `BAAI/bge-m3 (${t("modelRecommended")})`,
+							"Pro/BAAI/bge-m3": `Pro/BAAI/bge-m3 (${t("modelEnhanced")})`,
+							"BAAI/bge-large-zh-v1.5": `BAAI/bge-large-zh-v1.5 (${t("modelZhOptimized")})`,
+							"BAAI/bge-large-en-v1.5": `BAAI/bge-large-en-v1.5 (${t("modelEnOptimized")})`,
+						})
+						.setValue(this.plugin.settings.embeddingModel)
+						.onChange(async (value) => {
+							this.plugin.settings.embeddingModel = value;
+							await this.plugin.saveSettings();
+						})
+				);
+		} else {
+			// Hugging Face: API Key
+			new Setting(containerEl)
+				.setName(t("huggingFaceApiKey"))
+				.setDesc(t("huggingFaceApiKeyDesc"))
+				.addText((text) =>
+					text
+						.setPlaceholder("hf_...")
+						.setValue(this.plugin.settings.huggingFaceApiKey)
+						.onChange(async (value) => {
+							this.plugin.settings.huggingFaceApiKey = value;
+							await this.plugin.saveSettings();
+						})
+				)
+				.then((setting) => {
+					const input = setting.controlEl.querySelector("input") as HTMLInputElement | null;
+					if (input) input.type = "password";
+				});
+
+			// Hugging Face: Model selection
+			new Setting(containerEl)
+				.setName(t("embeddingModel"))
+				.setDesc(t("embeddingModelDesc"))
+				.addDropdown((dropdown) =>
+					dropdown
+						.addOptions({
+							"BAAI/bge-m3": `BAAI/bge-m3 (${t("modelRecommended")})`,
+							"BAAI/bge-large-zh-v1.5": `BAAI/bge-large-zh-v1.5 (${t("modelZhOptimized")})`,
+							"BAAI/bge-large-en-v1.5": `BAAI/bge-large-en-v1.5 (${t("modelEnOptimized")})`,
+							"intfloat/multilingual-e5-large": `intfloat/multilingual-e5-large (${t("modelZhOptimized")})`,
+						})
+						.setValue(this.plugin.settings.embeddingModel)
+						.onChange(async (value) => {
+							this.plugin.settings.embeddingModel = value;
+							await this.plugin.saveSettings();
+						})
+				);
+		}
 
 		// ══════════════════════════════════════
 		// Section: MCP Service

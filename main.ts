@@ -50,7 +50,7 @@ export default class SmartVaultPlugin extends Plugin {
 		this.store = new VectorStore(dataDir);
 		await this.store.init();
 
-		this.queue = new IndexQueue((this.store as any).db);
+		this.queue = new IndexQueue(this.store);
 		this.client = new EmbeddingClient(this.settings);
 		this.scheduler = new Scheduler(
 			this.app,
@@ -83,10 +83,10 @@ export default class SmartVaultPlugin extends Plugin {
 		});
 
 		// Show initial status bar with existing index data
-		this.updateInitialStatusBar();
+		await this.updateInitialStatusBar();
 
 		// Start MCP server
-		if (this.settings.siliconFlowApiKey) {
+		if (this.settings.siliconFlowApiKey || this.settings.huggingFaceApiKey) {
 			await this.startMcpServer();
 		}
 
@@ -145,23 +145,25 @@ export default class SmartVaultPlugin extends Plugin {
 		);
 
 		// Update initial status bar
-		this.updateInitialStatusBar();
+		await this.updateInitialStatusBar();
 
 		console.log("[Semlink] Plugin loaded");
 	}
 
 	onunload() {
-		// All synchronous — Obsidian does NOT await async onunload
+		// All synchronous — Obsidian does NOT await async onunload.
 		try { this.scheduler?.abort(); } catch {}
 		try { this.watcher?.stop(); } catch {}
 		try { this.mcpServer?.stop(); } catch {}
-		// Explicit save before close: the async run()'s finally block may not
-		// execute before the process exits. This ensures all in-memory data
-		// (including notes that haven't reached the 10-note save threshold)
-		// is flushed to disk.
-		try { this.store?.save(); } catch {}
-		// store.close() calls save() again internally — redundant but safe
-		try { this.store?.close(); } catch {}
+		// Persist & close the store. store.close() is async, but:
+		//  - In worker mode it sends a `close` message to the child, which
+		//    performs a synchronous save() + db.close() in its own thread and
+		//    then exits. Data lands on disk even if the host tears down
+		//    immediately after.
+		//  - In fallback mode close() runs synchronously.
+		// Either way we don't block on the promise here (we can't — onunload
+		// is sync); the worker handles flushing on its end.
+		try { void this.store?.close(); } catch {}
 		console.log("[Semlink] Plugin unloaded");
 	}
 
@@ -232,7 +234,11 @@ export default class SmartVaultPlugin extends Plugin {
 			return;
 		}
 
-		if (!this.settings.siliconFlowApiKey) {
+		const hasApiKey = this.settings.provider === "huggingface"
+			? !!this.settings.huggingFaceApiKey
+			: !!this.settings.siliconFlowApiKey;
+
+		if (!hasApiKey) {
 			new Notice(`Semlink: ${t("noticeNoApiKey")}`);
 			return;
 		}
@@ -243,14 +249,14 @@ export default class SmartVaultPlugin extends Plugin {
 
 	// ──── UI ────
 
-	showProgressModal() {
+	async showProgressModal() {
 		// Sync store stats to progress tracker before opening
 		// Both "idle" and "completed" phases need DB stats — the in-memory
 		// progress values may be stale (e.g. after an incremental/watcher run
 		// only processed a handful of files).
 		const phase = this.progress.current.phase;
 		if (phase === "idle" || phase === "completed") {
-			const stats = this.store.getStats();
+			const stats = await this.store.getStats();
 			this.progress.initFromStats(stats.indexedNotes, stats.activeChunks, stats.indexedNotes);
 		}
 		const modal = new ProgressModal(this.app, this.progress);
@@ -288,13 +294,13 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 	}
 
-	private updateInitialStatusBar() {
+	private async updateInitialStatusBar() {
 		if (this.statusBarEl) {
 			const dot = this.statusBarEl.querySelector(".status-dot");
 			if (dot) dot.className = "status-dot idle";
 			const count = this.statusBarEl.querySelector(".status-count");
 			if (count) {
-				const stats = this.store.getStats();
+				const stats = await this.store.getStats();
 				count.textContent = `${stats.indexedNotes} ${t("statusFilesCount")}`;
 			}
 		}

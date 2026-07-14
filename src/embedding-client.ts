@@ -3,7 +3,7 @@
 // ========================================
 
 import { requestUrl, RequestUrlParam } from "obsidian";
-import type { SmartVaultSettings, EmbeddingResponse, NetworkStatus } from "./types";
+import type { SmartVaultSettings, EmbeddingProvider, EmbeddingResponse, NetworkStatus } from "./types";
 
 export interface EmbedResult {
 	embeddings: number[][];
@@ -12,7 +12,9 @@ export interface EmbedResult {
 }
 
 export class EmbeddingClient {
+	private provider: EmbeddingProvider;
 	private apiKey: string;
+	private huggingFaceApiKey: string;
 	private apiBase: string;
 	private model: string;
 	private batchSize: number;
@@ -26,7 +28,9 @@ export class EmbeddingClient {
 	private lastResponseTimes: number[] = [];
 
 	constructor(settings: SmartVaultSettings) {
+		this.provider = settings.provider || "siliconflow";
 		this.apiKey = settings.siliconFlowApiKey;
+		this.huggingFaceApiKey = settings.huggingFaceApiKey;
 		this.apiBase = settings.apiBase;
 		this.model = settings.embeddingModel;
 		this.batchSize = settings.batchSize;
@@ -35,12 +39,19 @@ export class EmbeddingClient {
 	}
 
 	updateSettings(settings: SmartVaultSettings) {
+		this.provider = settings.provider || "siliconflow";
 		this.apiKey = settings.siliconFlowApiKey;
+		this.huggingFaceApiKey = settings.huggingFaceApiKey;
 		this.apiBase = settings.apiBase;
 		this.model = settings.embeddingModel;
 		this.batchSize = settings.batchSize;
 		this.requestDelayMs = settings.requestDelayMs;
 		this.maxRetries = settings.maxRetries;
+	}
+
+	/** Get the active API key based on current provider */
+	private get activeApiKey(): string {
+		return this.provider === "huggingface" ? this.huggingFaceApiKey : this.apiKey;
 	}
 
 	get networkStatus(): NetworkStatus {
@@ -67,8 +78,9 @@ export class EmbeddingClient {
 	 * Handles retries and rate-limiting internally.
 	 */
 	async embed(texts: string[]): Promise<EmbedResult> {
-		if (!this.apiKey) {
-			throw new Error("SiliconFlow API key not configured");
+		if (!this.activeApiKey) {
+			const providerName = this.provider === "huggingface" ? "Hugging Face" : "SiliconFlow";
+			throw new Error(`${providerName} API key not configured`);
 		}
 
 		// Check auto-pause
@@ -176,6 +188,13 @@ export class EmbeddingClient {
 	}
 
 	private async callApi(input: string[]): Promise<EmbeddingResponse> {
+		if (this.provider === "huggingface") {
+			return this.callHuggingFaceApi(input);
+		}
+		return this.callSiliconFlowApi(input);
+	}
+
+	private async callSiliconFlowApi(input: string[]): Promise<EmbeddingResponse> {
 		const params: RequestUrlParam = {
 			url: `${this.apiBase}/v1/embeddings`,
 			method: "POST",
@@ -202,6 +221,47 @@ export class EmbeddingClient {
 		}
 
 		return resp.json as EmbeddingResponse;
+	}
+
+	private async callHuggingFaceApi(input: string[]): Promise<EmbeddingResponse> {
+		const params: RequestUrlParam = {
+			url: `https://api-inference.huggingface.co/models/${this.model}`,
+			method: "POST",
+			headers: {
+				"Authorization": `Bearer ${this.huggingFaceApiKey}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				inputs: input,
+			}),
+			throw: false,
+		};
+
+		const resp = await requestUrl(params);
+
+		if (resp.status !== 200) {
+			const errBody = typeof resp.json === "object" ? resp.json : {};
+			const errMsg = errBody?.error || errBody?.error?.message || errBody?.message || `HTTP ${resp.status}`;
+			const err: any = new Error(errMsg);
+			err.status = resp.status;
+			throw err;
+		}
+
+		// HF returns [[emb1], [emb2], ...] — convert to OpenAI-compatible format
+		const raw = resp.json as number[][][];
+		// Handle single input case: HF may return [emb] instead of [[emb]]
+		const embeddings: number[][] = Array.isArray(raw[0]?.[0]) ? raw as unknown as number[][] : raw;
+
+		return {
+			object: "list",
+			model: this.model,
+			data: embeddings.map((embedding, index) => ({
+				object: "embedding",
+				embedding,
+				index,
+			})),
+			usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+		};
 	}
 
 	private onSuccess() {

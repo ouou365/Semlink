@@ -2,10 +2,15 @@
 // Semlink - Core Type Definitions
 // ========================================
 
+/** Embedding service provider */
+export type EmbeddingProvider = "siliconflow" | "huggingface";
+
 /** Plugin settings persisted via Obsidian loadData/saveData */
 export interface SmartVaultSettings {
 	language: "zh" | "en";
+	provider: EmbeddingProvider;
 	siliconFlowApiKey: string;
+	huggingFaceApiKey: string;
 	apiBase: string;
 	embeddingModel: string;
 	mcpPort: number;
@@ -21,7 +26,9 @@ export interface SmartVaultSettings {
 
 export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	language: "zh",
+	provider: "siliconflow",
 	siliconFlowApiKey: "",
+	huggingFaceApiKey: "",
 	apiBase: "https://api.siliconflow.cn",
 	embeddingModel: "BAAI/bge-m3",
 	mcpPort: 3001,

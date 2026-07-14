@@ -72,7 +72,7 @@ export class Scheduler {
 			// Skip empty files — they produce no chunks and would never be counted
 			if (file.stat.size === 0) continue;
 
-			const storedMtime = this.store.getNoteMtime(file.path);
+			const storedMtime = await this.store.getNoteMtime(file.path);
 			if (storedMtime === null) {
 				// New file
 				items.push({ notePath: file.path, action: "add", priority: 2 });
@@ -96,7 +96,7 @@ export class Scheduler {
 		this.progress.current.processedNotes = alreadyIndexed;
 		this.progress.current.skippedChunks = alreadyIndexed;
 
-		this.queue.enqueueMany(items);
+		await this.queue.enqueueMany(items);
 		this.progress.incrementProcessed(0); // trigger UI update
 		console.log(`[Semlink] Scan complete: ${items.length} files to index, ${alreadyIndexed} unchanged`);
 	}
@@ -136,10 +136,10 @@ export class Scheduler {
 				}
 
 				// Dequeue next batch
-				const batch = this.queue.dequeue(this.settings.batchSize);
+				const batch = await this.queue.dequeue(this.settings.batchSize);
 				if (batch.length === 0) {
 					// Queue empty — flush any remaining unsaved notes (tail < saveInterval)
-					this.flushSave();
+					await this.flushSave();
 					break;
 				}
 
@@ -159,7 +159,7 @@ export class Scheduler {
 			}
 		} finally {
 			// Always save on loop exit (normal completion, pause, or abort)
-			this.store.save();
+			await this.store.save();
 			this.running = false;
 		}
 	}
@@ -169,7 +169,7 @@ export class Scheduler {
 		const file = this.vault.getAbstractFileByPath(notePath);
 		if (!file || !(file instanceof TFile)) {
 			// File deleted
-			this.store.deleteChunksByNotePath(notePath);
+			await this.store.deleteChunksByNotePath(notePath);
 			return false;
 		}
 
@@ -179,7 +179,7 @@ export class Scheduler {
 
 		// For updates: mark old chunks as stale
 		if (action === "update") {
-			this.store.markChunksStale(notePath);
+			await this.store.markChunksStale(notePath);
 		}
 
 		// Chunk the note (sync but usually fast)
@@ -205,13 +205,13 @@ export class Scheduler {
 		// Wrap all DB writes for this note in a single transaction
 		// IMPORTANT: do NOT yield before DB writes — if close() fires during yield,
 		// the in-memory DB won't contain this note's data and it will be lost.
-		this.store.beginTransaction();
+		await this.store.beginTransaction();
 		try {
 			// Insert chunk metadata first (so UPDATE in saveEmbeddings can find them)
 			const chunkIds = chunks.map((c) => c.id);
 			const now = Date.now();
 			for (let i = 0; i < chunks.length; i++) {
-				this.store.insertChunk({
+				await this.store.insertChunk({
 					id: chunks[i].id,
 					notePath,
 					heading: chunks[i].heading,
@@ -225,16 +225,16 @@ export class Scheduler {
 			}
 
 			// Save embeddings (UPDATE chunks SET vector = ... WHERE id = ?)
-			this.store.saveEmbeddings(chunkIds, allEmbeddings);
+			await this.store.saveEmbeddings(chunkIds, allEmbeddings);
 
 			// Delete stale chunks for this note (if update)
 			if (action === "update") {
-				this.store.deleteStaleChunks(notePath);
+				await this.store.deleteStaleChunks(notePath);
 			}
 
-			this.store.commitTransaction();
+			await this.store.commitTransaction();
 		} catch (e) {
-			this.store.rollbackTransaction();
+			await this.store.rollbackTransaction();
 			throw e;
 		}
 
@@ -273,7 +273,7 @@ export class Scheduler {
 			const indexed = await this.processNote(notePath, items);
 			// Mark queue items as completed
 			for (const item of items) {
-				if (item.id != null) this.queue.complete(item.id);
+				if (item.id != null) await this.queue.complete(item.id);
 			}
 			// Only count notes that actually produced chunks
 			if (indexed) {
@@ -287,7 +287,7 @@ export class Scheduler {
 			console.error(`[Semlink] Error processing ${notePath}:`, msg);
 
 			for (const item of items) {
-				if (item.id != null) this.queue.fail(item.id, msg);
+				if (item.id != null) await this.queue.fail(item.id, msg);
 			}
 			this.progress.incrementFailed(items.length);
 			this.progress.setConsecutiveFailures(this.client.consecutiveFailures);
@@ -324,29 +324,29 @@ export class Scheduler {
 		this.processedSinceSave++;
 		if (this.processedSinceSave >= this.saveInterval) {
 			await this.yieldControl();
-			this.store.save();
-			const stats = this.store.getStats();
+			await this.store.save();
+			const stats = await this.store.getStats();
 			this.progress.setDbSizeMb(stats.dbSizeMb);
 			this.processedSinceSave = 0;
 		}
 	}
 
 	/** Flush any remaining unsaved notes to disk (called when queue is empty) */
-	private flushSave(): void {
+	private async flushSave(): Promise<void> {
 		if (this.processedSinceSave > 0) {
-			this.store.save();
+			await this.store.save();
 			this.processedSinceSave = 0;
 		}
 	}
 
 	/** Enqueue a single file for indexing (from watcher) */
-	enqueueFile(notePath: string, action: QueueAction): void {
-		this.queue.enqueue(notePath, action, action === "update" ? 3 : 2);
+	async enqueueFile(notePath: string, action: QueueAction): Promise<void> {
+		await this.queue.enqueue(notePath, action, action === "update" ? 3 : 2);
 	}
 
 	/** Rename a note's path in the index without re-embedding (from watcher) */
-	renamePath(oldPath: string, newPath: string): void {
-		this.store.renameNotePath(oldPath, newPath);
+	async renamePath(oldPath: string, newPath: string): Promise<void> {
+		await this.store.renameNotePath(oldPath, newPath);
 	}
 
 	/**

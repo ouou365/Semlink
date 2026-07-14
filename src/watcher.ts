@@ -73,8 +73,8 @@ export class VaultWatcher {
 		if (file.extension !== "md") return;
 		if (this.isExcluded(file.path)) return;
 
-		this.debounce(file.path, () => {
-			this.scheduler.enqueueFile(file.path, "add");
+		this.debounce(file.path, async () => {
+			await this.scheduler.enqueueFile(file.path, "add");
 			this.ensureSchedulerRunning();
 		});
 	}
@@ -85,8 +85,8 @@ export class VaultWatcher {
 		if (file.extension !== "md") return;
 		if (this.isExcluded(file.path)) return;
 
-		this.debounce(file.path, () => {
-			this.scheduler.enqueueFile(file.path, "update");
+		this.debounce(file.path, async () => {
+			await this.scheduler.enqueueFile(file.path, "update");
 			this.ensureSchedulerRunning();
 		});
 	}
@@ -95,8 +95,9 @@ export class VaultWatcher {
 		if (!this.autoIndex || !this.ready) return;
 		if (!(file instanceof TFile)) return;
 
-		this.scheduler.enqueueFile(file.path, "delete");
-		this.ensureSchedulerRunning();
+		// Fire-and-forget: enqueue is async (routes through the worker), but the
+		// event handler itself must stay synchronous.
+		void this.scheduler.enqueueFile(file.path, "delete").then(() => this.ensureSchedulerRunning());
 	}
 
 	private onRename(file: TAbstractFile, oldPath: string) {
@@ -106,11 +107,10 @@ export class VaultWatcher {
 
 		if (this.isExcluded(file.path)) {
 			// Moved to excluded location — delete old index entries
-			this.scheduler.enqueueFile(oldPath, "delete");
-			this.ensureSchedulerRunning();
+			void this.scheduler.enqueueFile(oldPath, "delete").then(() => this.ensureSchedulerRunning());
 		} else {
 			// Just update the path in-place, no re-embedding needed
-			this.scheduler.renamePath(oldPath, file.path);
+			void this.scheduler.renamePath(oldPath, file.path);
 		}
 	}
 

@@ -367,11 +367,11 @@ export class McpServer {
 			case "get_similar_notes":
 				return await this.toolGetSimilarNotes(args.path, args.limit, args.threshold);
 			case "list_indexed":
-				return this.toolListIndexed(args.prefix);
+				return await this.toolListIndexed(args.prefix);
 			case "index_status":
-				return this.toolIndexStatus();
+				return await this.toolIndexStatus();
 			case "reindex":
-				return this.toolReindex(args.path, args.force);
+				return await this.toolReindex(args.path, args.force);
 			case "get_section":
 				return await this.toolGetSection(args.path, args.heading, args.maxDepth);
 			default:
@@ -387,7 +387,7 @@ export class McpServer {
 		const queryVec = embedResult.embeddings[0];
 
 		// Search
-		const results = this.store.search(queryVec, limit, threshold);
+		const results = await this.store.search(queryVec, limit, threshold);
 
 		return {
 			content: [
@@ -431,7 +431,7 @@ export class McpServer {
 
 	private async toolGetSimilarNotes(path: string, limit = 10, threshold = 0.4) {
 		// Get chunks for this note to use as reference
-		const chunks = this.store.getChunksByNotePath(path);
+		const chunks = await this.store.getChunksByNotePath(path);
 		if (chunks.length === 0) {
 			return {
 				content: [{ type: "text", text: `No indexed chunks found for: ${path}` }],
@@ -444,7 +444,7 @@ export class McpServer {
 		const embedResult = await this.client.embed([chunks[0].content]);
 		const queryVec = embedResult.embeddings[0];
 
-		const results = this.store.search(queryVec, limit + 5, threshold);
+		const results = await this.store.search(queryVec, limit + 5, threshold);
 
 		// Filter out the original note
 		const filtered = results.filter((r) => r.notePath !== path).slice(0, limit);
@@ -468,13 +468,13 @@ export class McpServer {
 		};
 	}
 
-	private toolListIndexed(prefix?: string) {
-		const paths = this.store.getAllIndexedPaths();
+	private async toolListIndexed(prefix?: string) {
+		const paths = await this.store.getAllIndexedPaths();
 		const filtered = prefix
 			? Array.from(paths).filter((p) => p.startsWith(prefix))
 			: Array.from(paths);
 
-		const stats = this.store.getStats();
+		const stats = await this.store.getStats();
 
 		return {
 			content: [
@@ -491,9 +491,9 @@ export class McpServer {
 		};
 	}
 
-	private toolIndexStatus() {
+	private async toolIndexStatus() {
 		const progress = this.progress.current;
-		const stats = this.store.getStats();
+		const stats = await this.store.getStats();
 
 		return {
 			content: [
@@ -527,14 +527,14 @@ export class McpServer {
 		};
 	}
 
-	private toolReindex(path?: string, force = false) {
+	private async toolReindex(path?: string, force = false) {
 		if (path) {
-			this.scheduler.enqueueFile(path, "update");
+			await this.scheduler.enqueueFile(path, "update");
 		} else {
 			// Full reindex
 			if (force) {
 				// Clear all data before rebuilding
-				this.store.clearAll();
+				await this.store.clearAll();
 				this.progress.reset();
 			}
 			if (!this.scheduler.isRunning) {
