@@ -225,20 +225,78 @@
     flex-shrink: 0;
 }
 
-/* Results area (middle, scrollable) */
-.semlink-search-results {
+/* Conversation area (middle, scrollable) */
+.semlink-search-messages {
     flex: 1 1 0;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
     padding: 0 12px 8px;
 }
 
+/* A single Q&A turn */
+.semlink-msg-turn {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.semlink-msg-user-turn {
+    align-items: flex-end;
+}
+
+.semlink-msg-assistant-turn {
+    align-items: flex-start;
+}
+
+/* Chat bubbles */
+.semlink-msg-bubble {
+    max-width: 90%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+.semlink-msg-user {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-bottom-right-radius: 3px;
+}
+
+.semlink-msg-assistant {
+    background: var(--background-secondary);
+    color: var(--text-normal);
+    border: 1px solid var(--background-modifier-border);
+    border-bottom-left-radius: 3px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+}
+
+.semlink-msg-loading {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.semlink-msg-empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.semlink-msg-error {
+    color: var(--text-error);
+}
+
+/* Result cards (rendered inside assistant bubbles) */
 .semlink-search-result {
     padding: 10px 12px;
     border-radius: 6px;
-    background: var(--background-secondary);
+    background: var(--background-primary);
     cursor: pointer;
     transition: background 0.15s ease;
     border: 1px solid var(--background-modifier-border);
