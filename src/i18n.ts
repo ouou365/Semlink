@@ -131,6 +131,18 @@ const S: Strings = {
 	btnPausing: { zh: "暂停中...", en: "Pausing..." },
 	reportBug: { zh: "报告 Bug", en: "Report Bug" },
 	errorAuthFailed: { zh: "⚠ API Key 无效或未配置，请前往插件设置填写 API Key", en: "⚠ API Key invalid or missing. Please configure it in plugin Settings" },
+
+	// ──── Semantic Search View ────
+	searchViewTitle:   { zh: "语义搜索",          en: "Semantic Search" },
+	searchPlaceholder: { zh: "输入自然语言查询…",   en: "Type a natural-language query…" },
+	searchButton:      { zh: "搜索",              en: "Search" },
+	searchSearching:   { zh: "搜索中…",           en: "Searching…" },
+	searchNoQuery:     { zh: "请输入查询内容",      en: "Enter a query to search" },
+	searchNoResults:   { zh: "没有找到相关笔记",    en: "No matching notes found" },
+	searchError:       { zh: "搜索失败：",         en: "Search failed:" },
+	searchScoreLabel:  { zh: "相似度",            en: "Similarity" },
+	searchNeedApiKey:  { zh: "请先在插件设置中配置 API Key 并完成索引", en: "Configure an API Key in Settings and run an index first" },
+	cmdOpenSearch:     { zh: "打开语义搜索侧边栏",  en: "Open Semantic Search sidebar" },
 };
 
 export function t(key: string): string {
