@@ -2,8 +2,9 @@
 // Semlink - Semantic Search View (Right Sidebar)
 // ========================================
 // A sidebar panel that lets the user type a natural-language query, runs it
-// through the same embed → search pipeline the MCP server uses, and lists the
-// most relevant note chunks. Clicking a result opens the note.
+// through the same embed → search pipeline the MCP server uses, and shows the
+// results in a conversational (chat-like) flow. Each turn = a user query
+// bubble followed by a list of matching note cards.
 
 import { ItemView, WorkspaceLeaf, TFile, Vault } from "obsidian";
 import type { VectorStore } from "./vector-store";
@@ -22,10 +23,10 @@ export class SemanticSearchView extends ItemView {
 	private client: EmbeddingClient;
 	private vault: Vault;
 
-	// DOM references (built once in onOpen, updated in place)
+	// DOM references
 	private inputEl!: HTMLInputElement;
-	private resultsEl!: HTMLElement;
-	private statusEl!: HTMLElement;
+	private messagesEl!: HTMLElement; // scrollable conversation area
+	private statusEl!: HTMLElement;   // transient status (no-api-key hint)
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -62,11 +63,11 @@ export class SemanticSearchView extends ItemView {
 		logoEl.innerHTML = logoSvg;
 		header.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
 
-		// ── Results area (middle, scrollable) ──
+		// ── Conversation area (middle, scrollable) ──
 		this.statusEl = contentEl.createDiv({ cls: "semlink-search-status" });
-		this.resultsEl = contentEl.createDiv({ cls: "semlink-search-results" });
+		this.messagesEl = contentEl.createDiv({ cls: "semlink-search-messages" });
 
-		// ── Input footer (bottom, fixed) — like claudian's composer ──
+		// ── Input footer (bottom, fixed) ──
 		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
 		const wrapper = footer.createDiv({ cls: "semlink-search-input-wrapper" });
 		this.inputEl = wrapper.createEl("input", {
@@ -74,8 +75,6 @@ export class SemanticSearchView extends ItemView {
 			cls: "semlink-search-input",
 			attr: { placeholder: t("searchPlaceholder"), "aria-label": t("searchPlaceholder") },
 		});
-		// Search only on explicit submit (Enter key or Search button) — no
-		// live/autocomplete-style search while typing.
 		this.inputEl.addEventListener("keydown", (e) => {
 			if (e.key === "Enter") {
 				e.preventDefault();
@@ -91,8 +90,6 @@ export class SemanticSearchView extends ItemView {
 			void this.runSearch();
 		});
 
-		// If no API key is configured, show a hint up front instead of failing
-		// on the first query.
 		if (!this.hasApiKey()) {
 			this.statusEl.textContent = t("searchNeedApiKey");
 		}
@@ -103,8 +100,6 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	private hasApiKey(): boolean {
-		// EmbeddingClient throws if the active key is missing; we mirror that
-		// check here so we can show a friendly hint.
 		const provider = (this.client as any).provider as string | undefined;
 		if (provider === "huggingface") {
 			return !!(this.client as any).huggingFaceApiKey;
@@ -114,23 +109,23 @@ export class SemanticSearchView extends ItemView {
 
 	private async runSearch(): Promise<void> {
 		const query = this.inputEl.value.trim();
-		if (!query) {
-			this.statusEl.textContent = t("searchNoQuery");
-			this.resultsEl.empty();
-			return;
-		}
+		if (!query) return;
 		if (!this.hasApiKey()) {
 			this.statusEl.textContent = t("searchNeedApiKey");
-			this.resultsEl.empty();
 			return;
 		}
 
-		// Loading state
-		this.statusEl.textContent = t("searchSearching");
-		this.resultsEl.empty();
+		// Clear the transient status once the first query is submitted.
+		this.statusEl.textContent = "";
+
+		// Append the user's message bubble, then clear the input field.
+		this.appendUserMessage(query);
+		this.inputEl.value = "";
+
+		// Append a loading placeholder for the assistant's reply.
+		const loadingEl = this.appendAssistantMessage(t("searchSearching"));
 
 		try {
-			// Same pipeline as mcp-server.toolSearchNotes: embed query → search.
 			const embedResult = await this.client.embed([query]);
 			const results = await this.store.search(
 				embedResult.embeddings[0],
@@ -138,37 +133,51 @@ export class SemanticSearchView extends ItemView {
 				DEFAULT_THRESHOLD,
 			);
 
+			// Replace the loading placeholder with actual results.
+			loadingEl.empty();
 			if (results.length === 0) {
-				this.statusEl.textContent = t("searchNoResults");
-				return;
+				loadingEl.createDiv({ cls: "semlink-msg-empty", text: t("searchNoResults") });
+			} else {
+				this.renderResultsIn(loadingEl, results);
 			}
-
-			this.statusEl.textContent = "";
-			this.renderResults(results);
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
-			this.statusEl.textContent = `${t("searchError")} ${msg}`;
+			loadingEl.empty();
+			loadingEl.createDiv({ cls: "semlink-msg-error", text: `${t("searchError")} ${msg}` });
 		}
+
+		this.scrollToBottom();
 	}
 
-	private renderResults(results: SearchResult[]): void {
-		this.resultsEl.empty();
-		for (const r of results) {
-			const card = this.resultsEl.createDiv({ cls: "semlink-search-result" });
+	/** Append a right-aligned user query bubble to the conversation. */
+	private appendUserMessage(text: string): void {
+		const turn = this.messagesEl.createDiv({ cls: "semlink-msg-turn semlink-msg-user-turn" });
+		turn.createDiv({ cls: "semlink-msg-bubble semlink-msg-user", text });
+	}
 
-			// Title: prefer heading, fall back to file basename
+	/** Append a left-aligned assistant container and return it for population. */
+	private appendAssistantMessage(initialText: string): HTMLElement {
+		const turn = this.messagesEl.createDiv({ cls: "semlink-msg-turn semlink-msg-assistant-turn" });
+		const bubble = turn.createDiv({ cls: "semlink-msg-bubble semlink-msg-assistant" });
+		if (initialText) {
+			bubble.createDiv({ cls: "semlink-msg-loading", text: initialText });
+		}
+		return bubble;
+	}
+
+	/** Render result cards inside an assistant bubble. */
+	private renderResultsIn(container: HTMLElement, results: SearchResult[]): void {
+		for (const r of results) {
+			const card = container.createDiv({ cls: "semlink-search-result" });
+
 			const title = r.heading || this.basename(r.notePath);
 			card.createDiv({ cls: "semlink-search-result-title", text: title });
-
-			// Path (muted)
 			card.createDiv({ cls: "semlink-search-result-path", text: r.notePath });
 
-			// Preview text
 			if (r.contentPreview) {
 				card.createDiv({ cls: "semlink-search-result-preview", text: r.contentPreview });
 			}
 
-			// Meta row: similarity badge
 			const meta = card.createDiv({ cls: "semlink-search-result-meta" });
 			const scorePct = Math.round(r.score * 100);
 			meta.createSpan({
@@ -176,11 +185,14 @@ export class SemanticSearchView extends ItemView {
 				text: `${t("searchScoreLabel")} ${scorePct}%`,
 			});
 
-			// Click anywhere on the card opens the note
 			card.addEventListener("click", () => {
 				void this.openNote(r.notePath);
 			});
 		}
+	}
+
+	private scrollToBottom(): void {
+		this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
 	}
 
 	private async openNote(notePath: string): Promise<void> {
