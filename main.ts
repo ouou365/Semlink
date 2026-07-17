@@ -16,6 +16,7 @@ import { SmartVaultSettingTab } from "./src/settings";
 import { ProgressModal } from "./src/progress-modal";
 import { SemanticSearchView, SEARCH_VIEW_TYPE } from "./src/search-view";
 import { setLang, t } from "./src/i18n";
+import logoSvg from "./src/semlink-logo.svg";
 
 export default class SmartVaultPlugin extends Plugin {
 	settings: SmartVaultSettings = { ...DEFAULT_SETTINGS };
@@ -110,9 +111,14 @@ export default class SmartVaultPlugin extends Plugin {
 		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SemanticSearchView(
 			leaf, this.store, this.client, this.app.vault,
 		));
-		this.addRibbonIcon("search", t("searchViewTitle"), () => {
+		const ribbonBtn = this.addRibbonIcon("search", t("searchViewTitle"), () => {
 			void this.activateSearchView();
 		});
+		// Replace the built-in Lucide icon with the custom Semlink logo SVG.
+		const svgEl = ribbonBtn.querySelector("svg");
+		if (svgEl) {
+			svgEl.outerHTML = logoSvg;
+		}
 
 		// Commands
 		this.addCommand({

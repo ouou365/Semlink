@@ -195,9 +195,17 @@
 }
 
 .semlink-search-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 20px;
     height: 20px;
     flex-shrink: 0;
+}
+
+.semlink-search-logo svg {
+    width: 20px;
+    height: 20px;
 }
 
 .semlink-search-brand {
