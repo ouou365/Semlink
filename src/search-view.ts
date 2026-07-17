@@ -6,7 +6,7 @@
 // results in a conversational (chat-like) flow. Each turn = a user query
 // bubble followed by a list of matching note cards.
 
-import { ItemView, WorkspaceLeaf, TFile, Vault } from "obsidian";
+import { ItemView, MarkdownView, WorkspaceLeaf, TFile, Vault } from "obsidian";
 import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import type { SearchResult } from "./types";
@@ -186,7 +186,7 @@ export class SemanticSearchView extends ItemView {
 			});
 
 			card.addEventListener("click", () => {
-				void this.openNote(r.notePath);
+				void this.openNote(r.notePath, r.contentPreview);
 			});
 		}
 	}
@@ -195,11 +195,69 @@ export class SemanticSearchView extends ItemView {
 		this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
 	}
 
-	private async openNote(notePath: string): Promise<void> {
+	private async openNote(notePath: string, preview: string): Promise<void> {
 		const file = this.vault.getAbstractFileByPath(notePath);
-		if (file instanceof TFile) {
-			await this.app.workspace.getLeaf(false).openFile(file);
+		if (!(file instanceof TFile)) return;
+
+		// Open the file, then try to scroll to the line that best matches the
+		// chunk's preview text.
+		await this.app.workspace.getLeaf(false).openFile(file);
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const editor = view?.editor;
+		if (!editor) return;
+
+		const line = this.findMatchingLine(editor.getValue(), preview);
+		if (line >= 0) {
+			editor.setCursor({ line, ch: 0 });
+			editor.scrollIntoView({
+				from: { line, ch: 0 },
+				to: { line: Math.min(line + 3, editor.lastLine()), ch: 0 },
+			}, true);
 		}
+	}
+
+	/**
+	 * Find the line number in `content` whose text best matches `preview`.
+	 * The preview is a flattened snippet (newlines collapsed to spaces by
+	 * makePreview), so we match on its leading run of non-space characters
+	 * and fall back to a token-based best match.
+	 */
+	private findMatchingLine(content: string, preview: string): number {
+		if (!preview) return -1;
+		const lines = content.split("\n");
+
+		// Take the first chunk of the preview that looks like real text and
+		// try an exact substring search against each line.
+		const anchor = preview.replace(/\s+/g, " ").trim().slice(0, 40);
+		if (anchor) {
+			for (let i = 0; i < lines.length; i++) {
+				if (lines[i].includes(anchor)) return i;
+			}
+			// The preview may start mid-line: try the tail of the anchor.
+			const tail = anchor.slice(-20);
+			if (tail.length >= 5) {
+				for (let i = 0; i < lines.length; i++) {
+					if (lines[i].includes(tail)) return i;
+				}
+			}
+		}
+
+		// Fall back to matching the longest preview token anywhere in a line.
+		const tokens = preview.split(/\s+/).filter((w) => w.length >= 4);
+		if (tokens.length === 0) return -1;
+		let bestLine = -1;
+		let bestHits = 0;
+		for (let i = 0; i < lines.length; i++) {
+			let hits = 0;
+			for (const tok of tokens) {
+				if (lines[i].includes(tok)) hits++;
+			}
+			if (hits > bestHits) {
+				bestHits = hits;
+				bestLine = i;
+			}
+		}
+		return bestHits > 0 ? bestLine : -1;
 	}
 
 	private basename(path: string): string {
