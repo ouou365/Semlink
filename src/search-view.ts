@@ -27,8 +27,6 @@ export class SemanticSearchView extends ItemView {
 	private resultsEl!: HTMLElement;
 	private statusEl!: HTMLElement;
 
-	private debounceTimer: number | null = null;
-
 	constructor(
 		leaf: WorkspaceLeaf,
 		store: VectorStore,
@@ -76,24 +74,13 @@ export class SemanticSearchView extends ItemView {
 			cls: "semlink-search-input",
 			attr: { placeholder: t("searchPlaceholder"), "aria-label": t("searchPlaceholder") },
 		});
-		// Enter triggers an immediate search (bypassing debounce)
+		// Search only on explicit submit (Enter key or Search button) — no
+		// live/autocomplete-style search while typing.
 		this.inputEl.addEventListener("keydown", (e) => {
 			if (e.key === "Enter") {
 				e.preventDefault();
-				if (this.debounceTimer != null) {
-					window.clearTimeout(this.debounceTimer);
-					this.debounceTimer = null;
-				}
 				void this.runSearch();
 			}
-		});
-		// Typing triggers a debounced search
-		this.inputEl.addEventListener("input", () => {
-			if (this.debounceTimer != null) window.clearTimeout(this.debounceTimer);
-			this.debounceTimer = window.setTimeout(() => {
-				this.debounceTimer = null;
-				void this.runSearch();
-			}, 500);
 		});
 
 		const searchBtn = wrapper.createEl("button", {
@@ -112,10 +99,6 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	protected async onClose(): Promise<void> {
-		if (this.debounceTimer != null) {
-			window.clearTimeout(this.debounceTimer);
-			this.debounceTimer = null;
-		}
 		this.contentEl.empty();
 	}
 
