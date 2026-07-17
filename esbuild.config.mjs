@@ -46,6 +46,7 @@ const buildOptions = {
 	loader: {
 		".wasm": "base64",
 		".png": "dataurl",
+		".svg": "text",
 	},
 };
 
