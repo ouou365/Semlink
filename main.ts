@@ -115,9 +115,18 @@ export default class SmartVaultPlugin extends Plugin {
 			void this.activateSearchView();
 		});
 		// Replace the built-in Lucide icon with the custom Semlink logo SVG.
+		// Obsidian sizes ribbon icons via `.svg-icon { width/height }`, so we
+		// reuse that class to keep the custom icon at the correct size and
+		// inherit the theme text color (the SVG path uses fill="currentColor").
 		const svgEl = ribbonBtn.querySelector("svg");
 		if (svgEl) {
 			svgEl.outerHTML = logoSvg;
+			const customSvg = ribbonBtn.querySelector("svg");
+			if (customSvg) {
+				customSvg.addClass("svg-icon");
+				customSvg.setAttribute("width", "18");
+				customSvg.setAttribute("height", "18");
+			}
 		}
 
 		// Commands

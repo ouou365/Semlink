@@ -204,6 +204,7 @@
     width: 20px;
     height: 20px;
     flex-shrink: 0;
+    color: var(--interactive-accent);
 }
 
 .semlink-search-logo svg {
