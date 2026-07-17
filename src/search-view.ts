@@ -58,15 +58,20 @@ export class SemanticSearchView extends ItemView {
 		contentEl.empty();
 		contentEl.addClass("semlink-search-view");
 
-		// Brand header
+		// ── Header (top, fixed) — brand logo + title ──
 		const header = contentEl.createDiv({ cls: "semlink-search-header" });
 		const logoEl = header.createDiv({ cls: "semlink-search-logo" });
 		logoEl.innerHTML = logoSvg;
 		header.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
 
-		// Search bar
-		const bar = contentEl.createDiv({ cls: "semlink-search-bar" });
-		this.inputEl = bar.createEl("input", {
+		// ── Results area (middle, scrollable) ──
+		this.statusEl = contentEl.createDiv({ cls: "semlink-search-status" });
+		this.resultsEl = contentEl.createDiv({ cls: "semlink-search-results" });
+
+		// ── Input footer (bottom, fixed) — like claudian's composer ──
+		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
+		const wrapper = footer.createDiv({ cls: "semlink-search-input-wrapper" });
+		this.inputEl = wrapper.createEl("input", {
 			type: "text",
 			cls: "semlink-search-input",
 			attr: { placeholder: t("searchPlaceholder"), "aria-label": t("searchPlaceholder") },
@@ -91,19 +96,13 @@ export class SemanticSearchView extends ItemView {
 			}, 500);
 		});
 
-		const searchBtn = bar.createEl("button", {
+		const searchBtn = wrapper.createEl("button", {
 			cls: "semlink-search-btn",
 			text: t("searchButton"),
 		});
 		searchBtn.addEventListener("click", () => {
 			void this.runSearch();
 		});
-
-		// Status line (loading / error / empty)
-		this.statusEl = contentEl.createDiv({ cls: "semlink-search-status" });
-
-		// Results container (scrollable)
-		this.resultsEl = contentEl.createDiv({ cls: "semlink-search-results" });
 
 		// If no API key is configured, show a hint up front instead of failing
 		// on the first query.
