@@ -14,6 +14,7 @@ import { McpServer } from "./src/mcp-server";
 import { VaultWatcher } from "./src/watcher";
 import { SmartVaultSettingTab } from "./src/settings";
 import { ProgressModal } from "./src/progress-modal";
+import { SemanticSearchView, SEARCH_VIEW_TYPE } from "./src/search-view";
 import { setLang, t } from "./src/i18n";
 
 export default class SmartVaultPlugin extends Plugin {
@@ -105,6 +106,14 @@ export default class SmartVaultPlugin extends Plugin {
 		// Register settings tab
 		this.addSettingTab(new SmartVaultSettingTab(this.app, this));
 
+		// Semantic Search sidebar view
+		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SemanticSearchView(
+			leaf, this.store, this.client, this.app.vault,
+		));
+		this.addRibbonIcon("search", t("searchViewTitle"), () => {
+			void this.activateSearchView();
+		});
+
 		// Commands
 		this.addCommand({
 			id: "smart-vault-full-index",
@@ -122,6 +131,12 @@ export default class SmartVaultPlugin extends Plugin {
 			id: "smart-vault-show-progress",
 			name: t("cmdShowProgress"),
 			callback: () => this.showProgressModal(),
+		});
+
+		this.addCommand({
+			id: "smart-vault-open-search",
+			name: t("cmdOpenSearch"),
+			callback: () => void this.activateSearchView(),
 		});
 
 		this.addCommand({
@@ -273,6 +288,24 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 		const modal = new ProgressModal(this.app, this.progress);
 		modal.open();
+	}
+
+	/** Reveal (or create) the semantic-search view in the right sidebar. */
+	async activateSearchView(): Promise<void> {
+		const { workspace } = this.app;
+		let leaf = workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
+		if (!leaf) {
+			leaf = workspace.getRightLeaf(false);
+			if (leaf) {
+				await leaf.setViewState({
+					type: SEARCH_VIEW_TYPE,
+					active: true,
+				});
+			}
+		}
+		if (leaf) {
+			await workspace.revealLeaf(leaf);
+		}
 	}
 
 	private updateStatusBar(p: import("./src/types").IndexProgress) {
