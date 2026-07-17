@@ -5,7 +5,7 @@
 // through the same embed → search pipeline the MCP server uses, and lists the
 // most relevant note chunks. Clicking a result opens the note.
 
-import { ItemView, WorkspaceLeaf, TFile, Vault } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, Vault, setIcon } from "obsidian";
 import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import type { SearchResult } from "./types";
@@ -56,6 +56,11 @@ export class SemanticSearchView extends ItemView {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass("semlink-search-view");
+
+		// Brand header
+		const header = contentEl.createDiv({ cls: "semlink-search-header" });
+		setIcon(header.createDiv({ cls: "semlink-search-logo" }), "search");
+		header.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
 
 		// Search bar
 		const bar = contentEl.createDiv({ cls: "semlink-search-bar" });

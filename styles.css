@@ -186,6 +186,35 @@
     height: 100%;
 }
 
+.semlink-search-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+}
+
+.semlink-search-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: var(--interactive-accent);
+}
+
+.semlink-search-logo svg {
+    width: 18px;
+    height: 18px;
+}
+
+.semlink-search-brand {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text-normal);
+    letter-spacing: 0.2px;
+}
+
 .semlink-search-bar {
     display: flex;
     gap: 6px;
