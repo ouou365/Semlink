@@ -143,6 +143,23 @@ const S: Strings = {
 	searchScoreLabel:  { zh: "相似度",            en: "Similarity" },
 	searchNeedApiKey:  { zh: "请先在插件设置中配置 API Key 并完成索引", en: "Configure an API Key in Settings and run an index first" },
 	cmdOpenSearch:     { zh: "打开语义搜索侧边栏",  en: "Open Semantic Search sidebar" },
+
+	// ──── Chat Model Provider ────
+	sectionChat:         { zh: "对话模型",              en: "Chat Models" },
+	chatProviderName:    { zh: "供应商名称",            en: "Provider Name" },
+	chatBaseUrl:         { zh: "Base URL",             en: "Base URL" },
+	chatApiKey:          { zh: "API Key",              en: "API Key" },
+	chatApiFormat:       { zh: "API 格式",              en: "API Format" },
+	chatFormatOpenAI:    { zh: "Chat Completions (/v1/chat/completions)", en: "Chat Completions (/v1/chat/completions)" },
+	chatFormatAnthropic: { zh: "Anthropic Messages (/v1/messages)",       en: "Anthropic Messages (/v1/messages)" },
+	chatModels:          { zh: "模型列表",              en: "Models" },
+	chatModelId:         { zh: "模型 ID",              en: "Model ID" },
+	chatContextWindow:   { zh: "上下文窗口",            en: "Context Window" },
+	chatAddProvider:     { zh: "添加供应商",            en: "Add Provider" },
+	chatAddModel:        { zh: "添加模型",              en: "Add Model" },
+	chatDeleteProvider:  { zh: "删除供应商",            en: "Delete Provider" },
+	chatDeleteModel:     { zh: "删除模型",              en: "Delete Model" },
+	chatEditModel:       { zh: "编辑模型",              en: "Edit Model" },
 };
 
 export function t(key: string): string {

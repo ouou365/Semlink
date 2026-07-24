@@ -5,6 +5,51 @@
 /** Embedding service provider */
 export type EmbeddingProvider = "siliconflow" | "huggingface";
 
+/** Chat completion API wire format */
+export type ChatApiFormat = "openai" | "anthropic";
+
+/** A single chat model definition */
+export interface ChatModel {
+	id: string;
+	contextWindow: number;
+}
+
+/** A chat model provider configuration */
+export interface ChatProvider {
+	id: string;
+	name: string;
+	baseUrl: string;
+	apiKey: string;
+	apiFormat: ChatApiFormat;
+	models: ChatModel[];
+}
+
+/** Default DeepSeek chat providers (pre-configured for convenience) */
+export const DEFAULT_CHAT_PROVIDERS: ChatProvider[] = [
+	{
+		id: "deepseek-openai",
+		name: "DeepSeek (OpenAI)",
+		baseUrl: "https://api.deepseek.com",
+		apiKey: "",
+		apiFormat: "openai",
+		models: [
+			{ id: "deepseek-v4-flash", contextWindow: 200000 },
+			{ id: "deepseek-v4-pro", contextWindow: 200000 },
+		],
+	},
+	{
+		id: "deepseek-anthropic",
+		name: "DeepSeek (Anthropic)",
+		baseUrl: "https://api.deepseek.com/anthropic",
+		apiKey: "",
+		apiFormat: "anthropic",
+		models: [
+			{ id: "deepseek-v4-flash", contextWindow: 200000 },
+			{ id: "deepseek-v4-pro", contextWindow: 200000 },
+		],
+	},
+];
+
 /** Plugin settings persisted via Obsidian loadData/saveData */
 export interface SmartVaultSettings {
 	language: "zh" | "en";
@@ -22,6 +67,8 @@ export interface SmartVaultSettings {
 	maxRetries: number;
 	batchSize: number;
 	requestDelayMs: number;
+	/** Chat model providers for the conversational search feature */
+	chatProviders: ChatProvider[];
 }
 
 export const DEFAULT_SETTINGS: SmartVaultSettings = {
@@ -40,6 +87,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	maxRetries: 3,
 	batchSize: 64,
 	requestDelayMs: 200,
+	chatProviders: DEFAULT_CHAT_PROVIDERS,
 };
 
 /** Chunk status in the lifecycle */

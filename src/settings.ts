@@ -5,7 +5,7 @@
 import { App, ButtonComponent, PluginSettingTab, Setting } from "obsidian";
 import type SmartVaultPlugin from "../main";
 import { DEFAULT_SETTINGS } from "./types";
-import type { IndexProgress } from "./types";
+import type { ChatProvider, ChatModel, IndexProgress } from "./types";
 import { t } from "./i18n";
 
 export class SmartVaultSettingTab extends PluginSettingTab {
@@ -173,6 +173,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 						})
 				);
 		}
+
+		// ══════════════════════════════════════
+		// Section: Chat Models
+		// ══════════════════════════════════════
+		this.renderChatModelsSection(containerEl);
 
 		// ══════════════════════════════════════
 		// Section: MCP Service
@@ -375,6 +380,160 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+	}
+
+	// ──── Chat Models Section ────
+
+	private renderChatModelsSection(containerEl: HTMLElement): void {
+		new Setting(containerEl).setName(t("sectionChat")).setHeading();
+
+		const providers = this.plugin.settings.chatProviders;
+		for (let pi = 0; pi < providers.length; pi++) {
+			this.renderChatProvider(containerEl, pi);
+		}
+
+		// Add provider button
+		new Setting(containerEl)
+			.addButton((btn) => {
+				btn.setButtonText(t("chatAddProvider")).setClass("mod-cta").onClick(async () => {
+					providers.push({
+						id: `provider-${Date.now()}`,
+						name: "New Provider",
+						baseUrl: "",
+						apiKey: "",
+						apiFormat: "openai",
+						models: [],
+					});
+					await this.plugin.saveSettings();
+					this.display();
+				});
+			});
+	}
+
+	private renderChatProvider(containerEl: HTMLElement, index: number): void {
+		const provider = this.plugin.settings.chatProviders[index];
+		if (!provider) return;
+
+		// Provider name
+		new Setting(containerEl)
+			.setName(t("chatProviderName"))
+			.addText((text) =>
+				text
+					.setPlaceholder("DeepSeek")
+					.setValue(provider.name)
+					.onChange(async (value) => {
+						provider.name = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Base URL
+		new Setting(containerEl)
+			.setName(t("chatBaseUrl"))
+			.addText((text) =>
+				text
+					.setPlaceholder("https://api.example.com")
+					.setValue(provider.baseUrl)
+					.onChange(async (value) => {
+						provider.baseUrl = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// API Key
+		new Setting(containerEl)
+			.setName(t("chatApiKey"))
+			.addText((text) =>
+				text
+					.setPlaceholder("sk-...")
+					.setValue(provider.apiKey)
+					.onChange(async (value) => {
+						provider.apiKey = value;
+						await this.plugin.saveSettings();
+					})
+			)
+			.then((setting) => {
+				const input = setting.controlEl.querySelector("input") as HTMLInputElement | null;
+				if (input) input.type = "password";
+			});
+
+		// API Format
+		new Setting(containerEl)
+			.setName(t("chatApiFormat"))
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						"openai": t("chatFormatOpenAI"),
+						"anthropic": t("chatFormatAnthropic"),
+					})
+					.setValue(provider.apiFormat)
+					.onChange(async (value) => {
+						provider.apiFormat = value as "openai" | "anthropic";
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Models sub-section
+		new Setting(containerEl).setName(t("chatModels")).setHeading();
+
+		for (let mi = 0; mi < provider.models.length; mi++) {
+			this.renderChatModel(containerEl, index, mi);
+		}
+
+		// Add model + Delete provider buttons
+		new Setting(containerEl)
+			.addButton((btn) => {
+				btn.setButtonText(t("chatAddModel")).onClick(async () => {
+					provider.models.push({ id: "new-model", contextWindow: 200000 });
+					await this.plugin.saveSettings();
+					this.display();
+				});
+			})
+			.addButton((btn) => {
+				btn.setButtonText(t("chatDeleteProvider")).setWarning().onClick(async () => {
+					this.plugin.settings.chatProviders.splice(index, 1);
+					await this.plugin.saveSettings();
+					this.display();
+				});
+			});
+	}
+
+	private renderChatModel(containerEl: HTMLElement, providerIndex: number, modelIndex: number): void {
+		const provider = this.plugin.settings.chatProviders[providerIndex];
+		if (!provider) return;
+		const model = provider.models[modelIndex];
+		if (!model) return;
+
+		new Setting(containerEl)
+			.setName(t("chatModelId"))
+			.addText((text) =>
+				text
+					.setPlaceholder("model-id")
+					.setValue(model.id)
+					.onChange(async (value) => {
+						model.id = value;
+						await this.plugin.saveSettings();
+					})
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("200000")
+					.setValue(String(model.contextWindow))
+					.onChange(async (value) => {
+						const n = parseInt(value, 10);
+						if (!isNaN(n) && n > 0) {
+							model.contextWindow = n;
+							await this.plugin.saveSettings();
+						}
+					})
+			)
+			.addExtraButton((btn) => {
+				btn.setIcon("trash").setTooltip(t("chatDeleteModel")).onClick(async () => {
+					provider.models.splice(modelIndex, 1);
+					await this.plugin.saveSettings();
+					this.display();
+				});
+			});
 	}
 
 	private applyIndexBtnState(p: IndexProgress) {
