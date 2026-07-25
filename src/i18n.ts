@@ -19,6 +19,9 @@ type Strings = Record<string, Record<Lang, string>>;
 const S: Strings = {
 	// ──── Settings Tab ────
 	settingsTitle: { zh: "Semlink 设置", en: "Semlink Settings" },
+	tabGeneral: { zh: "通用", en: "General" },
+	tabModels: { zh: "模型", en: "Models" },
+	tabMcp: { zh: "MCP", en: "MCP" },
 	language: { zh: "语言", en: "Language" },
 	languageDesc: { zh: "界面显示语言", en: "Interface language" },
 	provider: { zh: "嵌入服务", en: "Embedding Provider" },

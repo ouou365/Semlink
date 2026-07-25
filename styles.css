@@ -177,6 +177,36 @@
     opacity: 0.7;
 }
 
+/* Settings tabs */
+.smart-vault-settings .semlink-settings-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.smart-vault-settings .semlink-settings-tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 6px 14px;
+    margin-bottom: -1px;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.smart-vault-settings .semlink-settings-tab:hover {
+    color: var(--text-normal);
+}
+
+.smart-vault-settings .semlink-settings-tab.is-active {
+    color: var(--interactive-accent);
+    border-bottom-color: var(--interactive-accent);
+    font-weight: 600;
+}
+
 /* ──── Semantic Search View (Right Sidebar) ──── */
 /* Layout follows the claudian pattern: flex column with a fixed header at top,
    a scrollable results area in the middle, and a fixed input footer at bottom. */

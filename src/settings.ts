@@ -8,12 +8,15 @@ import { DEFAULT_SETTINGS } from "./types";
 import type { ChatProvider, ChatModel, IndexProgress } from "./types";
 import { t } from "./i18n";
 
+type SettingsTab = "general" | "models" | "mcp";
+
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
 	private indexBtn: ButtonComponent | null = null;
 	private indexBtnUnsubscribe: (() => void) | null = null;
 	private indexBtnCurrentState: "resume" | "pause" | "none" = "none";
 	private indexBtnLoading = false;
+	private activeTab: SettingsTab = "general";
 
 	constructor(app: App, plugin: SmartVaultPlugin) {
 		super(app, plugin);
@@ -39,6 +42,50 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		bugLink.href = "mailto:ozy2013xm@gmail.com?subject=Semlink Bug Report";
 		bugLink.addClass("semlink-bug-link");
 
+		// Tab navigation
+		this.renderTabNav(containerEl);
+
+		// Render only the active tab's content
+		const panelEl = containerEl.createDiv({ cls: "semlink-settings-panel" });
+		switch (this.activeTab) {
+			case "general":
+				this.renderGeneralTab(panelEl);
+				break;
+			case "models":
+				this.renderModelsTab(panelEl);
+				break;
+			case "mcp":
+				this.renderMcpTab(panelEl);
+				break;
+		}
+	}
+
+	private renderTabNav(containerEl: HTMLElement): void {
+		const navEl = containerEl.createDiv({ cls: "semlink-settings-tabs" });
+		const tabs: Array<{ id: SettingsTab; label: string }> = [
+			{ id: "general", label: t("tabGeneral") },
+			{ id: "models", label: t("tabModels") },
+			{ id: "mcp", label: t("tabMcp") },
+		];
+		for (const tab of tabs) {
+			const btn = navEl.createEl("button", {
+				cls: "semlink-settings-tab",
+				text: tab.label,
+			});
+			if (tab.id === this.activeTab) btn.addClass("is-active");
+			btn.addEventListener("click", () => {
+				if (this.activeTab !== tab.id) {
+					this.activeTab = tab.id;
+					this.display();
+				}
+			});
+		}
+	}
+
+	// ══════════════════════════════════════
+	// Tab: General — language, indexing, embedding params
+	// ══════════════════════════════════════
+	private renderGeneralTab(containerEl: HTMLElement): void {
 		// Language
 		new Setting(containerEl)
 			.setName(t("language"))
@@ -54,9 +101,116 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// ══════════════════════════════════════
-		// Section: Model Settings
-		// ══════════════════════════════════════
+		// ── Section: Index Management ──
+		new Setting(containerEl).setName(t("sectionIndex")).setHeading();
+
+		new Setting(containerEl)
+			.setName(t("excludePaths"))
+			.setDesc(t("excludePathsDesc"))
+			.addTextArea((text) =>
+				text
+					.setPlaceholder("templates/\n.git/\nnode_modules/")
+					.setValue(this.plugin.settings.excludePaths)
+					.onChange(async (value) => {
+						this.plugin.settings.excludePaths = value;
+						await this.plugin.saveSettings();
+					})
+			)
+			.then((setting) => {
+				(setting.controlEl.querySelector("textarea") as HTMLTextAreaElement).rows = 4;
+			});
+
+		new Setting(containerEl)
+			.setName(t("autoIndex"))
+			.setDesc(t("autoIndexDesc"))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.autoIndex)
+					.onChange(async (value) => {
+						this.plugin.settings.autoIndex = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(t("fullReindex"))
+			.setDesc(t("fullReindexDesc"))
+			.addButton((btn) => {
+				this.indexBtn = btn;
+				this.indexBtnCurrentState = "none";
+				this.applyIndexBtnState(this.plugin.progress.current);
+				this.indexBtnUnsubscribe = this.plugin.progress.onProgress((event) => {
+					if (event.type === "progress") {
+						this.applyIndexBtnState(event.progress);
+					}
+				});
+			});
+
+		// ── Section: Embedding Parameters ──
+		new Setting(containerEl).setName(t("sectionEmbedding")).setHeading();
+
+		new Setting(containerEl)
+			.setName(t("chunkSize"))
+			.setDesc(t("chunkSizeDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(200, 2000, 100)
+					.setValue(this.plugin.settings.chunkSize)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.chunkSize = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(t("chunkOverlap"))
+			.setDesc(t("chunkOverlapDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(0, 500, 50)
+					.setValue(this.plugin.settings.chunkOverlap)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.chunkOverlap = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(t("batchSize"))
+			.setDesc(t("batchSizeDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 128, 1)
+					.setValue(this.plugin.settings.batchSize)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.batchSize = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(t("requestDelay"))
+			.setDesc(t("requestDelayDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(0, 1000, 50)
+					.setValue(this.plugin.settings.requestDelayMs)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.requestDelayMs = value;
+						await this.plugin.saveSettings();
+					})
+			);
+	}
+
+	// ══════════════════════════════════════
+	// Tab: Models — embedding provider + chat models
+	// ══════════════════════════════════════
+	private renderModelsTab(containerEl: HTMLElement): void {
+		// ── Section: Model Settings (embedding) ──
 		new Setting(containerEl).setName(t("sectionModel")).setHeading();
 
 		// Provider selection
@@ -174,14 +328,14 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				);
 		}
 
-		// ══════════════════════════════════════
-		// Section: Chat Models
-		// ══════════════════════════════════════
+		// ── Section: Chat Models ──
 		this.renderChatModelsSection(containerEl);
+	}
 
-		// ══════════════════════════════════════
-		// Section: MCP Service
-		// ══════════════════════════════════════
+	// ══════════════════════════════════════
+	// Tab: MCP — service port, access key, status & client config
+	// ══════════════════════════════════════
+	private renderMcpTab(containerEl: HTMLElement): void {
 		new Setting(containerEl).setName(t("sectionMcp")).setHeading();
 
 		new Setting(containerEl)
@@ -272,114 +426,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					textarea.addClass("semlink-monospace");
 				});
 			});
-
-		// ══════════════════════════════════════
-		// Section: Index Management
-		// ══════════════════════════════════════
-		new Setting(containerEl).setName(t("sectionIndex")).setHeading();
-
-		new Setting(containerEl)
-			.setName(t("excludePaths"))
-			.setDesc(t("excludePathsDesc"))
-			.addTextArea((text) =>
-				text
-					.setPlaceholder("templates/\n.git/\nnode_modules/")
-					.setValue(this.plugin.settings.excludePaths)
-					.onChange(async (value) => {
-						this.plugin.settings.excludePaths = value;
-						await this.plugin.saveSettings();
-					})
-			)
-			.then((setting) => {
-				(setting.controlEl.querySelector("textarea") as HTMLTextAreaElement).rows = 4;
-			});
-
-		new Setting(containerEl)
-			.setName(t("autoIndex"))
-			.setDesc(t("autoIndexDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.autoIndex)
-					.onChange(async (value) => {
-						this.plugin.settings.autoIndex = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t("fullReindex"))
-			.setDesc(t("fullReindexDesc"))
-			.addButton((btn) => {
-				this.indexBtn = btn;
-				this.indexBtnCurrentState = "none";
-				this.applyIndexBtnState(this.plugin.progress.current);
-				this.indexBtnUnsubscribe = this.plugin.progress.onProgress((event) => {
-					if (event.type === "progress") {
-						this.applyIndexBtnState(event.progress);
-					}
-				});
-			});
-
-		// ══════════════════════════════════════
-		// Section: Embedding Parameters
-		// ══════════════════════════════════════
-		new Setting(containerEl).setName(t("sectionEmbedding")).setHeading();
-
-		new Setting(containerEl)
-			.setName(t("chunkSize"))
-			.setDesc(t("chunkSizeDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(200, 2000, 100)
-					.setValue(this.plugin.settings.chunkSize)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.chunkSize = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t("chunkOverlap"))
-			.setDesc(t("chunkOverlapDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 500, 50)
-					.setValue(this.plugin.settings.chunkOverlap)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.chunkOverlap = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t("batchSize"))
-			.setDesc(t("batchSizeDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(1, 128, 1)
-					.setValue(this.plugin.settings.batchSize)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.batchSize = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t("requestDelay"))
-			.setDesc(t("requestDelayDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 1000, 50)
-					.setValue(this.plugin.settings.requestDelayMs)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.requestDelayMs = value;
-						await this.plugin.saveSettings();
-					})
-			);
 	}
 
 	// ──── Chat Models Section ────
