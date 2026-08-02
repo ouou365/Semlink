@@ -1,0 +1,12 @@
+[eval]:1
+const fs=require('fs');const path=require('path');function walk(d){let r=[];for(const f of fs.readdirSync(d)){const fp=path.join(d,f);if(f.startsWith('.')||f==='node_modules')continue;if(fs.statSync(fp).isDirectory()){r=r.concat(walk(fp))}else if(f.endsWith('.md')){r.push(fp)}}return r}const vault='D:\Obsidian\xinuo';const files=walk(vault).map(f=>path.relative(vault,f).replace(/\/g,'/'));console.log(JSON.stringify(files))
+                                                                                                                                                                                                                                                                                                                       ^^^^
+Bad character escape sequence, expected 2 hex characters
+
+SyntaxError: Invalid hexadecimal escape sequence
+    at makeContextifyScript (node:internal/vm:194:14)
+    at compileScript (node:internal/process/execution:388:10)
+    at evalTypeScript (node:internal/process/execution:260:22)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.11.0
