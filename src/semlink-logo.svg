@@ -1,1 +1,25 @@
-<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M476.608 183.872h-0.192a292.672 292.672 0 1 0 292.8 292.672h83.2a374.4 374.4 0 0 1-82.112 234.24l153.216 153.984-29.504 29.376-29.504 29.312-152.96-153.792a374.272 374.272 0 0 1-235.136 82.816 375.936 375.936 0 0 1 0-751.872h0.192v83.264z m215.36-74.304c3.52-11.264 20.352-12.864 23.296 0a170.112 170.112 0 0 0 128.256 128.256c12.16 2.752 12.096 20.544 0 23.296a170.112 170.112 0 0 0-128.256 128.256 11.968 11.968 0 0 1-23.296 0A170.176 170.176 0 0 0 563.712 261.12c-12.16-2.752-12.16-20.544 0-23.296a170.112 170.112 0 0 0 128.256-128.256z" fill="currentColor"></path></svg>
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Semlink">
+ <g transform="translate(512 512) scale(1.125) translate(-512 -512)">
+  <!-- 外层立方体轮廓（正六边形，去掉三条直径对角线）—— 中景 -->
+  <path d="M512 72 L893 292 L893 732 L512 952 L131 732 L131 292 Z"
+        fill="none" stroke="currentColor" stroke-width="48" stroke-linejoin="round" stroke-linecap="round"/>
+
+  <!-- 6 条连接线：外顶点 → 小立方体顶点（不进入内部）—— 中景 -->
+  <g stroke="currentColor" stroke-width="48" stroke-linecap="round">
+    <line x1="512" y1="72" x2="512" y2="288"/>
+    <line x1="893" y1="292" x2="706" y2="400"/>
+    <line x1="893" y1="732" x2="706" y2="624"/>
+    <line x1="512" y1="952" x2="512" y2="736"/>
+    <line x1="131" y1="732" x2="318" y2="624"/>
+    <line x1="131" y1="292" x2="318" y2="400"/>
+  </g>
+
+  <!-- 小立方体线框（空心）—— 近景，最粗 -->
+  <path d="M512 288 L706 400 L706 624 L512 736 L318 624 L318 400 Z"
+        fill="none" stroke="currentColor" stroke-width="58" stroke-linejoin="round" stroke-linecap="round"/>
+
+  <!-- 小立方体内部对角线（已删除朝上/左下/右下的中心 3 段，仅保留向"下/右上/左上"三段）—— 近景，最粗 -->
+  <path d="M512 512 L512 736 M706 400 L512 512 M318 400 L512 512"
+        fill="none" stroke="currentColor" stroke-width="58" stroke-linejoin="round" stroke-linecap="round"/>
+ </g>
+</svg>

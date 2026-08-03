@@ -228,3 +228,33 @@ export type ProgressEvent =
 	| { type: "complete" };
 
 export type ProgressCallback = (event: ProgressEvent) => void;
+
+// ──── Chat History ────
+
+/** A thinking step serialized into history (mirrors ChatClient's ThinkingStep). */
+export interface HistoryThinkingStep {
+	type: "thought" | "tool";
+	text?: string;
+	name?: string;
+	args?: any;
+	result?: string;
+}
+
+/** One message in a persisted chat session. */
+export interface HistoryMessage {
+	role: "user" | "assistant";
+	content: string;
+	thinking?: HistoryThinkingStep[];
+	sources?: string[];
+	elapsedSec?: number;
+	timestamp: number;
+}
+
+/** A full chat session (one "conversation thread"). */
+export interface ChatSession {
+	id: string;
+	title: string;
+	messages: HistoryMessage[];
+	createdAt: number;
+	updatedAt: number;
+}

@@ -209,18 +209,21 @@ export class ChatClient {
 			};
 			if (tools.length > 0) body.tools = tools;
 
+			// Stream this round. streamOpenAIChat forwards content deltas live
+			// via onStream, but ONLY once it's seen that the round has no tool
+			// calls (i.e. this is the final answer). Tool rounds stay buffered.
 			const stream = await this.streamOpenAIChat(
 				`${baseUrl}/v1/chat/completions`,
 				provider,
 				body,
+				onStream,
 			);
 			if (stream.usageTokens) usageTokens = stream.usageTokens;
 			cacheHits.push(...stream.cacheHits);
 			if (stream.content) lastText = stream.content;
 
 			if (stream.toolCalls.length === 0) {
-				// Final round: stream the answer body to the UI.
-				await this.replay(stream.content, onStream);
+				// Final round — answer was already streamed live above.
 				return finalize(stream.content.trim() || lastText.trim());
 			}
 
@@ -280,11 +283,14 @@ export class ChatClient {
 		}));
 	}
 
-	/** Stream one OpenAI-compatible chat round (content buffered, no UI emit). */
+	/** Stream one OpenAI-compatible chat round. When `onStream` is provided,
+	 * each content delta is forwarded live (true streaming, not buffered-then-
+	 * replayed). Tool rounds pass no onStream so their content stays buffered. */
 	private async streamOpenAIChat(
 		url: string,
 		provider: ChatProvider,
 		body: any,
+		onStream?: (text: string) => void,
 	): Promise<{ content: string; toolCalls: any[]; usageTokens: number; cacheHits: number[] }> {
 		const resp = await fetch(url, {
 			method: "POST",
@@ -306,12 +312,18 @@ export class ChatClient {
 		const cacheHits: number[] = [];
 		// Tool calls accumulate by their stream index.
 		const toolCalls: Record<number, any> = {};
+		// Track finish_reason to know if this round is the final answer
+		// (finish_reason="stop") or a tool round (finish_reason="tool_calls").
+		let finishReason = "";
 
 		await this.readSSE(resp, (json) => {
 			const delta = json?.choices?.[0]?.delta;
 			if (typeof delta?.content === "string" && delta.content) {
 				content += delta.content;
 			}
+			// Check finish_reason — appears in the last chunk of each round.
+			const fr = json?.choices?.[0]?.finish_reason;
+			if (fr) finishReason = fr;
 			for (const tc of delta?.tool_calls || []) {
 				const idx = tc.index ?? 0;
 				toolCalls[idx] ??= { id: tc.id || "", type: "function", function: { name: "", arguments: "" } };
@@ -332,6 +344,14 @@ export class ChatClient {
 		const calls = Object.entries(toolCalls)
 			.sort(([a], [b]) => Number(a) - Number(b))
 			.map(([, call]) => ({ id: call.id, type: "function", function: call.function }));
+
+		// Only forward content to onStream if this was the FINAL answer round
+		// (no tool calls). Tool rounds' interim content is never shown — this
+		// avoids the "text flashes then vanishes" flicker that happened when
+		// onStream fired before a tool_call arrived mid-stream.
+		if (onStream && calls.length === 0 && content) {
+			onStream(content);
+		}
 
 		return { content, toolCalls: calls, usageTokens, cacheHits };
 	}
@@ -561,13 +581,10 @@ export class ChatClient {
 	 * streams without ever exposing interim tool-round "thinking" text.
 	 */
 	private async replay(text: string, onStream?: (text: string) => void): Promise<void> {
+		// Output the complete answer in one shot — no fake typewriter effect.
+		// (Previously chunked at 12 chars/10ms to simulate streaming, but the
+		// full text is already in hand by the time replay runs.)
 		if (!onStream || !text) return;
-		const CHUNK = 12;
-		const DELAY = 10;
-		for (let i = CHUNK; i < text.length; i += CHUNK) {
-			onStream(text.slice(0, i));
-			await new Promise((resolve) => window.setTimeout(resolve, DELAY));
-		}
 		onStream(text);
 	}
 

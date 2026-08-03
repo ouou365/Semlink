@@ -11,7 +11,8 @@ import { ItemView, MarkdownRenderer, MarkdownView, WorkspaceLeaf, TFile, Vault, 
 import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
-import type { SearchResult } from "./types";
+import type { SearchResult, ChatSession, HistoryMessage } from "./types";
+import { ChatHistoryStore } from "./chat-history";
 import { SaveNoteModal } from "./save-note-modal";
 import { t } from "./i18n";
 import logoSvg from "./semlink-logo.svg";
@@ -28,6 +29,7 @@ export class SemanticSearchView extends ItemView {
 	private client: EmbeddingClient;
 	private chatClient: ChatClient;
 	private vault: Vault;
+	private history: ChatHistoryStore;
 
 	// DOM references
 	private inputEl!: HTMLTextAreaElement;
@@ -42,18 +44,24 @@ export class SemanticSearchView extends ItemView {
 	private depthTriggerEl: HTMLElement | null = null;
 	private depthPopupEl: HTMLElement | null = null;
 
+	// Current conversation state
+	private currentSessionId: string | null = null;
+	private currentMessages: HistoryMessage[] = [];
+
 	constructor(
 		leaf: WorkspaceLeaf,
 		store: VectorStore,
 		client: EmbeddingClient,
 		vault: Vault,
 		chatClient: ChatClient,
+		dataDir: string,
 	) {
 		super(leaf);
 		this.store = store;
 		this.client = client;
 		this.vault = vault;
 		this.chatClient = chatClient;
+		this.history = new ChatHistoryStore(dataDir);
 	}
 
 	getViewType(): string {
@@ -65,7 +73,7 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	getIcon(): string {
-		return "search";
+		return "semlink-logo";
 	}
 
 	protected async onOpen(): Promise<void> {
@@ -73,37 +81,59 @@ export class SemanticSearchView extends ItemView {
 		contentEl.empty();
 		contentEl.addClass("semlink-search-view");
 
-		// ── Header (top, fixed) — brand logo + title ──
+		// ── Header (top, fixed) — left icons | centered brand | right icons ──
 		const header = contentEl.createDiv({ cls: "semlink-search-header" });
-		const logoEl = header.createDiv({ cls: "semlink-search-logo" });
+		// Left icon group: history menu + new-session (pencil).
+		const leftIcons = header.createDiv({ cls: "semlink-search-header-side" });
+		const menuBtn = leftIcons.createEl("button", {
+			cls: "semlink-search-icon-btn clickable-icon",
+			attr: { "aria-label": t("historyTitle"), title: t("historyTitle") },
+		});
+		setIcon(menuBtn, "menu");
+		menuBtn.addEventListener("click", () => this.showHistoryDrawer());
+		const newChatBtn = leftIcons.createEl("button", {
+			cls: "semlink-search-icon-btn clickable-icon",
+			attr: { "aria-label": t("searchNewChat"), title: t("searchNewChat") },
+		});
+		setIcon(newChatBtn, "pencil");
+		newChatBtn.addEventListener("click", () => {
+			this.startNewSession();
+			this.messagesEl.empty();
+			this.statusEl.textContent = "";
+			this.inputEl.value = "";
+			this.renderWelcome();
+			this.inputEl.focus();
+		});
+		// Centered brand (logo + "Semlink").
+		const brand = header.createDiv({ cls: "semlink-search-brand-group" });
+		const logoEl = brand.createDiv({ cls: "semlink-search-logo" });
 		logoEl.innerHTML = logoSvg;
-		header.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
+		brand.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
+		// Right icon group: settings.
+		const rightIcons = header.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
+		const settingsBtn = rightIcons.createEl("button", {
+			cls: "semlink-search-icon-btn clickable-icon",
+			attr: { "aria-label": t("settingsTitle"), title: t("settingsTitle") },
+		});
+		setIcon(settingsBtn, "settings");
+		settingsBtn.addEventListener("click", () => {
+			(this.app as any).setting.open();
+			(this.app as any).setting.openTabById("semlink");
+		});
 
 		// ── Conversation area (middle, scrollable) ──
 		this.statusEl = contentEl.createDiv({ cls: "semlink-search-status" });
 		this.messagesEl = contentEl.createDiv({ cls: "semlink-search-messages" });
+		this.renderWelcome();
 
 		// ── Input footer (bottom, fixed) ──
 		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
-
-		// New-conversation button above the input
-		const newChatRow = footer.createDiv({ cls: "semlink-search-newchat" });
-		const newChatBtn = newChatRow.createEl("button", {
-			cls: "semlink-search-newchat-btn",
-			text: t("searchNewChat"),
-		});
-		newChatBtn.addEventListener("click", () => {
-			this.messagesEl.empty();
-			this.statusEl.textContent = "";
-			this.inputEl.value = "";
-			this.inputEl.focus();
-		});
 
 		const wrapper = footer.createDiv({ cls: "semlink-search-input-wrapper" });
 		const inputRow = wrapper.createDiv({ cls: "semlink-search-input-row" });
 		this.inputEl = inputRow.createEl("textarea", {
 			cls: "semlink-search-input",
-			rows: 3,
+			rows: 5,
 			attr: { placeholder: t("searchPlaceholder"), "aria-label": t("searchPlaceholder") },
 		});
 		this.inputEl.addEventListener("keydown", (e) => {
@@ -212,6 +242,7 @@ export class SemanticSearchView extends ItemView {
 
 		// Append the user's message bubble, then clear the input field.
 		this.appendUserMessage(query);
+		this.recordUserMessage(query);
 		this.inputEl.value = "";
 
 		// Append a loading placeholder for the assistant's reply.
@@ -238,11 +269,16 @@ export class SemanticSearchView extends ItemView {
 				streamEl.style.display = "none";
 
 				const context = this.buildContext(results.slice(0, ANSWER_CONTEXT_SIZE));
+				// Fold conversation history into the query for multi-turn context.
+				const histCtx = this.buildHistoryContext();
+				const fullQuery = histCtx
+					? `以下是之前的对话历史：\n${histCtx}\n\n用户最新问题：${query}`
+					: query;
 				try {
 					const thinkStart = Date.now();
 					const result = await this.chatClient.chat(
 						context,
-						query,
+						fullQuery,
 						(toolName) => {
 							loadingTextEl.textContent = t("searchToolCalling").replace("{tool}", toolName);
 							streamEl.style.display = "none";
@@ -253,7 +289,6 @@ export class SemanticSearchView extends ItemView {
 							loadingTextEl.style.display = "none";
 							streamEl.style.display = "";
 							streamEl.textContent = text;
-							this.scrollToBottom();
 						},
 					);
 					const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
@@ -289,22 +324,11 @@ export class SemanticSearchView extends ItemView {
 					const usedSources = this.buildUsedSources(initialResults, result.usedNotes);
 					this.renderSources(loadingEl, usedSources, false);
 
+					// Persist this turn into chat history.
+					this.recordAssistantMessage(result.answer, thinking, result.usedNotes, elapsedSec);
+
 					// Action buttons (icons) below the sources: copy / save.
-					const actionsEl = loadingEl.createDiv({ cls: "semlink-msg-actions" });
-					const copyBtn = actionsEl.createEl("button", {
-						cls: "semlink-msg-action",
-						attr: { "aria-label": t("searchCopy"), title: t("searchCopy") },
-					});
-					setIcon(copyBtn, "copy");
-					copyBtn.addEventListener("click", () => void this.copyAnswer(result.answer));
-					const saveBtn = actionsEl.createEl("button", {
-						cls: "semlink-msg-action",
-						attr: { "aria-label": t("searchSave"), title: t("searchSave") },
-					});
-					setIcon(saveBtn, "save");
-					saveBtn.addEventListener("click", () => {
-						new SaveNoteModal(this.app, query, result.answer).open();
-					});
+					this.appendActions(loadingEl, result.answer, query);
 				} catch (e) {
 					const msg = e instanceof Error ? e.message : String(e);
 					loadingEl.empty();
@@ -383,6 +407,28 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	/**
+	 * Append copy / save action buttons to an assistant bubble.
+	 * Used for both live answers and restored history messages.
+	 */
+	private appendActions(container: HTMLElement, content: string, questionForSave: string): void {
+		const actionsEl = container.createDiv({ cls: "semlink-msg-actions" });
+		const copyBtn = actionsEl.createEl("button", {
+			cls: "semlink-msg-action",
+			attr: { "aria-label": t("searchCopy"), title: t("searchCopy") },
+		});
+		setIcon(copyBtn, "copy");
+		copyBtn.addEventListener("click", () => void this.copyAnswer(content));
+		const saveBtn = actionsEl.createEl("button", {
+			cls: "semlink-msg-action",
+			attr: { "aria-label": t("searchSave"), title: t("searchSave") },
+		});
+		setIcon(saveBtn, "save");
+		saveBtn.addEventListener("click", () => {
+			new SaveNoteModal(this.app, questionForSave, content).open();
+		});
+	}
+
+	/**
 	 * Render the "thinking" collapsible (default closed) listing the model's
 	 * thoughts and tool calls in chronological order, above the answer. The
 	 * label shows how long the model spent, e.g. "思考了 30 秒".
@@ -409,10 +455,26 @@ export class SemanticSearchView extends ItemView {
 				callDetails.createDiv({ cls: "semlink-tool-call-label", text: t("searchToolRequest") });
 				callDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.args) });
 
-				callDetails.createDiv({ cls: "semlink-tool-call-label", text: t("searchToolResponse") });
-				callDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.result) });
-			}
+			callDetails.createDiv({ cls: "semlink-tool-call-label", text: t("searchToolResponse") });
+			callDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.result) });
 		}
+	}
+
+		// Copy-thinking button at the bottom of the expanded section.
+		const copyBtn = details.createEl("button", {
+			cls: "semlink-thinking-copy",
+			text: t("searchCopyThinking"),
+		});
+		copyBtn.addEventListener("click", () => {
+			const text = thinking.map((s) =>
+				s.type === "thought" ? `💭 ${s.text}` : `🔧 ${s.name}${this.summarizeArgs(s.args)}`
+			).join("\n");
+			void navigator.clipboard.writeText(text).then(() => {
+				new Notice(t("searchCopied"));
+			}).catch(() => {
+				new Notice(t("searchCopyFailed"));
+			});
+		});
 	}
 
 	/** Compact one-line preview of the request args, e.g. " — MIBT". */
@@ -433,8 +495,177 @@ export class SemanticSearchView extends ItemView {
 		}
 	}
 
+	/**
+	 * Render a time-aware welcome message in the center of the conversation
+	 * area when it's empty. Removed as soon as the user sends their first
+	 * message. Greeting adapts to morning/afternoon/evening/night.
+	 */
+	private renderWelcome(): void {
+		const hour = new Date().getHours();
+		let key: string;
+		if (hour < 5) key = "welcomeMidnight";
+		else if (hour < 7) key = "welcomeDawn";
+		else if (hour < 9) key = "welcomeEarlyMorn";
+		else if (hour < 12) key = "welcomeMorning";
+		else if (hour < 13) key = "welcomeLunch";
+		else if (hour < 14) key = "welcomeNap";
+		else if (hour < 15) key = "welcomeAfternoon1";
+		else if (hour < 16) key = "welcomeAfternoon2";
+		else if (hour < 17) key = "welcomeAfternoon3";
+		else if (hour < 18) key = "welcomeAfternoon4";
+		else if (hour < 19) key = "welcomeAfternoon5";
+		else if (hour < 21) key = "welcomeDusk";
+		else if (hour < 22) key = "welcomeNight";
+		else key = "welcomeLateNight";
+
+		// i18n string: "emoji line1\nline2" — split into a primary greeting
+		// (larger, bold) and a secondary care note (smaller, muted).
+		const lines = t(key).split("\n");
+		const welcome = this.messagesEl.createDiv({ cls: "semlink-search-welcome" });
+		welcome.createDiv({ cls: "semlink-search-welcome-greeting", text: lines[0] || "" });
+		if (lines[1]) {
+			welcome.createDiv({ cls: "semlink-search-welcome-sub", text: lines[1] });
+		}
+	}
+
+	// ── Chat history: session lifecycle ──
+
+	/** Seal the current session (if any) and reset to a blank conversation. */
+	private startNewSession(): void {
+		this.currentSessionId = null;
+		this.currentMessages = [];
+	}
+
+	/** Record a user question into the current session (creating one if needed). */
+	private recordUserMessage(content: string): void {
+		if (!this.currentSessionId) {
+			this.currentSessionId = this.history.createSession(content);
+		}
+		const msg: HistoryMessage = { role: "user", content, timestamp: Date.now() };
+		this.currentMessages.push(msg);
+		this.history.addMessage(this.currentSessionId, msg);
+		void this.history.save();
+	}
+
+	/** Record an assistant answer into the current session. */
+	private recordAssistantMessage(content: string, thinking?: ThinkingStep[], sources?: string[], elapsedSec?: number): void {
+		if (!this.currentSessionId) return;
+		const msg: HistoryMessage = {
+			role: "assistant",
+			content,
+			thinking: thinking?.map((s) => ({
+				type: s.type,
+				text: s.type === "thought" ? s.text : undefined,
+				name: s.type === "tool" ? s.name : undefined,
+				args: s.type === "tool" ? s.args : undefined,
+				result: s.type === "tool" ? s.result : undefined,
+			})),
+			sources,
+			elapsedSec,
+			timestamp: Date.now(),
+		};
+		this.currentMessages.push(msg);
+		this.history.addMessage(this.currentSessionId, msg);
+		void this.history.save();
+	}
+
+	/** Build a context string from the current session's prior turns. */
+	private buildHistoryContext(): string {
+		if (this.currentMessages.length <= 1) return "";
+		// All messages except the latest user turn (which is the current query).
+		const prior = this.currentMessages.slice(0, -1);
+		return prior.map((m) => `${m.role === "user" ? "用户" : "助手"}：${m.content}`).join("\n\n");
+	}
+
+	/** Render a previously-saved session into the conversation area. */
+	private async loadSession(session: ChatSession): Promise<void> {
+		this.currentSessionId = session.id;
+		this.currentMessages = [...session.messages];
+		this.messagesEl.empty();
+		this.statusEl.textContent = "";
+		let lastUserQuery = "";
+		for (const msg of session.messages) {
+			if (msg.role === "user") {
+				lastUserQuery = msg.content;
+				this.appendUserMessage(msg.content);
+			} else {
+				const bubble = this.appendAssistantMessage("");
+				const thinking = (msg.thinking || []).map((s) => s as ThinkingStep);
+				if (thinking.length > 0) this.renderThinking(bubble, thinking, msg.elapsedSec || 0);
+				const answerEl = bubble.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
+				await MarkdownRenderer.render(this.app, msg.content, answerEl, "", this);
+				if (msg.sources && msg.sources.length > 0) {
+					const usedSources = msg.sources.map((p) => ({ notePath: p, heading: "", contentPreview: "" }));
+					this.renderSources(bubble, usedSources as any, false);
+				}
+				// Copy / save actions for history answers too.
+				this.appendActions(bubble, msg.content, lastUserQuery);
+			}
+		}
+		this.scrollToBottom();
+		this.inputEl.focus();
+	}
+
+	// ── Chat history: drawer UI ──
+
+	/** Slide in a left-side drawer listing saved chat sessions. */
+	private async showHistoryDrawer(): Promise<void> {
+		const sessions = await this.history.load();
+		// Attach to the view's contentEl (not document.body) so the drawer is
+		// positioned relative to the search panel, not the whole Obsidian window.
+		this.contentEl.style.position = "relative";
+		// Backdrop
+		const backdrop = this.contentEl.createDiv({ cls: "semlink-history-backdrop" });
+		// Drawer panel
+		const drawer = this.contentEl.createDiv({ cls: "semlink-history-drawer" });
+		const header = drawer.createDiv({ cls: "semlink-history-header" });
+		header.createDiv({ cls: "semlink-history-title", text: t("historyTitle") });
+		const closeBtn = header.createEl("button", { cls: "semlink-search-icon-btn clickable-icon" });
+		setIcon(closeBtn, "x");
+		const list = drawer.createDiv({ cls: "semlink-history-list" });
+		if (sessions.length === 0) {
+			list.createDiv({ cls: "semlink-history-empty", text: t("historyEmpty") });
+		}
+		for (const session of this.history.list()) {
+			const item = list.createDiv({ cls: "semlink-history-item" });
+			const info = item.createDiv({ cls: "semlink-history-item-info" });
+			info.createDiv({ cls: "semlink-history-item-title", text: session.title });
+			const date = new Date(session.updatedAt);
+			const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+			info.createDiv({ cls: "semlink-history-item-meta", text: `${timeStr} · ${session.messages.length} ${t("historyMessages")}` });
+			// Delete button
+			const delBtn = item.createEl("button", { cls: "semlink-history-item-del clickable-icon" });
+			setIcon(delBtn, "trash");
+			delBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.history.deleteSession(session.id);
+				void this.history.save();
+				item.remove();
+			});
+			item.addEventListener("click", () => {
+				this.closeHistoryDrawer(backdrop, drawer);
+				void this.loadSession(session);
+			});
+		}
+		// Animate in
+		requestAnimationFrame(() => {
+			drawer.addClass("semlink-history-drawer-open");
+			backdrop.addClass("semlink-history-backdrop-open");
+		});
+		closeBtn.addEventListener("click", () => this.closeHistoryDrawer(backdrop, drawer));
+		backdrop.addEventListener("click", () => this.closeHistoryDrawer(backdrop, drawer));
+	}
+
+	private closeHistoryDrawer(backdrop: HTMLElement, drawer: HTMLElement): void {
+		drawer.removeClass("semlink-history-drawer-open");
+		backdrop.removeClass("semlink-history-backdrop-open");
+		setTimeout(() => { backdrop.remove(); drawer.remove(); }, 300);
+	}
+
 	/** Append a right-aligned user query bubble to the conversation. */
 	private appendUserMessage(text: string): void {
+		// Remove the welcome placeholder once the first real message arrives.
+		this.messagesEl.querySelector(".semlink-search-welcome")?.remove();
 		const turn = this.messagesEl.createDiv({ cls: "semlink-msg-turn semlink-msg-user-turn" });
 		turn.createDiv({ cls: "semlink-msg-bubble semlink-msg-user", text });
 	}

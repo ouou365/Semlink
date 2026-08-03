@@ -2,7 +2,7 @@
 // Semlink - Plugin Entry Point
 // ========================================
 
-import { Notice, Plugin, TFile, FileSystemAdapter } from "obsidian";
+import { Notice, Plugin, TFile, FileSystemAdapter, addIcon } from "obsidian";
 import { join } from "path";
 import { DEFAULT_SETTINGS, type SmartVaultSettings } from "./src/types";
 import { VectorStore } from "./src/vector-store";
@@ -122,25 +122,20 @@ export default class SmartVaultPlugin extends Plugin {
 
 		// Semantic Search sidebar view
 		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SemanticSearchView(
-			leaf, this.store, this.client, this.app.vault, this.chatClient,
+			leaf, this.store, this.client, this.app.vault, this.chatClient, dataDir,
 		));
-		const ribbonBtn = this.addRibbonIcon("search", t("searchViewTitle"), () => {
+
+		// Register the custom Semlink logo as a named Obsidian icon so that both
+		// the left ribbon button and the right sidebar tab use the same brand
+		// mark. addIcon() wraps content in a fixed `0 0 100 100` viewBox, but our
+		// logo uses a 1024 coordinate space, so we wrap the extracted inner markup
+		// in a scale group (100/1024 ≈ 0.0977) to map it into that 100x100 box.
+		const logoInner = logoSvg.replace(/^[\s\S]*?<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
+		addIcon("semlink-logo", `<g transform="scale(0.09765625)">${logoInner}</g>`);
+
+		const ribbonBtn = this.addRibbonIcon("semlink-logo", t("searchViewTitle"), () => {
 			void this.activateSearchView();
 		});
-		// Replace the built-in Lucide icon with the custom Semlink logo SVG.
-		// Obsidian sizes ribbon icons via `.svg-icon { width/height }`, so we
-		// reuse that class to keep the custom icon at the correct size and
-		// inherit the theme text color (the SVG path uses fill="currentColor").
-		const svgEl = ribbonBtn.querySelector("svg");
-		if (svgEl) {
-			svgEl.outerHTML = logoSvg;
-			const customSvg = ribbonBtn.querySelector("svg");
-			if (customSvg) {
-				customSvg.addClass("svg-icon");
-				customSvg.setAttribute("width", "18");
-				customSvg.setAttribute("height", "18");
-			}
-		}
 
 		// Commands
 		this.addCommand({
@@ -328,11 +323,27 @@ export default class SmartVaultPlugin extends Plugin {
 
 	/** Shared QA pipeline used by Feishu bots (embed → search → chat). */
 	private buildFeishuAskHandler(): FeishuAskHandler {
-		return async (question, onToken) => {
+		return async (question, onToken, history, signal, onThinking) => {
 			const embedResult = await this.client.embed([question]);
 			const results = await this.store.search(embedResult.embeddings[0], 10, 0.3);
 			const context = this.buildFeishuContext(results.slice(0, 5));
-			const chatResult = await this.chatClient.chat(context, question, undefined, "standard", onToken);
+			// Fold conversation history into the question so the LLM has
+			// multi-turn context (chat-client.chat itself is stateless).
+			let fullQuestion = question;
+			if (history && history.length > 0) {
+				const transcript = history
+					.map((t) => `${t.role === "user" ? "用户" : "助手"}：${t.content}`)
+					.join("\n\n");
+				fullQuestion = `以下是之前的对话历史：\n${transcript}\n\n用户最新问题：${question}`;
+			}
+			// Bridge chat-client's onToolCall into our per-event onThinking, so
+			// the Feishu bot can stream each tool call into the thinking panel.
+			const onToolCall = onThinking
+				? (name: string, args: any) => onThinking({ type: "tool", name, args })
+				: undefined;
+			const chatResult = await this.chatClient.chat(context, fullQuestion, onToolCall, "standard", onToken);
+			// Honor an abort signal by rejecting (the bot treats this as stopped).
+			if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 			return {
 				answer: chatResult.answer,
 				thinking: chatResult.thinking,
