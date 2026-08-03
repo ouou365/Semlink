@@ -240,10 +240,19 @@ export interface HistoryThinkingStep {
 	result?: string;
 }
 
+/** One composed input run: plain text or a dropped-note chip. */
+export interface HistorySegment {
+	type: "text" | "file";
+	value: string;
+}
+
 /** One message in a persisted chat session. */
 export interface HistoryMessage {
 	role: "user" | "assistant";
 	content: string;
+	/** User messages only — ordered text/chip runs that reproduce the composed
+	 * input faithfully when the session is re-opened from history. */
+	segments?: HistorySegment[];
 	thinking?: HistoryThinkingStep[];
 	sources?: string[];
 	elapsedSec?: number;

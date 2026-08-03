@@ -11,7 +11,7 @@ import { ItemView, MarkdownRenderer, MarkdownView, WorkspaceLeaf, TFile, Vault, 
 import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
-import type { SearchResult, ChatSession, HistoryMessage } from "./types";
+import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
 import { ChatHistoryStore } from "./chat-history";
 import { SaveNoteModal } from "./save-note-modal";
 import { t } from "./i18n";
@@ -32,7 +32,7 @@ export class SemanticSearchView extends ItemView {
 	private history: ChatHistoryStore;
 
 	// DOM references
-	private inputEl!: HTMLTextAreaElement;
+	private inputEl!: HTMLDivElement;
 	private messagesEl!: HTMLElement; // scrollable conversation area
 	private statusEl!: HTMLElement;   // transient status (no-api-key hint)
 	private contextRingEl!: HTMLElement | null; // context-usage donut
@@ -48,9 +48,12 @@ export class SemanticSearchView extends ItemView {
 	private currentSessionId: string | null = null;
 	private currentMessages: HistoryMessage[] = [];
 
-	// Dropped note attachments (vault-relative paths) shown as tags above input.
-	private attachBarEl!: HTMLElement;
+	// Dropped note attachments (vault-relative paths) rendered as inline chips
+	// mixed with the input text.
 	private attachments: string[] = [];
+	/** basename → vault path cache for drop resolution (vault.getFiles() is
+	 * expensive on large vaults; build it once and reuse). */
+	private basenameCache: Map<string, string> | null = null;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -104,7 +107,7 @@ export class SemanticSearchView extends ItemView {
 			this.startNewSession();
 			this.messagesEl.empty();
 			this.statusEl.textContent = "";
-			this.inputEl.value = "";
+			this.inputEl.empty();
 			this.renderWelcome();
 			this.inputEl.focus();
 		});
@@ -134,14 +137,10 @@ export class SemanticSearchView extends ItemView {
 		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
 
 		const wrapper = footer.createDiv({ cls: "semlink-search-input-wrapper" });
-		// Attachment tag bar: files dropped from the vault show as deletable
-		// chips here, and their content is folded into the next query's context.
-		const attachBar = wrapper.createDiv({ cls: "semlink-attach-bar" });
-		this.attachBarEl = attachBar;
-		// Drag & drop is handled on the WHOLE input wrapper (the attach bar is
-		// hidden when empty, so a user dragging onto the textarea must still
-		// trigger the chip flow). preventDefault stops Obsidian from treating
-		// the drop as a link insert / file open.
+		// Drag & drop is handled on the WHOLE input wrapper. preventDefault +
+		// stopPropagation keeps Obsidian from treating the drop as a link
+		// insert / file open. Dropped notes become inline chips inside the
+		// contenteditable input, mixed with the typed text.
 		let dragDepth = 0;
 		wrapper.addEventListener("dragover", (e) => {
 			e.preventDefault();
@@ -159,22 +158,41 @@ export class SemanticSearchView extends ItemView {
 			dragDepth = Math.max(0, dragDepth - 1);
 			if (dragDepth === 0) wrapper.removeClass("semlink-attach-bar-drag");
 		});
-		wrapper.addEventListener("drop", (e) => {
-			e.preventDefault();
-			e.stopPropagation();
-			dragDepth = 0;
-			wrapper.removeClass("semlink-attach-bar-drag");
-			void this.handleFileDrop(e);
-		});
+		// Obsidian installs document-level drop handlers (open file / insert
+		// link) that can swallow the drop before it ever bubbles up to our
+		// wrapper. Grab the drop in the CAPTURE phase, scoped to the input
+		// wrapper, so vault-file drops always reach us first.
+		this.registerDomEvent(
+			document,
+			"drop",
+			(e) => {
+				const target = e.target;
+				if (!(target instanceof Element) || !target.closest(".semlink-search-input-wrapper")) return;
+				e.preventDefault();
+				e.stopPropagation();
+				dragDepth = 0;
+				wrapper.removeClass("semlink-attach-bar-drag");
+				void this.handleFileDrop(e);
+			},
+			true,
+		);
 		const inputRow = wrapper.createDiv({ cls: "semlink-search-input-row" });
-		this.inputEl = inputRow.createEl("textarea", {
+		// Contenteditable input so dropped-note chips can mix INLINE with the
+		// typed text (a plain textarea can only hold text).
+		this.inputEl = inputRow.createDiv({
 			cls: "semlink-search-input",
-			rows: 5,
-			attr: { placeholder: t("searchPlaceholder"), "aria-label": t("searchPlaceholder"), style: "height: 100px;" },
+			attr: {
+				contenteditable: "true",
+				role: "textbox",
+				"aria-multiline": "true",
+				"data-placeholder": t("searchPlaceholder"),
+				"aria-label": t("searchPlaceholder"),
+			},
 		});
 		this.inputEl.addEventListener("keydown", (e) => {
-			// Enter sends; Shift+Enter inserts a newline.
-			if (e.key === "Enter" && !e.shiftKey) {
+			// Enter sends; Shift+Enter inserts a newline. Skip while an IME
+			// composition is in progress (pinyin candidates are still open).
+			if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
 				e.preventDefault();
 				void this.runSearch();
 				// Scroll to the bottom right away so the new message and the
@@ -182,15 +200,37 @@ export class SemanticSearchView extends ItemView {
 				this.scrollToBottom();
 			}
 		});
-
-		const searchBtn = inputRow.createEl("button", {
-			cls: "semlink-search-btn",
-			attr: { "aria-label": t("searchSend"), title: t("searchSend") },
+		// Paste: keep rich HTML out of the chip DOM. [[...]] tokens are
+		// resolved back into styled wiki links (highlight + click-to-open +
+		// attachment tracking); everything else inserts as plain text.
+		this.inputEl.addEventListener("paste", (e) => {
+			e.preventDefault();
+			const text = e.clipboardData?.getData("text/plain") || "";
+			this.insertTextWithWikilinks(text);
 		});
-		setIcon(searchBtn, "send");
-		searchBtn.addEventListener("click", () => {
-			void this.runSearch();
-			this.scrollToBottom();
+		// Browsers insert a <br> when text next to an atomic chip is deleted
+		// (to keep the caret on a visible line) — that forced line break would
+		// push the chip onto a second line. Clean those artifacts up, and keep
+		// the attachment list in sync with the wiki links actually in the input
+		// (a link may be removed via backspace or cut).
+		this.inputEl.addEventListener("input", () => {
+			this.syncAttachmentsFromInput();
+			this.sanitizeInputLayout();
+		});
+		// Cut: the browser will not delete contenteditable=false wiki links on
+		// its own — copy the selection and remove it via the Range API.
+		this.inputEl.addEventListener("cut", (e) => {
+			e.preventDefault();
+			const sel = window.getSelection();
+			if (!sel || sel.rangeCount === 0 || !this.inputEl.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+				return;
+			}
+			const text = sel.toString();
+			if (!text) return;
+			void navigator.clipboard.writeText(text);
+			sel.getRangeAt(0).deleteContents();
+			this.syncAttachmentsFromInput();
+			this.sanitizeInputLayout();
 		});
 
 		// Active chat model indicator inside the input box, with a donut
@@ -240,6 +280,17 @@ export class SemanticSearchView extends ItemView {
 		this.depthTriggerEl = depthTrigger;
 		this.registerDomEvent(document, "click", () => this.hideDepthPopup());
 
+		// Send button lives on the model row (right side), not beside the input.
+		const searchBtn = modelEl.createEl("button", {
+			cls: "semlink-search-btn",
+			attr: { "aria-label": t("searchSend"), title: t("searchSend") },
+		});
+		setIcon(searchBtn, "send");
+		searchBtn.addEventListener("click", () => {
+			void this.runSearch();
+			this.scrollToBottom();
+		});
+
 		if (!this.hasApiKey()) {
 			this.statusEl.textContent = t("searchNeedApiKey");
 		}
@@ -266,7 +317,7 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	private async runSearch(): Promise<void> {
-		const query = this.inputEl.value.trim();
+		const query = this.extractInputText().trim();
 		if (!query) return;
 		if (!this.hasApiKey()) {
 			this.statusEl.textContent = t("searchNeedApiKey");
@@ -276,10 +327,20 @@ export class SemanticSearchView extends ItemView {
 		// Clear the transient status once the first query is submitted.
 		this.statusEl.textContent = "";
 
-		// Append the user's message bubble, then clear the input field.
-		this.appendUserMessage(query);
-		await this.recordUserMessage(query);
-		this.inputEl.value = "";
+		// Append the user's message bubble — preserving the text+chip mix the
+		// user composed — then clear the input. The snapshot is taken BEFORE
+		// clearing so the interleaved chips survive into the rendered bubble
+		// and into the persisted chat history (as ordered segments).
+		const userContent = this.inputEl.cloneNode(true) as HTMLElement;
+		const segments = this.snapshotSegments(userContent);
+		this.appendUserMessage(query, userContent);
+		await this.recordUserMessage(query, segments);
+		this.clearInputText();
+
+		// Snapshot the dropped notes for THIS turn — the attachments array is
+		// reset when the turn finishes, so the chips act as part of the message
+		// rather than persisting across turns.
+		const turnAttachments = this.attachments;
 
 		// Append a loading placeholder for the assistant's reply.
 		const loadingEl = this.appendAssistantMessage(t("searchSearching"));
@@ -288,8 +349,8 @@ export class SemanticSearchView extends ItemView {
 			// If the user dropped notes into the input, read THEM as the source
 			// of truth instead of running a vector search — the LLM should read
 			// the attached documents first, not trigger retrieval.
-			const hasAttachments = this.attachments.length > 0;
-			const attachCtx = hasAttachments ? await this.buildAttachmentContext() : "";
+			const hasAttachments = turnAttachments.length > 0;
+			const attachCtx = hasAttachments ? await this.buildAttachmentContext(turnAttachments) : "";
 			let results: SearchResult[] = [];
 			if (!hasAttachments) {
 				const embedResult = await this.client.embed([query]);
@@ -312,6 +373,31 @@ export class SemanticSearchView extends ItemView {
 				const streamEl = loadingEl.createDiv({ cls: "semlink-msg-stream" });
 				streamEl.style.display = "none";
 
+				// Animated "生成回答中" indicator: cycles the trailing dots so
+				// the UI never looks stuck while the model is composing —
+				// especially in the gap after the last tool call and before the
+				// first stream token.
+				let answerAnim: number | null = null;
+				let answerDots = 0;
+				const stopAnswerAnim = (): void => {
+					if (answerAnim !== null) {
+						window.clearInterval(answerAnim);
+						answerAnim = null;
+					}
+				};
+				const showAnswerLoading = (): void => {
+					loadingTextEl.style.display = "";
+					streamEl.style.display = "none";
+					streamEl.textContent = "";
+					answerDots = 0;
+					loadingTextEl.textContent = t("searchGeneratingAnswer");
+					stopAnswerAnim();
+					answerAnim = window.setInterval(() => {
+						answerDots = (answerDots % 3) + 1; // 1 → 2 → 3 → 1 …
+						loadingTextEl.textContent = t("searchGeneratingAnswer") + ".".repeat(answerDots);
+					}, 350);
+				};
+
 				const context = hasAttachments
 					? attachCtx
 					: this.buildContext(results.slice(0, ANSWER_CONTEXT_SIZE)) + attachCtx;
@@ -327,27 +413,42 @@ export class SemanticSearchView extends ItemView {
 						fullContext,
 						fullQuery,
 						(toolName) => {
+							// A tool is about to run — its name is accurate here.
+							stopAnswerAnim();
 							loadingTextEl.textContent = t("searchToolCalling").replace("{tool}", toolName);
 							streamEl.style.display = "none";
 							streamEl.textContent = "";
 						},
 						this.searchDepth,
 						(text) => {
+							// Answer streaming started.
+							stopAnswerAnim();
 							loadingTextEl.style.display = "none";
 							streamEl.style.display = "";
 							streamEl.textContent = text;
 						},
+						() => {
+							// The model is generating this round (deciding tools
+							// or composing the answer) — show the animated
+							// indicator instead of freezing on a tool's name.
+							showAnswerLoading();
+						},
 					);
 					const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
+					stopAnswerAnim();
 					loadingEl.empty();
-					// The initial retrieval is itself a search step — prepend it
-					// to the thinking process so the notes the model started
-					// from are visible at the top. (Skipped when attachments are
-					// the source instead of a vector search.)
+					// Make the initial evidence visible in the thinking process:
+					// a search_notes step for vector retrieval, or a
+					// read_attachments step when the user dropped notes in.
 					const initialResults = hasAttachments ? [] : results.slice(0, ANSWER_CONTEXT_SIZE);
-					const thinking: ThinkingStep[] = hasAttachments
-						? [...result.thinking]
-						: [{
+					const firstStep: ThinkingStep = hasAttachments
+						? {
+							type: "tool",
+							name: "read_attachments",
+							args: { files: [...turnAttachments] },
+							result: `已读取 ${turnAttachments.length} 个拖入的笔记内容，作为本次回答的主要依据。`,
+						}
+						: {
 							type: "tool",
 							name: "search_notes",
 							args: { query, limit: ANSWER_CONTEXT_SIZE, threshold: DEFAULT_THRESHOLD },
@@ -361,7 +462,8 @@ export class SemanticSearchView extends ItemView {
 								null,
 								2,
 							),
-						}, ...result.thinking];
+						};
+					const thinking: ThinkingStep[] = [firstStep, ...result.thinking];
 					this.renderThinking(loadingEl, thinking, elapsedSec);
 					this.updateContextInfo(result.contextTokens, result.contextBreakdown, result.cacheHitRate);
 					// Render the answer as markdown (Obsidian's renderer handles
@@ -372,7 +474,7 @@ export class SemanticSearchView extends ItemView {
 					// Reference sources BELOW the answer, collapsed by default.
 					// With attachments the sources ARE the dropped notes.
 					const usedSources = hasAttachments
-						? this.attachments.map((p) => ({ chunkId: "", notePath: p, heading: "", contentPreview: "", score: -1 }))
+						? turnAttachments.map((p) => ({ chunkId: "", notePath: p, heading: "", contentPreview: "", score: -1 }))
 						: this.buildUsedSources(initialResults, result.usedNotes);
 					this.renderSources(loadingEl, usedSources, false);
 
@@ -383,6 +485,7 @@ export class SemanticSearchView extends ItemView {
 					this.appendActions(loadingEl, result.answer, query);
 				} catch (e) {
 					const msg = e instanceof Error ? e.message : String(e);
+					stopAnswerAnim();
 					loadingEl.empty();
 					loadingEl.createDiv({ cls: "semlink-msg-error", text: `${t("searchError")} ${msg}` });
 					// Fall back to the raw results (expanded) so the user still
@@ -398,6 +501,9 @@ export class SemanticSearchView extends ItemView {
 			const msg = e instanceof Error ? e.message : String(e);
 			loadingEl.empty();
 			loadingEl.createDiv({ cls: "semlink-msg-error", text: `${t("searchError")} ${msg}` });
+		} finally {
+			// The dropped notes were consumed by this turn.
+			this.attachments = [];
 		}
 
 		this.scrollToBottom();
@@ -484,108 +590,308 @@ export class SemanticSearchView extends ItemView {
 
 	/** Handle a drop of vault files onto the attachment bar. */
 	private async handleFileDrop(e: DragEvent): Promise<void> {
+		const dt = e.dataTransfer;
+		if (!dt) return;
 		const candidates: string[] = [];
-		console.log("[Semlink] drop types:", e.dataTransfer?.types, "files:", e.dataTransfer?.files?.length);
 
-		// 1. Obsidian native files (DataTransferFile has a `path`).
-		const files = e.dataTransfer?.files;
-		if (files) {
-			for (const f of Array.from(files as any)) {
-				console.log("[Semlink] drop file:", f);
-				if (f?.path) candidates.push(String(f.path));
-			}
-		}
-
-		// 2. obsidian:// URI in uri-list / text/plain (e.g. dragging a link).
-		const raw = e.dataTransfer?.getData("text/uri-list") || e.dataTransfer?.getData("text/plain");
-		console.log("[Semlink] drop uri/plain:", raw);
-		if (raw) {
-			const m = raw.match(/obsidian:\/\/open\?[^#]*file=([^&]+)/);
-			if (m) {
-				try { candidates.push(decodeURIComponent(m[1])); } catch { /* ignore */ }
-			}
-		}
-
-		console.log("[Semlink] drop candidates:", candidates);
-
-		// Normalize: strip vault base path if present, keep vault-relative.
-		for (const rawPath of candidates) {
-			let p = rawPath.replace(/\\/g, "/");
-			// Obsidian may hand us absolute OS paths; resolve to vault-relative.
+		// 1. Read EVERY type the drop carries. Obsidian's file explorer hands
+		//    vault files as text/uri-list / text/plain (`obsidian://open?file=`),
+		//    but it may add custom types too — parse them all instead of hoping
+		//    for one specific format.
+		for (const type of Array.from(dt.types || [])) {
+			let data = "";
 			try {
-				const base = (this.app.vault.adapter as any).getBasePath?.();
-				if (base && p.startsWith(base.replace(/\\/g, "/") + "/")) {
-					p = p.slice(base.length + 1);
+				data = dt.getData(type);
+			} catch {
+				continue;
+			}
+			if (!data) continue;
+			// obsidian://open?vault=..&file=..  — the `file` param is the
+			// vault-relative path (URL-encoded).
+			const uri = data.match(/obsidian:\/\/open\?[^#]*file=([^&#]+)/);
+			if (uri) {
+				try {
+					candidates.push(decodeURIComponent(uri[1]));
+				} catch {
+					// ignore malformed encoding
 				}
-			} catch { /* ignore */ }
-			console.log("[Semlink] drop normalized:", p, "exists:", !!this.vault.getAbstractFileByPath(p));
-			// Skip non-note paths (images, folders, URIs that failed to parse).
-			if (!p || p.startsWith("obsidian://")) continue;
-			// The obsidian:// URI's file param omits the extension — resolve it:
-			// try as-is, then with common note extensions appended.
-			let resolved = p;
-			if (!this.vault.getAbstractFileByPath(resolved)) {
-				for (const ext of [".md", ".txt", ".markdown"]) {
-					if (this.vault.getAbstractFileByPath(resolved + ext)) {
-						resolved += ext;
-						break;
-					}
+			} else if (data.startsWith("file://")) {
+				// OS-level file URI (e.g. dragged from a file manager).
+				try {
+					candidates.push(decodeURIComponent(data.slice(7)));
+				} catch {
+					// ignore
 				}
 			}
-			if (!this.vault.getAbstractFileByPath(resolved)) continue;
-			if (!this.attachments.includes(resolved)) this.attachments.push(resolved);
 		}
-		this.renderAttachments();
+
+		// 2. OS-level File objects (drag from outside Obsidian). Electron's
+		//    File exposes a `path`; plain browser File objects only have `name`.
+		const osFiles = Array.from(dt.files || []) as Array<{ path?: string; name?: string }>;
+		for (const f of osFiles) {
+			if (f.path) candidates.push(f.path);
+		}
+
+		// 3. Normalize & resolve to vault-relative paths. Only cheap index
+		//    lookups here — heavy DOM work is deferred to the next frame below.
+		const added: string[] = [];
+		for (const rawPath of candidates) {
+			const resolved = this.resolveNotePath(rawPath);
+			if (!resolved) continue;
+			if (!this.attachments.includes(resolved)) {
+				this.attachments.push(resolved);
+				added.push(resolved);
+			}
+		}
+
+		if (added.length === 0) return;
+		// Defer DOM mutation (chips + notice) off the drop event so the UI
+		// doesn't jank; a single frame later is imperceptible.
+		requestAnimationFrame(() => {
+			this.insertAttachmentChips(added);
+			new Notice(t("attachAdded").replace("{n}", String(added.length)));
+		});
 	}
 
-	/** Re-render the attachment tag bar from this.attachments. */
-	private renderAttachments(): void {
-		this.attachBarEl.empty();
-		if (this.attachments.length === 0) {
-			this.attachBarEl.style.display = "none";
-			return;
+	/** Resolve an absolute/bare path to a vault note by basename (cached). */
+	private matchNoteByBasename(p: string): string | undefined {
+		if (!this.basenameCache) {
+			this.basenameCache = new Map();
+			for (const f of this.vault.getFiles()) {
+				this.basenameCache.set(f.basename.toLowerCase(), f.path);
+			}
 		}
-		this.attachBarEl.style.display = "flex";
-		for (const path of this.attachments) {
-			const chip = this.attachBarEl.createDiv({ cls: "semlink-attach-chip" });
-			// Title = basename minus extension, truncated to ~12 chars.
-			const base = path.split("/").pop() || path;
-			const title = base.replace(/\.(md|txt|markdown)$/i, "");
-			const label = title.length > 12 ? title.slice(0, 12) + "…" : title;
-			chip.createSpan({ cls: "semlink-attach-chip-label", text: label });
-			const del = chip.createEl("button", { cls: "semlink-attach-chip-del clickable-icon" });
-			setIcon(del, "x");
-			del.addEventListener("click", () => this.removeAttachment(path));
-			// Clicking the chip opens the note.
-			chip.addEventListener("click", (e) => {
-				if ((e.target as HTMLElement).closest(".semlink-attach-chip-del")) return;
-				void this.app.workspace.openLinkText(path, "", false);
-			});
-		}
+		const baseName = p.split("/").pop()?.toLowerCase().replace(/\.(md|txt|markdown)$/i, "");
+		return baseName ? this.basenameCache.get(baseName) : undefined;
 	}
 
-	/** Remove an attachment and re-render. */
-	private removeAttachment(path: string): void {
-		this.attachments = this.attachments.filter((p) => p !== path);
-		this.renderAttachments();
+	/**
+	 * Insert note chips at the current caret position inside the
+	 * contenteditable input (appended at the end if there's no selection).
+	 * All chips share one range operation, then the caret is placed once.
+	 */
+	private insertAttachmentChips(paths: string[]): void {
+		if (paths.length === 0) return;
+		const sel = window.getSelection();
+		let range: Range | null = null;
+		let inInput = false;
+		if (sel && sel.rangeCount > 0) {
+			const r = sel.getRangeAt(0);
+			if (this.inputEl.contains(r.commonAncestorContainer)) {
+				range = r;
+				inInput = true;
+			}
+		}
+		if (inInput && range) {
+			range.deleteContents();
+			for (const path of paths) {
+				range.insertNode(this.createWikilink(path));
+				// A space after each link keeps surrounding words separated.
+				const space = document.createTextNode(" ");
+				range.insertNode(space);
+				range.setStartAfter(space);
+				range.collapse(true);
+			}
+			sel?.removeAllRanges();
+			sel?.addRange(range);
+		} else {
+			for (const path of paths) {
+				this.inputEl.appendChild(this.createWikilink(path));
+				this.inputEl.appendChild(document.createTextNode(" "));
+			}
+		}
+		this.inputEl.focus();
+	}
+
+	/**
+	 * Build the inline wiki-link element rendered as `[[filename]]`. It is
+	 * atomic (contenteditable="false") so backspace removes it as a unit, and
+	 * clickable to open the note directly.
+	 */
+	private createWikilink(path: string): HTMLElement {
+		const link = createSpan({
+			cls: "semlink-wikilink",
+			attr: { contenteditable: "false", "data-path": path, title: path },
+		});
+		const base = path.split("/").pop() || path;
+		const name = base.replace(/\.(md|txt|markdown)$/i, "");
+		link.setText(`[[${name}]]`);
+		link.addEventListener("click", (e) => {
+			e.stopPropagation();
+			void this.app.workspace.openLinkText(path, "", false);
+		});
+		return link;
+	}
+
+	/** Plain text of the input with wiki links (and their labels) excluded. */
+	private extractInputText(): string {
+		const clone = this.inputEl.cloneNode(true) as HTMLElement;
+		clone.querySelectorAll(".semlink-wikilink").forEach((c) => c.remove());
+		let out = "";
+		const walk = (node: Node): void => {
+			if (node.nodeType === Node.TEXT_NODE) {
+				out += node.textContent || "";
+				return;
+			}
+			if (node.nodeType !== Node.ELEMENT_NODE) return;
+			const el = node as HTMLElement;
+			if (el.tagName === "BR") {
+				out += "\n";
+				return;
+			}
+			if (el.tagName === "DIV" || el.tagName === "P") {
+				out += "\n";
+				el.childNodes.forEach(walk);
+				out += "\n";
+				return;
+			}
+			el.childNodes.forEach(walk);
+		};
+		walk(clone);
+		// Squash the line breaks introduced around block elements.
+		return out.replace(/\u200B/g, "").replace(/\n{3,}/g, "\n\n").trim();
+	}
+
+	/** Clear the input content (text + chips) after sending. */
+	private clearInputText(): void {
+		this.inputEl.empty();
+	}
+
+	/**
+	 * Insert pasted text at the caret. [[...]] tokens are resolved to vault
+	 * notes and inserted as styled wiki links (highlight + click-to-open +
+	 * attachment tracking); the rest becomes plain text (newlines as <br>).
+	 */
+	private insertTextWithWikilinks(text: string): void {
+		const sel = window.getSelection();
+		if (!sel || sel.rangeCount === 0) return;
+		const range = sel.getRangeAt(0);
+		range.deleteContents();
+		const insert = (node: Node): void => {
+			range.insertNode(node);
+			range.setStartAfter(node);
+			range.collapse(true);
+		};
+
+		const added: string[] = [];
+		for (const part of text.split(/(\[\[[^\]]*\]\])/g).filter((s) => s.length > 0)) {
+			const m = part.match(/^\[\[(.+?)\]\]$/);
+			if (m) {
+				// [[target]] or [[target|alias]] — resolve to an existing note.
+				const target = m[1].split("|")[0].trim();
+				const resolved = this.resolveNotePath(target);
+				if (resolved) {
+					insert(this.createWikilink(resolved));
+					added.push(resolved);
+				} else {
+					insert(document.createTextNode(part));
+				}
+			} else {
+				part.split(/\r?\n/).forEach((line, i) => {
+					if (i > 0) insert(document.createElement("br"));
+					insert(document.createTextNode(line));
+				});
+			}
+		}
+		for (const p of added) {
+			if (!this.attachments.includes(p)) this.attachments.push(p);
+		}
+		sel.removeAllRanges();
+		sel.addRange(range);
+		this.inputEl.focus();
+	}
+
+	/** Resolve a bare/absolute path to an existing vault note, or null. */
+	private resolveNotePath(rawPath: string): string | null {
+		let p = rawPath.replace(/\\/g, "/");
+		// Strip the vault base dir if the drop carried an absolute OS path.
+		try {
+			const base = (this.app.vault.adapter as any).getBasePath?.();
+			if (base && p.startsWith(base.replace(/\\/g, "/") + "/")) {
+				p = p.slice(base.length + 1);
+			}
+		} catch {
+			// ignore
+		}
+		if (!p || p.startsWith("obsidian://")) return null;
+
+		// Try as-is, then with note extensions appended.
+		let resolved = p;
+		if (!this.vault.getAbstractFileByPath(resolved)) {
+			for (const ext of [".md", ".txt", ".markdown"]) {
+				if (this.vault.getAbstractFileByPath(resolved + ext)) {
+					resolved += ext;
+					break;
+				}
+			}
+		}
+		// Last resort: match by basename (cached lookup).
+		if (!this.vault.getAbstractFileByPath(resolved)) {
+			const hit = this.matchNoteByBasename(p);
+			if (hit) resolved = hit;
+		}
+		return this.vault.getAbstractFileByPath(resolved) ? resolved : null;
+	}
+
+	/**
+	 * Rebuild the attachment list from the wiki links currently in the input.
+	 * Links can be removed while editing (backspace, cut), and the list must
+	 * reflect what the user actually kept.
+	 */
+	private syncAttachmentsFromInput(): void {
+		this.attachments = Array.from(
+			this.inputEl.querySelectorAll<HTMLElement>(".semlink-wikilink[data-path]"),
+		).map((el) => el.getAttribute("data-path") as string);
+	}
+
+	/**
+	 * Remove layout artifacts left by editing next to inline chips. When the
+	 * user deletes the text in front of a chip, the browser keeps the caret
+	 * line alive by inserting a <br> — a forced line break that visually moves
+	 * the chip to the next line. A <br> that only has line breaks / whitespace
+	 * before it (or sits at the very start) is such an artifact; drop it.
+	 */
+	private sanitizeInputLayout(): void {
+		for (const br of Array.from(this.inputEl.querySelectorAll("br"))) {
+			let prev: Node | null = br.previousSibling;
+			let onlyBreaksBefore = true;
+			while (prev) {
+				if (prev.nodeType === Node.ELEMENT_NODE) {
+					if ((prev as HTMLElement).tagName === "BR") {
+						prev = prev.previousSibling;
+						continue;
+					}
+					onlyBreaksBefore = false;
+					break;
+				}
+				if (prev.nodeType === Node.TEXT_NODE && (prev.textContent || "").trim().length > 0) {
+					onlyBreaksBefore = false;
+					break;
+				}
+				prev = prev.previousSibling;
+			}
+			if (onlyBreaksBefore) br.remove();
+		}
 	}
 
 	/** Read dropped notes' content (capped) to fold into the query context. */
-	private async buildAttachmentContext(): Promise<string> {
-		if (this.attachments.length === 0) return "";
+	private async buildAttachmentContext(paths: string[]): Promise<string> {
+		if (paths.length === 0) return "";
 		const parts: string[] = [];
-		for (const path of this.attachments) {
+		for (const path of paths) {
 			try {
 				const file = this.vault.getAbstractFileByPath(path);
 				if (file instanceof TFile) {
 					const content = await this.vault.cachedRead(file);
-					parts.push(`【笔记：${path}】\n${content.slice(0, 3000)}`);
+					parts.push(`【笔记 ${paths.indexOf(path) + 1}/${paths.length}：${path}】\n${content.slice(0, 3000)}`);
 				}
 			} catch {
 				// skip unreadable attachments
 			}
 		}
-		return parts.length ? `\n\n以下是拖入的笔记内容，请重点参考：\n${parts.join("\n\n")}` : "";
+		return parts.length
+			? `\n\n用户拖入了 ${parts.length} 个笔记，以下内容必须仔细阅读，并直接基于这些内容回答用户的问题：\n${parts.join("\n\n")}`
+			: "";
 	}
 
 	/**
@@ -695,11 +1001,10 @@ export class SemanticSearchView extends ItemView {
 		this.currentSessionId = null;
 		this.currentMessages = [];
 		this.attachments = [];
-		this.renderAttachments();
 	}
 
 	/** Record a user question into the current session (creating one if needed). */
-	private async recordUserMessage(content: string): Promise<void> {
+	private async recordUserMessage(content: string, segments?: HistorySegment[]): Promise<void> {
 		// CRITICAL: load() first — otherwise a fresh store (after a plugin
 		// reload) starts with an empty array and save() would overwrite all
 		// previously persisted sessions with just this one.
@@ -707,7 +1012,7 @@ export class SemanticSearchView extends ItemView {
 		if (!this.currentSessionId) {
 			this.currentSessionId = this.history.createSession(content);
 		}
-		const msg: HistoryMessage = { role: "user", content, timestamp: Date.now() };
+		const msg: HistoryMessage = { role: "user", content, segments, timestamp: Date.now() };
 		this.currentMessages.push(msg);
 		this.history.addMessage(this.currentSessionId, msg);
 		void this.history.save();
@@ -754,7 +1059,11 @@ export class SemanticSearchView extends ItemView {
 		for (const msg of session.messages) {
 			if (msg.role === "user") {
 				lastUserQuery = msg.content;
-				this.appendUserMessage(msg.content);
+				if (msg.segments && msg.segments.length > 0) {
+					this.appendUserMessageFromSegments(msg.segments);
+				} else {
+					this.appendUserMessage(msg.content);
+				}
 			} else {
 				const bubble = this.appendAssistantMessage("");
 				const thinking = (msg.thinking || []).map((s) => s as ThinkingStep);
@@ -829,12 +1138,134 @@ export class SemanticSearchView extends ItemView {
 		setTimeout(() => { backdrop.remove(); drawer.remove(); }, 300);
 	}
 
-	/** Append a right-aligned user query bubble to the conversation. */
-	private appendUserMessage(text: string): void {
+	/**
+	 * Serialize the input's DOM (text + chips, in order) into segments for
+	 * chat-history persistence. Text runs are merged; chips become file
+	 * segments carrying their vault path.
+	 */
+	private snapshotSegments(root: HTMLElement): HistorySegment[] {
+		const segs: HistorySegment[] = [];
+		const pushText = (t: string): void => {
+			if (!t) return;
+			const last = segs[segs.length - 1];
+			if (last && last.type === "text") last.value += t;
+			else segs.push({ type: "text", value: t });
+		};
+		const walk = (node: Node): void => {
+			if (node.nodeType === Node.TEXT_NODE) {
+				pushText(node.textContent || "");
+				return;
+			}
+			if (node.nodeType !== Node.ELEMENT_NODE) return;
+			const el = node as HTMLElement;
+			if (el.tagName === "BR") {
+				pushText("\n");
+				return;
+			}
+			if (el.classList.contains("semlink-wikilink")) {
+				const path = el.getAttribute("data-path");
+				if (path) segs.push({ type: "file", value: path });
+				return; // don't descend into the wiki-link internals
+			}
+			if (el.tagName === "DIV" || el.tagName === "P") {
+				pushText("\n");
+				el.childNodes.forEach(walk);
+				pushText("\n");
+				return;
+			}
+			el.childNodes.forEach(walk);
+		};
+		walk(root);
+		// Trim leading/trailing whitespace from the first/last text segments.
+		if (segs.length > 0) {
+			const first = segs[0];
+			if (first.type === "text") first.value = first.value.replace(/^[\s\n]+/, "");
+			const last = segs[segs.length - 1];
+			if (last.type === "text") last.value = last.value.replace(/[\s\n]+$/, "");
+		}
+		return segs.filter((s) => !(s.type === "text" && s.value.length === 0));
+	}
+
+	/**
+	 * Append a right-aligned user bubble rebuilt from persisted segments
+	 * (used when loading a chat session from history).
+	 */
+	private appendUserMessageFromSegments(segments: HistorySegment[]): void {
+		this.messagesEl.querySelector(".semlink-search-welcome")?.remove();
+		const turn = this.messagesEl.createDiv({ cls: "semlink-msg-turn semlink-msg-user-turn" });
+		const bubble = turn.createDiv({ cls: "semlink-msg-bubble semlink-msg-user" });
+		for (const seg of segments) {
+			if (seg.type === "text") {
+				bubble.append(seg.value);
+			} else {
+				bubble.appendChild(this.createWikilink(seg.value));
+			}
+		}
+	}
+
+	/**
+	 * Append a right-aligned user query bubble. When `content` (a DOM snapshot
+	 * of the input) is provided, the bubble reproduces the text + inline
+	 * wiki-link mix the user composed; otherwise it renders plain `text`.
+	 */
+	private appendUserMessage(text: string, content?: HTMLElement): void {
 		// Remove the welcome placeholder once the first real message arrives.
 		this.messagesEl.querySelector(".semlink-search-welcome")?.remove();
 		const turn = this.messagesEl.createDiv({ cls: "semlink-msg-turn semlink-msg-user-turn" });
-		turn.createDiv({ cls: "semlink-msg-bubble semlink-msg-user", text });
+		const bubble = turn.createDiv({ cls: "semlink-msg-bubble semlink-msg-user" });
+		if (content) {
+			this.sanitizeBubbleContent(content);
+			bubble.appendChild(content);
+		} else {
+			bubble.textContent = text;
+		}
+	}
+
+	/**
+	 * Prepare an input snapshot for rendering in a sent bubble:
+	 * - drop `contenteditable` from the root AND the wiki links (the message
+	 *   must not remain editable),
+	 * - keep wiki links clickable to open their note,
+	 * - strip the trailing blank line(s) browsers leave in contenteditable
+	 *   (a trailing `<div><br></div>` would render as empty lines).
+	 */
+	private sanitizeBubbleContent(content: HTMLElement): void {
+		content.removeAttribute("contenteditable");
+		// Drop the input class so the bubble's own color (white) applies —
+		// otherwise `.semlink-search-input`'s `color: var(--text-normal)`
+		// overrides the inherited bubble color.
+		content.removeClass("semlink-search-input");
+		content.querySelectorAll(".semlink-wikilink").forEach((link) => {
+			link.removeAttribute("contenteditable");
+			const path = link.getAttribute("data-path");
+			if (path) {
+				link.addEventListener("click", (e) => {
+					e.stopPropagation();
+					void this.app.workspace.openLinkText(path, "", false);
+				});
+			}
+		});
+		// Trim trailing whitespace / <br> / empty block elements.
+		for (;;) {
+			const last = content.lastChild;
+			if (!last) break;
+			if (last.nodeType === Node.TEXT_NODE && (last.textContent || "").trim() === "") {
+				content.removeChild(last);
+				continue;
+			}
+			if (last.nodeType === Node.ELEMENT_NODE) {
+				const el = last as HTMLElement;
+				if (el.tagName === "BR") {
+					content.removeChild(el);
+					continue;
+				}
+				if ((el.tagName === "DIV" || el.tagName === "P") && (el.textContent || "").trim() === "") {
+					content.removeChild(el);
+					continue;
+				}
+			}
+			break;
+		}
 	}
 
 	/** Append a left-aligned assistant container and return it for population. */

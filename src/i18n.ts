@@ -219,6 +219,7 @@ const S: Strings = {
 	searchScoreLabel:  { zh: "相似度",            en: "Similarity" },
 	searchNeedApiKey:  { zh: "请先在插件设置中配置 API Key 并完成索引", en: "Configure an API Key in Settings and run an index first" },
 	searchThinking:    { zh: "正在根据笔记内容回答…", en: "Thinking based on your notes…" },
+	searchGeneratingAnswer: { zh: "生成回答中", en: "Generating answer" },
 	searchToolCalling: { zh: "正在调用 {tool}…",     en: "Calling {tool}…" },
 	searchToolTrace:   { zh: "工具调用",             en: "Tool Calls" },
 	searchThinkingProcess: { zh: "思考过程",         en: "Thinking Process" },
@@ -229,6 +230,8 @@ const S: Strings = {
 	searchNoFinalAnswer: { zh: "模型多次调用工具后仍未给出最终回答，请尝试更具体或更简单的问题", en: "The model kept calling tools without producing a final answer. Try a more specific or simpler question." },
 	searchSources:     { zh: "参考来源",           en: "Sources" },
 	searchNoChatProvider: { zh: "未配置对话供应商，显示检索结果列表（可在 设置 → 对话 中配置）", en: "No chat provider configured — showing results list (configure one in Settings → Chat)" },
+	attachAdded: { zh: "已添加 {n} 个拖入的笔记", en: "Added {n} dropped note(s)" },
+	searchRemoveAttachment: { zh: "移除附件", en: "Remove attachment" },
 	cmdOpenSearch:     { zh: "打开语义搜索侧边栏",  en: "Open Semantic Search sidebar" },
 
 	// ──── Chat Model Provider ────

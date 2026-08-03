@@ -105,6 +105,9 @@ export class ChatClient {
 	 * reads notes: "standard" prefers get_section with a smaller result cap,
 	 * "enhanced" allows full get_note reads with a larger cap. `onStream` is
 	 * called with the growing answer text as the model streams it.
+	 * `onRoundStart` fires whenever the model begins generating a round (a
+	 * potential tool round or the final answer) — the UI can show a generic
+	 * "generating" state instead of freezing on the previous tool's name.
 	 */
 	async chat(
 		context: string,
@@ -112,6 +115,7 @@ export class ChatClient {
 		onToolCall?: (toolName: string, args: any) => void,
 		depth: "standard" | "enhanced" = "standard",
 		onStream?: (text: string) => void,
+		onRoundStart?: () => void,
 	): Promise<ChatResult> {
 		const provider = this.getActiveProvider();
 		if (!provider) throw new Error("No chat provider configured");
@@ -141,9 +145,9 @@ export class ChatClient {
 		const usedNotes: string[] = [];
 
 		if (provider.apiFormat === "anthropic") {
-			return this.chatAnthropic(provider, model.id, contextWindow, systemPrompt, question, onToolCall, thinking, usedNotes, onStream);
+			return this.chatAnthropic(provider, model.id, contextWindow, systemPrompt, question, onToolCall, thinking, usedNotes, onStream, onRoundStart);
 		}
-		return this.chatOpenAI(provider, model.id, contextWindow, systemPrompt, question, onToolCall, thinking, usedNotes, onStream);
+		return this.chatOpenAI(provider, model.id, contextWindow, systemPrompt, question, onToolCall, thinking, usedNotes, onStream, onRoundStart);
 	}
 
 	// ──── OpenAI format (streaming) ────
@@ -158,6 +162,7 @@ export class ChatClient {
 		thinking: ThinkingStep[] = [],
 		usedNotes: string[] = [],
 		onStream?: (text: string) => void,
+		onRoundStart?: () => void,
 	): Promise<ChatResult> {
 		const baseUrl = provider.baseUrl.replace(/\/+$/, "");
 		const tools = this.buildOpenAITools();
@@ -196,6 +201,9 @@ export class ChatClient {
 		};
 
 		for (let round = 0; round < MAX_TOOL_ITERATIONS; round++) {
+			// The model is generating this round (tool decision or final
+			// answer) — let the UI show a generic "generating" state.
+			onRoundStart?.();
 			// If we're deep into tool rounds, nudge the model to wrap up.
 			if (round === NUDGE_AFTER_ROUND) {
 				messages.push({ role: "user", content: t("searchAnswerNowHint") });
@@ -368,6 +376,7 @@ export class ChatClient {
 		thinking: ThinkingStep[] = [],
 		usedNotes: string[] = [],
 		onStream?: (text: string) => void,
+		onRoundStart?: () => void,
 	): Promise<ChatResult> {
 		const baseUrl = provider.baseUrl.replace(/\/+$/, "");
 		const tools = this.buildAnthropicTools();
@@ -402,6 +411,9 @@ export class ChatClient {
 		};
 
 		for (let round = 0; round < MAX_TOOL_ITERATIONS; round++) {
+			// The model is generating this round (tool decision or final
+			// answer) — let the UI show a generic "generating" state.
+			onRoundStart?.();
 			const body: Record<string, any> = {
 				model,
 				max_tokens: 4096,

@@ -420,6 +420,10 @@
     flex-direction: column;
     gap: 12px;
     padding: 0 12px 8px;
+    /* Obsidian's global CSS disables text selection in places; force it back
+       on for the conversation so messages can be selected & copied. */
+    user-select: text !important;
+    -webkit-user-select: text !important;
 }
 
 /* Welcome / empty-state placeholder shown when no conversation yet */
@@ -490,9 +494,19 @@
 }
 
 .semlink-msg-user {
-    background: var(--interactive-accent);
-    color: var(--text-on-accent);
-    border-bottom-right-radius: 3px;
+	background: var(--interactive-accent);
+	color: #fff;
+	white-space: pre-wrap;
+	border-bottom-right-radius: 3px;
+}
+
+/* Selected text on the colored bubble: white background + dark text is far
+   more visible than the default subtle ::selection against the accent color.
+   !important beats Obsidian's global ::selection rule. */
+.semlink-msg-user ::selection,
+.semlink-msg-user::selection {
+	background: rgba(255, 255, 255, 0.9) !important;
+	color: #1e1e1e !important;
 }
 
 .semlink-msg-assistant {
@@ -593,107 +607,99 @@
     border-color: var(--interactive-accent);
 }
 
-/* Attached-note tag bar above the input */
-.semlink-attach-bar {
-    display: none;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 2px 2px 0;
-    min-height: 0;
-}
-
+/* Drag highlight on the whole input wrapper (subtle border tint, no dashed
+   outline — the user found the dotted rectangle distracting). */
 .semlink-attach-bar-drag {
-    outline: 1px dashed var(--interactive-accent);
-    outline-offset: 2px;
-    border-radius: 8px;
-    border-color: var(--interactive-accent) !important;
+	border-color: var(--interactive-accent) !important;
 }
 
-.semlink-attach-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    max-width: 100%;
-    padding: 2px 6px;
-    border-radius: 10px;
-    background: var(--background-modifier-hover);
-    border: 1px solid var(--background-modifier-border);
-    cursor: pointer;
+/* Inline dropped-note wiki links (contenteditable input, mixed with text).
+   Rendered as [[filename]] — highlighted and clickable to open the note.
+   Long file names wrap across lines (no nowrap, no horizontal clipping).
+   Text is selectable/copyable (user-select is NOT disabled here). */
+.semlink-wikilink {
+	color: var(--text-accent);
+	background: var(--background-modifier-hover);
+	border-radius: 4px;
+	padding: 0 3px;
+	margin: 0 1px;
+	cursor: pointer;
+	white-space: normal;
 }
 
-.semlink-attach-chip:hover {
-    border-color: var(--interactive-accent);
+.semlink-wikilink:hover {
+	background: var(--background-modifier-border);
+	text-decoration: underline;
 }
 
-.semlink-attach-chip-label {
-    font-size: 11px;
-    color: var(--text-normal);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+/* Wiki links inside a user bubble: light tags on the accent background.
+   Selectable as plain text (input keeps user-select:none for atomicity). */
+.semlink-msg-user .semlink-wikilink {
+	color: #fff;
+	background: rgba(255, 255, 255, 0.16);
+	user-select: text;
+	-webkit-user-select: text;
 }
 
-.semlink-attach-chip-del {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    padding: 0;
-    border-radius: 50%;
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    flex-shrink: 0;
-}
-
-.semlink-attach-chip-del:hover {
-    color: var(--text-error);
-    background: var(--background-modifier-border);
+.semlink-msg-user .semlink-wikilink:hover {
+	background: rgba(255, 255, 255, 0.28);
+	text-decoration: underline;
 }
 
 .semlink-search-input-row {
-    display: flex;
-    align-items: flex-end;
-    gap: 6px;
+	display: flex;
+	align-items: flex-end;
+	gap: 6px;
 }
 
 .semlink-search-input {
-    flex: 1 1 0;
-    resize: none;
-    border: none;
-    background: transparent;
-    color: var(--text-normal);
-    font-family: inherit;
-    font-size: 14px;
-    line-height: 1.5;
-    padding: 2px 4px;
-    min-width: 0;
+	flex: 1 1 0;
+	height: 100px;
+	min-height: 100px;
+	max-height: 100px;
+	overflow-x: hidden;
+	overflow-y: auto;
+	border: none;
+	outline: none;
+	background: transparent;
+	color: var(--text-normal);
+	font-family: inherit;
+	font-size: 14px;
+	line-height: 1.5;
+	padding: 2px 4px;
+	min-width: 0;
+	white-space: pre-wrap;
+	word-break: break-word;
+	user-select: text;
 }
 
 .semlink-search-input:focus {
-    outline: none;
-    box-shadow: none;
+	outline: none;
+	box-shadow: none;
 }
 
-.semlink-search-input::placeholder {
-    color: var(--text-muted);
+/* Placeholder shown only when the input is empty (no text, no chips). */
+.semlink-search-input:empty::before {
+	content: attr(data-placeholder);
+	color: var(--text-muted);
+	pointer-events: none;
 }
 
 .semlink-search-btn {
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    padding: 0;
-    border: none;
-    border-radius: 6px;
-    background: var(--interactive-accent);
-    color: var(--text-on-accent);
-    cursor: pointer;
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	padding: 0;
+	border: none;
+	border-radius: 6px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	cursor: pointer;
+	/* Sit at the far right of the model row. */
+	margin-left: auto;
 }
 
 .semlink-search-btn:hover {
@@ -1211,8 +1217,8 @@
 }
 
 .semlink-msg-action svg {
-    width: 15px;
-    height: 15px;
+    width: 14px;
+    height: 14px;
 }
 
 .semlink-msg-action:hover {
