@@ -13,7 +13,7 @@
 
 import initSqlJs, { Database } from "sql.js";
 import wasmBase64 from "sql.js/dist/sql-wasm.wasm";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, statSync } from "fs";
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
 import type { NoteChunk, SearchResult, QueueItem, QueueAction, QueueItemStatus } from "./types";
 
@@ -50,9 +50,27 @@ export class DbEngine {
 		const SQL = await initSqlJs({ wasmBinary });
 
 		const dbPath = join(this.dataDir, DB_FILE);
+		// A leftover temp file means a previous write died before rename —
+		// discard it (the real DB was untouched by the atomic write).
+		const tmpPath = join(this.dataDir, `${DB_FILE}.tmp`);
+		if (existsSync(tmpPath)) {
+			try { unlinkSync(tmpPath); } catch { /* ignore */ }
+		}
+
 		if (existsSync(dbPath)) {
-			const buf = readFileSync(dbPath);
-			this.db = new SQL.Database(buf);
+			try {
+				const buf = readFileSync(dbPath);
+				this.db = new SQL.Database(buf);
+			} catch (e) {
+				// Corrupted/torn DB (e.g. from a pre-atomic-write crash). Don't
+				// silently rebuild — back it up so the data is recoverable, then
+				// start fresh. A silent rebuild would re-embed everything anyway.
+				console.error("[Semlink] DB load failed, backing up and rebuilding:", e);
+				try {
+					renameSync(dbPath, `${dbPath}.corrupt-${Date.now()}`);
+				} catch { /* ignore */ }
+				this.db = new SQL.Database();
+			}
 		} else {
 			this.db = new SQL.Database();
 		}
@@ -188,12 +206,24 @@ export class DbEngine {
 	}
 
 	/** Persist the in-memory DB to disk. Runs entirely off the main thread in
-	 *  worker mode (db.export + writeFileSync of a 397MB file). */
+	 *  worker mode (db.export + write of a ~400MB file).
+	 *
+	 *  ATOMIC WRITE: write to a temp file in the same directory, then rename
+	 *  over the real DB. rename() is atomic on the same filesystem — if the
+	 *  process dies mid-write (Obsidian reload, power loss), the old DB file
+	 *  stays intact instead of being left truncated/corrupted. A torn DB was
+	 *  the root cause of "all chunks re-indexed after every reload" (mtime
+	 *  lookups returned nothing → everything treated as new). */
 	save(): void {
 		if (!this.db) return;
 		const data = this.db.export();
 		const buf = Buffer.from(data);
-		writeFileSync(join(this.dataDir, DB_FILE), buf);
+		const finalPath = join(this.dataDir, DB_FILE);
+		const tmpPath = join(this.dataDir, `${DB_FILE}.tmp`);
+		writeFileSync(tmpPath, buf);
+		// fsync isn't available on every platform via this import; rename alone
+		// still protects against torn writes from a killed process.
+		renameSync(tmpPath, finalPath);
 	}
 
 	/** Clear all stored data (chunks, queue, vectors) for a full rebuild */
@@ -364,6 +394,45 @@ export class DbEngine {
 		return removed;
 	}
 
+	/**
+	 * Clean up queue rows that are no longer meaningful:
+	 * - completed / failed rows from earlier runs (they only served their
+	 *   purpose; leaving them makes the queue balloon and repeated scans
+	 *   re-process stale entries).
+	 * Returns the number of rows deleted.
+	 */
+	cleanupQueue(): number {
+		const before = this.queueCount();
+		this.db!.run("DELETE FROM queue WHERE status IN ('completed', 'failed')");
+		const after = this.queueCount();
+		return before - after;
+	}
+
+	/**
+	 * Remove queue rows whose note_path no longer exists in the vault
+	 * (files moved/renamed/deleted outside the watcher's view). These ghost
+	 * entries otherwise keep re-enqueueing forever.
+	 * Returns the number of rows deleted.
+	 */
+	purgeGhostQueue(existingPaths: Set<string>): number {
+		const rows = this.db!.exec("SELECT id, note_path FROM queue");
+		if (rows.length === 0) return 0;
+		let removed = 0;
+		for (const row of rows[0].values) {
+			const path = row[1] as string;
+			if (!existingPaths.has(path)) {
+				this.db!.run("DELETE FROM queue WHERE id = ?", [row[0]]);
+				removed++;
+			}
+		}
+		return removed;
+	}
+
+	private queueCount(): number {
+		const r = this.db!.exec("SELECT COUNT(*) FROM queue");
+		return r.length > 0 ? (r[0].values[0][0] as number) : 0;
+	}
+
 	getStats(): { totalChunks: number; activeChunks: number; indexedNotes: number; dbSizeMb: number } {
 		let totalChunks = 0, activeChunks = 0;
 		const r1 = this.db!.exec("SELECT COUNT(*) FROM chunks");
@@ -522,9 +591,11 @@ export class DbEngine {
 
 	/** Enqueue a single item */
 	enqueue(notePath: string, action: QueueAction, priority = 2): void {
-		// Avoid duplicates for the same path+action that are still pending
+		// Avoid duplicates for the same path+action that are pending OR already
+		// processing — otherwise repeated scans pile up duplicate queue rows and
+		// the same note gets embedded over and over (progress > 100%).
 		const existing = this.db!.exec(
-			"SELECT id FROM queue WHERE note_path = ? AND action = ? AND status = 'pending'",
+			"SELECT id FROM queue WHERE note_path = ? AND action = ? AND status IN ('pending','processing')",
 			[notePath, action]
 		);
 		if (existing.length > 0 && existing[0].values.length > 0) return;

@@ -182,7 +182,7 @@ const S: Strings = {
 	welcomeNap:        { zh: "😴 午休小憩\n养精神，睡醒再梳理笔记", en: "😴 Nap time\nRecharge now, tackle notes later." },
 	welcomeAfternoon1: { zh: "💼 下午好\n笔记各类问题随时来问", en: "💼 Good afternoon\nAsk me anything about your notes." },
 	welcomeAfternoon2: { zh: "☕ 下午茶小歇\n查阅笔记依旧方便", en: "☕ Tea break\nYour notes are still just a query away." },
-	welcomeAfternoon3: { zh: "🖱️ 专注办公\n整理、查询笔记都没问题", en: "🖱️ Focus time\nOrganize and search your notes with ease." },
+	welcomeAfternoon3: { zh: "😄 下午好！\n整理、查询笔记都没问题", en: "😄 Good afternoon!\nOrganize and search your notes with ease." },
 	welcomeAfternoon4: { zh: "🚪 临近下班\n需要处理笔记尽快操作", en: "🚪 Almost off work\nWrap up your notes before you head out." },
 	welcomeAfternoon5: { zh: "🏃 下班啦\n好好享用晚餐，整理笔记不急这一会儿", en: "🏃 Off work!\nEnjoy your dinner — notes can wait a bit." },
 	welcomeDusk:       { zh: "🌇 放松时刻\n翻看、整理笔记都没问题", en: "🌇 Time to relax\nBrowse and organize your notes at your own pace." },

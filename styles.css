@@ -593,6 +593,66 @@
     border-color: var(--interactive-accent);
 }
 
+/* Attached-note tag bar above the input */
+.semlink-attach-bar {
+    display: none;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 2px 2px 0;
+    min-height: 0;
+}
+
+.semlink-attach-bar-drag {
+    outline: 1px dashed var(--interactive-accent);
+    outline-offset: 2px;
+    border-radius: 8px;
+    border-color: var(--interactive-accent) !important;
+}
+
+.semlink-attach-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: var(--background-modifier-hover);
+    border: 1px solid var(--background-modifier-border);
+    cursor: pointer;
+}
+
+.semlink-attach-chip:hover {
+    border-color: var(--interactive-accent);
+}
+
+.semlink-attach-chip-label {
+    font-size: 11px;
+    color: var(--text-normal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.semlink-attach-chip-del {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border-radius: 50%;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.semlink-attach-chip-del:hover {
+    color: var(--text-error);
+    background: var(--background-modifier-border);
+}
+
 .semlink-search-input-row {
     display: flex;
     align-items: flex-end;

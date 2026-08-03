@@ -70,6 +70,8 @@ async function handle(op: string, args: any[]): Promise<any> {
 		case "getPendingCount": return engine.getPendingCount();
 		case "getCounts": return engine.getCounts();
 		case "cleanup": return engine.cleanup(args[0]);
+		case "cleanupQueue": return engine.cleanupQueue();
+		case "purgeGhostQueue": return engine.purgeGhostQueue(args[0]);
 		case "clearQueue": return engine.clearQueue();
 		case "getPendingPaths": return engine.getPendingPaths();
 		default:

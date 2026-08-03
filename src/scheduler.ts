@@ -105,6 +105,15 @@ export class Scheduler {
 			console.log(`[Semlink] Pruned ${pruned} orphaned note paths from index`);
 		}
 
+		// Queue hygiene: drop stale completed/failed rows from earlier runs and
+		// ghost rows whose files no longer exist. Without this, repeated scans
+		// re-process old entries and progress can exceed 100%.
+		const cleaned = await this.store.cleanupQueue();
+		const purged = await this.store.purgeGhostQueue(existingPaths);
+		if (cleaned > 0 || purged > 0) {
+			console.log(`[Semlink] Queue cleanup: ${cleaned} stale + ${purged} ghost rows removed`);
+		}
+
 		// totalNotes = already indexed + to be indexed (excluding empty files)
 		this.progress.setTotalNotes(alreadyIndexed + items.length);
 

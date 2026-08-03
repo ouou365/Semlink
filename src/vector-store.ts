@@ -148,6 +148,8 @@ export class VectorStore {
 			case "getPendingCount": return e.getPendingCount();
 			case "getCounts": return e.getCounts();
 			case "cleanup": return e.cleanup(args[0]);
+			case "cleanupQueue": return e.cleanupQueue();
+			case "purgeGhostQueue": return e.purgeGhostQueue(args[0]);
 			case "clearQueue": return e.clearQueue();
 			case "getPendingPaths": return e.getPendingPaths();
 			default: throw new Error(`Unknown op: ${op}`);
@@ -217,6 +219,14 @@ export class VectorStore {
 	}
 	async pruneOrphanedPaths(existingPaths: Set<string>): Promise<number> {
 		return await this.call("pruneOrphanedPaths", [existingPaths]);
+	}
+	/** Delete completed/failed queue rows from previous runs. */
+	async cleanupQueue(): Promise<number> {
+		return await this.call("cleanupQueue");
+	}
+	/** Delete queue rows whose note_path no longer exists in the vault. */
+	async purgeGhostQueue(existingPaths: Set<string>): Promise<number> {
+		return await this.call("purgeGhostQueue", [existingPaths]);
 	}
 	async getStats(): Promise<{ totalChunks: number; activeChunks: number; indexedNotes: number; dbSizeMb: number }> {
 		return await this.call("getStats");

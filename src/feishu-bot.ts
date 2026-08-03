@@ -75,6 +75,11 @@ export class FeishuBot {
 	 * message triggers two answers and two cards. */
 	private seenMessageIds: Map<string, number> = new Map();
 	private dedupeWindowMs = 5 * 60 * 1000;
+	/** Wall-clock time when this instance started. Messages created BEFORE this
+	 * are replays from the WS reconnect (the long connection replays events that
+	 * happened while we were offline, e.g. during an Obsidian reload) — they must
+	 * be ignored, since the seenMessageIds map is in-memory and resets on reload. */
+	private startedAt = Date.now();
 
 	// ── Conversational state per chat ──
 	/** Conversation history per chatId: alternating user/assistant turns,
@@ -246,6 +251,14 @@ export class FeishuBot {
 				return;
 			}
 			this.seenMessageIds.set(msgId, now);
+		}
+		// Ignore messages created before this instance started — they are WS
+		// replays of events that occurred while we were offline (e.g. during an
+		// Obsidian reload). create_time is ms since epoch.
+		const createTime = Number(message.create_time) || 0;
+		if (createTime && createTime < this.startedAt - 5000) {
+			console.log(`[Semlink] Feishu replay event (msg created ${new Date(createTime).toISOString()} < start ${new Date(this.startedAt).toISOString()}) — ignoring`);
+			return;
 		}
 		console.log("[Semlink] Feishu event received:", data?.event_type || data?.header?.event_type || "im.message.receive_v1", msgId ? `msg=${msgId}` : "(no msg id)");
 

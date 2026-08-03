@@ -48,6 +48,10 @@ export class SemanticSearchView extends ItemView {
 	private currentSessionId: string | null = null;
 	private currentMessages: HistoryMessage[] = [];
 
+	// Dropped note attachments (vault-relative paths) shown as tags above input.
+	private attachBarEl!: HTMLElement;
+	private attachments: string[] = [];
+
 	constructor(
 		leaf: WorkspaceLeaf,
 		store: VectorStore,
@@ -130,11 +134,43 @@ export class SemanticSearchView extends ItemView {
 		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
 
 		const wrapper = footer.createDiv({ cls: "semlink-search-input-wrapper" });
+		// Attachment tag bar: files dropped from the vault show as deletable
+		// chips here, and their content is folded into the next query's context.
+		const attachBar = wrapper.createDiv({ cls: "semlink-attach-bar" });
+		this.attachBarEl = attachBar;
+		// Drag & drop is handled on the WHOLE input wrapper (the attach bar is
+		// hidden when empty, so a user dragging onto the textarea must still
+		// trigger the chip flow). preventDefault stops Obsidian from treating
+		// the drop as a link insert / file open.
+		let dragDepth = 0;
+		wrapper.addEventListener("dragover", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+			wrapper.addClass("semlink-attach-bar-drag");
+		});
+		wrapper.addEventListener("dragenter", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			dragDepth++;
+			wrapper.addClass("semlink-attach-bar-drag");
+		});
+		wrapper.addEventListener("dragleave", () => {
+			dragDepth = Math.max(0, dragDepth - 1);
+			if (dragDepth === 0) wrapper.removeClass("semlink-attach-bar-drag");
+		});
+		wrapper.addEventListener("drop", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			dragDepth = 0;
+			wrapper.removeClass("semlink-attach-bar-drag");
+			void this.handleFileDrop(e);
+		});
 		const inputRow = wrapper.createDiv({ cls: "semlink-search-input-row" });
 		this.inputEl = inputRow.createEl("textarea", {
 			cls: "semlink-search-input",
 			rows: 5,
-			attr: { placeholder: t("searchPlaceholder"), "aria-label": t("searchPlaceholder") },
+			attr: { placeholder: t("searchPlaceholder"), "aria-label": t("searchPlaceholder"), style: "height: 100px;" },
 		});
 		this.inputEl.addEventListener("keydown", (e) => {
 			// Enter sends; Shift+Enter inserts a newline.
@@ -242,23 +278,31 @@ export class SemanticSearchView extends ItemView {
 
 		// Append the user's message bubble, then clear the input field.
 		this.appendUserMessage(query);
-		this.recordUserMessage(query);
+		await this.recordUserMessage(query);
 		this.inputEl.value = "";
 
 		// Append a loading placeholder for the assistant's reply.
 		const loadingEl = this.appendAssistantMessage(t("searchSearching"));
 
 		try {
-			const embedResult = await this.client.embed([query]);
-			const results = await this.store.search(
-				embedResult.embeddings[0],
-				DEFAULT_LIMIT,
-				DEFAULT_THRESHOLD,
-			);
+			// If the user dropped notes into the input, read THEM as the source
+			// of truth instead of running a vector search — the LLM should read
+			// the attached documents first, not trigger retrieval.
+			const hasAttachments = this.attachments.length > 0;
+			const attachCtx = hasAttachments ? await this.buildAttachmentContext() : "";
+			let results: SearchResult[] = [];
+			if (!hasAttachments) {
+				const embedResult = await this.client.embed([query]);
+				results = await this.store.search(
+					embedResult.embeddings[0],
+					DEFAULT_LIMIT,
+					DEFAULT_THRESHOLD,
+				);
+			}
 
 			loadingEl.empty();
 
-			if (results.length === 0) {
+			if (!hasAttachments && results.length === 0) {
 				loadingEl.createDiv({ cls: "semlink-msg-empty", text: t("searchNoResults") });
 			} else if (this.chatClient.isConfigured()) {
 				// Answer mode: feed the retrieved notes to the chat model and
@@ -268,7 +312,10 @@ export class SemanticSearchView extends ItemView {
 				const streamEl = loadingEl.createDiv({ cls: "semlink-msg-stream" });
 				streamEl.style.display = "none";
 
-				const context = this.buildContext(results.slice(0, ANSWER_CONTEXT_SIZE));
+				const context = hasAttachments
+					? attachCtx
+					: this.buildContext(results.slice(0, ANSWER_CONTEXT_SIZE)) + attachCtx;
+				const fullContext = context;
 				// Fold conversation history into the query for multi-turn context.
 				const histCtx = this.buildHistoryContext();
 				const fullQuery = histCtx
@@ -277,7 +324,7 @@ export class SemanticSearchView extends ItemView {
 				try {
 					const thinkStart = Date.now();
 					const result = await this.chatClient.chat(
-						context,
+						fullContext,
 						fullQuery,
 						(toolName) => {
 							loadingTextEl.textContent = t("searchToolCalling").replace("{tool}", toolName);
@@ -295,24 +342,26 @@ export class SemanticSearchView extends ItemView {
 					loadingEl.empty();
 					// The initial retrieval is itself a search step — prepend it
 					// to the thinking process so the notes the model started
-					// from are visible at the top.
-					const initialResults = results.slice(0, ANSWER_CONTEXT_SIZE);
-					const initialSearchStep: ThinkingStep = {
-						type: "tool",
-						name: "search_notes",
-						args: { query, limit: ANSWER_CONTEXT_SIZE, threshold: DEFAULT_THRESHOLD },
-						result: JSON.stringify(
-							initialResults.map((r) => ({
-								path: r.notePath,
-								heading: r.heading,
-								preview: r.contentPreview,
-								score: r.score,
-							})),
-							null,
-							2,
-						),
-					};
-					const thinking: ThinkingStep[] = [initialSearchStep, ...result.thinking];
+					// from are visible at the top. (Skipped when attachments are
+					// the source instead of a vector search.)
+					const initialResults = hasAttachments ? [] : results.slice(0, ANSWER_CONTEXT_SIZE);
+					const thinking: ThinkingStep[] = hasAttachments
+						? [...result.thinking]
+						: [{
+							type: "tool",
+							name: "search_notes",
+							args: { query, limit: ANSWER_CONTEXT_SIZE, threshold: DEFAULT_THRESHOLD },
+							result: JSON.stringify(
+								initialResults.map((r) => ({
+									path: r.notePath,
+									heading: r.heading,
+									preview: r.contentPreview,
+									score: r.score,
+								})),
+								null,
+								2,
+							),
+						}, ...result.thinking];
 					this.renderThinking(loadingEl, thinking, elapsedSec);
 					this.updateContextInfo(result.contextTokens, result.contextBreakdown, result.cacheHitRate);
 					// Render the answer as markdown (Obsidian's renderer handles
@@ -321,11 +370,14 @@ export class SemanticSearchView extends ItemView {
 					await MarkdownRenderer.render(this.app, result.answer, answerEl, "", this);
 
 					// Reference sources BELOW the answer, collapsed by default.
-					const usedSources = this.buildUsedSources(initialResults, result.usedNotes);
+					// With attachments the sources ARE the dropped notes.
+					const usedSources = hasAttachments
+						? this.attachments.map((p) => ({ chunkId: "", notePath: p, heading: "", contentPreview: "", score: -1 }))
+						: this.buildUsedSources(initialResults, result.usedNotes);
 					this.renderSources(loadingEl, usedSources, false);
 
 					// Persist this turn into chat history.
-					this.recordAssistantMessage(result.answer, thinking, result.usedNotes, elapsedSec);
+					await this.recordAssistantMessage(result.answer, thinking, result.usedNotes, elapsedSec);
 
 					// Action buttons (icons) below the sources: copy / save.
 					this.appendActions(loadingEl, result.answer, query);
@@ -426,6 +478,114 @@ export class SemanticSearchView extends ItemView {
 		saveBtn.addEventListener("click", () => {
 			new SaveNoteModal(this.app, questionForSave, content).open();
 		});
+	}
+
+	// ── Dropped-note attachments (tag chips above the input) ──
+
+	/** Handle a drop of vault files onto the attachment bar. */
+	private async handleFileDrop(e: DragEvent): Promise<void> {
+		const candidates: string[] = [];
+		console.log("[Semlink] drop types:", e.dataTransfer?.types, "files:", e.dataTransfer?.files?.length);
+
+		// 1. Obsidian native files (DataTransferFile has a `path`).
+		const files = e.dataTransfer?.files;
+		if (files) {
+			for (const f of Array.from(files as any)) {
+				console.log("[Semlink] drop file:", f);
+				if (f?.path) candidates.push(String(f.path));
+			}
+		}
+
+		// 2. obsidian:// URI in uri-list / text/plain (e.g. dragging a link).
+		const raw = e.dataTransfer?.getData("text/uri-list") || e.dataTransfer?.getData("text/plain");
+		console.log("[Semlink] drop uri/plain:", raw);
+		if (raw) {
+			const m = raw.match(/obsidian:\/\/open\?[^#]*file=([^&]+)/);
+			if (m) {
+				try { candidates.push(decodeURIComponent(m[1])); } catch { /* ignore */ }
+			}
+		}
+
+		console.log("[Semlink] drop candidates:", candidates);
+
+		// Normalize: strip vault base path if present, keep vault-relative.
+		for (const rawPath of candidates) {
+			let p = rawPath.replace(/\\/g, "/");
+			// Obsidian may hand us absolute OS paths; resolve to vault-relative.
+			try {
+				const base = (this.app.vault.adapter as any).getBasePath?.();
+				if (base && p.startsWith(base.replace(/\\/g, "/") + "/")) {
+					p = p.slice(base.length + 1);
+				}
+			} catch { /* ignore */ }
+			console.log("[Semlink] drop normalized:", p, "exists:", !!this.vault.getAbstractFileByPath(p));
+			// Skip non-note paths (images, folders, URIs that failed to parse).
+			if (!p || p.startsWith("obsidian://")) continue;
+			// The obsidian:// URI's file param omits the extension — resolve it:
+			// try as-is, then with common note extensions appended.
+			let resolved = p;
+			if (!this.vault.getAbstractFileByPath(resolved)) {
+				for (const ext of [".md", ".txt", ".markdown"]) {
+					if (this.vault.getAbstractFileByPath(resolved + ext)) {
+						resolved += ext;
+						break;
+					}
+				}
+			}
+			if (!this.vault.getAbstractFileByPath(resolved)) continue;
+			if (!this.attachments.includes(resolved)) this.attachments.push(resolved);
+		}
+		this.renderAttachments();
+	}
+
+	/** Re-render the attachment tag bar from this.attachments. */
+	private renderAttachments(): void {
+		this.attachBarEl.empty();
+		if (this.attachments.length === 0) {
+			this.attachBarEl.style.display = "none";
+			return;
+		}
+		this.attachBarEl.style.display = "flex";
+		for (const path of this.attachments) {
+			const chip = this.attachBarEl.createDiv({ cls: "semlink-attach-chip" });
+			// Title = basename minus extension, truncated to ~12 chars.
+			const base = path.split("/").pop() || path;
+			const title = base.replace(/\.(md|txt|markdown)$/i, "");
+			const label = title.length > 12 ? title.slice(0, 12) + "…" : title;
+			chip.createSpan({ cls: "semlink-attach-chip-label", text: label });
+			const del = chip.createEl("button", { cls: "semlink-attach-chip-del clickable-icon" });
+			setIcon(del, "x");
+			del.addEventListener("click", () => this.removeAttachment(path));
+			// Clicking the chip opens the note.
+			chip.addEventListener("click", (e) => {
+				if ((e.target as HTMLElement).closest(".semlink-attach-chip-del")) return;
+				void this.app.workspace.openLinkText(path, "", false);
+			});
+		}
+	}
+
+	/** Remove an attachment and re-render. */
+	private removeAttachment(path: string): void {
+		this.attachments = this.attachments.filter((p) => p !== path);
+		this.renderAttachments();
+	}
+
+	/** Read dropped notes' content (capped) to fold into the query context. */
+	private async buildAttachmentContext(): Promise<string> {
+		if (this.attachments.length === 0) return "";
+		const parts: string[] = [];
+		for (const path of this.attachments) {
+			try {
+				const file = this.vault.getAbstractFileByPath(path);
+				if (file instanceof TFile) {
+					const content = await this.vault.cachedRead(file);
+					parts.push(`【笔记：${path}】\n${content.slice(0, 3000)}`);
+				}
+			} catch {
+				// skip unreadable attachments
+			}
+		}
+		return parts.length ? `\n\n以下是拖入的笔记内容，请重点参考：\n${parts.join("\n\n")}` : "";
 	}
 
 	/**
@@ -534,10 +694,16 @@ export class SemanticSearchView extends ItemView {
 	private startNewSession(): void {
 		this.currentSessionId = null;
 		this.currentMessages = [];
+		this.attachments = [];
+		this.renderAttachments();
 	}
 
 	/** Record a user question into the current session (creating one if needed). */
-	private recordUserMessage(content: string): void {
+	private async recordUserMessage(content: string): Promise<void> {
+		// CRITICAL: load() first — otherwise a fresh store (after a plugin
+		// reload) starts with an empty array and save() would overwrite all
+		// previously persisted sessions with just this one.
+		await this.history.load();
 		if (!this.currentSessionId) {
 			this.currentSessionId = this.history.createSession(content);
 		}
@@ -548,8 +714,9 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	/** Record an assistant answer into the current session. */
-	private recordAssistantMessage(content: string, thinking?: ThinkingStep[], sources?: string[], elapsedSec?: number): void {
+	private async recordAssistantMessage(content: string, thinking?: ThinkingStep[], sources?: string[], elapsedSec?: number): Promise<void> {
 		if (!this.currentSessionId) return;
+		await this.history.load();
 		const msg: HistoryMessage = {
 			role: "assistant",
 			content,
