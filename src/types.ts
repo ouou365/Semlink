@@ -24,25 +24,32 @@ export interface ChatProvider {
 	models: ChatModel[];
 }
 
+/** A Feishu bot bound to Semlink (created via QR scan or manual entry). */
+export interface FeishuBotConfig {
+	id: string;
+	name: string;
+	appId: string;
+	appSecret: string;
+	/** open_id of the Feishu user who bound this bot (QR scan). */
+	userOpenId?: string;
+	/** One-time code the user sends to the bot as `/bind <code>` to confirm. */
+	bindCode?: string;
+	/** Whether the binding has been confirmed via `/bind` in Feishu. */
+	bound?: boolean;
+	enabled: boolean;
+	/** Runtime connection state (not persisted meaningfully). */
+	connected: boolean;
+	lastError?: string;
+}
+
 /** Default DeepSeek chat providers (pre-configured for convenience) */
 export const DEFAULT_CHAT_PROVIDERS: ChatProvider[] = [
 	{
 		id: "deepseek-openai",
-		name: "DeepSeek (OpenAI)",
+		name: "DeepSeek",
 		baseUrl: "https://api.deepseek.com",
 		apiKey: "",
 		apiFormat: "openai",
-		models: [
-			{ id: "deepseek-v4-flash", contextWindow: 200000 },
-			{ id: "deepseek-v4-pro", contextWindow: 200000 },
-		],
-	},
-	{
-		id: "deepseek-anthropic",
-		name: "DeepSeek (Anthropic)",
-		baseUrl: "https://api.deepseek.com/anthropic",
-		apiKey: "",
-		apiFormat: "anthropic",
 		models: [
 			{ id: "deepseek-v4-flash", contextWindow: 200000 },
 			{ id: "deepseek-v4-pro", contextWindow: 200000 },
@@ -69,6 +76,8 @@ export interface SmartVaultSettings {
 	requestDelayMs: number;
 	/** Chat model providers for the conversational search feature */
 	chatProviders: ChatProvider[];
+	/** Feishu bots bound to Semlink */
+	feishuBots: FeishuBotConfig[];
 }
 
 export const DEFAULT_SETTINGS: SmartVaultSettings = {
@@ -88,6 +97,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	batchSize: 64,
 	requestDelayMs: 200,
 	chatProviders: DEFAULT_CHAT_PROVIDERS,
+	feishuBots: [],
 };
 
 /** Chunk status in the lifecycle */

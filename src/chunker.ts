@@ -15,6 +15,13 @@ const HEADING_RE = /^(#{1,6})\s+(.+)$/;
  * Split a markdown document into chunks.
  * Strategy: split by headings first; if a section exceeds chunkSize,
  * split further by fixed-size with overlap.
+ *
+ * Sections are closed only by a heading of the SAME OR HIGHER level, so a
+ * parent heading keeps its sub-sections (e.g. "# MIBT" keeps "## 长按触发").
+ * Splitting on every heading level would otherwise orphan a parent heading
+ * that is immediately followed by a sub-heading into a heading-only chunk
+ * whose only content is "# MIBT" — polluting search results and starving the
+ * chat model of real content.
  */
 export function chunkMarkdown(
 	text: string,
@@ -25,31 +32,46 @@ export function chunkMarkdown(
 	const lines = text.split("\n");
 
 	// Group lines by heading sections
-	const sections: { heading: string; lines: string[] }[] = [];
+	const sections: { heading: string; level: number; lines: string[] }[] = [];
 	let currentHeading = "";
+	let currentLevel = 0;
 	let currentLines: string[] = [];
 
 	for (const line of lines) {
 		const match = line.match(HEADING_RE);
 		if (match) {
-			// Flush previous section
-			if (currentLines.length > 0) {
-				sections.push({ heading: currentHeading, lines: [...currentLines] });
+			const level = match[1].length;
+			// A same-or-higher level heading closes the current section.
+			if (currentLevel > 0 && level <= currentLevel) {
+				sections.push({ heading: currentHeading, level: currentLevel, lines: [...currentLines] });
+				currentLines = [];
+				currentHeading = match[2].trim();
+				currentLevel = level;
+			} else if (currentLevel === 0) {
+				// First heading in the doc (possibly after a preamble) opens
+				// the first section.
+				if (currentLines.length > 0) {
+					sections.push({ heading: "", level: 0, lines: [...currentLines] });
+					currentLines = [];
+				}
+				currentHeading = match[2].trim();
+				currentLevel = level;
 			}
-			currentHeading = match[2].trim();
-			currentLines = [line];
+			// Deeper sub-headings stay inside the current section — only the
+			// line is appended; heading/level are unchanged.
+			currentLines.push(line);
 		} else {
 			currentLines.push(line);
 		}
 	}
 	// Flush last section
 	if (currentLines.length > 0) {
-		sections.push({ heading: currentHeading, lines: [...currentLines] });
+		sections.push({ heading: currentHeading, level: currentLevel, lines: [...currentLines] });
 	}
 
 	// If no sections found (no headings), treat entire doc as one section
 	if (sections.length === 0) {
-		sections.push({ heading: "", lines: lines });
+		sections.push({ heading: "", level: 0, lines: lines });
 	}
 
 	// Now chunk each section

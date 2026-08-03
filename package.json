@@ -8,7 +8,13 @@
 		"build": "node esbuild.config.mjs production",
 		"copy-wasm": "node copy-wasm.mjs"
 	},
-	"keywords": ["obsidian", "mcp", "embedding", "semantic-search", "bge-m3"],
+	"keywords": [
+		"obsidian",
+		"mcp",
+		"embedding",
+		"semantic-search",
+		"bge-m3"
+	],
 	"devDependencies": {
 		"@types/node": "^20.0.0",
 		"builtin-modules": "^3.3.0",
@@ -17,6 +23,11 @@
 		"typescript": "^5.4.0"
 	},
 	"dependencies": {
+		"@larksuiteoapi/node-sdk": "^1.72.0",
+		"@types/pako": "^2.0.4",
+		"@types/qrcode": "^1.5.6",
+		"pako": "^3.0.1",
+		"qrcode": "^1.5.4",
 		"sql.js": "^1.11.0"
 	}
 }

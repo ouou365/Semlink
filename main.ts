@@ -8,6 +8,8 @@ import { DEFAULT_SETTINGS, type SmartVaultSettings } from "./src/types";
 import { VectorStore } from "./src/vector-store";
 import { IndexQueue } from "./src/index-queue";
 import { EmbeddingClient } from "./src/embedding-client";
+import { ChatClient } from "./src/chat-client";
+import { SemlinkTools } from "./src/chat-tools";
 import { Scheduler } from "./src/scheduler";
 import { ProgressTracker } from "./src/progress";
 import { McpServer } from "./src/mcp-server";
@@ -15,6 +17,7 @@ import { VaultWatcher } from "./src/watcher";
 import { SmartVaultSettingTab } from "./src/settings";
 import { ProgressModal } from "./src/progress-modal";
 import { SemanticSearchView, SEARCH_VIEW_TYPE } from "./src/search-view";
+import { FeishuBot, type FeishuAskHandler } from "./src/feishu-bot";
 import { setLang, t } from "./src/i18n";
 import logoSvg from "./src/semlink-logo.svg";
 
@@ -24,11 +27,16 @@ export default class SmartVaultPlugin extends Plugin {
 	store!: VectorStore;
 	queue!: IndexQueue;
 	client!: EmbeddingClient;
+	chatClient!: ChatClient;
+	chatTools!: SemlinkTools;
 	scheduler!: Scheduler;
 	progress!: ProgressTracker;
 	mcpServer: McpServer | null = null;
 	watcher!: VaultWatcher;
 	pluginDir: string = "";
+
+	/** Running Feishu bot instances, keyed by bot id. */
+	private feishuBots: Map<string, FeishuBot> = new Map();
 
 	private statusBarEl: HTMLElement | null = null;
 	private lastStatusBarUpdate = 0;
@@ -55,6 +63,8 @@ export default class SmartVaultPlugin extends Plugin {
 
 		this.queue = new IndexQueue(this.store);
 		this.client = new EmbeddingClient(this.settings);
+		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault);
+		this.chatClient = new ChatClient(this.settings, this.chatTools);
 		this.scheduler = new Scheduler(
 			this.app,
 			this.store,
@@ -107,9 +117,12 @@ export default class SmartVaultPlugin extends Plugin {
 		// Register settings tab
 		this.addSettingTab(new SmartVaultSettingTab(this.app, this));
 
+		// Start any enabled Feishu bots.
+		await this.syncFeishuBots();
+
 		// Semantic Search sidebar view
 		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SemanticSearchView(
-			leaf, this.store, this.client, this.app.vault,
+			leaf, this.store, this.client, this.app.vault, this.chatClient,
 		));
 		const ribbonBtn = this.addRibbonIcon("search", t("searchViewTitle"), () => {
 			void this.activateSearchView();
@@ -197,6 +210,10 @@ export default class SmartVaultPlugin extends Plugin {
 		try { this.scheduler?.abort(); } catch {}
 		try { this.watcher?.stop(); } catch {}
 		try { this.mcpServer?.stop(); } catch {}
+		for (const bot of this.feishuBots.values()) {
+			try { void bot.stop(); } catch {}
+		}
+		this.feishuBots.clear();
 		// Persist & close the store. store.close() is async, but:
 		//  - In worker mode it sends a `close` message to the child, which
 		//    performs a synchronous save() + db.close() in its own thread and
@@ -218,9 +235,11 @@ export default class SmartVaultPlugin extends Plugin {
 		await this.saveData(this.settings);
 		setLang(this.settings.language);
 		this.client?.updateSettings(this.settings);
+		this.chatClient?.updateSettings(this.settings);
 		this.scheduler?.updateSettings(this.settings);
 		this.mcpServer?.updateSettings(this.settings);
 		this.watcher?.updateSettings(this.settings);
+		await this.syncFeishuBots();
 	}
 
 	// ──── MCP Server ────
@@ -266,6 +285,66 @@ export default class SmartVaultPlugin extends Plugin {
 		} else {
 			await this.startMcpServer();
 		}
+	}
+
+	// ──── Feishu Bots ────
+
+	/** Reconcile running bot instances with the configured bot list. */
+	private async syncFeishuBots(): Promise<void> {
+		const configured = new Set<string>();
+		for (const bot of this.settings.feishuBots) {
+			configured.add(bot.id);
+			const running = this.feishuBots.get(bot.id);
+			if (!bot.enabled) {
+				if (running) {
+					await running.stop();
+					this.feishuBots.delete(bot.id);
+				}
+				continue;
+			}
+			if (running) continue;
+
+			const instance = new FeishuBot(bot, this.buildFeishuAskHandler(), () => {
+				// Persist state mutations (bound confirmation, connection state)
+				// — syncFeishuBots is idempotent, so no recursion here.
+				void this.saveSettings();
+			});
+			this.feishuBots.set(bot.id, instance);
+			try {
+				await instance.start();
+			} catch (e) {
+				bot.connected = false;
+				bot.lastError = e instanceof Error ? e.message : String(e);
+			}
+		}
+
+		for (const [id, running] of this.feishuBots) {
+			if (!configured.has(id)) {
+				await running.stop();
+				this.feishuBots.delete(id);
+			}
+		}
+	}
+
+	/** Shared QA pipeline used by Feishu bots (embed → search → chat). */
+	private buildFeishuAskHandler(): FeishuAskHandler {
+		return async (question, onToken) => {
+			const embedResult = await this.client.embed([question]);
+			const results = await this.store.search(embedResult.embeddings[0], 10, 0.3);
+			const context = this.buildFeishuContext(results.slice(0, 5));
+			const chatResult = await this.chatClient.chat(context, question, undefined, "standard", onToken);
+			return {
+				answer: chatResult.answer,
+				thinking: chatResult.thinking,
+				usedNotes: chatResult.usedNotes,
+			};
+		};
+	}
+
+	private buildFeishuContext(results: Array<{ heading: string; notePath: string; contentPreview: string }>): string {
+		return results
+			.map((r, i) => `[${i + 1}] ${r.heading || r.notePath}（${r.notePath}）\n${r.contentPreview}`)
+			.join("\n\n");
 	}
 
 	// ──── Indexing ────

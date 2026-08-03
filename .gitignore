@@ -9,3 +9,6 @@ node_modules/
 
 # 构建产物（可选：如果想让别人直接用就保留 main.js）
 # main.js
+
+# ZCode 内部工作文件
+.zcode/

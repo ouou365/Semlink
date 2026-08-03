@@ -3,12 +3,16 @@
 // ========================================
 
 import { App, ButtonComponent, PluginSettingTab, Setting } from "obsidian";
+import * as QRCode from "qrcode";
 import type SmartVaultPlugin from "../main";
 import { DEFAULT_SETTINGS } from "./types";
-import type { ChatProvider, ChatModel, IndexProgress } from "./types";
+import type { ChatProvider, IndexProgress } from "./types";
+import { ChatModelsModal } from "./chat-models-modal";
+import { AddFeishuBotModal } from "./feishu-bot-modal";
+import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { t } from "./i18n";
 
-type SettingsTab = "general" | "models" | "mcp";
+type SettingsTab = "general" | "embedding" | "chat" | "mcp" | "bot";
 
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
@@ -17,6 +21,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	private indexBtnCurrentState: "resume" | "pause" | "none" = "none";
 	private indexBtnLoading = false;
 	private activeTab: SettingsTab = "general";
+	private feishuScanHandle: FeishuScanHandle | null = null;
 
 	constructor(app: App, plugin: SmartVaultPlugin) {
 		super(app, plugin);
@@ -29,18 +34,17 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		this.indexBtn = null;
 		this.indexBtnLoading = false;
 		this.indexBtnCurrentState = "none";
+		// Abort any in-flight Feishu scan before re-rendering (a fresh QR
+		// session is started by the bot tab).
+		this.feishuScanHandle?.abort();
+		this.feishuScanHandle = null;
 
 		const { containerEl } = this;
 		containerEl.empty();
 		containerEl.addClass("smart-vault-settings");
 
-		// Title heading with inline bug-report link
-		const titleSetting = new Setting(containerEl).setName(t("settingsTitle")).setHeading();
-		const nameEl = titleSetting.nameEl;
-		const bugLink = nameEl.createEl("a");
-		bugLink.setText(t("reportBug"));
-		bugLink.href = "mailto:ozy2013xm@gmail.com?subject=Semlink Bug Report";
-		bugLink.addClass("semlink-bug-link");
+		// Title heading
+		new Setting(containerEl).setName(t("settingsTitle")).setHeading();
 
 		// Tab navigation
 		this.renderTabNav(containerEl);
@@ -51,11 +55,17 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			case "general":
 				this.renderGeneralTab(panelEl);
 				break;
-			case "models":
-				this.renderModelsTab(panelEl);
+			case "embedding":
+				this.renderEmbeddingTab(panelEl);
+				break;
+			case "chat":
+				this.renderChatTab(panelEl);
 				break;
 			case "mcp":
 				this.renderMcpTab(panelEl);
+				break;
+			case "bot":
+				this.renderBotTab(panelEl);
 				break;
 		}
 	}
@@ -64,8 +74,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const navEl = containerEl.createDiv({ cls: "semlink-settings-tabs" });
 		const tabs: Array<{ id: SettingsTab; label: string }> = [
 			{ id: "general", label: t("tabGeneral") },
-			{ id: "models", label: t("tabModels") },
+			{ id: "embedding", label: t("tabEmbedding") },
+			{ id: "chat", label: t("tabChat") },
 			{ id: "mcp", label: t("tabMcp") },
+			{ id: "bot", label: t("tabBot") },
 		];
 		for (const tab of tabs) {
 			const btn = navEl.createEl("button", {
@@ -83,7 +95,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	}
 
 	// ══════════════════════════════════════
-	// Tab: General — language, indexing, embedding params
+	// Tab: General — language, index management & support
 	// ══════════════════════════════════════
 	private renderGeneralTab(containerEl: HTMLElement): void {
 		// Language
@@ -146,71 +158,24 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			});
 
-		// ── Section: Embedding Parameters ──
-		new Setting(containerEl).setName(t("sectionEmbedding")).setHeading();
-
+		// Report Bug
 		new Setting(containerEl)
-			.setName(t("chunkSize"))
-			.setDesc(t("chunkSizeDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(200, 2000, 100)
-					.setValue(this.plugin.settings.chunkSize)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.chunkSize = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t("chunkOverlap"))
-			.setDesc(t("chunkOverlapDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 500, 50)
-					.setValue(this.plugin.settings.chunkOverlap)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.chunkOverlap = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t("batchSize"))
-			.setDesc(t("batchSizeDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(1, 128, 1)
-					.setValue(this.plugin.settings.batchSize)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.batchSize = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t("requestDelay"))
-			.setDesc(t("requestDelayDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 1000, 50)
-					.setValue(this.plugin.settings.requestDelayMs)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.requestDelayMs = value;
-						await this.plugin.saveSettings();
+			.setName(t("reportBug"))
+			.setDesc(t("reportBugDesc"))
+			.addButton((btn) =>
+				btn
+					.setButtonText(t("reportBugButton"))
+					.onClick(() => {
+						window.location.href = "mailto:ozy2013xm@gmail.com?subject=Semlink Bug Report";
 					})
 			);
 	}
 
 	// ══════════════════════════════════════
-	// Tab: Models — embedding provider + chat models
+	// Tab: Embedding — embedding model & embedding params
 	// ══════════════════════════════════════
-	private renderModelsTab(containerEl: HTMLElement): void {
-		// ── Section: Model Settings (embedding) ──
+	private renderEmbeddingTab(containerEl: HTMLElement): void {
+		// ── Section: Embedding Model ──
 		new Setting(containerEl).setName(t("sectionModel")).setHeading();
 
 		// Provider selection
@@ -328,7 +293,70 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				);
 		}
 
-		// ── Section: Chat Models ──
+		// ── Section: Embedding Parameters ──
+		new Setting(containerEl).setName(t("sectionEmbedding")).setHeading();
+
+		new Setting(containerEl)
+			.setName(t("chunkSize"))
+			.setDesc(t("chunkSizeDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(200, 2000, 100)
+					.setValue(this.plugin.settings.chunkSize)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.chunkSize = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(t("chunkOverlap"))
+			.setDesc(t("chunkOverlapDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(0, 500, 50)
+					.setValue(this.plugin.settings.chunkOverlap)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.chunkOverlap = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(t("batchSize"))
+			.setDesc(t("batchSizeDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 128, 1)
+					.setValue(this.plugin.settings.batchSize)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.batchSize = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(t("requestDelay"))
+			.setDesc(t("requestDelayDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(0, 1000, 50)
+					.setValue(this.plugin.settings.requestDelayMs)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.requestDelayMs = value;
+						await this.plugin.saveSettings();
+					})
+			);
+	}
+
+	// ══════════════════════════════════════
+	// Tab: Chat — chat providers & models
+	// ══════════════════════════════════════
+	private renderChatTab(containerEl: HTMLElement): void {
 		this.renderChatModelsSection(containerEl);
 	}
 
@@ -428,6 +456,112 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			});
 	}
 
+	// ══════════════════════════════════════
+	// Tab: Bot — Feishu bots bound to Semlink
+	// ══════════════════════════════════════
+	private renderBotTab(containerEl: HTMLElement): void {
+		new Setting(containerEl).setName(t("botSection")).setHeading();
+		containerEl.createDiv({ cls: "feishu-prereq", text: t("botPrereq") });
+
+		const bots = this.plugin.settings.feishuBots;
+		if (bots.length === 0) {
+			containerEl.createDiv({ cls: "feishu-empty", text: t("botEmpty") });
+		}
+
+		for (let i = 0; i < bots.length; i++) {
+			const bot = bots[i];
+			const status = bot.connected ? t("botStatusConnected") : t("botStatusDisconnected");
+			let desc = `${t("botAppId")}: ${bot.appId} · ${t("botStatus")}: ${status}`;
+			if (bot.bound) {
+				desc += ` · ${t("botBound")}`;
+			} else if (bot.bindCode) {
+				desc += ` · ${t("botBindPending")}（${t("botBindHint").replace("{code}", bot.bindCode)}）`;
+			}
+			if (bot.lastError) desc += ` · ${bot.lastError}`;
+
+			new Setting(containerEl)
+				.setName(bot.name || bot.appId)
+				.setDesc(desc)
+				.addToggle((toggle) =>
+					toggle
+						.setValue(bot.enabled)
+						.onChange(async (value) => {
+							bot.enabled = value;
+							await this.plugin.saveSettings();
+							this.display();
+						})
+				)
+				.addExtraButton((btn) => {
+					btn.setIcon("trash").setTooltip(t("botDelete")).onClick(async () => {
+						bots.splice(i, 1);
+						await this.plugin.saveSettings();
+						this.display();
+					});
+				});
+		}
+
+		// Inline scan-to-add section: the QR appears directly in the settings
+		// page and the user scans it with the Feishu app.
+		new Setting(containerEl).setName(t("botAddScan")).setHeading();
+		this.renderFeishuScan(containerEl);
+
+		// Manual entry as an alternative.
+		new Setting(containerEl).addButton((btn) => {
+			btn.setButtonText(t("botAddManual")).onClick(() => {
+				new AddFeishuBotModal(this.app, this.plugin, () => this.display()).open();
+			});
+		});
+	}
+
+	/** Show the scan QR inline and bind the created app when scanned. */
+	private renderFeishuScan(container: HTMLElement): void {
+		const box = container.createDiv({ cls: "feishu-scan-box" });
+		const statusEl = box.createDiv({ cls: "feishu-scan-status", text: t("botScanWaiting") });
+
+		this.feishuScanHandle?.abort();
+		this.feishuScanHandle = startFeishuRegister(
+			"Semlink",
+			(url) => {
+				void QRCode.toDataURL(url, { width: 200, margin: 1 }).then((dataUrl) => {
+					if (!box.isConnected) return;
+					box.createEl("img", { cls: "feishu-qr", attr: { src: dataUrl, alt: "QR" } });
+					statusEl.setText(t("botScanHint"));
+				}).catch(() => {
+					statusEl.setText(t("botScanError"));
+				});
+			},
+			(status) => {
+				statusEl.setText(`${t("botScanWaiting")} (${status})`);
+			},
+		);
+
+		this.feishuScanHandle.promise
+			.then(async (res) => {
+				// One-time bind code: the user confirms the binding in Feishu by
+				// sending `/bind <code>` to the bot (ZCode-style flow).
+				const bindCode = Math.random().toString(36).slice(2, 8).toUpperCase();
+				this.plugin.settings.feishuBots.push({
+					id: `bot-${Date.now()}`,
+					name: res.userName || "Feishu Bot",
+					appId: res.appId,
+					appSecret: res.appSecret,
+					userOpenId: res.userOpenId,
+					bindCode,
+					bound: false,
+					enabled: true,
+					connected: false,
+				});
+				await this.plugin.saveSettings();
+				new Notice(`${t("botSaved")} · ${t("botBindHint").replace("{code}", bindCode)}`);
+				this.display();
+			})
+			.catch((e) => {
+				if (!box.isConnected) return;
+				const msg = e instanceof Error ? e.message : String(e);
+				statusEl.setText(`${t("botScanError")}: ${msg}`);
+			});
+	}
+
 	// ──── Chat Models Section ────
 
 	private renderChatModelsSection(containerEl: HTMLElement): void {
@@ -519,67 +653,24 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Models sub-section
-		new Setting(containerEl).setName(t("chatModels")).setHeading();
-
-		for (let mi = 0; mi < provider.models.length; mi++) {
-			this.renderChatModel(containerEl, index, mi);
-		}
-
-		// Add model + Delete provider buttons
+		// Models sub-item — click to open the management modal
 		new Setting(containerEl)
-			.addButton((btn) => {
-				btn.setButtonText(t("chatAddModel")).onClick(async () => {
-					provider.models.push({ id: "new-model", contextWindow: 200000 });
-					await this.plugin.saveSettings();
-					this.display();
-				});
-			})
-			.addButton((btn) => {
-				btn.setButtonText(t("chatDeleteProvider")).setWarning().onClick(async () => {
-					this.plugin.settings.chatProviders.splice(index, 1);
-					await this.plugin.saveSettings();
-					this.display();
-				});
-			});
-	}
+			.setName(t("chatModels"))
+			.setDesc(t("chatModelsDesc").replace("{count}", String(provider.models.length)))
+			.addButton((btn) =>
+				btn.setButtonText(t("chatManageModels")).onClick(() => {
+					new ChatModelsModal(this.app, this.plugin, provider, () => this.display()).open();
+				})
+			);
 
-	private renderChatModel(containerEl: HTMLElement, providerIndex: number, modelIndex: number): void {
-		const provider = this.plugin.settings.chatProviders[providerIndex];
-		if (!provider) return;
-		const model = provider.models[modelIndex];
-		if (!model) return;
-
-		new Setting(containerEl)
-			.setName(t("chatModelId"))
-			.addText((text) =>
-				text
-					.setPlaceholder("model-id")
-					.setValue(model.id)
-					.onChange(async (value) => {
-						model.id = value;
-						await this.plugin.saveSettings();
-					})
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("200000")
-					.setValue(String(model.contextWindow))
-					.onChange(async (value) => {
-						const n = parseInt(value, 10);
-						if (!isNaN(n) && n > 0) {
-							model.contextWindow = n;
-							await this.plugin.saveSettings();
-						}
-					})
-			)
-			.addExtraButton((btn) => {
-				btn.setIcon("trash").setTooltip(t("chatDeleteModel")).onClick(async () => {
-					provider.models.splice(modelIndex, 1);
-					await this.plugin.saveSettings();
-					this.display();
-				});
+		// Delete provider button
+		new Setting(containerEl).addButton((btn) => {
+			btn.setButtonText(t("chatDeleteProvider")).setWarning().onClick(async () => {
+				this.plugin.settings.chatProviders.splice(index, 1);
+				await this.plugin.saveSettings();
+				this.display();
 			});
+		});
 	}
 
 	private applyIndexBtnState(p: IndexProgress) {
