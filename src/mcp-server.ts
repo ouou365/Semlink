@@ -351,6 +351,44 @@ export class McpServer {
 						required: ["path", "heading"],
 					},
 				},
+				{
+					name: "grep_notes",
+					description: "在 Vault 笔记中按文本或正则表达式精确搜索内容，适合精确关键词、编号、日期、代码片段等语义检索覆盖不到的内容。totalFiles 为匹配笔记总数；paths 字段返回匹配文件清单（completeList=true 时即完整清单，最多 200 个），一次调用即可拿到完整清单。limit 仅控制附带行内容的文件数。",
+					inputSchema: {
+						type: "object",
+						properties: {
+							pattern: {
+								type: "string",
+								description: "要搜索的文本或正则表达式",
+							},
+							regex: {
+								type: "boolean",
+								description: "pattern 是否为正则表达式（默认 false，按普通文本匹配）",
+								default: false,
+							},
+							pathFilter: {
+								type: "string",
+								description: "仅搜索路径前缀匹配的笔记，如 'projects/xxx'（可选）",
+							},
+							caseSensitive: {
+								type: "boolean",
+								description: "是否区分大小写（默认 false）",
+								default: false,
+							},
+							limit: {
+								type: "number",
+								description: "附带行内容的文件数（默认 10，最大 30）",
+								default: 10,
+							},
+							contextLines: {
+								type: "number",
+								description: "每个匹配前后附带的上下文行数（默认 1，最大 3）",
+								default: 1,
+							},
+						},
+						required: ["pattern"],
+					},
+				},
 			],
 		};
 	}
@@ -374,6 +412,8 @@ export class McpServer {
 				return await this.toolReindex(args.path, args.force);
 			case "get_section":
 				return await this.toolGetSection(args.path, args.heading, args.maxDepth);
+			case "grep_notes":
+				return await this.toolGrepNotes(args.pattern, args.regex, args.pathFilter, args.caseSensitive, args.limit, args.contextLines);
 			default:
 				throw new Error(`Unknown tool: ${toolName}`);
 		}
@@ -485,6 +525,90 @@ export class McpServer {
 						totalChunks: stats.activeChunks,
 						listed: filtered.length,
 						paths: filtered.sort(),
+					}, null, 2),
+				},
+			],
+		};
+	}
+
+	private async toolGrepNotes(pattern: string, regex = false, pathFilter?: string, caseSensitive = false, limit = 10, contextLines = 1) {
+		if (!pattern) {
+			return { content: [{ type: "text", text: "Error: missing pattern" }] };
+		}
+		let re: RegExp;
+		try {
+			const escaped = regex ? pattern : pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+			re = new RegExp(escaped, caseSensitive ? "" : "i");
+		} catch (e) {
+			return { content: [{ type: "text", text: `Error: invalid regex: ${e instanceof Error ? e.message : String(e)}` }] };
+		}
+
+		// `limit` controls how many files carry detailed lines; the COMPLETE
+		// matching path list is always returned (up to MAX_PATHS).
+		const detailLimit = Math.min(Math.max(1, limit), 30);
+		const MAX_PATHS = 200;
+		const ctx = Math.min(Math.max(0, contextLines), 3);
+		const maxLinesPerFile = 12;
+		const files = this.vault.getFiles().filter((f) => {
+			if (!/\.(md|txt|markdown)$/i.test(f.path)) return false;
+			if (pathFilter && !f.path.toLowerCase().startsWith(pathFilter.toLowerCase())) return false;
+			return true;
+		});
+
+		// Scan ALL files with bounded concurrency — sequential reads of
+		// thousands of vault files would freeze the tool.
+		const CONCURRENCY = 32;
+		let totalFiles = 0;
+		const allPaths: string[] = [];
+		const detailed: Array<{ path: string; matchCount: number; lines: string[] }> = [];
+		for (let i = 0; i < files.length; i += CONCURRENCY) {
+			const chunk = files.slice(i, i + CONCURRENCY);
+			const batch = await Promise.all(
+				chunk.map(async (file) => {
+					try {
+						if (file.stat.size > 5 * 1024 * 1024) return null; // skip huge files
+						const content = await this.vault.cachedRead(file);
+						const lines = content.split("\n");
+						let fileMatches = 0;
+						const hits: string[] = [];
+						for (let j = 0; j < lines.length; j++) {
+							if (!re.test(lines[j])) continue;
+							fileMatches++;
+							if (hits.length >= maxLinesPerFile) continue;
+							const from = Math.max(0, j - ctx);
+							const to = Math.min(lines.length - 1, j + ctx);
+							for (let k = from; k <= to; k++) {
+								const label = `L${k + 1}: ${lines[k].trim().slice(0, 150)}`;
+								if (!hits.includes(label)) hits.push(label);
+							}
+						}
+						if (fileMatches === 0) return null;
+						return { path: file.path, matchCount: fileMatches, lines: hits };
+					} catch {
+						return null; // skip unreadable files
+					}
+				}),
+			);
+			for (const r of batch) {
+				if (!r) continue;
+				totalFiles++;
+				if (totalFiles <= MAX_PATHS) allPaths.push(r.path);
+				if (detailed.length < detailLimit) detailed.push(r);
+			}
+		}
+
+		return {
+			content: [
+				{
+					type: "text",
+					text: JSON.stringify({
+						pattern,
+						regex,
+						caseSensitive,
+						totalFiles,
+						completeList: totalFiles <= MAX_PATHS,
+						paths: allPaths,
+						results: detailed,
 					}, null, 2),
 				},
 			],

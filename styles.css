@@ -521,6 +521,43 @@
 .semlink-msg-loading {
     color: var(--text-muted);
     font-style: italic;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Expand marker on the LEFT, same as .semlink-thinking-summary::before. */
+.semlink-msg-loading::before {
+    content: "▸ ";
+    flex-shrink: 0;
+}
+
+.semlink-msg-loading.is-open::before {
+    content: "▾ ";
+}
+
+.semlink-msg-loading-text {
+    font-style: italic;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    /* Room for the italic glyph overhang so the right edge isn't clipped. */
+    padding-right: 0.3em;
+}
+
+/* Fixed-width slot for the animated dots: growing dots never move the
+   marker (the text stays put while the dots pulse). Dots render upright
+   (not italic) so they never get clipped by the reserved width. */
+.semlink-msg-loading-dots {
+    display: inline-block;
+    min-width: 1.5em;
+    text-align: left;
+    flex-shrink: 0;
+    font-style: normal;
+    padding-right: 0.15em;
 }
 
 .semlink-msg-empty {
@@ -654,9 +691,8 @@
 
 .semlink-search-input {
 	flex: 1 1 0;
-	height: 100px;
-	min-height: 100px;
-	max-height: 100px;
+	min-height: 80px;
+	max-height: 160px;
 	overflow-x: hidden;
 	overflow-y: auto;
 	border: none;
@@ -941,6 +977,25 @@
     border-color: var(--interactive-accent);
 }
 
+/* Live thinking preview while the answer is being generated: hidden by
+   default; clicking the loading line (with its ">" chevron) toggles it. */
+.semlink-thinking-live {
+    margin-top: 8px;
+}
+
+.semlink-thinking-live-body {
+    margin-top: 4px;
+    padding: 6px 8px;
+    border-left: 2px solid var(--background-modifier-border);
+    border-radius: 0 4px 4px 0;
+    font-size: 12px;
+}
+
+.semlink-thinking-live-body .semlink-thinking-thought,
+.semlink-thinking-live-body .semlink-tool-call-summary {
+    margin: 2px 0;
+}
+
 .semlink-thinking-summary::before {
     content: "▸ ";
 }
@@ -1079,36 +1134,38 @@
 
 .semlink-context-tooltip .ctx-capacity {
     font-weight: 600;
-    margin-bottom: 6px;
+    margin: 0 0 2px;
+}
+
+/* Overall context-usage progress bar (one bar for the whole capacity) */
+.semlink-context-tooltip .ctx-total-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--background-modifier-border);
+    overflow: hidden;
+    margin: 4px 0 8px;
+}
+
+.semlink-context-tooltip .ctx-total-bar-fill {
+    height: 100%;
+    background: var(--interactive-accent);
+    border-radius: 3px;
 }
 
 .semlink-context-tooltip .ctx-row {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
-    margin: 4px 0;
+    margin: 3px 0;
 }
 
 .semlink-context-tooltip .ctx-name {
-    flex: 0 0 auto;
-    width: 72px;
+    flex: 0 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.semlink-context-tooltip .ctx-bar {
-    flex: 1 1 auto;
-    height: 6px;
-    border-radius: 3px;
-    background: var(--background-modifier-border);
-    overflow: hidden;
-}
-
-.semlink-context-tooltip .ctx-bar-fill {
-    height: 100%;
-    background: var(--interactive-accent);
-    border-radius: 3px;
 }
 
 .semlink-context-tooltip .ctx-tokens {
@@ -1118,7 +1175,7 @@
 }
 
 .semlink-context-tooltip .ctx-cache {
-    margin-top: 8px;
+    margin: 8px 0 0;
     border-top: 1px solid var(--background-modifier-border);
     padding-top: 6px;
     color: var(--text-muted);
@@ -1184,6 +1241,40 @@
 .semlink-search-depth-option.is-active {
     color: var(--interactive-accent);
     font-weight: 600;
+}
+
+/* Model-switcher popup: reuses the depth popup, adds group headers and a
+   wider min-width so model ids don't wrap. */
+.semlink-search-model-popup {
+    min-width: 180px;
+}
+
+.semlink-search-model-popup-group {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-faint);
+    padding: 5px 10px 2px;
+}
+
+/* The model name in the input row is a dropdown trigger now (name + "▾"
+   arrow). Hover must NOT change the color — the row already sits in a muted
+   tone and a hover tint would be noisy next to the context donut. */
+.semlink-search-model-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    cursor: pointer;
+}
+
+.semlink-search-model-name {
+    cursor: pointer;
+}
+
+.semlink-search-model-arrow {
+    font-size: 9px;
+    color: var(--text-faint);
+    flex-shrink: 0;
+    line-height: 1;
 }
 
 /* Streaming answer text (raw markdown, shown while the model streams) */

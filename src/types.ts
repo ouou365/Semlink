@@ -246,6 +246,19 @@ export interface HistorySegment {
 	value: string;
 }
 
+/** One context category's token share (messages / system_tools / …). */
+export interface ContextCategory {
+	key: string; // "messages" | "system_tools" | "mcp_tools" | "skills" | "system_prompt" | "other"
+	tokens: number;
+}
+
+/** Context usage breakdown of a chat turn (capacity + per-category tokens). */
+export interface ContextBreakdown {
+	capacity: number;
+	used: number;
+	categories: ContextCategory[];
+}
+
 /** One message in a persisted chat session. */
 export interface HistoryMessage {
 	role: "user" | "assistant";
@@ -256,6 +269,11 @@ export interface HistoryMessage {
 	thinking?: HistoryThinkingStep[];
 	sources?: string[];
 	elapsedSec?: number;
+	/** Context usage of this turn, so the ring + tooltip can be restored
+	 * when the session is re-opened from history. */
+	contextTokens?: number;
+	contextBreakdown?: ContextBreakdown;
+	cacheHitRate?: number | null;
 	timestamp: number;
 }
 

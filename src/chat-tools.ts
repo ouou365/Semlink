@@ -100,6 +100,23 @@ export class SemlinkTools {
 					},
 				},
 			},
+			{
+				name: "grep_notes",
+				description:
+					"在 Vault 笔记中按文本或正则表达式精确搜索内容，适合精确关键词、编号、日期、代码片段等语义检索覆盖不到的内容。totalFiles 为匹配笔记总数；paths 字段返回匹配文件清单（completeList=true 时即完整清单，最多 200 个），一次调用即可拿到完整清单，不要用不同措辞或更大 limit 反复搜索。limit 仅控制附带行内容的文件数。",
+				parameters: {
+					type: "object",
+					properties: {
+						pattern: { type: "string", description: "要搜索的文本或正则表达式" },
+						regex: { type: "boolean", description: "pattern 是否为正则表达式（默认 false，按普通文本匹配）" },
+						pathFilter: { type: "string", description: "仅搜索路径前缀匹配的笔记，如 'projects/xxx'（可选）" },
+						caseSensitive: { type: "boolean", description: "是否区分大小写（默认 false）" },
+						limit: { type: "number", description: "最多返回的匹配文件数（默认 10，最大 30）" },
+						contextLines: { type: "number", description: "每个匹配前后附带的上下文行数（默认 1，最大 3）" },
+					},
+					required: ["pattern"],
+				},
+			},
 		];
 	}
 
@@ -117,6 +134,8 @@ export class SemlinkTools {
 					return await this.toolGetSimilarNotes(args.path, args.limit, args.threshold);
 				case "list_indexed":
 					return await this.toolListIndexed(args.prefix);
+				case "grep_notes":
+					return await this.toolGrepNotes(args.pattern, args.regex, args.pathFilter, args.caseSensitive, args.limit, args.contextLines);
 				default:
 					return `Error: unknown tool "${name}"`;
 			}
@@ -214,6 +233,112 @@ export class SemlinkTools {
 				2,
 			),
 		);
+	}
+
+	/**
+	 * Grep the vault notes for exact text or a regex. Reads note contents from
+	 * disk (accurate, current) and returns matching files with line numbers
+	 * plus a few context lines — unlike semantic search, this finds exact
+	 * keywords / IDs / dates that embedding retrieval can miss.
+	 */
+	private async toolGrepNotes(
+		pattern: string,
+		regex = false,
+		pathFilter?: string,
+		caseSensitive = false,
+		limit = 10,
+		contextLines = 1,
+	): Promise<string> {
+		if (!pattern) return "Error: missing pattern";
+		let re: RegExp;
+		try {
+			re = new RegExp(regex ? pattern : this.escapeRegExp(pattern), caseSensitive ? "" : "i");
+		} catch (e) {
+			return `Error: invalid regex: ${e instanceof Error ? e.message : String(e)}`;
+		}
+
+		// `limit` controls how many files carry detailed lines; the COMPLETE
+		// matching path list is always returned (up to MAX_PATHS) so "list all
+		// notes mentioning X" is answered in a single call.
+		const detailLimit = Math.min(Math.max(1, limit), 30);
+		const MAX_PATHS = 200;
+		const ctx = Math.min(Math.max(0, contextLines), 3);
+		const maxLinesPerFile = 12;
+
+		const files = this.vault.getFiles().filter((f) => {
+			if (!/\.(md|txt|markdown)$/i.test(f.path)) return false;
+			if (pathFilter && !f.path.toLowerCase().startsWith(pathFilter.toLowerCase())) return false;
+			return true;
+		});
+
+		// Scan ALL files so `totalFiles` is exact (and completeList reliable);
+		// detailed lines are only kept for the first `detailLimit` matches.
+		// Reads run with bounded concurrency — sequentially awaiting thousands
+		// of vault files froze the tool for tens of seconds.
+		const CONCURRENCY = 32;
+		let totalFiles = 0;
+		const allPaths: string[] = [];
+		const detailed: Array<{ path: string; matchCount: number; lines: string[] }> = [];
+		for (let i = 0; i < files.length; i += CONCURRENCY) {
+			const chunk = files.slice(i, i + CONCURRENCY);
+			const batch = await Promise.all(
+				chunk.map(async (file) => {
+					try {
+						// Skip pathological files; cachedRead keeps repeat calls fast.
+						if (file.stat.size > 5 * 1024 * 1024) return null;
+						const content = await this.vault.cachedRead(file);
+						const lines = content.split("\n");
+						let fileMatches = 0;
+						const hits: string[] = [];
+						for (let j = 0; j < lines.length; j++) {
+							if (!re.test(lines[j])) continue;
+							fileMatches++;
+							if (hits.length >= maxLinesPerFile) continue;
+							// Dedupe line labels around the match (overlapping context).
+							const from = Math.max(0, j - ctx);
+							const to = Math.min(lines.length - 1, j + ctx);
+							for (let k = from; k <= to; k++) {
+								const label = `L${k + 1}: ${lines[k].trim().slice(0, 150)}`;
+								if (!hits.includes(label)) hits.push(label);
+							}
+						}
+						if (fileMatches === 0) return null;
+						return { path: file.path, matchCount: fileMatches, lines: hits };
+					} catch {
+						return null; // skip unreadable files
+					}
+				}),
+			);
+			for (const r of batch) {
+				if (!r) continue;
+				totalFiles++;
+				if (totalFiles <= MAX_PATHS) allPaths.push(r.path);
+				if (detailed.length < detailLimit) detailed.push(r);
+			}
+		}
+
+		return this.truncate(
+			JSON.stringify(
+				{
+					pattern,
+					regex,
+					caseSensitive,
+					totalFiles,
+					// true = totalFiles ≤ MAX_PATHS，paths 即完整文件清单。
+					completeList: totalFiles <= MAX_PATHS,
+					paths: allPaths,
+					results: detailed,
+				},
+				null,
+				2,
+			),
+			12000,
+		);
+	}
+
+	/** Escape a plain-text search term so it is matched literally. */
+	private escapeRegExp(text: string): string {
+		return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 	}
 
 	private truncate(text: string, maxLen = this.maxResultChars): string {

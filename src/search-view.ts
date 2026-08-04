@@ -43,6 +43,11 @@ export class SemanticSearchView extends ItemView {
 	private searchDepth: "standard" | "enhanced" = "standard";
 	private depthTriggerEl: HTMLElement | null = null;
 	private depthPopupEl: HTMLElement | null = null;
+	private modelNameEl: HTMLElement | null = null;
+	private modelTriggerEl: HTMLElement | null = null;
+	private modelPopupEl: HTMLElement | null = null;
+	/** Time-slot key of the currently shown welcome greeting. */
+	private currentWelcomeKey: string | null = null;
 
 	// Current conversation state
 	private currentSessionId: string | null = null;
@@ -132,6 +137,20 @@ export class SemanticSearchView extends ItemView {
 		this.statusEl = contentEl.createDiv({ cls: "semlink-search-status" });
 		this.messagesEl = contentEl.createDiv({ cls: "semlink-search-messages" });
 		this.renderWelcome();
+
+		// The greeting is time-based — refresh it automatically when the time
+		// slot changes (e.g. 11:59 → 12:00), no reload needed. Only re-renders
+		// while the welcome is still visible (before the first message).
+		this.registerInterval(
+			window.setInterval(() => {
+				const key = this.welcomeKeyForHour();
+				if (key === this.currentWelcomeKey) return;
+				const existing = this.messagesEl.querySelector(".semlink-search-welcome");
+				if (!existing) return;
+				existing.remove();
+				this.renderWelcome();
+			}, 60_000),
+		);
 
 		// ── Input footer (bottom, fixed) ──
 		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
@@ -235,9 +254,19 @@ export class SemanticSearchView extends ItemView {
 
 		// Active chat model indicator inside the input box, with a donut
 		// showing how much of the context window the current turn uses.
+		// Clicking the model name (with its "▾" arrow) opens the
+		// model-switcher popup (same pattern as the search-depth popup).
 		const modelEl = wrapper.createDiv({ cls: "semlink-search-model" });
 		const modelLabel = this.chatClient.getActiveModelLabel();
-		modelEl.createSpan({ cls: "semlink-search-model-name", text: modelLabel || t("searchNoChatModel") });
+		const modelTrigger = modelEl.createSpan({ cls: "semlink-search-model-trigger" });
+		this.modelNameEl = modelTrigger.createSpan({ cls: "semlink-search-model-name", text: modelLabel || t("searchNoChatModel") });
+		modelTrigger.createSpan({ cls: "semlink-search-model-arrow", text: "▾" });
+		this.modelTriggerEl = modelTrigger;
+		modelTrigger.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.toggleModelPopup();
+		});
+		this.registerDomEvent(document, "click", () => this.hideModelPopup());
 		if (modelLabel && this.chatClient.getActiveContextWindow()) {
 			// Ring + percentage form the context-usage indicator; the tooltip
 			// only triggers when hovering THIS part of the row (not the depth
@@ -305,6 +334,10 @@ export class SemanticSearchView extends ItemView {
 			this.depthPopupEl.remove();
 			this.depthPopupEl = null;
 		}
+		if (this.modelPopupEl) {
+			this.modelPopupEl.remove();
+			this.modelPopupEl = null;
+		}
 		this.contentEl.empty();
 	}
 
@@ -369,7 +402,13 @@ export class SemanticSearchView extends ItemView {
 				// Answer mode: feed the retrieved notes to the chat model and
 				// show its answer, with the source cards folded underneath. The
 				// model may call Semlink's search/read tools to dig deeper.
-				const loadingTextEl = loadingEl.createDiv({ cls: "semlink-msg-loading", text: t("searchThinking") });
+				// Loading line: animated status text + a "▸" marker on the LEFT
+				// (via ::before, same as the thinking summary). Clicking the
+				// whole line toggles the live thinking preview below. The
+				// animated dots live in a FIXED-WIDTH slot so nothing jitters.
+				const loadingTextEl = loadingEl.createDiv({ cls: "semlink-msg-loading" });
+				const loadingTextSpan = loadingTextEl.createSpan({ cls: "semlink-msg-loading-text", text: t("searchThinking") });
+				const loadingDotsSpan = loadingTextEl.createSpan({ cls: "semlink-msg-loading-dots" });
 				const streamEl = loadingEl.createDiv({ cls: "semlink-msg-stream" });
 				streamEl.style.display = "none";
 
@@ -385,39 +424,95 @@ export class SemanticSearchView extends ItemView {
 						answerAnim = null;
 					}
 				};
-				const showAnswerLoading = (): void => {
+				const startDots = (label: string): void => {
 					loadingTextEl.style.display = "";
 					streamEl.style.display = "none";
 					streamEl.textContent = "";
 					answerDots = 0;
-					loadingTextEl.textContent = t("searchGeneratingAnswer");
+					loadingTextSpan.textContent = label;
+					loadingDotsSpan.textContent = "";
 					stopAnswerAnim();
 					answerAnim = window.setInterval(() => {
-						answerDots = (answerDots % 3) + 1; // 1 → 2 → 3 → 1 …
-						loadingTextEl.textContent = t("searchGeneratingAnswer") + ".".repeat(answerDots);
+						// Dots cycle 3 → 2 → 1 → 3 …
+						answerDots = 4 - ((answerDots % 3) + 1);
+						loadingDotsSpan.textContent = ".".repeat(answerDots);
 					}, 350);
 				};
+				// Whether any tool has been called yet — decides whether the
+				// next round is "thinking" (模型思考中) or the final answer
+				// generation (生成回答中).
+				let hasCalledTool = false;
+
+				// The initial evidence step (search_notes / read_attachments) is
+				// known up front — seed the LIVE thinking preview with it.
+				const initialResults = hasAttachments ? [] : results.slice(0, ANSWER_CONTEXT_SIZE);
+				const firstStep: ThinkingStep = hasAttachments
+					? {
+						type: "tool",
+						name: "read_attachments",
+						args: { files: [...turnAttachments] },
+						result: `已读取 ${turnAttachments.length} 个拖入的笔记内容，作为本次回答的主要依据。`,
+					}
+					: {
+						type: "tool",
+						name: "search_notes",
+						args: { query, limit: ANSWER_CONTEXT_SIZE, threshold: DEFAULT_THRESHOLD },
+						result: JSON.stringify(
+							initialResults.map((r) => ({
+								path: r.notePath,
+								heading: r.heading,
+								preview: r.contentPreview,
+								score: r.score,
+							})),
+							null,
+							2,
+						),
+					};
+
+				// Live thinking preview while generating: hidden by default;
+				// clicking the loading line toggles it. Renders the same steps
+				// the finished answer's thinking section will show.
+				const liveSteps: ThinkingStep[] = [firstStep];
+				const liveWrap = loadingEl.createDiv({ cls: "semlink-thinking-live" });
+				const liveBody = liveWrap.createDiv({ cls: "semlink-thinking-live-body" });
+				liveBody.style.display = "none";
+				const refreshLiveBody = (): void => {
+					if (liveBody.style.display === "none") return;
+					liveBody.empty();
+					this.renderThinkingSteps(liveBody, liveSteps);
+				};
+				loadingTextEl.addEventListener("click", () => {
+					if (liveBody.style.display === "none") {
+						liveBody.style.display = "";
+						refreshLiveBody();
+						loadingTextEl.addClass("is-open");
+					} else {
+						liveBody.style.display = "none";
+						loadingTextEl.removeClass("is-open");
+					}
+				});
 
 				const context = hasAttachments
 					? attachCtx
 					: this.buildContext(results.slice(0, ANSWER_CONTEXT_SIZE)) + attachCtx;
 				const fullContext = context;
-				// Fold conversation history into the query for multi-turn context.
-				const histCtx = this.buildHistoryContext();
-				const fullQuery = histCtx
-					? `以下是之前的对话历史：\n${histCtx}\n\n用户最新问题：${query}`
-					: query;
+				// Declared outside the try so the failure path can report how
+				// long the (failed) attempt took.
+				const thinkStart = Date.now();
 				try {
-					const thinkStart = Date.now();
+					// Prior turns go as a native message array (ZCode-style —
+					// chat-client expands them into the messages list and
+					// truncates with a sliding window when needed). The latest
+					// user message is THIS turn, so it's excluded here.
 					const result = await this.chatClient.chat(
 						fullContext,
-						fullQuery,
+						query,
+						this.currentMessages.slice(0, -1),
 						(toolName) => {
-							// A tool is about to run — its name is accurate here.
-							stopAnswerAnim();
-							loadingTextEl.textContent = t("searchToolCalling").replace("{tool}", toolName);
-							streamEl.style.display = "none";
-							streamEl.textContent = "";
+							// A tool is running — animate its label so a slow
+							// tool (e.g. a full-vault grep) doesn't look frozen.
+							hasCalledTool = true;
+							startDots(t("searchToolCalling").replace("{tool}", toolName).replace(/…$/, ""));
 						},
 						this.searchDepth,
 						(text) => {
@@ -428,41 +523,32 @@ export class SemanticSearchView extends ItemView {
 							streamEl.textContent = text;
 						},
 						() => {
-							// The model is generating this round (deciding tools
-							// or composing the answer) — show the animated
-							// indicator instead of freezing on a tool's name.
-							showAnswerLoading();
+							// Round start: before any tool was called it's the
+							// thinking phase (模型思考中); after tools it's the
+							// final answer generation (生成回答中).
+							startDots(hasCalledTool ? t("searchGeneratingAnswer") : t("searchModelThinking"));
+						},
+						(step) => {
+							// A new thinking step arrived — refresh the live
+							// thinking preview.
+							liveSteps.push(step);
+							refreshLiveBody();
+						},
+						(attempt, total) => {
+							// Transient failure — show ZCode-style retry
+							// progress instead of a frozen status.
+							stopAnswerAnim();
+							loadingTextEl.style.display = "";
+							streamEl.style.display = "none";
+							loadingTextSpan.textContent = t("searchReconnecting")
+								.replace("{n}", String(attempt))
+								.replace("{total}", String(total));
+							loadingDotsSpan.textContent = "";
 						},
 					);
 					const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
 					stopAnswerAnim();
 					loadingEl.empty();
-					// Make the initial evidence visible in the thinking process:
-					// a search_notes step for vector retrieval, or a
-					// read_attachments step when the user dropped notes in.
-					const initialResults = hasAttachments ? [] : results.slice(0, ANSWER_CONTEXT_SIZE);
-					const firstStep: ThinkingStep = hasAttachments
-						? {
-							type: "tool",
-							name: "read_attachments",
-							args: { files: [...turnAttachments] },
-							result: `已读取 ${turnAttachments.length} 个拖入的笔记内容，作为本次回答的主要依据。`,
-						}
-						: {
-							type: "tool",
-							name: "search_notes",
-							args: { query, limit: ANSWER_CONTEXT_SIZE, threshold: DEFAULT_THRESHOLD },
-							result: JSON.stringify(
-								initialResults.map((r) => ({
-									path: r.notePath,
-									heading: r.heading,
-									preview: r.contentPreview,
-									score: r.score,
-								})),
-								null,
-								2,
-							),
-						};
 					const thinking: ThinkingStep[] = [firstStep, ...result.thinking];
 					this.renderThinking(loadingEl, thinking, elapsedSec);
 					this.updateContextInfo(result.contextTokens, result.contextBreakdown, result.cacheHitRate);
@@ -478,8 +564,17 @@ export class SemanticSearchView extends ItemView {
 						: this.buildUsedSources(initialResults, result.usedNotes);
 					this.renderSources(loadingEl, usedSources, false);
 
-					// Persist this turn into chat history.
-					await this.recordAssistantMessage(result.answer, thinking, result.usedNotes, elapsedSec);
+					// Persist this turn into chat history (incl. context usage so
+					// the ring + tooltip can be restored when re-opening).
+					await this.recordAssistantMessage(
+						result.answer,
+						thinking,
+						result.usedNotes,
+						elapsedSec,
+						result.contextTokens,
+						result.contextBreakdown,
+						result.cacheHitRate,
+					);
 
 					// Action buttons (icons) below the sources: copy / save.
 					this.appendActions(loadingEl, result.answer, query);
@@ -488,6 +583,12 @@ export class SemanticSearchView extends ItemView {
 					stopAnswerAnim();
 					loadingEl.empty();
 					loadingEl.createDiv({ cls: "semlink-msg-error", text: `${t("searchError")} ${msg}` });
+					// Keep the thinking process visible even when the answer
+					// failed — show what the model did before the error.
+					if (liveSteps.length > 0) {
+						const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
+						this.renderThinking(loadingEl, liveSteps, elapsedSec);
+					}
 					// Fall back to the raw results (expanded) so the user still
 					// gets something useful when the chat call fails.
 					this.renderSources(loadingEl, results, true);
@@ -906,25 +1007,7 @@ export class SemanticSearchView extends ItemView {
 			text: t("searchThinkingDuration").replace("{seconds}", String(elapsedSec)),
 		});
 
-		for (const step of thinking) {
-			if (step.type === "thought") {
-				details.createDiv({ cls: "semlink-thinking-thought", text: `💭 ${step.text}` });
-			} else {
-				// Each tool call is one line by default; click to expand and
-				// see the full request args and response.
-				const callDetails = details.createEl("details", { cls: "semlink-tool-call" });
-				callDetails.createEl("summary", {
-					cls: "semlink-tool-call-summary",
-					text: `🔧 ${step.name}${this.summarizeArgs(step.args)}`,
-				});
-
-				callDetails.createDiv({ cls: "semlink-tool-call-label", text: t("searchToolRequest") });
-				callDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.args) });
-
-			callDetails.createDiv({ cls: "semlink-tool-call-label", text: t("searchToolResponse") });
-			callDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.result) });
-		}
-	}
+		this.renderThinkingSteps(details, thinking);
 
 		// Copy-thinking button at the bottom of the expanded section.
 		const copyBtn = details.createEl("button", {
@@ -941,6 +1024,33 @@ export class SemanticSearchView extends ItemView {
 				new Notice(t("searchCopyFailed"));
 			});
 		});
+	}
+
+	/**
+	 * Render the thinking steps (thoughts + tool calls) into a container.
+	 * Shared by the finished answer's collapsible section and the LIVE
+	 * preview shown while the answer is still being generated.
+	 */
+	private renderThinkingSteps(container: HTMLElement, steps: ThinkingStep[]): void {
+		for (const step of steps) {
+			if (step.type === "thought") {
+				container.createDiv({ cls: "semlink-thinking-thought", text: `💭 ${step.text}` });
+			} else {
+				// Each tool call is one line by default; click to expand and
+				// see the full request args and response.
+				const callDetails = container.createEl("details", { cls: "semlink-tool-call" });
+				callDetails.createEl("summary", {
+					cls: "semlink-tool-call-summary",
+					text: `🔧 ${step.name}${this.summarizeArgs(step.args)}`,
+				});
+
+				callDetails.createDiv({ cls: "semlink-tool-call-label", text: t("searchToolRequest") });
+				callDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.args) });
+
+				callDetails.createDiv({ cls: "semlink-tool-call-label", text: t("searchToolResponse") });
+				callDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.result) });
+			}
+		}
 	}
 
 	/** Compact one-line preview of the request args, e.g. " — MIBT". */
@@ -967,22 +1077,8 @@ export class SemanticSearchView extends ItemView {
 	 * message. Greeting adapts to morning/afternoon/evening/night.
 	 */
 	private renderWelcome(): void {
-		const hour = new Date().getHours();
-		let key: string;
-		if (hour < 5) key = "welcomeMidnight";
-		else if (hour < 7) key = "welcomeDawn";
-		else if (hour < 9) key = "welcomeEarlyMorn";
-		else if (hour < 12) key = "welcomeMorning";
-		else if (hour < 13) key = "welcomeLunch";
-		else if (hour < 14) key = "welcomeNap";
-		else if (hour < 15) key = "welcomeAfternoon1";
-		else if (hour < 16) key = "welcomeAfternoon2";
-		else if (hour < 17) key = "welcomeAfternoon3";
-		else if (hour < 18) key = "welcomeAfternoon4";
-		else if (hour < 19) key = "welcomeAfternoon5";
-		else if (hour < 21) key = "welcomeDusk";
-		else if (hour < 22) key = "welcomeNight";
-		else key = "welcomeLateNight";
+		const key = this.welcomeKeyForHour();
+		this.currentWelcomeKey = key;
 
 		// i18n string: "emoji line1\nline2" — split into a primary greeting
 		// (larger, bold) and a secondary care note (smaller, muted).
@@ -992,6 +1088,25 @@ export class SemanticSearchView extends ItemView {
 		if (lines[1]) {
 			welcome.createDiv({ cls: "semlink-search-welcome-sub", text: lines[1] });
 		}
+	}
+
+	/** Time-slot key of the greeting for the current hour. */
+	private welcomeKeyForHour(): string {
+		const hour = new Date().getHours();
+		if (hour < 5) return "welcomeMidnight";
+		if (hour < 7) return "welcomeDawn";
+		if (hour < 9) return "welcomeEarlyMorn";
+		if (hour < 12) return "welcomeMorning";
+		if (hour < 13) return "welcomeLunch";
+		if (hour < 14) return "welcomeNap";
+		if (hour < 15) return "welcomeAfternoon1";
+		if (hour < 16) return "welcomeAfternoon2";
+		if (hour < 17) return "welcomeAfternoon3";
+		if (hour < 18) return "welcomeAfternoon4";
+		if (hour < 19) return "welcomeAfternoon5";
+		if (hour < 21) return "welcomeDusk";
+		if (hour < 22) return "welcomeNight";
+		return "welcomeLateNight";
 	}
 
 	// ── Chat history: session lifecycle ──
@@ -1019,7 +1134,15 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	/** Record an assistant answer into the current session. */
-	private async recordAssistantMessage(content: string, thinking?: ThinkingStep[], sources?: string[], elapsedSec?: number): Promise<void> {
+	private async recordAssistantMessage(
+		content: string,
+		thinking?: ThinkingStep[],
+		sources?: string[],
+		elapsedSec?: number,
+		contextTokens?: number,
+		contextBreakdown?: ContextBreakdown,
+		cacheHitRate?: number | null,
+	): Promise<void> {
 		if (!this.currentSessionId) return;
 		await this.history.load();
 		const msg: HistoryMessage = {
@@ -1034,19 +1157,14 @@ export class SemanticSearchView extends ItemView {
 			})),
 			sources,
 			elapsedSec,
+			contextTokens,
+			contextBreakdown,
+			cacheHitRate,
 			timestamp: Date.now(),
 		};
 		this.currentMessages.push(msg);
 		this.history.addMessage(this.currentSessionId, msg);
 		void this.history.save();
-	}
-
-	/** Build a context string from the current session's prior turns. */
-	private buildHistoryContext(): string {
-		if (this.currentMessages.length <= 1) return "";
-		// All messages except the latest user turn (which is the current query).
-		const prior = this.currentMessages.slice(0, -1);
-		return prior.map((m) => `${m.role === "user" ? "用户" : "助手"}：${m.content}`).join("\n\n");
 	}
 
 	/** Render a previously-saved session into the conversation area. */
@@ -1064,19 +1182,24 @@ export class SemanticSearchView extends ItemView {
 				} else {
 					this.appendUserMessage(msg.content);
 				}
-			} else {
-				const bubble = this.appendAssistantMessage("");
-				const thinking = (msg.thinking || []).map((s) => s as ThinkingStep);
-				if (thinking.length > 0) this.renderThinking(bubble, thinking, msg.elapsedSec || 0);
-				const answerEl = bubble.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
-				await MarkdownRenderer.render(this.app, msg.content, answerEl, "", this);
-				if (msg.sources && msg.sources.length > 0) {
-					const usedSources = msg.sources.map((p) => ({ notePath: p, heading: "", contentPreview: "" }));
-					this.renderSources(bubble, usedSources as any, false);
+				} else {
+					const bubble = this.appendAssistantMessage("");
+					const thinking = (msg.thinking || []).map((s) => s as ThinkingStep);
+					if (thinking.length > 0) this.renderThinking(bubble, thinking, msg.elapsedSec || 0);
+					const answerEl = bubble.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
+					await MarkdownRenderer.render(this.app, msg.content, answerEl, "", this);
+					if (msg.sources && msg.sources.length > 0) {
+						const usedSources = msg.sources.map((p) => ({ notePath: p, heading: "", contentPreview: "" }));
+						this.renderSources(bubble, usedSources as any, false);
+					}
+					// Copy / save actions for history answers too.
+					this.appendActions(bubble, msg.content, lastUserQuery);
+					// Restore this turn's context usage (ring + tooltip). Old
+					// sessions saved before these fields existed simply skip.
+					if (msg.contextTokens !== undefined || msg.contextBreakdown !== undefined || msg.cacheHitRate !== undefined) {
+						this.updateContextInfo(msg.contextTokens, msg.contextBreakdown, msg.cacheHitRate);
+					}
 				}
-				// Copy / save actions for history answers too.
-				this.appendActions(bubble, msg.content, lastUserQuery);
-			}
 		}
 		this.scrollToBottom();
 		this.inputEl.focus();
@@ -1331,10 +1454,10 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	/** Store the latest usage info (ring + tooltip data) after each turn. */
-	private updateContextInfo(tokens: number, breakdown: ContextBreakdown, cacheHitRate: number | null): void {
-		this.lastBreakdown = breakdown;
-		this.lastCacheHitRate = cacheHitRate;
-		this.updateContextRing(tokens);
+	private updateContextInfo(tokens?: number, breakdown?: ContextBreakdown, cacheHitRate?: number | null): void {
+		if (breakdown !== undefined) this.lastBreakdown = breakdown;
+		if (cacheHitRate !== undefined) this.lastCacheHitRate = cacheHitRate;
+		if (tokens !== undefined) this.updateContextRing(tokens);
 	}
 
 	/** Show the context-usage tooltip next to the donut. */
@@ -1349,22 +1472,52 @@ export class SemanticSearchView extends ItemView {
 		}
 		const el = this.tooltipEl;
 		const bd = this.lastBreakdown;
+		const used = bd?.used ?? 0;
+		// The capacity ceiling is FIXED by the active model — before any turn
+		// it must show the model's window (e.g. 0/100万), never 0/0.
+		const capacity = bd?.capacity ?? this.chatClient.getActiveContextWindow() ?? 0;
 
 		el.empty();
-		el.createDiv({ cls: "ctx-capacity", text: `${t("ctxTotal")}: ${(bd ? bd.capacity : 0).toLocaleString()} tokens` });
+		// Header: 上下文容量 (left) + 55.1万/100万（55.1%）(right-aligned)
+		const totalPct = capacity > 0 ? (used / capacity) * 100 : 0;
+		const headerRow = el.createDiv({ cls: "ctx-row ctx-capacity" });
+		headerRow.createSpan({ cls: "ctx-name", text: t("ctxCapacity") });
+		headerRow.createSpan({
+			cls: "ctx-tokens",
+			text: `${this.formatWan(used)}/${this.formatWan(capacity)}（${this.formatPct(totalPct)}%）`,
+		});
 
-		const categories = bd ? bd.categories : [];
-		for (const cat of categories) {
-			const pct = bd && bd.used > 0 ? Math.round((cat.tokens / bd.used) * 100) : 0;
+		// One overall progress bar for the whole context usage.
+		const bar = el.createDiv({ cls: "ctx-total-bar" });
+		bar.createDiv({ cls: "ctx-total-bar-fill", attr: { style: `width:${Math.min(100, totalPct)}%` } });
+
+		// Category rows in a stable display order: name + share % only.
+		// 系统工具 / 技能 are noise for the user — they are not shown.
+		// Before the first turn the breakdown is null — synthesize the rows at
+		// 0% so the structure is always visible, not an empty list.
+		const order = ["messages", "system_tools", "skills", "mcp_tools", "system_prompt", "other"];
+		const source = bd ? bd.categories : order.map((key) => ({ key, tokens: 0 }));
+		const cats = source
+			.filter((c) => c.key !== "system_tools" && c.key !== "skills")
+			.sort((a, b) => {
+				const ia = order.indexOf(a.key);
+				const ib = order.indexOf(b.key);
+				return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+			});
+		for (const cat of cats) {
+			const pct = used > 0 ? (cat.tokens / used) * 100 : 0;
 			const row = el.createDiv({ cls: "ctx-row" });
 			row.createSpan({ cls: "ctx-name", text: this.categoryLabel(cat.key) });
-			const bar = row.createDiv({ cls: "ctx-bar" });
-			bar.createDiv({ cls: "ctx-bar-fill", attr: { style: `width:${pct}%` } });
-			row.createSpan({ cls: "ctx-tokens", text: `${cat.tokens.toLocaleString()} · ${pct}%` });
+			row.createSpan({ cls: "ctx-tokens", text: `${this.formatPct(pct)}%` });
 		}
 
-		const cacheText = this.lastCacheHitRate === null ? "—" : `${Math.round(this.lastCacheHitRate * 100)}%`;
-		el.createDiv({ cls: "ctx-cache", text: `${t("ctxCacheHit")}: ${cacheText}` });
+		// Before the first turn there is no cache statistic — show 0% as a
+		// placeholder rather than a dash. Same left/right layout as the
+		// category rows so the percentage aligns with them.
+		const cacheText = this.lastCacheHitRate === null ? "0%" : `${this.formatPct(this.lastCacheHitRate * 100)}%`;
+		const cacheRow = el.createDiv({ cls: "ctx-row ctx-cache" });
+		cacheRow.createSpan({ cls: "ctx-name", text: t("ctxCacheHit") });
+		cacheRow.createSpan({ cls: "ctx-tokens", text: cacheText });
 
 		// Position the tooltip above the donut (viewport-fixed on document.body).
 		const rect = this.contextRingEl.getBoundingClientRect();
@@ -1378,6 +1531,20 @@ export class SemanticSearchView extends ItemView {
 		if (rect.left + el.offsetWidth > vw - 8) {
 			el.style.left = Math.max(8, vw - el.offsetWidth - 8) + "px";
 		}
+	}
+
+	/** 551000 → "55.1万"; 1000000 → "100万"; values < 10000 stay raw. */
+	private formatWan(n: number): string {
+		if (n >= 10000) {
+			const w = n / 10000;
+			return (Number.isInteger(w) ? String(w) : w.toFixed(1).replace(/\.0$/, "")) + "万";
+		}
+		return String(Math.round(n));
+	}
+
+	/** 0.551 → "55.1" (one decimal, trailing .0 stripped). */
+	private formatPct(p: number): string {
+		return (Math.round(p * 10) / 10).toFixed(1).replace(/\.0$/, "");
 	}
 
 	private hideContextTooltip(): void {
@@ -1452,6 +1619,76 @@ export class SemanticSearchView extends ItemView {
 
 	private hideDepthPopup(): void {
 		if (this.depthPopupEl) this.depthPopupEl.style.display = "none";
+	}
+
+	// ──── Model switcher popup (same pattern as the depth popup) ────
+
+	private toggleModelPopup(): void {
+		if (this.modelPopupEl && this.modelPopupEl.style.display === "block") {
+			this.hideModelPopup();
+		} else {
+			this.showModelPopup();
+		}
+	}
+
+	private showModelPopup(): void {
+		if (!this.modelTriggerEl) return;
+		// Lazily create the popup on document.body (see showDepthPopup).
+		if (!this.modelPopupEl) {
+			this.modelPopupEl = document.body.createDiv({ cls: "semlink-search-depth-popup semlink-search-model-popup" });
+			this.modelPopupEl.style.position = "fixed";
+			this.modelPopupEl.style.display = "none";
+			this.modelPopupEl.style.zIndex = "9999";
+		}
+		const popup = this.modelPopupEl;
+		popup.empty();
+
+		const active = this.chatClient.getActiveModel();
+		for (const group of this.chatClient.getModelOptions()) {
+			popup.createDiv({ cls: "semlink-search-model-popup-group", text: group.providerName });
+			for (const m of group.models) {
+				const isActive = active !== null && active.provider.id === group.providerId && active.model.id === m.id;
+				const opt = popup.createDiv({
+					cls: "semlink-search-depth-option" + (isActive ? " is-active" : ""),
+					text: m.id,
+				});
+				opt.addEventListener("click", () => {
+					if (this.chatClient.setActiveModel(group.providerId, m.id)) {
+						this.updateModelLabel();
+						this.hideModelPopup();
+					}
+				});
+			}
+		}
+
+		// Position ABOVE the trigger (bottom edge of the window is tight).
+		const rect = this.modelTriggerEl.getBoundingClientRect();
+		popup.style.left = rect.left + "px";
+		popup.style.bottom = (window.innerHeight - rect.top + 4) + "px";
+		popup.style.display = "block";
+
+		// Keep it inside the viewport.
+		const vw = window.innerWidth;
+		if (rect.left + popup.offsetWidth > vw - 8) {
+			popup.style.left = Math.max(8, vw - popup.offsetWidth - 8) + "px";
+		}
+	}
+
+	private hideModelPopup(): void {
+		if (this.modelPopupEl) this.modelPopupEl.style.display = "none";
+	}
+
+	/** Refresh the model label and the context ring after switching. */
+	private updateModelLabel(): void {
+		const label = this.chatClient.getActiveModelLabel();
+		if (this.modelNameEl) {
+			this.modelNameEl.textContent = label || t("searchNoChatModel");
+		}
+		// The context window may differ across models — recompute the ring
+		// against the last turn's usage.
+		if (this.lastBreakdown) {
+			this.updateContextRing(this.lastBreakdown.used);
+		}
 	}
 
 	/** Copy the answer markdown to the clipboard (with a legacy fallback). */
