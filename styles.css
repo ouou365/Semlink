@@ -223,9 +223,10 @@
 /* Header (top) */
 .semlink-search-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
-    padding: 12px 12px;
+    gap: 2px 8px;
+    padding: 10px 12px 8px;
     flex-shrink: 0;
 }
 
@@ -241,12 +242,15 @@
     justify-content: flex-end;
 }
 
-/* Brand group (logo + "Semlink") — fixed width, centered between the sides. */
+/* Brand group (logo + "Semlink"/first question) — centered between the
+   sides. min-width: 0 lets long question titles shrink so the brand text
+   ellipsizes instead of pushing the side icon groups. */
 .semlink-search-brand-group {
     display: flex;
     align-items: center;
     gap: 8px;
     flex: 0 0 auto;
+    min-width: 0;
 }
 
 .semlink-search-logo {
@@ -267,6 +271,34 @@
     font-size: 14px;
     font-weight: 600;
     color: var(--text-normal);
+    /* In case a long title ever lands here: truncate instead of pushing
+       the header's side icon groups. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+/* Second header row: the first question in small text, centered below the
+   brand. Hidden by default; the header goes compact (and this row appears)
+   only while the first question is scrolled under the header. min-width: 0
+   lets long questions ellipsize instead of overflowing the header. */
+.semlink-search-first-question {
+    display: none;
+    flex: 1 1 100%;
+    min-width: 0;
+    text-align: center;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.semlink-search-header--compact .semlink-search-first-question {
+    display: block;
 }
 
 /* Shared icon-button style (menu, settings, close). */

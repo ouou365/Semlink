@@ -35,6 +35,10 @@ export class SemanticSearchView extends ItemView {
 	private inputEl!: HTMLDivElement;
 	private messagesEl!: HTMLElement; // scrollable conversation area
 	private statusEl!: HTMLElement;   // transient status (no-api-key hint)
+	private headerEl!: HTMLElement;   // top header (brand + icon sides)
+	private firstQuestionEl!: HTMLElement; // second row: first question in small text
+	private firstQuestion = "";       // first user question (header subtitle)
+	private headerCompact = false;    // whether the subtitle row is visible
 	private contextRingEl!: HTMLElement | null; // context-usage donut
 	private contextPctEl!: HTMLElement | null;
 	private tooltipEl!: HTMLElement | null; // context-usage tooltip
@@ -95,6 +99,7 @@ export class SemanticSearchView extends ItemView {
 
 		// ── Header (top, fixed) — left icons | centered brand | right icons ──
 		const header = contentEl.createDiv({ cls: "semlink-search-header" });
+		this.headerEl = header;
 		// Left icon group: history menu + new-session (pencil).
 		const leftIcons = header.createDiv({ cls: "semlink-search-header-side" });
 		const menuBtn = leftIcons.createEl("button", {
@@ -114,9 +119,11 @@ export class SemanticSearchView extends ItemView {
 			this.statusEl.textContent = "";
 			this.inputEl.empty();
 			this.renderWelcome();
+			// Empty area cannot hide a first question — drop the subtitle row.
+			this.updateCompactHeader();
 			this.inputEl.focus();
 		});
-		// Centered brand (logo + "Semlink").
+		// Centered brand (logo + "Semlink" — always stays).
 		const brand = header.createDiv({ cls: "semlink-search-brand-group" });
 		const logoEl = brand.createDiv({ cls: "semlink-search-logo" });
 		logoEl.innerHTML = logoSvg;
@@ -132,11 +139,19 @@ export class SemanticSearchView extends ItemView {
 			(this.app as any).setting.open();
 			(this.app as any).setting.openTabById("semlink");
 		});
+		// Second header row: the first question in small text. It appears
+		// only while the first question is scrolled under the header (see
+		// updateCompactHeader) so the conversation topic stays visible.
+		const firstQ = header.createDiv({ cls: "semlink-search-first-question" });
+		this.firstQuestionEl = firstQ;
 
 		// ── Conversation area (middle, scrollable) ──
 		this.statusEl = contentEl.createDiv({ cls: "semlink-search-status" });
 		this.messagesEl = contentEl.createDiv({ cls: "semlink-search-messages" });
 		this.renderWelcome();
+
+		// Show the subtitle row once the first question hides under the header.
+		this.registerDomEvent(this.messagesEl, "scroll", () => this.updateCompactHeader());
 
 		// The greeting is time-based — refresh it automatically when the time
 		// slot changes (e.g. 11:59 → 12:00), no reload needed. Only re-renders
@@ -1116,6 +1131,8 @@ export class SemanticSearchView extends ItemView {
 		this.currentSessionId = null;
 		this.currentMessages = [];
 		this.attachments = [];
+		// Clear the subtitle until a question is asked.
+		this.firstQuestion = "";
 	}
 
 	/** Record a user question into the current session (creating one if needed). */
@@ -1126,6 +1143,16 @@ export class SemanticSearchView extends ItemView {
 		await this.history.load();
 		if (!this.currentSessionId) {
 			this.currentSessionId = this.history.createSession(content);
+		}
+		// The FIRST question becomes the header's subtitle row.
+		if (!this.firstQuestion) {
+			this.firstQuestion = (
+				segments && segments.length > 0
+					? segments.map((s) => (s.type === "file" ? `[[${s.value}]]` : s.value)).join("")
+					: content
+			)
+				.replace(/\s+/g, " ")
+				.trim();
 		}
 		const msg: HistoryMessage = { role: "user", content, segments, timestamp: Date.now() };
 		this.currentMessages.push(msg);
@@ -1171,6 +1198,19 @@ export class SemanticSearchView extends ItemView {
 	private async loadSession(session: ChatSession): Promise<void> {
 		this.currentSessionId = session.id;
 		this.currentMessages = [...session.messages];
+		// Header subtitle = the session's first question (same as live chats).
+		const firstUser = session.messages.find((m) => m.role === "user");
+		if (firstUser) {
+			this.firstQuestion = (
+				firstUser.segments && firstUser.segments.length > 0
+					? firstUser.segments.map((s) => (s.type === "file" ? `[[${s.value}]]` : s.value)).join("")
+					: firstUser.content
+			)
+				.replace(/\s+/g, " ")
+				.trim();
+		} else {
+			this.firstQuestion = "";
+		}
 		this.messagesEl.empty();
 		this.statusEl.textContent = "";
 		let lastUserQuery = "";
@@ -1202,6 +1242,9 @@ export class SemanticSearchView extends ItemView {
 				}
 		}
 		this.scrollToBottom();
+		// scrollToBottom may not fire a scroll event when the session is
+		// shorter than the viewport — re-check the subtitle row manually.
+		this.updateCompactHeader();
 		this.inputEl.focus();
 	}
 
@@ -1433,6 +1476,29 @@ export class SemanticSearchView extends ItemView {
 
 	private scrollToBottom(): void {
 		this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+	}
+
+	/** Subtitle row visibility: while the first user message is scrolled under
+	 *  the header, show the first question as a second, small-text row (the
+	 *  brand row above stays untouched). Re-checked on scroll and after any
+	 *  state change (new session / session load). */
+	private updateCompactHeader(): void {
+		const first = this.messagesEl.querySelector<HTMLElement>(".semlink-msg-user-turn .semlink-msg-user");
+		const compact =
+			!!first && first.getBoundingClientRect().top < this.headerEl.getBoundingClientRect().bottom;
+		if (compact !== this.headerCompact) {
+			this.headerCompact = compact;
+			this.headerEl.toggleClass("semlink-search-header--compact", compact);
+		}
+		if (compact) {
+			// Keep the subtitle in sync even when the compact state itself
+			// didn't flip (e.g. another session was loaded while scrolled
+			// down — the question text must follow the new session).
+			const text = this.firstQuestion;
+			if (this.firstQuestionEl.textContent !== text) {
+				this.firstQuestionEl.textContent = text;
+			}
+		}
 	}
 
 	/** Update the context-usage donut with the latest turn's token count. */
