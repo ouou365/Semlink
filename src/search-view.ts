@@ -16,6 +16,9 @@ import { ChatHistoryStore } from "./chat-history";
 import { SaveNoteModal } from "./save-note-modal";
 import { t } from "./i18n";
 import logoSvg from "./semlink-logo.svg";
+import llmIconSvg from "./network-icon.svg";
+import expandIconSvg from "./expand-icon.svg";
+import collapseIconSvg from "./collapse-icon.svg";
 
 export const SEARCH_VIEW_TYPE = "semlink-semantic-search";
 
@@ -36,22 +39,33 @@ export class SemanticSearchView extends ItemView {
 	private messagesEl!: HTMLElement; // scrollable conversation area
 	private statusEl!: HTMLElement;   // transient status (no-api-key hint)
 	private headerEl!: HTMLElement;   // top header (brand + icon sides)
+	private headerRightIconsEl!: HTMLElement; // right icon group (ring + settings)
+	private settingsBtnEl!: HTMLElement;      // settings gear (ring sits left of it)
 	private firstQuestionEl!: HTMLElement; // second row: first question in small text
 	private firstQuestion = "";       // first user question (header subtitle)
 	private headerCompact = false;    // whether the subtitle row is visible
 	private contextRingEl!: HTMLElement | null; // context-usage donut
+	private contextUsageEl!: HTMLElement | null; // wrapper (hidden until first msg)
 	private contextPctEl!: HTMLElement | null;
 	private tooltipEl!: HTMLElement | null; // context-usage tooltip
+	private tooltipHideTimer: number | null = null; // delayed-hide timer
+	// Send-button state machine: idle(send) → loading(spin) → stop(abort).
+	private searchBtnEl!: HTMLButtonElement;
+	private isGenerating = false;
+	/** Input tall mode (half-screen editor for long prompts). */
+	private inputExpanded = false;
+	private expandBtnEl: HTMLElement | null = null;
+	private inputHintEl: HTMLElement | null = null;
+	private activeAskController: AbortController | null = null;
 	private lastBreakdown: ContextBreakdown | null = null;
 	private lastCacheHitRate: number | null = null;
-	private searchDepth: "standard" | "enhanced" = "standard";
-	private depthTriggerEl: HTMLElement | null = null;
-	private depthPopupEl: HTMLElement | null = null;
 	private modelNameEl: HTMLElement | null = null;
 	private modelTriggerEl: HTMLElement | null = null;
 	private modelPopupEl: HTMLElement | null = null;
 	/** Time-slot key of the currently shown welcome greeting. */
 	private currentWelcomeKey: string | null = null;
+	/** Home ("new session") button — hidden while the welcome screen is up. */
+	private newChatBtnEl: HTMLElement | null = null;
 
 	// Current conversation state
 	private currentSessionId: string | null = null;
@@ -112,7 +126,27 @@ export class SemanticSearchView extends ItemView {
 			cls: "semlink-search-icon-btn clickable-icon",
 			attr: { "aria-label": t("searchNewChat"), title: t("searchNewChat") },
 		});
-		setIcon(newChatBtn, "pencil");
+		this.newChatBtnEl = newChatBtn;
+		// Home icon: Obsidian's icon set has no house icon, so inline the
+		// classic lucide home (house + door) — same stroke style as built-in
+		// icons, 24px to match Obsidian's default icon size.
+		const homeSvg = newChatBtn.createSvg("svg", {
+			cls: "svg-icon",
+			attr: {
+				viewBox: "0 0 24 24",
+				width: "24",
+				height: "24",
+				fill: "none",
+				stroke: "currentColor",
+				"stroke-width": "2",
+				"stroke-linecap": "round",
+				"stroke-linejoin": "round",
+				"aria-hidden": "true",
+			},
+		});
+		homeSvg.innerHTML =
+			'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>' +
+			'<polyline points="9 22 9 12 15 12 15 22"/>';
 		newChatBtn.addEventListener("click", () => {
 			this.startNewSession();
 			this.messagesEl.empty();
@@ -128,12 +162,14 @@ export class SemanticSearchView extends ItemView {
 		const logoEl = brand.createDiv({ cls: "semlink-search-logo" });
 		logoEl.innerHTML = logoSvg;
 		brand.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
-		// Right icon group: settings.
+		// Right icon group: context-usage ring + settings.
 		const rightIcons = header.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
+		this.headerRightIconsEl = rightIcons;
 		const settingsBtn = rightIcons.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
 			attr: { "aria-label": t("settingsTitle"), title: t("settingsTitle") },
 		});
+		this.settingsBtnEl = settingsBtn;
 		setIcon(settingsBtn, "settings");
 		settingsBtn.addEventListener("click", () => {
 			(this.app as any).setting.open();
@@ -211,6 +247,13 @@ export class SemanticSearchView extends ItemView {
 			true,
 		);
 		const inputRow = wrapper.createDiv({ cls: "semlink-search-input-row" });
+		// Keyboard hint (Ctrl+Enter newline / Enter send) — visible only while
+		// the input is expanded to the tall editor.
+		this.inputHintEl = wrapper.createDiv({
+			cls: "semlink-search-input-hint",
+			text: t("searchInputHint"),
+		});
+		this.inputHintEl.style.display = "none";
 		// Contenteditable input so dropped-note chips can mix INLINE with the
 		// typed text (a plain textarea can only hold text).
 		this.inputEl = inputRow.createDiv({
@@ -224,15 +267,24 @@ export class SemanticSearchView extends ItemView {
 			},
 		});
 		this.inputEl.addEventListener("keydown", (e) => {
-			// Enter sends; Shift+Enter inserts a newline. Skip while an IME
-			// composition is in progress (pinyin candidates are still open).
-			if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+			if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
+			if (e.ctrlKey || e.metaKey) {
+				// Ctrl+Enter: insert a newline via the Range API — browsers'
+				// execCommand("insertLineBreak") is unreliable in some hosts,
+				// and the default action may be swallowed elsewhere.
 				e.preventDefault();
-				void this.runSearch();
-				// Scroll to the bottom right away so the new message and the
-				// loading state are immediately visible.
-				this.scrollToBottom();
+				this.insertLineBreakAtCaret();
+				return;
 			}
+			if (e.shiftKey) return; // Shift+Enter: default contenteditable newline.
+			// Plain Enter sends.
+			e.preventDefault();
+			// While generating, Enter must not spawn a second run.
+			if (this.isGenerating) return;
+			void this.runSearch();
+			// Scroll to the bottom right away so the new message and the
+			// loading state are immediately visible.
+			this.scrollToBottom();
 		});
 		// Paste: keep rich HTML out of the chip DOM. [[...]] tokens are
 		// resolved back into styled wiki links (highlight + click-to-open +
@@ -273,20 +325,13 @@ export class SemanticSearchView extends ItemView {
 		// model-switcher popup (same pattern as the search-depth popup).
 		const modelEl = wrapper.createDiv({ cls: "semlink-search-model" });
 		const modelLabel = this.chatClient.getActiveModelLabel();
-		const modelTrigger = modelEl.createSpan({ cls: "semlink-search-model-trigger" });
-		this.modelNameEl = modelTrigger.createSpan({ cls: "semlink-search-model-name", text: modelLabel || t("searchNoChatModel") });
-		modelTrigger.createSpan({ cls: "semlink-search-model-arrow", text: "▾" });
-		this.modelTriggerEl = modelTrigger;
-		modelTrigger.addEventListener("click", (e) => {
-			e.stopPropagation();
-			this.toggleModelPopup();
-		});
-		this.registerDomEvent(document, "click", () => this.hideModelPopup());
+		// Context-usage ring lives in the HEADER's right icon group (next to the
+		// settings gear), not in the input row — it stays visible while typing.
 		if (modelLabel && this.chatClient.getActiveContextWindow()) {
-			// Ring + percentage form the context-usage indicator; the tooltip
-			// only triggers when hovering THIS part of the row (not the depth
-			// selector next to it).
-			const usageEl = modelEl.createDiv({ cls: "semlink-context-usage" });
+			// Ring-only indicator (no percentage text), inserted BEFORE the
+			// settings button so it sits to its left. The tooltip only triggers
+			// when hovering the ring.
+			const usageEl = this.headerRightIconsEl.createDiv({ cls: "semlink-context-usage" });
 			const ringEl = usageEl.createDiv({ cls: "semlink-context-ring" });
 			ringEl.innerHTML =
 				'<svg viewBox="0 0 36 36">' +
@@ -294,43 +339,74 @@ export class SemanticSearchView extends ItemView {
 				'<circle class="ring-fg" cx="18" cy="18" r="15.9"></circle>' +
 				"</svg>";
 			this.contextRingEl = ringEl;
-			this.contextPctEl = usageEl.createSpan({ cls: "semlink-context-pct", text: "0%" });
+			this.contextPctEl = null;
+			this.contextUsageEl = usageEl;
+			// Hidden until the first message is sent (no context usage to show
+			// on an empty conversation).
+			usageEl.style.display = "none";
+			// Move the ring to the LEFT of the settings button.
+			if (this.settingsBtnEl) {
+				this.headerRightIconsEl.insertBefore(usageEl, this.settingsBtnEl);
+			}
 
 			// Tooltip with the context breakdown, shown on hover. Created
 			// lazily on document.body so `position: fixed` is never thrown off
 			// by transformed/clipping ancestors inside the Obsidian leaf.
 			this.tooltipEl = null;
 			usageEl.addEventListener("mouseenter", () => this.showContextTooltip());
-			usageEl.addEventListener("mouseleave", () => this.hideContextTooltip());
+			usageEl.addEventListener("mouseleave", () => {
+				// Delayed hide: the tooltip floats a few px away, so moving the
+				// mouse across the gap must not dismiss it instantly. The tooltip's
+				// own mouseenter cancels the timer.
+				if (this.tooltipHideTimer) window.clearTimeout(this.tooltipHideTimer);
+				this.tooltipHideTimer = window.setTimeout(() => this.hideContextTooltip(), 200);
+			});
 		} else {
 			this.contextRingEl = null;
 			this.contextPctEl = null;
+			this.contextUsageEl = null;
 			this.tooltipEl = null;
 		}
-
-		// Search depth selector on the same row as the model indicator:
-		// standard (get_section, small reads) vs enhanced (full get_note reads).
-		// A custom trigger + popup (no native select) so the popup can open
-		// ABOVE the trigger — the input sits at the bottom edge of the window.
-		const depthEl = modelEl.createSpan({ cls: "semlink-search-depth" });
-		depthEl.createSpan({ cls: "semlink-search-depth-label", text: t("searchDepthLabel") });
-		const depthTrigger = depthEl.createSpan({ cls: "semlink-search-depth-trigger" });
-		depthTrigger.createSpan({ cls: "semlink-search-depth-trigger-text", text: this.depthLabel() });
-		depthTrigger.createSpan({ cls: "semlink-search-depth-trigger-chevron", text: "▾" });
-		depthTrigger.addEventListener("click", (e) => {
+		const modelTrigger = modelEl.createSpan({ cls: "semlink-search-model-trigger" });
+		// LLM icon instead of the verbose "provider/model" text label.
+		this.modelNameEl = modelTrigger.createSpan({ cls: "semlink-search-model-name" });
+		this.modelNameEl.innerHTML = llmIconSvg;
+		this.modelTriggerEl = modelTrigger;
+		modelTrigger.addEventListener("click", (e) => {
 			e.stopPropagation();
-			this.toggleDepthPopup();
+			this.toggleModelPopup();
 		});
-		this.depthTriggerEl = depthTrigger;
-		this.registerDomEvent(document, "click", () => this.hideDepthPopup());
+		this.registerDomEvent(document, "click", () => this.hideModelPopup());
+
+		// Expand/collapse toggle left of the send button: grows the input to
+		// half the screen for long prompts, collapses back on click (and after
+		// every send). Custom icons (outward/inward corner arrows).
+		const expandBtn = modelEl.createEl("button", {
+			cls: "semlink-search-icon-btn semlink-search-expand-btn",
+			attr: { "aria-label": t("searchExpandInput"), title: t("searchExpandInput") },
+		});
+		this.expandBtnEl = expandBtn;
+		expandBtn.innerHTML = expandIconSvg;
+		expandBtn.addEventListener("click", () => {
+			this.inputExpanded = !this.inputExpanded;
+			this.applyInputExpanded();
+		});
 
 		// Send button lives on the model row (right side), not beside the input.
+		// State machine: send → loading(spin) → stop(click aborts the run) → send.
 		const searchBtn = modelEl.createEl("button", {
 			cls: "semlink-search-btn",
 			attr: { "aria-label": t("searchSend"), title: t("searchSend") },
 		});
-		setIcon(searchBtn, "send");
+		this.searchBtnEl = searchBtn;
+		setIcon(searchBtn, "arrow-up");
 		searchBtn.addEventListener("click", () => {
+			if (this.isGenerating) {
+				// Stop button: abort the in-flight generation.
+				this.activeAskController?.abort();
+				this.setSendButtonState("idle");
+				return;
+			}
 			void this.runSearch();
 			this.scrollToBottom();
 		});
@@ -344,10 +420,6 @@ export class SemanticSearchView extends ItemView {
 		if (this.tooltipEl) {
 			this.tooltipEl.remove();
 			this.tooltipEl = null;
-		}
-		if (this.depthPopupEl) {
-			this.depthPopupEl.remove();
-			this.depthPopupEl = null;
 		}
 		if (this.modelPopupEl) {
 			this.modelPopupEl.remove();
@@ -364,6 +436,43 @@ export class SemanticSearchView extends ItemView {
 		return !!(this.client as any).apiKey;
 	}
 
+	/** Send-button state machine: "idle"(arrow-up) | "stop"(solid square, aborts the run). */
+	private setSendButtonState(state: "idle" | "stop"): void {
+		const btn = this.searchBtnEl;
+		if (!btn) return;
+		btn.empty();
+		if (state === "idle") {
+			setIcon(btn, "arrow-up");
+			btn.setAttr("aria-label", t("searchSend"));
+			btn.setAttr("title", t("searchSend"));
+		} else {
+			// Custom solid stop icon (ring + filled square): Obsidian's icon
+			// set has no filled stop variant, so inline the SVG directly.
+			// Both paths use fill="currentColor" to follow the button color.
+			const svg = btn.createSvg("svg", {
+				attr: { viewBox: "0 0 1040 1024", "aria-hidden": "true" },
+			});
+			svg.innerHTML =
+				'<path fill="currentColor" d="M512 64c60.5 0 119.2 11.8 174.4 35.2 53.3 22.6 101.3 54.9 142.4 96 41.2 41.2 73.5 89.1 96 142.4C948.2 392.8 960 451.5 960 512s-11.8 119.2-35.2 174.4c-22.6 53.3-54.9 101.3-96 142.4-41.2 41.2-89.1 73.5-142.4 96C631.2 948.2 572.5 960 512 960s-119.2-11.8-174.4-35.2c-53.3-22.6-101.3-54.9-142.4-96-41.2-41.2-73.5-89.1-96-142.4C75.8 631.2 64 572.5 64 512s11.8-119.2 35.2-174.4c22.6-53.3 54.9-101.3 96-142.4 41.2-41.2 89.1-73.5 142.4-96C392.8 75.8 451.5 64 512 64m0-64C229.2 0 0 229.2 0 512s229.2 512 512 512 512-229.2 512-512S794.8 0 512 0z"/>' +
+				'<path fill="currentColor" d="M716 304H308c-2.2 0-4 1.8-4 4v408c0 2.2 1.8 4 4 4h408c2.2 0 4-1.8 4-4V308c0-2.2-1.8-4-4-4z"/>';
+			btn.setAttr("aria-label", t("searchStop"));
+			btn.setAttr("title", t("searchStop"));
+		}
+	}
+
+	/** Sync the input height + toggle icon with this.inputExpanded. */
+	private applyInputExpanded(): void {
+		this.inputEl.toggleClass("is-expanded", this.inputExpanded);
+		// The keyboard hint appears only in the tall editor.
+		if (this.inputHintEl) this.inputHintEl.style.display = this.inputExpanded ? "" : "none";
+		const btn = this.expandBtnEl;
+		if (!btn) return;
+		btn.innerHTML = this.inputExpanded ? collapseIconSvg : expandIconSvg;
+		const label = t(this.inputExpanded ? "searchCollapseInput" : "searchExpandInput");
+		btn.setAttr("aria-label", label);
+		btn.setAttr("title", label);
+	}
+
 	private async runSearch(): Promise<void> {
 		const query = this.extractInputText().trim();
 		if (!query) return;
@@ -371,6 +480,13 @@ export class SemanticSearchView extends ItemView {
 			this.statusEl.textContent = t("searchNeedApiKey");
 			return;
 		}
+
+		// Enter generating mode: abort controller for /stop-style cancellation;
+		// the send button immediately becomes the clickable stop button.
+		this.isGenerating = true;
+		const controller = new AbortController();
+		this.activeAskController = controller;
+		this.setSendButtonState("stop");
 
 		// Clear the transient status once the first query is submitted.
 		this.statusEl.textContent = "";
@@ -383,7 +499,14 @@ export class SemanticSearchView extends ItemView {
 		const segments = this.snapshotSegments(userContent);
 		this.appendUserMessage(query, userContent);
 		await this.recordUserMessage(query, segments);
+		// First message sent → the context-usage ring becomes relevant.
+		if (this.contextUsageEl) this.contextUsageEl.style.display = "";
 		this.clearInputText();
+		// Sending restores the input to its compact height (expand icon back).
+		if (this.inputExpanded) {
+			this.inputExpanded = false;
+			this.applyInputExpanded();
+		}
 
 		// Snapshot the dropped notes for THIS turn — the attachments array is
 		// reset when the turn finishes, so the chips act as part of the message
@@ -488,8 +611,7 @@ export class SemanticSearchView extends ItemView {
 				// clicking the loading line toggles it. Renders the same steps
 				// the finished answer's thinking section will show.
 				const liveSteps: ThinkingStep[] = [firstStep];
-				const liveWrap = loadingEl.createDiv({ cls: "semlink-thinking-live" });
-				const liveBody = liveWrap.createDiv({ cls: "semlink-thinking-live-body" });
+				const liveBody = loadingEl.createDiv({ cls: "semlink-thinking-live-body" });
 				liveBody.style.display = "none";
 				const refreshLiveBody = (): void => {
 					if (liveBody.style.display === "none") return;
@@ -526,11 +648,11 @@ export class SemanticSearchView extends ItemView {
 						(toolName) => {
 							// A tool is running — animate its label so a slow
 							// tool (e.g. a full-vault grep) doesn't look frozen.
-							hasCalledTool = true;
-							startDots(t("searchToolCalling").replace("{tool}", toolName).replace(/…$/, ""));
-						},
-						this.searchDepth,
-						(text) => {
+						hasCalledTool = true;
+						startDots(t("searchToolCalling").replace("{tool}", toolName).replace(/…$/, ""));
+					},
+					"standard",
+					(text) => {
 							// Answer streaming started.
 							stopAnswerAnim();
 							loadingTextEl.style.display = "none";
@@ -545,7 +667,8 @@ export class SemanticSearchView extends ItemView {
 						},
 						(step) => {
 							// A new thinking step arrived — refresh the live
-							// thinking preview.
+							// thinking preview. No auto-scroll: the user reads
+							// from top to bottom during generation.
 							liveSteps.push(step);
 							refreshLiveBody();
 						},
@@ -560,6 +683,7 @@ export class SemanticSearchView extends ItemView {
 								.replace("{total}", String(total));
 							loadingDotsSpan.textContent = "";
 						},
+						controller.signal,
 					);
 					const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
 					stopAnswerAnim();
@@ -594,19 +718,31 @@ export class SemanticSearchView extends ItemView {
 					// Action buttons (icons) below the sources: copy / save.
 					this.appendActions(loadingEl, result.answer, query);
 				} catch (e) {
-					const msg = e instanceof Error ? e.message : String(e);
-					stopAnswerAnim();
-					loadingEl.empty();
-					loadingEl.createDiv({ cls: "semlink-msg-error", text: `${t("searchError")} ${msg}` });
-					// Keep the thinking process visible even when the answer
-					// failed — show what the model did before the error.
-					if (liveSteps.length > 0) {
-						const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
-						this.renderThinking(loadingEl, liveSteps, elapsedSec);
+					// User aborted — keep whatever streamed so far and show a
+					// "stopped" notice instead of an error.
+					if (controller.signal.aborted || (e as any)?.name === "AbortError") {
+						stopAnswerAnim();
+						loadingEl.empty();
+						if (liveSteps.length > 0) {
+							const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
+							this.renderThinking(loadingEl, liveSteps, elapsedSec);
+						}
+						loadingEl.createDiv({ cls: "semlink-msg-stopped", text: t("searchStopped") });
+					} else {
+						const msg = e instanceof Error ? e.message : String(e);
+						stopAnswerAnim();
+						loadingEl.empty();
+						loadingEl.createDiv({ cls: "semlink-msg-error", text: `${t("searchError")} ${msg}` });
+						// Keep the thinking process visible even when the answer
+						// failed — show what the model did before the error.
+						if (liveSteps.length > 0) {
+							const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
+							this.renderThinking(loadingEl, liveSteps, elapsedSec);
+						}
+						// Fall back to the raw results (expanded) so the user still
+						// gets something useful when the chat call fails.
+						this.renderSources(loadingEl, results, true);
 					}
-					// Fall back to the raw results (expanded) so the user still
-					// gets something useful when the chat call fails.
-					this.renderSources(loadingEl, results, true);
 				}
 			} else {
 				// No chat provider configured → show the plain result list.
@@ -620,9 +756,11 @@ export class SemanticSearchView extends ItemView {
 		} finally {
 			// The dropped notes were consumed by this turn.
 			this.attachments = [];
+			// Leave generating mode: button back to send, controller released.
+			this.isGenerating = false;
+			this.activeAskController = null;
+			this.setSendButtonState("idle");
 		}
-
-		this.scrollToBottom();
 	}
 
 	/** Build the note-context prompt for the chat model from search results. */
@@ -655,7 +793,11 @@ export class SemanticSearchView extends ItemView {
 
 	/** Render a collapsible "reference sources" section inside an assistant bubble. */
 	private renderSources(container: HTMLElement, results: SearchResult[], open: boolean): void {
-		const details = container.createEl("details", { cls: "semlink-search-sources" });
+		// The sources card is its own card OUTSIDE the assistant bubble (the
+		// bubble is the merged thinking+answer card) — append to the turn
+		// container so it sits below the bubble as an independent card.
+		const turn = container.closest(".semlink-msg-turn") || container;
+		const details = turn.createEl("details", { cls: "semlink-search-sources" });
 		if (open) details.setAttr("open", "");
 
 		details.createEl("summary", {
@@ -685,7 +827,11 @@ export class SemanticSearchView extends ItemView {
 	 * Used for both live answers and restored history messages.
 	 */
 	private appendActions(container: HTMLElement, content: string, questionForSave: string): void {
-		const actionsEl = container.createDiv({ cls: "semlink-msg-actions" });
+		// Actions sit BELOW the reference sources card, outside the merged
+		// thinking+answer bubble — append to the turn container (same as
+		// renderSources).
+		const turn = container.closest(".semlink-msg-turn") || container;
+		const actionsEl = turn.createDiv({ cls: "semlink-msg-actions" });
 		const copyBtn = actionsEl.createEl("button", {
 			cls: "semlink-msg-action",
 			attr: { "aria-label": t("searchCopy"), title: t("searchCopy") },
@@ -990,6 +1136,26 @@ export class SemanticSearchView extends ItemView {
 		}
 	}
 
+	/** Insert a <br> at the caret (Ctrl+Enter). Works without execCommand. */
+	private insertLineBreakAtCaret(): void {
+		const sel = window.getSelection();
+		if (!sel || sel.rangeCount === 0) return;
+		const range = sel.getRangeAt(0);
+		// Only act when the caret is inside our input.
+		if (!this.inputEl.contains(range.commonAncestorContainer)) return;
+		range.deleteContents();
+		const br = document.createElement("br");
+		range.insertNode(br);
+		// Move the caret after the new break.
+		range.setStartAfter(br);
+		range.collapse(true);
+		sel.removeAllRanges();
+		sel.addRange(range);
+		// Run the same bookkeeping as a native edit (attachments sync +
+		// layout sanitize).
+		this.inputEl.dispatchEvent(new InputEvent("input", { bubbles: true }));
+	}
+
 	/** Read dropped notes' content (capped) to fold into the query context. */
 	private async buildAttachmentContext(paths: string[]): Promise<string> {
 		if (paths.length === 0) return "";
@@ -1019,26 +1185,10 @@ export class SemanticSearchView extends ItemView {
 		const details = container.createEl("details", { cls: "semlink-thinking" });
 		details.createEl("summary", {
 			cls: "semlink-thinking-summary",
-			text: t("searchThinkingDuration").replace("{seconds}", String(elapsedSec)),
+			text: t("searchThinkingDuration").replace("{seconds}", this.formatDuration(elapsedSec)),
 		});
 
 		this.renderThinkingSteps(details, thinking);
-
-		// Copy-thinking button at the bottom of the expanded section.
-		const copyBtn = details.createEl("button", {
-			cls: "semlink-thinking-copy",
-			text: t("searchCopyThinking"),
-		});
-		copyBtn.addEventListener("click", () => {
-			const text = thinking.map((s) =>
-				s.type === "thought" ? `💭 ${s.text}` : `🔧 ${s.name}${this.summarizeArgs(s.args)}`
-			).join("\n");
-			void navigator.clipboard.writeText(text).then(() => {
-				new Notice(t("searchCopied"));
-			}).catch(() => {
-				new Notice(t("searchCopyFailed"));
-			});
-		});
 	}
 
 	/**
@@ -1048,6 +1198,7 @@ export class SemanticSearchView extends ItemView {
 	 */
 	private renderThinkingSteps(container: HTMLElement, steps: ThinkingStep[]): void {
 		for (const step of steps) {
+			if (!step) continue; // defensive: never crash on a malformed step
 			if (step.type === "thought") {
 				container.createDiv({ cls: "semlink-thinking-thought", text: `💭 ${step.text}` });
 			} else {
@@ -1103,6 +1254,14 @@ export class SemanticSearchView extends ItemView {
 		if (lines[1]) {
 			welcome.createDiv({ cls: "semlink-search-welcome-sub", text: lines[1] });
 		}
+		this.updateHomeIconVisibility();
+	}
+
+	/** Home icon is the "back to start" button — it only makes sense once a
+	 *  conversation exists, so hide it while the welcome screen is up. */
+	private updateHomeIconVisibility(): void {
+		const onHome = !!this.messagesEl.querySelector(".semlink-search-welcome");
+		this.newChatBtnEl?.toggleClass("is-hidden", onHome);
 	}
 
 	/** Time-slot key of the greeting for the current hour. */
@@ -1133,6 +1292,8 @@ export class SemanticSearchView extends ItemView {
 		this.attachments = [];
 		// Clear the subtitle until a question is asked.
 		this.firstQuestion = "";
+		// No conversation → hide the context-usage ring again.
+		if (this.contextUsageEl) this.contextUsageEl.style.display = "none";
 	}
 
 	/** Record a user question into the current session (creating one if needed). */
@@ -1213,6 +1374,12 @@ export class SemanticSearchView extends ItemView {
 		}
 		this.messagesEl.empty();
 		this.statusEl.textContent = "";
+		// A restored conversation is never the welcome screen → show the home button.
+		this.updateHomeIconVisibility();
+		// Restoring a conversation with content → show the context-usage ring.
+		if (this.contextUsageEl && session.messages.length > 0) {
+			this.contextUsageEl.style.display = "";
+		}
 		let lastUserQuery = "";
 		for (const msg of session.messages) {
 			if (msg.role === "user") {
@@ -1358,6 +1525,7 @@ export class SemanticSearchView extends ItemView {
 	 */
 	private appendUserMessageFromSegments(segments: HistorySegment[]): void {
 		this.messagesEl.querySelector(".semlink-search-welcome")?.remove();
+		this.updateHomeIconVisibility();
 		const turn = this.messagesEl.createDiv({ cls: "semlink-msg-turn semlink-msg-user-turn" });
 		const bubble = turn.createDiv({ cls: "semlink-msg-bubble semlink-msg-user" });
 		for (const seg of segments) {
@@ -1377,6 +1545,7 @@ export class SemanticSearchView extends ItemView {
 	private appendUserMessage(text: string, content?: HTMLElement): void {
 		// Remove the welcome placeholder once the first real message arrives.
 		this.messagesEl.querySelector(".semlink-search-welcome")?.remove();
+		this.updateHomeIconVisibility();
 		const turn = this.messagesEl.createDiv({ cls: "semlink-msg-turn semlink-msg-user-turn" });
 		const bubble = turn.createDiv({ cls: "semlink-msg-bubble semlink-msg-user" });
 		if (content) {
@@ -1533,6 +1702,15 @@ export class SemanticSearchView extends ItemView {
 		if (!this.tooltipEl) {
 			this.tooltipEl = document.body.createDiv({ cls: "semlink-context-tooltip" });
 			this.tooltipEl.style.position = "fixed";
+			// Hovering the tooltip itself keeps it open (otherwise moving the
+			// mouse from the ring onto the tooltip hides it immediately).
+			this.tooltipEl.addEventListener("mouseenter", () => {
+				// Pointer arrived — cancel any pending hide (gap crossing).
+				if (this.tooltipHideTimer) window.clearTimeout(this.tooltipHideTimer);
+				this.tooltipHideTimer = null;
+				if (this.tooltipEl) this.tooltipEl.style.display = "block";
+			});
+			this.tooltipEl.addEventListener("mouseleave", () => this.hideContextTooltip());
 			this.tooltipEl.style.display = "none";
 			this.tooltipEl.style.zIndex = "9999";
 		}
@@ -1585,27 +1763,41 @@ export class SemanticSearchView extends ItemView {
 		cacheRow.createSpan({ cls: "ctx-name", text: t("ctxCacheHit") });
 		cacheRow.createSpan({ cls: "ctx-tokens", text: cacheText });
 
-		// Position the tooltip above the donut (viewport-fixed on document.body).
+		// Position the tooltip BELOW-LEFT of the donut (viewport-fixed on
+		// document.body). The ring now sits in the top header, so it must open
+		// downward — upward would clip off the top of the viewport.
 		const rect = this.contextRingEl.getBoundingClientRect();
-		el.style.left = rect.left + "px";
-		el.style.top = rect.top + "px";
-		el.style.transform = "translateY(calc(-100% - 8px))";
+		el.style.left = Math.max(8, rect.left - el.offsetWidth + rect.width + 8) + "px";
+		el.style.top = rect.bottom + 8 + "px";
+		el.style.transform = "";
 		el.style.display = "block";
 
 		// Keep it inside the viewport.
 		const vw = window.innerWidth;
-		if (rect.left + el.offsetWidth > vw - 8) {
+		if (el.offsetLeft + el.offsetWidth > vw - 8) {
 			el.style.left = Math.max(8, vw - el.offsetWidth - 8) + "px";
 		}
 	}
 
 	/** 551000 → "55.1万"; 1000000 → "100万"; values < 10000 stay raw. */
 	private formatWan(n: number): string {
-		if (n >= 10000) {
-			const w = n / 10000;
-			return (Number.isInteger(w) ? String(w) : w.toFixed(1).replace(/\.0$/, "")) + "万";
-		}
-		return String(Math.round(n));
+		// Always express in 万 so the two sides of "x万/y万" stay consistent,
+		// even for small values (8171 → "0.8万", not the raw "8171").
+		const w = n / 10000;
+		return (Number.isInteger(w) ? String(w) : w.toFixed(1).replace(/\.0$/, "")) + "万";
+	}
+
+	/** 7528 → "2小时5分" / 65 → "1分5秒" / 30 → "30秒". */
+	private formatDuration(totalSec: number): string {
+		const s = Math.max(0, Math.round(totalSec));
+		const h = Math.floor(s / 3600);
+		const m = Math.floor((s % 3600) / 60);
+		const sec = s % 60;
+		const parts: string[] = [];
+		if (h > 0) parts.push(`${h}小时`);
+		if (m > 0) parts.push(`${m}分`);
+		if (sec > 0 || parts.length === 0) parts.push(`${sec}秒`);
+		return parts.join("");
 	}
 
 	/** 0.551 → "55.1" (one decimal, trailing .0 stripped). */
@@ -1628,66 +1820,7 @@ export class SemanticSearchView extends ItemView {
 		}
 	}
 
-	// ──── Search depth dropdown ────
-
-	private depthLabel(): string {
-		return this.searchDepth === "enhanced" ? t("searchDepthEnhanced") : t("searchDepthStandard");
-	}
-
-	private toggleDepthPopup(): void {
-		if (this.depthPopupEl && this.depthPopupEl.style.display === "block") {
-			this.hideDepthPopup();
-		} else {
-			this.showDepthPopup();
-		}
-	}
-
-	private showDepthPopup(): void {
-		if (!this.depthTriggerEl) return;
-		// Lazily create the popup on document.body so fixed positioning is
-		// not thrown off by transformed/clipping ancestors.
-		if (!this.depthPopupEl) {
-			this.depthPopupEl = document.body.createDiv({ cls: "semlink-search-depth-popup" });
-			this.depthPopupEl.style.position = "fixed";
-			this.depthPopupEl.style.display = "none";
-			this.depthPopupEl.style.zIndex = "9999";
-		}
-		const popup = this.depthPopupEl;
-		popup.empty();
-
-		const addOption = (value: "standard" | "enhanced") => {
-			const opt = popup.createDiv({
-				cls: "semlink-search-depth-option" + (this.searchDepth === value ? " is-active" : ""),
-				text: value === "enhanced" ? t("searchDepthEnhanced") : t("searchDepthStandard"),
-			});
-			opt.addEventListener("click", () => {
-				this.searchDepth = value;
-				const txt = this.depthTriggerEl?.querySelector(".semlink-search-depth-trigger-text");
-				if (txt) txt.textContent = this.depthLabel();
-				this.hideDepthPopup();
-			});
-		};
-		addOption("standard");
-		addOption("enhanced");
-
-		// Position ABOVE the trigger (bottom edge of the window is tight).
-		const rect = this.depthTriggerEl.getBoundingClientRect();
-		popup.style.left = rect.left + "px";
-		popup.style.bottom = (window.innerHeight - rect.top + 4) + "px";
-		popup.style.display = "block";
-
-		// Keep it inside the viewport.
-		const vw = window.innerWidth;
-		if (rect.left + popup.offsetWidth > vw - 8) {
-			popup.style.left = Math.max(8, vw - popup.offsetWidth - 8) + "px";
-		}
-	}
-
-	private hideDepthPopup(): void {
-		if (this.depthPopupEl) this.depthPopupEl.style.display = "none";
-	}
-
-	// ──── Model switcher popup (same pattern as the depth popup) ────
+	// ──── Model switcher popup ────
 
 	private toggleModelPopup(): void {
 		if (this.modelPopupEl && this.modelPopupEl.style.display === "block") {
@@ -1699,7 +1832,8 @@ export class SemanticSearchView extends ItemView {
 
 	private showModelPopup(): void {
 		if (!this.modelTriggerEl) return;
-		// Lazily create the popup on document.body (see showDepthPopup).
+		// Lazily create the popup on document.body so fixed positioning is
+		// not thrown off by transformed/clipping ancestors.
 		if (!this.modelPopupEl) {
 			this.modelPopupEl = document.body.createDiv({ cls: "semlink-search-depth-popup semlink-search-model-popup" });
 			this.modelPopupEl.style.position = "fixed";
@@ -1746,9 +1880,10 @@ export class SemanticSearchView extends ItemView {
 
 	/** Refresh the model label and the context ring after switching. */
 	private updateModelLabel(): void {
-		const label = this.chatClient.getActiveModelLabel();
+		// The indicator is a static LLM icon — nothing to relabel, but keep
+		// the icon in sync in case the element was rebuilt.
 		if (this.modelNameEl) {
-			this.modelNameEl.textContent = label || t("searchNoChatModel");
+			this.modelNameEl.innerHTML = llmIconSvg;
 		}
 		// The context window may differ across models — recompute the ring
 		// against the last turn's usage.

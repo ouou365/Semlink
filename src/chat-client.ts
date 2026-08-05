@@ -172,6 +172,7 @@ export class ChatClient {
 		onRoundStart?: () => void,
 		onThinking?: (step: ThinkingStep) => void,
 		onRetry?: (attempt: number, total: number) => void,
+		signal?: AbortSignal,
 	): Promise<ChatResult> {
 		// Use the SELECTED model (and its owning provider) — the model switcher
 		// may pick any model from any configured provider.
@@ -217,14 +218,16 @@ export class ChatClient {
 		};
 		const dispatch = (): Promise<ChatResult> =>
 			provider.apiFormat === "anthropic"
-				? this.chatAnthropic(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, onStream, onRoundStart, onThinking, onRoundSuccess)
-				: this.chatOpenAI(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, onStream, onRoundStart, onThinking, onRoundSuccess);
+				? this.chatAnthropic(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, onStream, onRoundStart, onThinking, onRoundSuccess, signal)
+				: this.chatOpenAI(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, onStream, onRoundStart, onThinking, onRoundSuccess, signal);
 
 		for (;;) {
 			totalAttempts++;
 			try {
 				return await dispatch();
 			} catch (e) {
+				// User aborted — never retry, propagate the AbortError as-is.
+				if (signal?.aborted || (e as any)?.name === "AbortError") throw e;
 				const retryDelayMs = CHAT_RETRY_DELAYS_MS[attempt - 1];
 				if (retryDelayMs === undefined || totalAttempts > CHAT_RETRY_TOTAL + 5 || !this.isTransientChatError(e)) {
 					throw e;
@@ -233,6 +236,7 @@ export class ChatClient {
 				console.warn(`[Semlink] transient error (attempt ${attempt}), retrying in ${retryDelayMs}ms:`, msg);
 				onRetry?.(attempt + 1, CHAT_RETRY_TOTAL);
 				await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+				if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 				attempt++;
 			}
 		}
@@ -402,6 +406,7 @@ export class ChatClient {
 		onRoundStart?: () => void,
 		onThinking?: (step: ThinkingStep) => void,
 		onRoundSuccess?: () => void,
+		signal?: AbortSignal,
 	): Promise<ChatResult> {
 		const baseUrl = provider.baseUrl.replace(/\/+$/, "");
 		const tools = this.buildOpenAITools();
@@ -460,6 +465,7 @@ export class ChatClient {
 				provider,
 				{ model, messages, stream: true, stream_options: { include_usage: true } },
 				undefined,
+				signal,
 			);
 			onRoundSuccess?.();
 			if (analysisStream.usageTokens) usageTokens = analysisStream.usageTokens;
@@ -511,6 +517,7 @@ export class ChatClient {
 				provider,
 				body,
 				onStream,
+				signal,
 			);
 			onRoundSuccess?.();
 			if (stream.usageTokens) usageTokens = stream.usageTokens;
@@ -561,10 +568,13 @@ export class ChatClient {
 					seenQueries.set(name, [...(seenQueries.get(name) || []), normQ]);
 				}
 
+				// User hit stop — bail out before running (possibly slow) tools.
+				if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 				onToolCall?.(name, args);
 				const result = this.tools
 					? await this.tools.execute(name, args)
 					: `Error: no tools available (unknown tool "${name}")`;
+				if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 				const step: ThinkingStep = { type: "tool", name, args, result };
 				thinking.push(step);
 				onThinking?.(step);
@@ -601,6 +611,7 @@ export class ChatClient {
 		provider: ChatProvider,
 		body: any,
 		onStream?: (text: string) => void,
+		signal?: AbortSignal,
 	): Promise<{ content: string; toolCalls: any[]; usageTokens: number; cacheHits: CacheSample[] }> {
 		let resp: Response;
 		try {
@@ -611,8 +622,13 @@ export class ChatClient {
 					"Authorization": `Bearer ${provider.apiKey}`,
 			},
 			body: JSON.stringify(body),
+			signal,
 		});
 		} catch (e) {
+			// User aborted — propagate as AbortError (NOT retryable).
+			if (signal?.aborted || (e as any)?.name === "AbortError") {
+				throw new DOMException("Aborted", "AbortError");
+			}
 			// Network-level failure (CORS / DNS / connection reset / offline).
 			// Prefix marks it as retryable — chat() retries once.
 			throw new Error(`NETWORK:无法连接 API 服务（${url}），请检查网络连接后重试`);
@@ -656,7 +672,7 @@ export class ChatClient {
 					const miss = u.prompt_cache_miss_tokens || 0;
 					if (hit + miss > 0) cacheHits.push({ hit, total: hit + miss });
 				}
-		});
+		}, signal);
 
 		const calls = Object.entries(toolCalls)
 			.sort(([a], [b]) => Number(a) - Number(b))
@@ -702,6 +718,7 @@ export class ChatClient {
 		onRoundStart?: () => void,
 		onThinking?: (step: ThinkingStep) => void,
 		onRoundSuccess?: () => void,
+		signal?: AbortSignal,
 	): Promise<ChatResult> {
 		const baseUrl = provider.baseUrl.replace(/\/+$/, "");
 		const tools = this.buildAnthropicTools();
@@ -756,7 +773,7 @@ export class ChatClient {
 				system: systemPrompt,
 				messages,
 				stream: true,
-			});
+			}, signal);
 			onRoundSuccess?.();
 			if (analysisStream.usageTokens) usageTokens = analysisStream.usageTokens;
 			cacheHits.push(...analysisStream.cacheHits);
@@ -806,6 +823,7 @@ export class ChatClient {
 				`${baseUrl}/v1/messages`,
 				provider,
 				body,
+				signal,
 			);
 			onRoundSuccess?.();
 			if (stream.usageTokens) usageTokens = stream.usageTokens;
@@ -865,10 +883,13 @@ export class ChatClient {
 					seenQueries.set(name, [...(seenQueries.get(name) || []), normQ]);
 				}
 
+				// User hit stop — bail out before running (possibly slow) tools.
+				if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 				onToolCall?.(name, args);
 				const result = this.tools
 					? await this.tools.execute(name, args)
 					: `Error: no tools available (unknown tool "${name}")`;
+				if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 				const step: ThinkingStep = { type: "tool", name, args, result };
 				thinking.push(step);
 				onThinking?.(step);
@@ -903,6 +924,7 @@ export class ChatClient {
 		url: string,
 		provider: ChatProvider,
 		body: any,
+		signal?: AbortSignal,
 	): Promise<{
 		contentBlocks: any[];
 		toolUses: any[];
@@ -920,8 +942,13 @@ export class ChatClient {
 					"anthropic-version": "2023-06-01",
 				},
 				body: JSON.stringify(body),
+				signal,
 			});
 		} catch (e) {
+			// User aborted — propagate as AbortError (NOT retryable).
+			if (signal?.aborted || (e as any)?.name === "AbortError") {
+				throw new DOMException("Aborted", "AbortError");
+			}
 			// Network-level failure — marked retryable; chat() retries once.
 			throw new Error(`NETWORK:无法连接 API 服务（${url}），请检查网络连接后重试`);
 		}
@@ -973,7 +1000,7 @@ export class ChatClient {
 			} else if (type === "message_delta") {
 				stopReason = json?.delta?.stop_reason || stopReason;
 			}
-		});
+		}, signal);
 
 		// Reassemble blocks in order for the assistant echo.
 		const contentBlocks = Object.entries(blocks)
@@ -1026,11 +1053,16 @@ export class ChatClient {
 	// ──── Shared helpers ────
 
 	/** Read an SSE response body, invoking onData for each parsed JSON event. */
-	private async readSSE(resp: Response, onData: (json: any) => void): Promise<void> {
+	private async readSSE(resp: Response, onData: (json: any) => void, signal?: AbortSignal): Promise<void> {
 		const reader = resp.body!.getReader();
 		const decoder = new TextDecoder();
 		let buffer = "";
 		for (;;) {
+			// User hit stop mid-stream — cancel the reader and abort.
+			if (signal?.aborted) {
+				try { await reader.cancel(); } catch { /* ignore */ }
+				throw new DOMException("Aborted", "AbortError");
+			}
 			const { done, value } = await reader.read();
 			if (done) break;
 			buffer += decoder.decode(value, { stream: true });

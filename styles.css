@@ -322,6 +322,12 @@
     background: var(--background-modifier-hover);
 }
 
+/* Home ("new session") button: hidden while the welcome screen is up.
+   Plain display:none would be beaten by the button's inline-flex. */
+.semlink-search-icon-btn.is-hidden {
+    display: none;
+}
+
 /* ── History drawer ── */
 
 .semlink-history-backdrop {
@@ -548,6 +554,11 @@
     gap: 8px;
     width: 100%;
     max-width: 100%;
+    /* ONE white card for thinking + answer (sources stays its own card). */
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 10px 12px;
 }
 
 .semlink-msg-loading {
@@ -599,6 +610,12 @@
 
 .semlink-msg-error {
     color: var(--text-error);
+}
+
+.semlink-msg-stopped {
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 4px 0;
 }
 
 /* Result cards (rendered inside assistant bubbles) */
@@ -659,7 +676,8 @@
 /* Input footer (bottom, fixed) — like claudian's composer */
 .semlink-search-footer {
     flex-shrink: 0;
-    padding: 6px 12px 12px;
+    /* 10px breathing room at the top (above the input wrapper). */
+    padding: 10px 12px 12px;
 }
 
 .semlink-search-input-wrapper {
@@ -723,7 +741,7 @@
 
 .semlink-search-input {
 	flex: 1 1 0;
-	min-height: 80px;
+	min-height: 70px;
 	max-height: 160px;
 	overflow-x: hidden;
 	overflow-y: auto;
@@ -762,21 +780,74 @@
 	height: 34px;
 	padding: 0;
 	border: none;
-	border-radius: 6px;
+	/* Circular button (matches the ring + solid square stop icon). */
+	border-radius: 50%;
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 	cursor: pointer;
-	/* Sit at the far right of the model row. */
-	margin-left: auto;
 }
 
 .semlink-search-btn:hover {
-    background: var(--interactive-accent-hover);
+	/* Gray hover (not purple): icon flips to the normal text color so it
+	   stays readable on the light gray hover background. */
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
 }
 
 .semlink-search-btn svg {
     width: 18px;
     height: 18px;
+}
+
+/* Expanded tall editor: half the window height, content scrolls. The footer
+   grows and the messages area above shrinks to make room. */
+.semlink-search-input.is-expanded {
+    min-height: 50vh;
+    height: 50vh;
+    max-height: 50vh;
+}
+
+/* Keyboard hint under the input — hidden by default (JS toggles it in the
+   tall editor), so typing text never fights it for layout space. */
+.semlink-search-input-hint {
+    font-size: 11px;
+    color: var(--text-faint);
+    text-align: right;
+    padding: 2px 2px 0;
+    user-select: none;
+}
+
+/* Expand/collapse toggle on the model row, left of the send button.
+   Takes over the far-right push (margin-left:auto); the send button's own
+   auto margin would otherwise split the free space between the two. */
+.semlink-search-expand-btn {
+    margin-left: auto;
+    color: var(--text-normal);
+}
+
+.semlink-search-expand-btn:hover {
+    color: var(--text-normal);
+}
+
+/* Flat icon: no box-shadow (the shared .semlink-search-icon-btn hover
+   background looks heavy next to the circular send button). The compound
+   selector's specificity (0,2,0) beats the shared hover rule (0,1,1).
+   Hover gets the light #ebebeb chip background per design. */
+.semlink-search-icon-btn.semlink-search-expand-btn,
+.semlink-search-icon-btn.semlink-search-expand-btn:focus-visible,
+.semlink-search-icon-btn.semlink-search-expand-btn:active {
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.semlink-search-icon-btn.semlink-search-expand-btn:hover {
+    background-color: #ebebeb;
+    box-shadow: none;
+}
+
+.semlink-search-expand-btn svg {
+    width: 16px;
+    height: 16px;
 }
 
 .semlink-search-model {
@@ -803,32 +874,45 @@
 .semlink-context-usage {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
     flex-shrink: 0;
+    cursor: pointer;
+}
+
+/* Hover mirrors the settings icon button: accent color + hover background. */
+.semlink-context-usage:hover {
+    background: var(--background-modifier-hover);
+}
+
+.semlink-context-usage:hover .ring-fg {
+    stroke: var(--interactive-accent);
 }
 
 .semlink-context-ring {
-    width: 14px;
-    height: 14px;
+    width: 18px;
+    height: 18px;
     flex-shrink: 0;
 }
 
 .semlink-context-ring svg {
-    width: 14px;
-    height: 14px;
+    width: 18px;
+    height: 18px;
     display: block;
 }
 
 .semlink-context-ring .ring-bg {
     fill: none;
     stroke: var(--background-modifier-border);
-    stroke-width: 3;
+    stroke-width: 4;
 }
 
 .semlink-context-ring .ring-fg {
     fill: none;
-    stroke: var(--interactive-accent);
-    stroke-width: 3;
+    stroke: var(--text-muted);
+    stroke-width: 4;
     stroke-linecap: round;
     transition: stroke-dashoffset 0.3s ease;
 }
@@ -936,12 +1020,14 @@
     overflow-x: auto;
 }
 
-/* Collapsible reference sources */
+/* Collapsible reference sources — its own independent white card, below
+   the merged thinking+answer card (sibling of the bubble in the turn). */
 .semlink-search-sources {
+    width: 100%;
     border: 1px solid var(--background-modifier-border);
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 6px 10px;
-    background: var(--background-secondary);
+    background: var(--background-primary);
 }
 
 .semlink-search-sources-summary {
@@ -972,10 +1058,13 @@
     gap: 6px;
 }
 
-/* Thinking process (tool calls + sources, above the answer) */
+/* Thinking process — #f5f6f7 panel inside the merged card; the gray
+   background separates it from the white answer below (no divider
+   needed). */
 .semlink-thinking {
-    border-bottom: 1px solid var(--background-modifier-border);
-    padding-bottom: 8px;
+    background: #f5f6f7;
+    border-radius: 6px;
+    padding: 8px 12px;
 }
 
 .semlink-thinking-summary {
@@ -992,35 +1081,26 @@
 }
 
 /* Copy-thinking button at the bottom of the expanded thinking section. */
-.semlink-thinking-copy {
-    display: block;
-    margin: 8px auto 0;
-    font-size: 11px;
-    padding: 3px 12px;
-    border-radius: 4px;
-    background: transparent;
-    border: 1px solid var(--background-modifier-border);
-    color: var(--text-muted);
-    cursor: pointer;
-}
 
-.semlink-thinking-copy:hover {
-    color: var(--interactive-accent);
-    border-color: var(--interactive-accent);
-}
 
 /* Live thinking preview while the answer is being generated: hidden by
    default; clicking the loading line (with its ">" chevron) toggles it. */
-.semlink-thinking-live {
-    margin-top: 8px;
-}
 
+/* Match the finished state's summary → tool-call gap (8px, from the tool
+   call's own margin-top). The bubble is a flex column with gap:8px, so:
+   cancel that gap with a negative margin and drop the top padding — the
+   expanded preview then sits flush under the loading line and the first
+   tool-call's margin-top:8px alone provides the 8px gap. */
 .semlink-thinking-live-body {
-    margin-top: 4px;
-    padding: 6px 8px;
-    border-left: 2px solid var(--background-modifier-border);
-    border-radius: 0 4px 4px 0;
+    margin-top: -8px;
+    padding: 0 8px;
+    border-radius: 8px;
     font-size: 12px;
+    /* Live thinking preview also uses a white card; the top padding stays
+       0 so the loading line → first tool-call gap keeps its tuned 8px
+       (tool-call's own margin-top). */
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
 }
 
 .semlink-thinking-live-body .semlink-thinking-thought,
@@ -1046,23 +1126,34 @@
 }
 
 .semlink-tool-call {
-    margin-top: 8px;
-    padding: 8px 10px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 6px;
-    background: var(--background-primary);
+    margin-top: 6px;
+    /* No own box — sits directly on the #f5f6f7 thinking panel, so the
+       visual layers stay at: white card > gray thinking > white content. */
+    padding: 0;
+    border: none;
+    background: transparent;
 }
 
 .semlink-tool-call-summary {
     cursor: pointer;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--text-normal);
+    /* Quiet row, not a white bar: muted text on the gray panel, so the
+       tools never compete with the answer (the "主"). */
+    color: var(--text-muted);
     user-select: none;
     list-style: none;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    margin: 0;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+.semlink-tool-call-summary:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
 }
 
 .semlink-tool-call-summary::-webkit-details-marker {
@@ -1080,7 +1171,7 @@
 .semlink-tool-call-label {
     font-size: 11px;
     color: var(--text-muted);
-    margin: 6px 0 2px;
+    margin: 4px 0 2px;
 }
 
 .semlink-tool-call-pre {
@@ -1089,11 +1180,14 @@
     line-height: 1.4;
     white-space: pre-wrap;
     word-break: break-word;
-    max-height: 180px;
-    overflow-y: auto;
+    /* No max-height: content flows fully — per-block scrollbars would
+       nest inside the thinking panel's own scrolling. */
     margin: 0;
-    padding: 6px 8px;
-    background: var(--background-secondary);
+    padding: 5px 8px;
+    /* Very subtle block on the gray panel — deliberately quiet so the
+       expanded content stays secondary to the answer. */
+    background: var(--background-modifier-hover);
+    border: none;
     border-radius: 4px;
     color: var(--text-normal);
 }
@@ -1101,14 +1195,14 @@
 /* New conversation button (above the input) */
 /* Model thought block inside the thinking process */
 .semlink-thinking-thought {
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.5;
     color: var(--text-muted);
     font-style: italic;
     white-space: pre-wrap;
     word-break: break-word;
-    margin: 8px 0 0;
-    padding: 6px 8px;
+    margin: 6px 0 0;
+    padding: 4px 8px;
     border-left: 2px solid var(--background-modifier-border);
 }
 
@@ -1122,8 +1216,10 @@
     font-size: 12px;
     line-height: 1.4;
     cursor: pointer;
-    border: 1px solid var(--background-modifier-border);
-    background: var(--background-primary);
+    /* No own box — text directly on the white panel (white only on the
+       panel layer; hover gives the row its subtle highlight). */
+    border: none;
+    background: transparent;
     overflow: hidden;
 }
 
@@ -1162,6 +1258,9 @@
     box-shadow: var(--shadow-s);
     font-size: 12px;
     color: var(--text-normal);
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
 }
 
 .semlink-context-tooltip .ctx-capacity {
@@ -1213,41 +1312,7 @@
     color: var(--text-muted);
 }
 
-/* Search depth selector (same row as the model indicator) */
-.semlink-search-depth {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-}
-
-.semlink-search-depth-label {
-    font-size: 13px;
-    color: var(--text-faint);
-}
-
-/* Plain text trigger — no button styling */
-.semlink-search-depth-trigger {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    cursor: pointer;
-    font-size: 13px;
-    color: var(--text-normal);
-    padding: 1px 3px;
-    border-radius: 3px;
-}
-
-.semlink-search-depth-trigger:hover {
-    background: var(--background-modifier-hover);
-}
-
-.semlink-search-depth-trigger-chevron {
-    color: var(--text-faint);
-    font-size: 9px;
-}
-
-/* Popup opens ABOVE the trigger */
+/* Popup opens ABOVE the trigger (shared by the model switcher popup) */
 .semlink-search-depth-popup {
     min-width: 96px;
     padding: 4px;
@@ -1298,16 +1363,30 @@
     cursor: pointer;
 }
 
+/* LLM icon in the model trigger — fixed gray color; hover gets a light
+   chip background (matches the expand/collapse button treatment). Sized
+   26x26 like the header icon buttons. */
 .semlink-search-model-name {
     cursor: pointer;
+    color: var(--text-normal);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
 }
 
-.semlink-search-model-arrow {
-    font-size: 9px;
-    color: var(--text-faint);
-    flex-shrink: 0;
-    line-height: 1;
+.semlink-search-model-name:hover {
+    background-color: #ebebeb;
+    color: var(--text-normal);
 }
+
+.semlink-search-model-name svg {
+    width: 16px;
+    height: 16px;
+}
+
 
 /* Streaming answer text (raw markdown, shown while the model streams) */
 .semlink-msg-stream {
@@ -1322,7 +1401,9 @@
 .semlink-msg-actions {
     display: flex;
     gap: 6px;
-    margin-top: 6px;
+    /* No own margin: as a turn sibling (below the sources card) the turn's
+       flex gap provides the spacing. */
+    margin-top: 0;
 }
 
 .semlink-msg-action {
