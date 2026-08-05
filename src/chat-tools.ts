@@ -250,6 +250,42 @@ export class SemlinkTools {
 		contextLines = 1,
 	): Promise<string> {
 		if (!pattern) return "Error: missing pattern";
+
+		// FAST PATH: plain-text (non-regex) searches hit the indexed chunks via
+		// SQL LIKE — milliseconds instead of scanning every vault file. Only
+		// regex / case-sensitive queries (which SQLite LIKE can't express
+		// exactly) fall back to the full file scan below.
+		if (!regex && !caseSensitive) {
+			try {
+				const dbHits = await this.store.textSearch(pattern, 200, pathFilter);
+				if (dbHits.length > 0) {
+					return this.truncate(
+						JSON.stringify(
+							{
+								pattern,
+								regex,
+								caseSensitive,
+								source: "indexed-chunks",
+								totalFiles: dbHits.length,
+								completeList: dbHits.length <= 200,
+								paths: dbHits.map((h) => h.path),
+								results: dbHits.slice(0, Math.min(Math.max(1, limit), 30)).map((h) => ({
+									path: h.path,
+									matchCount: h.matchCount,
+									lines: h.preview ? [`L? : ${h.preview.trim().slice(0, 150)}`] : [],
+								})),
+							},
+							null,
+							2,
+						),
+						12000,
+					);
+				}
+			} catch {
+				// fall through to the full scan on any DB error
+			}
+		}
+
 		let re: RegExp;
 		try {
 			re = new RegExp(regex ? pattern : this.escapeRegExp(pattern), caseSensitive ? "" : "i");

@@ -587,6 +587,32 @@ export class DbEngine {
 		return results;
 	}
 
+	/**
+	 * Substring search over chunk content via SQL LIKE — far faster than
+	 * scanning every vault file (used by grep_notes). Returns matching note
+	 * paths with a count of matching chunks per note.
+	 */
+	textSearch(pattern: string, limit = 200, pathFilter?: string): Array<{ path: string; matchCount: number; preview: string }> {
+		const like = `%${pattern}%`;
+		let sql = "SELECT note_path, COUNT(*) as cnt, MAX(content_preview) as prev FROM chunks WHERE content LIKE ?";
+		const params: any[] = [like];
+		if (pathFilter) {
+			sql += " AND note_path LIKE ?";
+			params.push(`%${pathFilter}%`);
+		}
+		sql += " GROUP BY note_path ORDER BY cnt DESC LIMIT ?";
+		params.push(Math.max(1, limit));
+
+		const rows = this.db!.exec(sql, params);
+		if (rows.length === 0 || rows[0].values.length === 0) return [];
+
+		return rows[0].values.map((row) => ({
+			path: row[0] as string,
+			matchCount: row[1] as number,
+			preview: (row[2] as string) || "",
+		}));
+	}
+
 	// ──── Queue operations (merged from IndexQueue) ────
 
 	/** Enqueue a single item */

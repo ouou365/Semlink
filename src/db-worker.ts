@@ -60,6 +60,7 @@ async function handle(op: string, args: any[]): Promise<any> {
 		case "saveEmbeddings": return engine.saveEmbeddings(args[0], args[1]);
 		case "loadVectorCache": return engine.loadVectorCache();
 		case "search": return engine.search(args[0], args[1], args[2]);
+		case "textSearch": return engine.textSearch(args[0], args[1], args[2]);
 		// queue ops
 		case "enqueue": return engine.enqueue(args[0], args[1], args[2]);
 		case "enqueueMany": return engine.enqueueMany(args[0]);

@@ -139,6 +139,7 @@ export class VectorStore {
 			case "saveEmbeddings": return e.saveEmbeddings(args[0], args[1]);
 			case "loadVectorCache": return e.loadVectorCache();
 			case "search": return e.search(args[0], args[1], args[2]);
+			case "textSearch": return e.textSearch(args[0], args[1], args[2]);
 			case "enqueue": return e.enqueue(args[0], args[1], args[2]);
 			case "enqueueMany": return e.enqueueMany(args[0]);
 			case "dequeue": return e.dequeue(args[0]);
@@ -239,6 +240,11 @@ export class VectorStore {
 
 	async search(queryEmbedding: number[], limit = 10, threshold = 0.3): Promise<SearchResult[]> {
 		return await this.call("search", [queryEmbedding, limit, threshold]);
+	}
+
+	/** Fast substring search over indexed chunk content (for grep_notes). */
+	async textSearch(pattern: string, limit = 200, pathFilter?: string): Promise<Array<{ path: string; matchCount: number; preview: string }>> {
+		return await this.call("textSearch", [pattern, limit, pathFilter]);
 	}
 
 	/** Chunk a markdown document. Runs in the worker thread so large-file
