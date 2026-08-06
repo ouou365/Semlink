@@ -21,14 +21,19 @@ export class SemlinkTools {
 	private store: VectorStore;
 	private client: EmbeddingClient;
 	private vault: Vault;
+	/** Returns the vault path of the note currently open in Obsidian (or
+	 *  null when none). Injected by the plugin so tools can answer
+	 *  "当前笔记" questions without the user naming the file. */
+	private getActiveNote: () => string | null;
 
 	/** Upper bound on a single tool result; adjustable per search depth. */
 	maxResultChars = 4000;
 
-	constructor(store: VectorStore, client: EmbeddingClient, vault: Vault) {
+	constructor(store: VectorStore, client: EmbeddingClient, vault: Vault, getActiveNote: () => string | null = () => null) {
 		this.store = store;
 		this.client = client;
 		this.vault = vault;
+		this.getActiveNote = getActiveNote;
 	}
 
 	/** Read-only tools the chat model may call. */
@@ -132,6 +137,12 @@ export class SemlinkTools {
 					required: ["pattern"],
 				},
 			},
+			{
+				name: "get_active_note",
+				description:
+					"获取当前正在 Obsidian 中打开的笔记的路径（仅路径，不含内容）。适合「当前笔记是什么」「针对我正在看的这篇笔记」等需要当前上下文的问题。需要内容时请再用 get_note 按返回的路径读取。没有打开的笔记时返回明确提示。",
+				parameters: { type: "object", properties: {} },
+			},
 		];
 	}
 
@@ -153,6 +164,8 @@ export class SemlinkTools {
 					return await this.toolListIndexedDetailed(args.prefix, args.limit, args.offset);
 				case "grep_notes":
 					return await this.toolGrepNotes(args.pattern, args.regex, args.pathFilter, args.caseSensitive, args.limit, args.contextLines);
+				case "get_active_note":
+					return await this.toolGetActiveNote();
 				default:
 					return `Error: unknown tool "${name}"`;
 			}
@@ -192,6 +205,15 @@ export class SemlinkTools {
 		if (!file) return `Error: file not found: ${path}`;
 		const content = await this.vault.read(file);
 		return this.truncate(content);
+	}
+
+	/** The note currently open in Obsidian — path only (content via get_note). */
+	private async toolGetActiveNote(): Promise<string> {
+		const path = this.getActiveNote();
+		if (!path) {
+			return "Error: 当前没有打开的笔记。请让用户先打开一篇笔记，或改用 search_notes / grep_notes 检索知识库。";
+		}
+		return `当前打开的笔记：${path}`;
 	}
 
 	private async toolGetSection(path: string, heading: string, maxDepth?: number): Promise<string> {

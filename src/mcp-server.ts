@@ -33,6 +33,8 @@ export class McpServer {
 	private scheduler: Scheduler;
 	private settings: SmartVaultSettings;
 	private vault: any; // Obsidian Vault
+	/** Vault path of the note currently open in Obsidian (or null). */
+	private getActiveNote: () => string | null;
 
 	constructor(
 		store: VectorStore,
@@ -41,6 +43,7 @@ export class McpServer {
 		scheduler: Scheduler,
 		settings: SmartVaultSettings,
 		vault: any,
+		getActiveNote: () => string | null = () => null,
 	) {
 		this.store = store;
 		this.client = client;
@@ -48,6 +51,7 @@ export class McpServer {
 		this.scheduler = scheduler;
 		this.settings = settings;
 		this.vault = vault;
+		this.getActiveNote = getActiveNote;
 	}
 
 	updateSettings(settings: SmartVaultSettings) {
@@ -418,6 +422,14 @@ export class McpServer {
 						required: ["pattern"],
 					},
 				},
+				{
+					name: "get_active_note",
+					description: "获取当前正在 Obsidian 中打开的笔记的路径（仅路径，不含内容）。需要内容时请再用 get_note 按返回的路径读取。没有打开的笔记时返回明确提示。",
+					inputSchema: {
+						type: "object",
+						properties: {},
+					},
+				},
 			],
 		};
 	}
@@ -445,6 +457,8 @@ export class McpServer {
 				return await this.toolGetSection(args.path, args.heading, args.maxDepth);
 			case "grep_notes":
 				return await this.toolGrepNotes(args.pattern, args.regex, args.pathFilter, args.caseSensitive, args.limit, args.contextLines);
+			case "get_active_note":
+				return await this.toolGetActiveNote();
 			default:
 				throw new Error(`Unknown tool: ${toolName}`);
 		}
@@ -498,6 +512,20 @@ export class McpServer {
 				isError: true,
 			};
 		}
+	}
+
+	/** The note currently open in Obsidian — path only (content via get_note). */
+	private async toolGetActiveNote() {
+		const path = this.getActiveNote();
+		if (!path) {
+			return {
+				content: [{ type: "text", text: "当前没有打开的笔记。请先打开一篇笔记，或改用 search_notes / grep_notes 检索知识库。" }],
+				isError: true,
+			};
+		}
+		return {
+			content: [{ type: "text", text: `当前打开的笔记：${path}` }],
+		};
 	}
 
 	private async toolGetSimilarNotes(path: string, limit = 10, threshold = 0.4) {

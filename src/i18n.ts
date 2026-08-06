@@ -201,18 +201,15 @@ const S: Strings = {
 	welcomeNight:      { zh: "🌃 晚上好\n闲暇时光，来查阅复盘笔记吧", en: "🌃 Good evening!\nPerfect quiet time to look through your notes." },
 	welcomeLateNight:  { zh: "🌙 夜色越来越深\n记得早点休息，查笔记问问题我随时待命", en: "🌙 Getting late!\nHead to bed early — I'm here whenever you need to search notes." },
 	// Welcome screen extras: clickable example prompts + index stats.
-	searchSugRecent:   { zh: "最近我记了哪些笔记？", en: "What notes did I take recently?" },
-	searchSugProject:  { zh: "关于「阅读」我记了哪些内容？", en: "What have I noted about reading?" },
-	searchSugKeyword:  { zh: "帮我总结当前笔记的要点", en: "Summarize the key points of the current note" },
-	// Extra prompts in the random rotation pool.
-	searchSugTodo:     { zh: "找出所有提到 TODO 的笔记", en: "Find all notes mentioning TODO" },
-	searchSugWeekly:   { zh: "我上周的周报都写了什么？", en: "What did I write in last week's report?" },
-	searchSugPm:       { zh: "关于「产品经理」我都记了哪些内容？", en: "What have I noted about product management?" },
-	searchSugS100:     { zh: "知识库里有几篇提到「S-100」的笔记？", en: "How many notes mention S-100?" },
-	// Dynamic cards when a note is open (follow the active document).
-	searchSugSummarize: { zh: "帮我总结[[{note}]]的要点", en: "Summarize the key points of \"{note}\"" },
-	searchSugRelated:   { zh: "[[{note}]]与哪些笔记相关？", en: "Which notes relate to \"{note}\"?" },
-	searchSugAboutNote: { zh: "关于[[{note}]]我都记了哪些内容？", en: "What have I noted about \"{note}\"?" },
+	// ── Topic examples / current-note ──
+	searchSugReading:  { zh: "关于「阅读」我记了哪些内容？", en: "What have I noted about reading?" },
+	searchSugCurrentSummary: { zh: "帮我总结当前笔记的要点", en: "Summarize the key points of the current note" },
+	// ── Knowledge-base retrieval / aggregation ──
+	searchSugRecent:   { zh: "查看最近记录的笔记", en: "View recently recorded notes" },
+	searchSugReview:   { zh: "做近期知识积累复盘", en: "Review my recent knowledge accumulation" },
+	searchSugDuplicates:    { zh: "查找高度相似重复笔记", en: "Find highly similar duplicate notes" },
+	// ── Knowledge-base organization / management ──
+	searchSugMonthlyTpl:    { zh: "生成月度知识复盘模板", en: "Create a monthly review template" },
 	// Welcome index stats line.
 	searchWelcomeStats: { zh: "已索引 {notes} 篇笔记 · {chunks} 个片段", en: "{notes} notes · {chunks} chunks indexed" },
 	searchNoChatModel: { zh: "未配置对话模型",      en: "No chat model configured" },
@@ -236,8 +233,8 @@ const S: Strings = {
 	ctxSystemPrompt:   { zh: "系统提示词",          en: "System Prompt" },
 	ctxOther:          { zh: "其他",                en: "Other" },
 	ctxCacheHit:       { zh: "平均缓存命中率",       en: "Avg Cache Hit Rate" },
-	searchSearching:   { zh: "搜索中…",           en: "Searching…" },
-	searchSearchingElapsed: { zh: "思考了 {seconds} 秒（搜索中…）", en: "Thought {seconds}s (searching…)" },
+	searchSearching:   { zh: "搜索中",             en: "Searching" },
+	searchSearchingElapsed: { zh: "思考了 {seconds}秒（搜索中）", en: "Thought {seconds}s (searching)" },
 	searchSearchingStatus: { zh: "搜索中", en: "searching" },
 	searchNoQuery:     { zh: "请输入查询内容",      en: "Enter a query to search" },
 	searchNoResults:   { zh: "没有找到相关笔记",    en: "No matching notes found" },
@@ -245,8 +242,8 @@ const S: Strings = {
 	searchScoreLabel:  { zh: "相似度",            en: "Similarity" },
 	searchNeedApiKey:  { zh: "请先在插件设置中配置 API Key 并完成索引", en: "Configure an API Key in Settings and run an index first" },
 	searchThinking:    { zh: "正在根据笔记内容回答…", en: "Thinking based on your notes…" },
-	// No closing paren — the animated dots + "）" are appended by the UI.
-	searchThinkingElapsed: { zh: "思考了 {seconds} 秒（{status}", en: "Thought {seconds}s ({status}" },
+	// No closing paren — the UI appends "）".
+	searchThinkingElapsed: { zh: "思考了 {seconds}秒（{status}", en: "Thought {seconds}s ({status}" },
 	searchGeneratingAnswer: { zh: "生成回答中", en: "Generating answer" },
 	searchModelThinking: { zh: "模型思考中", en: "Model thinking" },
 	searchReconnecting: { zh: "重新连接中... {n}/{total}", en: "Reconnecting... {n}/{total}" },

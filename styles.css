@@ -500,7 +500,9 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 0 12px 8px;
+    /* Slim side padding — the conversation area spans nearly the full
+       panel width. */
+    padding: 0 6px 8px;
     /* Obsidian's global CSS disables text selection in places; force it back
        on for the conversation so messages can be selected & copied. */
     user-select: text !important;
@@ -541,7 +543,7 @@
     font-size: 24px;
     font-weight: 600;
     color: var(--text-normal);
-    max-width: 280px;
+    max-width: 300px;
     line-height: 1.5;
     word-break: break-word;
 }
@@ -550,7 +552,7 @@
     font-size: 17px;
     font-weight: 400;
     color: var(--text-muted);
-    max-width: 280px;
+    max-width: 360px;
     line-height: 1.5;
 }
 
@@ -560,7 +562,7 @@
     flex-direction: column;
     gap: 8px;
     width: 100%;
-    max-width: 280px;
+    max-width: 300px;
 }
 
 .semlink-search-welcome-sug {
@@ -586,10 +588,17 @@
 }
 
 .semlink-search-welcome-sug-text {
-    /* Single line — overflow truncates with an ellipsis. */
-    white-space: nowrap;
+    /* Long question titles (e.g. "R-REC-M.1371-6-202602-I!!PDF-E（28号报文
+       相关）") wrap onto a second line instead of truncating — the full
+       example stays readable. Beyond 2 lines, ellipsis. */
+    flex: 1 1 0;
+    min-width: 0;
+    white-space: normal;
+    word-break: break-word;
     overflow: hidden;
-    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
 }
 
 .semlink-search-welcome-sug:hover {
@@ -678,6 +687,15 @@
     /* Non-italic with a normal weight — plain status line, no pill. */
     font-style: normal;
     font-size: 14px;
+    /* Pin the live loading line ("思考了 X 秒（...）") to the top of the
+       scrollable conversation so the status + elapsed time stay visible
+       while the answer is still being generated. Matches the sticky
+       behavior of the thinking and tool-call headers once finished.
+       top: 0 because the live preview isn't inside a #f5f6f7 panel yet. */
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f5f6f7;
 }
 
 /* Expand marker on the LEFT, same as .semlink-thinking-summary::before. */
@@ -697,17 +715,15 @@
     white-space: nowrap;
 }
 
-/* Fixed-width slot for the animated dots + closing paren: growing dots
-   never move the marker (the text stays put while the dots pulse). Dots
-   render upright (not italic) so they never get clipped by the reserved
-   width. Right-aligned so the "）" stays at a fixed position. */
+/* The closing "）" — no reserved slot anymore: the animated dots were
+   removed, so the paren sits flush against the status text. The negative
+   margin cancels the container's gap:6px (which the dots used to need),
+   so "思考了7秒（搜索中）" shows no visible space. */
 .semlink-msg-loading-dots {
     display: inline-block;
-    min-width: 2.4em;
-    text-align: right;
     flex-shrink: 0;
     font-style: normal;
-    padding-right: 0.15em;
+    margin-left: -6px;
 }
 
 .semlink-msg-empty {
@@ -1118,8 +1134,10 @@
     padding-left: 0.5em;
 }
 
-.semlink-msg-answer.markdown-rendered code {
-    font-size: 12px;
+/* Inline code matches the body text size (14px); code blocks inside <pre>
+   keep their smaller default. */
+.semlink-msg-answer.markdown-rendered :not(pre) > code {
+    font-size: 14px;
 }
 
 .semlink-msg-answer.markdown-rendered pre {
@@ -1162,7 +1180,7 @@
     margin-top: 8px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 2px;
 }
 
 /* Thinking process — #f5f6f7 panel inside the merged card; the gray
