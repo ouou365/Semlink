@@ -836,13 +836,29 @@ export class SemanticSearchView extends ItemView {
 					const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
 					stopAnswerAnim();
 					loadingEl.empty();
-					const thinking: ThinkingStep[] = [firstStep, ...result.thinking];
-					this.renderThinking(loadingEl, thinking, elapsedSec);
+					// The model sometimes writes the FULL answer inside the
+					// pre-analysis thinking step (common when the retrieved
+					// snippets were already enough) and then leaves the real
+					// answer as a one-liner — promoting that thought keeps the
+					// content in the answer body instead of trapping it under 💭.
+					let answer = result.answer;
+					let thinking: ThinkingStep[] = result.thinking;
+					if (answer.trim().length < 30 && thinking.length > 0) {
+						for (let i = thinking.length - 1; i >= 0; i--) {
+							const s = thinking[i];
+							if (s.type === "thought" && s.text.trim().length >= 80) {
+								answer = s.text;
+								thinking = thinking.filter((_, j) => j !== i);
+								break;
+							}
+						}
+					}
+					this.renderThinking(loadingEl, [firstStep, ...thinking], elapsedSec);
 					this.updateContextInfo(result.contextTokens, result.contextBreakdown, result.cacheHitRate);
 					// Render the answer as markdown (Obsidian's renderer handles
 					// headings, lists, code, links, etc.).
 					const answerEl = loadingEl.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
-					await MarkdownRenderer.render(this.app, protectHyphens(result.answer), answerEl, "", this);
+					await MarkdownRenderer.render(this.app, protectHyphens(answer), answerEl, "", this);
 
 					// Reference sources BELOW the answer, collapsed by default.
 					// With attachments the sources ARE the dropped notes.
@@ -854,7 +870,7 @@ export class SemanticSearchView extends ItemView {
 					// Persist this turn into chat history (incl. context usage so
 					// the ring + tooltip can be restored when re-opening).
 					await this.recordAssistantMessage(
-						result.answer,
+						answer,
 						thinking,
 						result.usedNotes,
 						elapsedSec,
@@ -864,7 +880,7 @@ export class SemanticSearchView extends ItemView {
 					);
 
 					// Action buttons (icons) below the sources: copy / save.
-					this.appendActions(loadingEl, result.answer, query);
+					this.appendActions(loadingEl, answer, query);
 				} catch (e) {
 					// User aborted — keep whatever streamed so far and show a
 					// "stopped" notice instead of an error.
