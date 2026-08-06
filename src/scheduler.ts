@@ -8,6 +8,7 @@ import { VectorStore } from "./vector-store";
 import { IndexQueue } from "./index-queue";
 import { EmbeddingClient } from "./embedding-client";
 import { ProgressTracker } from "./progress";
+import { ActivityGate } from "./activity-gate";
 import { makePreview } from "./chunker";
 import { t } from "./i18n";
 
@@ -19,6 +20,9 @@ export class Scheduler {
 	private client: EmbeddingClient;
 	private progress: ProgressTracker;
 	private settings: SmartVaultSettings;
+	/** When set, indexing yields to the user: batches pause while they're
+	 *  actively working and resume after a quiet period. */
+	private gate: ActivityGate | null;
 
 	private running = false;
 	private aborted = false;
@@ -37,6 +41,7 @@ export class Scheduler {
 		client: EmbeddingClient,
 		progress: ProgressTracker,
 		settings: SmartVaultSettings,
+		gate: ActivityGate | null = null,
 	) {
 		this.app = app;
 		this.vault = app.vault;
@@ -45,6 +50,7 @@ export class Scheduler {
 		this.client = client;
 		this.progress = progress;
 		this.settings = settings;
+		this.gate = gate;
 	}
 
 	updateSettings(settings: SmartVaultSettings) {
@@ -90,9 +96,13 @@ export class Scheduler {
 				// Unchanged - already indexed
 				alreadyIndexed++;
 			}
-			// Yield every 200 files to keep UI responsive
+			// Yield every 200 files to keep UI responsive; also hold off the
+			// scan itself while the user is actively working.
 			if (fi > 0 && fi % 200 === 0) {
 				await this.yieldControl();
+				if (this.gate && !this.gate.isIdle()) {
+					await this.waitForIdle();
+				}
 			}
 		}
 
@@ -171,6 +181,16 @@ export class Scheduler {
 
 					this.progress.setPaused(false);
 					this.progress.setNetworkStatus("healthy");
+				}
+
+				// Yield to the user: while they're actively working (clicking,
+				// typing or scrolling within the last few seconds), hold off
+				// indexing so the UI stays smooth; resume once they idle.
+				if (this.gate && !this.gate.isIdle()) {
+					this.progress.setPaused(true, true);
+					await this.waitForIdle();
+					if (this.aborted) break;
+					this.progress.setPaused(false);
 				}
 
 				// Dequeue next batch
@@ -300,6 +320,14 @@ export class Scheduler {
 		// Process in chunks of concurrency
 		for (let i = 0; i < noteEntries.length; i += this.concurrency) {
 			if (this.aborted) break;
+
+			// Re-check between concurrency groups — a single batch can embed
+			// for a while, so don't wait until the whole batch finishes before
+			// noticing the user is back.
+			if (this.gate && !this.gate.isIdle()) {
+				await this.waitForIdle();
+				if (this.aborted) break;
+			}
 
 			const chunk = noteEntries.slice(i, i + this.concurrency);
 			const promises = chunk.map(([notePath, items]) =>
@@ -447,6 +475,21 @@ export class Scheduler {
 				}
 				this.progress.setBackoffRemaining(this.client.backoffRemainingSec);
 				window.setTimeout(check, 1000);
+			};
+			check();
+		});
+	}
+
+	/** Wait until the user has been idle for IDLE_MS (checked every 500ms).
+	 *  Resolves immediately when the gate is absent. */
+	private waitForIdle(): Promise<void> {
+		return new Promise((resolve) => {
+			const check = () => {
+				if (this.aborted || !this.gate || this.gate.isIdle()) {
+					resolve();
+					return;
+				}
+				window.setTimeout(check, 500);
 			};
 			check();
 		});

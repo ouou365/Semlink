@@ -17,6 +17,9 @@ import { VaultWatcher } from "./src/watcher";
 import { SmartVaultSettingTab } from "./src/settings";
 import { ProgressModal } from "./src/progress-modal";
 import { SemanticSearchView, SEARCH_VIEW_TYPE } from "./src/search-view";
+import { RecentFilesTracker } from "./src/recent-files";
+import { QuestionBankStore } from "./src/question-bank";
+import { ActivityGate } from "./src/activity-gate";
 import { FeishuBot, type FeishuAskHandler } from "./src/feishu-bot";
 import { setLang, t } from "./src/i18n";
 import logoSvg from "./src/semlink-logo.svg";
@@ -34,6 +37,13 @@ export default class SmartVaultPlugin extends Plugin {
 	mcpServer: McpServer | null = null;
 	watcher!: VaultWatcher;
 	pluginDir: string = "";
+
+	/** Recently touched files — feeds the welcome screen's AI questions. */
+	recentFiles!: RecentFilesTracker;
+	/** Persistent pool of AI-generated welcome questions. */
+	questionBank!: QuestionBankStore;
+	/** Watches for user activity so indexing yields while they're working. */
+	activityGate!: ActivityGate;
 
 	/** Running Feishu bot instances, keyed by bot id. */
 	private feishuBots: Map<string, FeishuBot> = new Map();
@@ -65,6 +75,9 @@ export default class SmartVaultPlugin extends Plugin {
 		this.client = new EmbeddingClient(this.settings);
 		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault);
 		this.chatClient = new ChatClient(this.settings, this.chatTools);
+		// Indexing pauses while the user is actively working (clicks, typing,
+		// scrolling) so heavy scans never make the frontend feel laggy.
+		this.activityGate = new ActivityGate();
 		this.scheduler = new Scheduler(
 			this.app,
 			this.store,
@@ -72,6 +85,7 @@ export default class SmartVaultPlugin extends Plugin {
 			this.client,
 			this.progress,
 			this.settings,
+			this.activityGate,
 		);
 
 		// File watcher
@@ -121,8 +135,24 @@ export default class SmartVaultPlugin extends Plugin {
 		await this.syncFeishuBots();
 
 		// Semantic Search sidebar view
+		this.recentFiles = new RecentFilesTracker(this.app.vault, dataDir);
+		this.recentFiles.load();
+		this.questionBank = new QuestionBankStore(dataDir);
+		this.questionBank.load();
+		// Track recently touched files so the AI questions can follow what the
+		// user is working on (opened, created or edited notes).
+		this.registerEvent(this.app.workspace.on("file-open", (file) => {
+			if (file) this.recentFiles.record(file.path);
+		}));
+		this.registerEvent(this.app.vault.on("create", (file) => {
+			if (file instanceof TFile) this.recentFiles.record(file.path);
+		}));
+		this.registerEvent(this.app.vault.on("modify", (file) => {
+			if (file instanceof TFile) this.recentFiles.record(file.path);
+		}));
 		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SemanticSearchView(
 			leaf, this.store, this.client, this.app.vault, this.chatClient, dataDir,
+			this.recentFiles, this.questionBank,
 		));
 
 		// Register the custom Semlink logo as a named Obsidian icon so that both
@@ -205,6 +235,8 @@ export default class SmartVaultPlugin extends Plugin {
 		try { this.scheduler?.abort(); } catch {}
 		try { this.watcher?.stop(); } catch {}
 		try { this.mcpServer?.stop(); } catch {}
+		try { this.recentFiles?.save(); } catch {}
+		try { this.activityGate?.dispose(); } catch {}
 		for (const bot of this.feishuBots.values()) {
 			try { void bot.stop(); } catch {}
 		}

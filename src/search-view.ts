@@ -14,6 +14,8 @@ import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
 import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
 import { ChatHistoryStore } from "./chat-history";
 import { SaveNoteModal } from "./save-note-modal";
+import type { RecentFilesTracker } from "./recent-files";
+import type { QuestionBankStore } from "./question-bank";
 import { t } from "./i18n";
 import logoSvg from "./semlink-logo.svg";
 import llmIconSvg from "./network-icon.svg";
@@ -39,6 +41,10 @@ const HOME_SUGGESTION_POOL: Array<{ key: string; icon: string }> = [
 
 /** Icons for the dynamic cards (summarize / related / recall). */
 const HOME_DYNAMIC_ICONS = ["📝", "🔗", "📚"];
+
+/** Emoji icons rotated across AI-generated question cards, so consecutive
+ *  batches (or repeated refreshes) don't repeat the same badge pattern. */
+const QUESTION_ICON_POOL = ["🕘", "📖", "📝", "🔍", "📆", "💼", "🧭", "📚", "🔗", "✍️"];
 
 /** Replace hyphens between word chars with non-breaking hyphens (U+2011)
  *  so paths like "S-104_...md" never break right after the dash — they
@@ -80,6 +86,8 @@ export class SemanticSearchView extends ItemView {
 	private chatClient: ChatClient;
 	private vault: Vault;
 	private history: ChatHistoryStore;
+	private recentFiles: RecentFilesTracker;
+	private questionBank: QuestionBankStore;
 
 	// DOM references
 	private inputEl!: HTMLDivElement;
@@ -114,6 +122,21 @@ export class SemanticSearchView extends ItemView {
 	private currentWelcomeKey: string | null = null;
 	/** Home ("new session") button — hidden while the welcome screen is up. */
 	private newChatBtnEl: HTMLElement | null = null;
+	/** Questions currently shown on the welcome cards (AI-generated). Kept
+	 *  across file-open / time-slot re-renders so switching notes doesn't
+	 *  burn through the question bank; reset on fresh opens / new sessions /
+	 *  when the bank was empty and only static prompts were shown. */
+	private welcomeQuestions: string[] = [];
+	/** Batch counter — rotates the emoji icons across AI question batches. */
+	private welcomeBatchIndex = 0;
+	/** Monotonic token: a superseded render (e.g. after "new session"
+	 *  mid-generation) must not touch the current UI. */
+	private welcomeGenToken = 0;
+	/** Aborts the in-flight welcome-question generation (view close / new
+	 *  session). Also gates the background refill: while an immediate
+	 *  generation is running, the low-water refill skips (avoid double LLM
+	 *  calls). */
+	private welcomeGenController: AbortController | null = null;
 
 	// Current conversation state
 	private currentSessionId: string | null = null;
@@ -133,6 +156,8 @@ export class SemanticSearchView extends ItemView {
 		vault: Vault,
 		chatClient: ChatClient,
 		dataDir: string,
+		recentFiles: RecentFilesTracker,
+		questionBank: QuestionBankStore,
 	) {
 		super(leaf);
 		this.store = store;
@@ -140,6 +165,24 @@ export class SemanticSearchView extends ItemView {
 		this.vault = vault;
 		this.chatClient = chatClient;
 		this.history = new ChatHistoryStore(dataDir);
+		this.recentFiles = recentFiles;
+		this.questionBank = questionBank;
+		// Background refill: BEFORE the bank runs dry (low-water mark), ask
+		// the chat model for a fresh batch — fire-and-forget, invisible to the
+		// UI. Skips while an immediate generation is already in flight.
+		this.questionBank.onRefillNeeded = async () => {
+			if (!this.chatClient.isConfigured()) return;
+			if (this.welcomeGenController) return; // immediate gen running
+			try {
+				const titles = this.recentFiles.getRecentNames(15);
+				const generated = await this.chatClient.generateQuestions(titles);
+				if (generated.length > 0) {
+					this.questionBank.refill(generated);
+				}
+			} catch (e) {
+				console.warn("[Semlink] question bank refill failed:", e);
+			}
+		};
 	}
 
 	getViewType(): string {
@@ -201,6 +244,11 @@ export class SemanticSearchView extends ItemView {
 			this.messagesEl.empty();
 			this.statusEl.textContent = "";
 			this.inputEl.empty();
+			// A new session is a fresh home-screen visit — draw again from the
+			// question bank (and drop any in-flight generation).
+			this.welcomeQuestions = [];
+			this.welcomeGenController?.abort();
+			this.welcomeGenController = null;
 			this.renderWelcome();
 			// Empty area cannot hide a first question — drop the subtitle row.
 			this.updateCompactHeader();
@@ -233,6 +281,9 @@ export class SemanticSearchView extends ItemView {
 		// ── Conversation area (middle, scrollable) ──
 		this.statusEl = contentEl.createDiv({ cls: "semlink-search-status" });
 		this.messagesEl = contentEl.createDiv({ cls: "semlink-search-messages" });
+		// A fresh open of the home screen draws a new batch from the question
+		// bank ("每次打开首页消耗 3 个问题").
+		this.welcomeQuestions = [];
 		this.renderWelcome();
 
 		// Show the subtitle row once the first question hides under the header.
@@ -478,6 +529,9 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	protected async onClose(): Promise<void> {
+		// Stop any in-flight welcome-question generation.
+		this.welcomeGenController?.abort();
+		this.welcomeGenController = null;
 		if (this.tooltipEl) {
 			this.tooltipEl.remove();
 			this.tooltipEl = null;
@@ -1386,10 +1440,95 @@ export class SemanticSearchView extends ItemView {
 			welcome.createDiv({ cls: "semlink-search-welcome-sub", text: lines[1] });
 		}
 
-		// Clickable prompt cards — with a note open they follow that document
-		// (summarize / related / recall); otherwise three random examples.
-		// Each card leads with an emoji badge, then the prompt text.
+		// Clickable prompt cards: by default the chat model suggests questions
+		// based on recently touched notes, served from a persistent question
+		// bank ("每次打开首页消耗 3 个问题"; the bank silently refills in the
+		// background BEFORE it runs dry, so the LLM is barely noticeable).
+		// Falls back to static example prompts when no chat model is
+		// configured or generation fails.
 		const sugRow = welcome.createDiv({ cls: "semlink-search-welcome-sugs" });
+		if (this.welcomeQuestions.length === 3) {
+			// A previous render already drew from the bank (e.g. file-open or
+			// time-slot re-render) — reuse those questions instead of burning
+			// more of the bank.
+			this.renderQuestionCards(sugRow, this.welcomeQuestions);
+		} else {
+			void this.renderWelcomeCards(welcome, sugRow);
+		}
+
+		// Index stats cards (best-effort; never fails the welcome screen).
+		void this.renderWelcomeStats(welcome);
+
+		this.updateHomeIconVisibility();
+	}
+
+	/** Fill the welcome prompt cards from the question bank. When the bank is
+	 *  empty (first run / after a failed refill) the static prompts render
+	 *  IMMEDIATELY — no spinners — while a background generation tops the
+	 *  bank up; if this render is still current, the cards silently swap to
+	 *  the AI questions once they arrive. Never fails the welcome screen. */
+	private async renderWelcomeCards(welcome: HTMLElement, sugRow: HTMLElement): Promise<void> {
+		// Supersede any earlier in-flight generation (new session / re-open).
+		const token = ++this.welcomeGenToken;
+		this.welcomeGenController?.abort();
+		this.welcomeGenController = null;
+
+		const taken = this.questionBank.take(3);
+		if (taken.questions.length === 3) {
+			this.welcomeQuestions = taken.questions;
+			this.renderQuestionCards(sugRow, this.welcomeQuestions);
+			return;
+		}
+
+		// Bank empty — static prompts now, AI questions as soon as they exist.
+		this.welcomeQuestions = [];
+		this.renderFallbackCards(sugRow);
+		if (!this.chatClient.isConfigured()) return;
+		this.welcomeGenController = new AbortController();
+		try {
+			const generated = await this.chatClient.generateQuestions(
+				this.recentFiles.getRecentNames(15),
+				this.welcomeGenController.signal,
+			);
+			if (generated.length > 0) {
+				this.questionBank.refill(generated);
+				// Silent swap: only if this render is still the current one.
+				if (token === this.welcomeGenToken && welcome.isConnected) {
+					this.welcomeQuestions = generated.slice(0, 3);
+					this.welcomeBatchIndex++;
+					sugRow.empty();
+					this.renderQuestionCards(sugRow, this.welcomeQuestions);
+				}
+			}
+		} catch (e) {
+			// Generation hiccup — static prompts stay; the bank refills on a
+			// later take() (low-water mark).
+			console.warn("[Semlink] welcome question generation failed:", e);
+		} finally {
+			this.welcomeGenController = null;
+		}
+	}
+
+	/** Render the given questions as clickable prompt cards, each with a
+	 *  rotating emoji badge. */
+	private renderQuestionCards(sugRow: HTMLElement, questions: string[]): void {
+		questions.forEach((text, i) => {
+			const el = sugRow.createDiv({ cls: "semlink-search-welcome-sug" });
+			const icon = QUESTION_ICON_POOL[(this.welcomeBatchIndex + i) % QUESTION_ICON_POOL.length];
+			el.createSpan({ cls: "semlink-search-welcome-sug-icon", text: icon });
+			el.createSpan({ cls: "semlink-search-welcome-sug-text", text });
+			el.addEventListener("click", () => {
+				// A run is already in flight — don't start a second one.
+				if (this.isGenerating) return;
+				this.setInputWithWikilinks(text);
+				void this.runSearch();
+			});
+		});
+	}
+
+	/** Static fallback cards when AI generation is unavailable: follow the
+	 *  active document when one is open, otherwise three random examples. */
+	private renderFallbackCards(sugRow: HTMLElement): void {
 		const activeFile = this.app.workspace.getActiveFile();
 		let cards: Array<{ text: string; icon: string }>;
 		if (activeFile) {
@@ -1417,11 +1556,6 @@ export class SemanticSearchView extends ItemView {
 				void this.runSearch();
 			});
 		}
-
-		// Index stats cards (best-effort; never fails the welcome screen).
-		void this.renderWelcomeStats(welcome);
-
-		this.updateHomeIconVisibility();
 	}
 
 	/** Best-effort welcome extras: index stats as a small muted line.
