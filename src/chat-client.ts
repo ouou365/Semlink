@@ -187,6 +187,7 @@ export class ChatClient {
 			"你是 Semlink 的笔记问答助手。回答步骤：① 先思考用户的问题，用简短文字写出你的分析并形成初步结论（这段分析会展示给用户，请写清楚但不要太长）；② 只有发现信息不足时才调用工具补充（search_notes / get_note / get_section / grep_notes 等），不要一上来就盲目调用工具；③ 信息足够后立即给出最终回答，不要反复调用工具。" +
 			"注意：初始检索提供的是笔记片段（截断预览），可能不完整。对于穷举性、准确性要求高的问题（如「包含哪些部分」「有哪些功能」），请调用 get_note 读取相关笔记的完整内容验证后再给出最终回答。" +
 			"对于「列出/找到所有提到某关键词的笔记」这类问题，grep_notes 一次调用即可完成：totalFiles 是匹配总数，paths 字段就是完整文件清单（completeList 为 true 时），直接列出即可，不要再次调用工具、不要用更大 limit 或不同措辞重复检索。" +
+			"初始检索片段仅供参考，可能无法覆盖所有情况。当问题明显属于以下类型时，请直接调用对应工具，不要依赖初始检索片段：涉及「最近/最新/何时记录/最近修改」等时间判断的问题用 list_indexed_detailed（已按修改时间倒序，取前几条即可）；需要全库概览或列举笔记用 list_indexed；精确关键词、编号、日期、代码片段用 grep_notes。" +
 			depthHint +
 			"请勿编造笔记中不存在的信息。回答使用与问题相同的语言。" +
 			"\n\n以下是初始检索到的相关笔记内容：\n" + context;
@@ -468,7 +469,7 @@ export class ChatClient {
 				signal,
 			);
 			onRoundSuccess?.();
-			if (analysisStream.usageTokens) usageTokens = analysisStream.usageTokens;
+			if (analysisStream.usageTokens) usageTokens = Math.max(usageTokens, analysisStream.usageTokens);
 			cacheHits.push(...analysisStream.cacheHits);
 			analysis = analysisStream.content?.trim();
 			// Strip any echoed instruction labels (e.g. "（分析阶段）初步结论：").
@@ -520,7 +521,7 @@ export class ChatClient {
 				signal,
 			);
 			onRoundSuccess?.();
-			if (stream.usageTokens) usageTokens = stream.usageTokens;
+			if (stream.usageTokens) usageTokens = Math.max(usageTokens, stream.usageTokens);
 			cacheHits.push(...stream.cacheHits);
 			if (stream.content) lastText = stream.content;
 
@@ -775,7 +776,7 @@ export class ChatClient {
 				stream: true,
 			}, signal);
 			onRoundSuccess?.();
-			if (analysisStream.usageTokens) usageTokens = analysisStream.usageTokens;
+			if (analysisStream.usageTokens) usageTokens = Math.max(usageTokens, analysisStream.usageTokens);
 			cacheHits.push(...analysisStream.cacheHits);
 			analysis = (analysisStream.contentBlocks || [])
 				.filter((b: any) => b?.type === "text")
@@ -826,7 +827,7 @@ export class ChatClient {
 				signal,
 			);
 			onRoundSuccess?.();
-			if (stream.usageTokens) usageTokens = stream.usageTokens;
+			if (stream.usageTokens) usageTokens = Math.max(usageTokens, stream.usageTokens);
 			cacheHits.push(...stream.cacheHits);
 
 			if (stream.stopReason !== "tool_use") {
@@ -970,7 +971,12 @@ export class ChatClient {
 			const type = json?.type;
 			if (type === "message_start") {
 				const u = json?.message?.usage;
-				if (typeof u?.input_tokens === "number") usageTokens = u.input_tokens;
+				if (typeof u?.input_tokens === "number") {
+					// Anthropic's input_tokens EXCLUDES cached tokens — add
+					// cache reads/creations back so the reported usage is the
+					// true request size and never drops as the cache warms up.
+					usageTokens = u.input_tokens + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+				}
 				if (typeof u?.cache_read_input_tokens === "number") {
 					const hit = u.cache_read_input_tokens || 0;
 					const total = (u.input_tokens || 0) + hit + (u.cache_creation_input_tokens || 0);

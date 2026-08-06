@@ -229,6 +229,11 @@ export default class SmartVaultPlugin extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 		setLang(this.settings.language);
+		// Re-render the search view's language-dependent UI (welcome screen,
+		// input placeholder, icon tooltips) right away.
+		for (const leaf of this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)) {
+			(leaf.view as SemanticSearchView).refreshLanguage?.();
+		}
 		this.client?.updateSettings(this.settings);
 		this.chatClient?.updateSettings(this.settings);
 		this.scheduler?.updateSettings(this.settings);

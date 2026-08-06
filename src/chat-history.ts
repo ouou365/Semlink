@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 
 /** Maximum number of sessions to keep on disk. */
-const MAX_SESSIONS = 50;
+const MAX_SESSIONS = 500;
 
 export class ChatHistoryStore {
 	private filePath: string;

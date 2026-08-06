@@ -528,16 +528,7 @@ export class DbEngine {
 		const numVectors = this.allVectorIds.length;
 
 		// Normalize query vector
-		const query = new Float32Array(dim);
-		let queryNorm = 0;
-		for (let i = 0; i < Math.min(queryEmbedding.length, dim); i++) {
-			query[i] = queryEmbedding[i];
-			queryNorm += query[i] * query[i];
-		}
-		queryNorm = Math.sqrt(queryNorm);
-		if (queryNorm > 0) {
-			for (let i = 0; i < dim; i++) query[i] /= queryNorm;
-		}
+		const query = this.normalizeQuery(queryEmbedding);
 
 		// Compute cosine similarities in batches to avoid blocking too long
 		const BATCH = 10000;
@@ -585,6 +576,63 @@ export class DbEngine {
 		}
 
 		return results;
+	}
+
+	/** Normalized query vector (unit length) for cosine similarity. */
+	private normalizeQuery(queryEmbedding: number[]): Float32Array {
+		const dim = EMBEDDING_DIM;
+		const query = new Float32Array(dim);
+		let queryNorm = 0;
+		for (let i = 0; i < Math.min(queryEmbedding.length, dim); i++) {
+			query[i] = queryEmbedding[i];
+			queryNorm += query[i] * query[i];
+		}
+		queryNorm = Math.sqrt(queryNorm);
+		if (queryNorm > 0) {
+			for (let i = 0; i < dim; i++) query[i] /= queryNorm;
+		}
+		return query;
+	}
+
+	/** Total cached vector count (for the sync-fallback time-sliced scan). */
+	vectorCount(): number {
+		this.loadVectorCache();
+		return this.allVectorIds?.length ?? 0;
+	}
+
+	/**
+	 * Cosine scan over ONE index range. Used by the sync-fallback path to
+	 * time-slice a full scan so the main thread can breathe between slices
+	 * (the worker path uses the monolithic search() instead).
+	 */
+	searchSlice(
+		queryEmbedding: number[],
+		startIdx: number,
+		endIdx: number,
+		threshold = 0.3,
+	): Array<{ chunkId: string; score: number }> {
+		this.loadVectorCache();
+		if (!this.allVectors || !this.allVectorIds) return [];
+
+		const dim = EMBEDDING_DIM;
+		const query = this.normalizeQuery(queryEmbedding);
+		const out: Array<{ chunkId: string; score: number }> = [];
+
+		for (let i = startIdx; i < Math.min(endIdx, this.allVectorIds.length); i++) {
+			const offset = i * dim;
+			let dot = 0;
+			let normB = 0;
+			for (let j = 0; j < dim; j++) {
+				const v = this.allVectors[offset + j];
+				dot += query[j] * v;
+				normB += v * v;
+			}
+			const score = normB > 0 ? dot / Math.sqrt(normB) : 0;
+			if (score >= threshold) {
+				out.push({ chunkId: this.allVectorIds[i], score });
+			}
+		}
+		return out;
 	}
 
 	/**

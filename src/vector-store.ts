@@ -239,7 +239,48 @@ export class VectorStore {
 	async loadVectorCache(): Promise<void> { await this.call("loadVectorCache"); }
 
 	async search(queryEmbedding: number[], limit = 10, threshold = 0.3): Promise<SearchResult[]> {
+		if (this.fallback) {
+			// Sync mode: time-slice the scan so the main thread (and the UI's
+			// elapsed counter / dots) keeps breathing between slices.
+			return await this.searchSyncSliced(queryEmbedding, limit, threshold);
+		}
 		return await this.call("search", [queryEmbedding, limit, threshold]);
+	}
+
+	/** Sync-fallback search: scan in slices, yielding between them. */
+	private async searchSyncSliced(
+		queryEmbedding: number[],
+		limit: number,
+		threshold: number,
+	): Promise<SearchResult[]> {
+		const engine = this.engine!;
+		// ~4096 vectors × 300 dims ≈ 1.2M dot products per slice (~50-150ms).
+		const SLICE = 4096;
+		const hits: Array<{ chunkId: string; score: number }> = [];
+		const count = engine.vectorCount();
+		for (let start = 0; start < count; start += SLICE) {
+			hits.push(...engine.searchSlice(queryEmbedding, start, Math.min(start + SLICE, count), threshold));
+			// Yield to the main thread so timers/render stay responsive.
+			await new Promise((r) => setTimeout(r, 0));
+		}
+
+		hits.sort((a, b) => b.score - a.score);
+		const topK = hits.slice(0, limit);
+
+		const results: SearchResult[] = [];
+		for (const h of topK) {
+			const chunk = engine.getChunkById(h.chunkId);
+			if (chunk) {
+				results.push({
+					chunkId: chunk.id,
+					notePath: chunk.notePath,
+					heading: chunk.heading,
+					contentPreview: chunk.contentPreview,
+					score: Math.round(h.score * 10000) / 10000,
+				});
+			}
+		}
+		return results;
 	}
 
 	/** Fast substring search over indexed chunk content (for grep_notes). */

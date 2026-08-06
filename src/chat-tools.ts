@@ -92,11 +92,26 @@ export class SemlinkTools {
 			},
 			{
 				name: "list_indexed",
-				description: "列出已索引的笔记路径（可用前缀过滤）。",
+				description: "列出已索引的笔记路径（分页：limit 默认 200，用 offset 翻页；total 为总匹配数，truncated 表示是否还有更多）。",
 				parameters: {
 					type: "object",
 					properties: {
 						prefix: { type: "string", description: "路径前缀过滤（可选）" },
+						limit: { type: "number", description: "最多返回条数（默认 200）" },
+						offset: { type: "number", description: "跳过前 N 条（默认 0，用于翻页）" },
+					},
+				},
+			},
+			{
+				name: "list_indexed_detailed",
+				description:
+					"列出已索引的笔记，每条附带创建时间和修改时间（ISO 格式），按修改时间倒序排列（最新在前），分页：limit 默认 100，用 offset 翻页。适合回答「最近记了哪些笔记」「最近修改了哪些笔记」等时间判断问题：直接取前几条即可，不要再猜。",
+				parameters: {
+					type: "object",
+					properties: {
+						prefix: { type: "string", description: "路径前缀过滤（可选）" },
+						limit: { type: "number", description: "最多返回条数（默认 100）" },
+						offset: { type: "number", description: "跳过前 N 条（默认 0，用于翻页）" },
 					},
 				},
 			},
@@ -133,7 +148,9 @@ export class SemlinkTools {
 				case "get_similar_notes":
 					return await this.toolGetSimilarNotes(args.path, args.limit, args.threshold);
 				case "list_indexed":
-					return await this.toolListIndexed(args.prefix);
+					return await this.toolListIndexed(args.prefix, args.limit, args.offset);
+				case "list_indexed_detailed":
+					return await this.toolListIndexedDetailed(args.prefix, args.limit, args.offset);
 				case "grep_notes":
 					return await this.toolGrepNotes(args.pattern, args.regex, args.pathFilter, args.caseSensitive, args.limit, args.contextLines);
 				default:
@@ -214,11 +231,13 @@ export class SemlinkTools {
 		);
 	}
 
-	private async toolListIndexed(prefix?: string): Promise<string> {
+	private async toolListIndexed(prefix?: string, limit = 200, offset = 0): Promise<string> {
 		const paths = await this.store.getAllIndexedPaths();
 		const filtered = prefix
 			? Array.from(paths).filter((p) => p.startsWith(prefix))
 			: Array.from(paths);
+		const total = filtered.length;
+		const page = filtered.sort().slice(offset, offset + limit);
 		const stats = await this.store.getStats();
 
 		return this.truncate(
@@ -226,8 +245,55 @@ export class SemlinkTools {
 				{
 					totalNotes: stats.indexedNotes,
 					totalChunks: stats.activeChunks,
-					listed: filtered.length,
-					paths: filtered.sort(),
+					total,
+					listed: page.length,
+					truncated: total > offset + limit,
+					paths: page,
+				},
+				null,
+				2,
+			),
+		);
+	}
+
+	/** list_indexed_detailed: paths + created/modified times, newest first
+	 *  (so "最近记了哪些笔记" is answerable from the head of the list).
+	 *  Paginated so a large vault never produces an oversized response. */
+	private async toolListIndexedDetailed(prefix?: string, limit = 100, offset = 0): Promise<string> {
+		const paths = await this.store.getAllIndexedPaths();
+		const filtered = prefix
+			? Array.from(paths).filter((p) => p.startsWith(prefix))
+			: Array.from(paths);
+
+		const notes = filtered.map((p) => {
+			const file = this.vault.getAbstractFileByPath(p);
+			const stat = (file as any)?.stat;
+			return {
+				path: p,
+				created: stat ? new Date(stat.ctime).toISOString() : null,
+				modified: stat ? new Date(stat.mtime).toISOString() : null,
+			};
+		});
+		// Newest modification first; notes without a stat go last.
+		notes.sort((a, b) => {
+			if (!a.modified) return 1;
+			if (!b.modified) return -1;
+			return b.modified.localeCompare(a.modified);
+		});
+		const total = notes.length;
+		const page = notes.slice(offset, offset + limit);
+
+		const stats = await this.store.getStats();
+
+		return this.truncate(
+			JSON.stringify(
+				{
+					totalNotes: stats.indexedNotes,
+					totalChunks: stats.activeChunks,
+					total,
+					listed: page.length,
+					truncated: total > offset + limit,
+					notes: page,
 				},
 				null,
 				2,

@@ -24,6 +24,53 @@ export const SEARCH_VIEW_TYPE = "semlink-semantic-search";
 
 const DEFAULT_LIMIT = 10;
 const DEFAULT_THRESHOLD = 0.3;
+
+/** Static prompt pool shown on the welcome screen when no note is open —
+ *  three are picked at random each render (icon + i18n key). */
+const HOME_SUGGESTION_POOL: Array<{ key: string; icon: string }> = [
+	{ key: "searchSugRecent", icon: "🕘" },
+	{ key: "searchSugProject", icon: "📖" },
+	{ key: "searchSugKeyword", icon: "📝" },
+	{ key: "searchSugTodo", icon: "🔍" },
+	{ key: "searchSugWeekly", icon: "📆" },
+	{ key: "searchSugPm", icon: "💼" },
+	{ key: "searchSugS100", icon: "🧭" },
+];
+
+/** Icons for the dynamic cards (summarize / related / recall). */
+const HOME_DYNAMIC_ICONS = ["📝", "🔗", "📚"];
+
+/** Replace hyphens between word chars with non-breaking hyphens (U+2011)
+ *  so paths like "S-104_...md" never break right after the dash — they
+ *  wrap at "/" instead. Visually identical; safe for markdown syntax
+ *  (list dashes and "---" rules don't match the surrounding-word rule). */
+function protectHyphens(text: string): string {
+	return text.replace(/(?<=[\w\u4e00-\u9fff])\-(?=[\w\u4e00-\u9fff])/g, "\u2011");
+}
+
+/** Recency bucket for a session timestamp: today / yesterday / 3天前 /
+ *  lastWeek / lastMonth / earlier. */
+function historyBucket(ts: number, now: number): string {
+	const DAY = 86400000;
+	const startOfToday = new Date(now).setHours(0, 0, 0, 0);
+	if (ts >= startOfToday) return "today";
+	if (ts >= startOfToday - DAY) return "yesterday";
+	if (ts >= now - 3 * DAY) return "daysAgo";
+	if (ts >= now - 7 * DAY) return "lastWeek";
+	if (ts >= now - 30 * DAY) return "lastMonth";
+	return "earlier";
+}
+
+/** i18n keys for the history group headers. */
+const HISTORY_GROUP_KEYS: Record<string, string> = {
+	today: "historyGroupToday",
+	yesterday: "historyGroupYesterday",
+	daysAgo: "historyGroupDaysAgo",
+	lastWeek: "historyGroupLastWeek",
+	lastMonth: "historyGroupLastMonth",
+	earlier: "historyGroupEarlier",
+};
+
 /** Number of top results fed into the chat model as context. */
 const ANSWER_CONTEXT_SIZE = 5;
 
@@ -39,6 +86,7 @@ export class SemanticSearchView extends ItemView {
 	private messagesEl!: HTMLElement; // scrollable conversation area
 	private statusEl!: HTMLElement;   // transient status (no-api-key hint)
 	private headerEl!: HTMLElement;   // top header (brand + icon sides)
+	private menuBtnEl: HTMLElement | null = null; // history drawer toggle
 	private headerRightIconsEl!: HTMLElement; // right icon group (ring + settings)
 	private settingsBtnEl!: HTMLElement;      // settings gear (ring sits left of it)
 	private firstQuestionEl!: HTMLElement; // second row: first question in small text
@@ -120,6 +168,7 @@ export class SemanticSearchView extends ItemView {
 			cls: "semlink-search-icon-btn clickable-icon",
 			attr: { "aria-label": t("historyTitle"), title: t("historyTitle") },
 		});
+		this.menuBtnEl = menuBtn;
 		setIcon(menuBtn, "menu");
 		menuBtn.addEventListener("click", () => this.showHistoryDrawer());
 		const newChatBtn = leftIcons.createEl("button", {
@@ -188,6 +237,18 @@ export class SemanticSearchView extends ItemView {
 
 		// Show the subtitle row once the first question hides under the header.
 		this.registerDomEvent(this.messagesEl, "scroll", () => this.updateCompactHeader());
+
+		// The welcome cards follow the note open in the editor — re-render
+		// them when the active document changes (only while the welcome
+		// screen is showing). `file-open` fires only on actual opens/closes,
+		// not when focus merely moves between leaves.
+		this.registerEvent(
+			this.app.workspace.on("file-open", () => {
+				if (!this.messagesEl.querySelector(".semlink-search-welcome")) return;
+				this.messagesEl.querySelector(".semlink-search-welcome")?.remove();
+				this.renderWelcome();
+			}),
+		);
 
 		// The greeting is time-based — refresh it automatically when the time
 		// slot changes (e.g. 11:59 → 12:00), no reload needed. Only re-renders
@@ -516,6 +577,23 @@ export class SemanticSearchView extends ItemView {
 		// Append a loading placeholder for the assistant's reply.
 		const loadingEl = this.appendAssistantMessage(t("searchSearching"));
 
+		// "思考了 X 秒（搜索中）" ticking during the search phase (embed +
+		// vector search). The timer self-cleans once the placeholder line is
+		// emptied/removed by whichever branch takes over. thinkStart covers
+		// the WHOLE turn (search + chat), so the counter never resets.
+		const thinkStart = Date.now();
+		const initialLoading = loadingEl.querySelector(".semlink-msg-loading");
+		const searchTick = (): void => {
+			if (!initialLoading?.isConnected) {
+				window.clearInterval(searchAnim);
+				return;
+			}
+			const secs = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
+			initialLoading.textContent = t("searchSearchingElapsed").replace("{seconds}", String(secs));
+		};
+		const searchAnim = window.setInterval(searchTick, 350);
+		searchTick();
+
 		try {
 			// If the user dropped notes into the input, read THEM as the source
 			// of truth instead of running a vector search — the LLM should read
@@ -567,15 +645,28 @@ export class SemanticSearchView extends ItemView {
 					streamEl.style.display = "none";
 					streamEl.textContent = "";
 					answerDots = 0;
-					loadingTextSpan.textContent = label;
-					loadingDotsSpan.textContent = "";
 					stopAnswerAnim();
-					answerAnim = window.setInterval(() => {
-						// Dots cycle 3 → 2 → 1 → 3 …
-						answerDots = 4 - ((answerDots % 3) + 1);
-						loadingDotsSpan.textContent = ".".repeat(answerDots);
-					}, 350);
+				const render = (): void => {
+					// "思考了 X 秒（生成回答中…）" — elapsed since the model
+					// started, the phase in parentheses, dots INSIDE the parens.
+					const secs = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
+					loadingTextSpan.textContent = t("searchThinkingElapsed")
+						.replace("{seconds}", String(secs))
+						.replace("{status}", label);
+					loadingDotsSpan.textContent = ".".repeat(answerDots) + "）";
 				};
+					answerAnim = window.setInterval(() => {
+						// Dots cycle 3 → 2 → 1 → 3 …; the seconds tick along in
+						// the same beat.
+						answerDots = 4 - ((answerDots % 3) + 1);
+						render();
+					}, 350);
+					render();
+				};
+				// Keep the "思考了 X 秒（搜索中）" counter running through the
+				// first model round-trip; the round-start / tool / stream
+				// callbacks swap in their own status labels.
+				startDots(t("searchSearchingStatus"));
 				// Whether any tool has been called yet — decides whether the
 				// next round is "thinking" (模型思考中) or the final answer
 				// generation (生成回答中).
@@ -613,10 +704,16 @@ export class SemanticSearchView extends ItemView {
 				const liveSteps: ThinkingStep[] = [firstStep];
 				const liveBody = loadingEl.createDiv({ cls: "semlink-thinking-live-body" });
 				liveBody.style.display = "none";
+				// Steps rendered so far. New steps are APPENDED (never a full
+				// re-render) so an expanded tool call stays expanded while the
+				// model keeps producing steps.
+				let renderedSteps = 0;
 				const refreshLiveBody = (): void => {
 					if (liveBody.style.display === "none") return;
-					liveBody.empty();
-					this.renderThinkingSteps(liveBody, liveSteps);
+					while (renderedSteps < liveSteps.length) {
+						this.renderThinkingSteps(liveBody, [liveSteps[renderedSteps]]);
+						renderedSteps++;
+					}
 				};
 				loadingTextEl.addEventListener("click", () => {
 					if (liveBody.style.display === "none") {
@@ -632,11 +729,8 @@ export class SemanticSearchView extends ItemView {
 				const context = hasAttachments
 					? attachCtx
 					: this.buildContext(results.slice(0, ANSWER_CONTEXT_SIZE)) + attachCtx;
-				const fullContext = context;
-				// Declared outside the try so the failure path can report how
-				// long the (failed) attempt took.
-				const thinkStart = Date.now();
-				try {
+					const fullContext = context;
+					try {
 					// Prior turns go as a native message array (ZCode-style —
 					// chat-client expands them into the messages list and
 					// truncates with a sliding window when needed). The latest
@@ -694,7 +788,7 @@ export class SemanticSearchView extends ItemView {
 					// Render the answer as markdown (Obsidian's renderer handles
 					// headings, lists, code, links, etc.).
 					const answerEl = loadingEl.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
-					await MarkdownRenderer.render(this.app, result.answer, answerEl, "", this);
+					await MarkdownRenderer.render(this.app, protectHyphens(result.answer), answerEl, "", this);
 
 					// Reference sources BELOW the answer, collapsed by default.
 					// With attachments the sources ARE the dropped notes.
@@ -746,7 +840,10 @@ export class SemanticSearchView extends ItemView {
 				}
 			} else {
 				// No chat provider configured → show the plain result list.
+				// Empty the bubble first so the search-phase loading line (and
+				// its ticking counter) is removed.
 				this.statusEl.textContent = t("searchNoChatProvider");
+				loadingEl.empty();
 				this.renderResultsIn(loadingEl, results);
 			}
 		} catch (e) {
@@ -793,6 +890,8 @@ export class SemanticSearchView extends ItemView {
 
 	/** Render a collapsible "reference sources" section inside an assistant bubble. */
 	private renderSources(container: HTMLElement, results: SearchResult[], open: boolean): void {
+		// No sources → no card (e.g. the chat failed before any retrieval).
+		if (results.length === 0) return;
 		// The sources card is its own card OUTSIDE the assistant bubble (the
 		// bubble is the merged thinking+answer card) — append to the turn
 		// container so it sits below the bubble as an independent card.
@@ -1064,6 +1163,24 @@ export class SemanticSearchView extends ItemView {
 		this.inputEl.focus();
 	}
 
+	/** Fill the input with text, converting [[...]] tokens into clickable
+	 *  wikilink chips (used by the suggestion cards) — same path as typed
+	 *  or pasted wiki links, so they stay clickable in the sent bubble. */
+	private setInputWithWikilinks(text: string): void {
+		this.inputEl.empty();
+		this.inputEl.focus();
+		// Place the caret at the start so insertTextWithWikilinks has a range.
+		const sel = window.getSelection();
+		const range = document.createRange();
+		range.selectNodeContents(this.inputEl);
+		range.collapse(true);
+		sel?.removeAllRanges();
+		sel?.addRange(range);
+		this.insertTextWithWikilinks(text);
+		this.syncAttachmentsFromInput();
+		this.sanitizeInputLayout();
+	}
+
 	/** Resolve a bare/absolute path to an existing vault note, or null. */
 	private resolveNotePath(rawPath: string): string | null {
 		let p = rawPath.replace(/\\/g, "/");
@@ -1229,13 +1346,18 @@ export class SemanticSearchView extends ItemView {
 		return "";
 	}
 
+	/** JSON in tool-call pre blocks — hyphens protected from line breaks. */
 	private prettyJson(value: any): string {
-		if (typeof value === "string") return value;
-		try {
-			return JSON.stringify(value, null, 2);
-		} catch {
-			return String(value);
+		let out: string;
+		if (typeof value === "string") out = value;
+		else {
+			try {
+				out = JSON.stringify(value, null, 2);
+			} catch {
+				out = String(value);
+			}
 		}
+		return protectHyphens(out);
 	}
 
 	/**
@@ -1247,15 +1369,81 @@ export class SemanticSearchView extends ItemView {
 		const key = this.welcomeKeyForHour();
 		this.currentWelcomeKey = key;
 
-		// i18n string: "emoji line1\nline2" — split into a primary greeting
-		// (larger, bold) and a secondary care note (smaller, muted).
+		// i18n string: "emoji line1\nline2" — the leading emoji becomes a
+		// floating badge, the rest the primary greeting, then the care note.
 		const lines = t(key).split("\n");
 		const welcome = this.messagesEl.createDiv({ cls: "semlink-search-welcome" });
-		welcome.createDiv({ cls: "semlink-search-welcome-greeting", text: lines[0] || "" });
+
+		const firstLine = lines[0] || "";
+		const emojiMatch = firstLine.match(/^(\p{Extended_Pictographic})\s*(.*)$/u);
+		const emoji = emojiMatch ? emojiMatch[1] : "";
+		const greetingText = emojiMatch ? emojiMatch[2] : firstLine;
+		if (emoji) {
+			welcome.createDiv({ cls: "semlink-search-welcome-emoji", text: emoji });
+		}
+		welcome.createDiv({ cls: "semlink-search-welcome-greeting", text: greetingText });
 		if (lines[1]) {
 			welcome.createDiv({ cls: "semlink-search-welcome-sub", text: lines[1] });
 		}
+
+		// Clickable prompt cards — with a note open they follow that document
+		// (summarize / related / recall); otherwise three random examples.
+		// Each card leads with an emoji badge, then the prompt text.
+		const sugRow = welcome.createDiv({ cls: "semlink-search-welcome-sugs" });
+		const activeFile = this.app.workspace.getActiveFile();
+		let cards: Array<{ text: string; icon: string }>;
+		if (activeFile) {
+			const name = activeFile.basename;
+			cards = [
+				{ text: t("searchSugSummarize").replace("{note}", name), icon: HOME_DYNAMIC_ICONS[0] },
+				{ text: t("searchSugRelated").replace("{note}", name), icon: HOME_DYNAMIC_ICONS[1] },
+				{ text: t("searchSugAboutNote").replace("{note}", name), icon: HOME_DYNAMIC_ICONS[2] },
+			];
+		} else {
+			// Shuffle the pool and take three — every visit feels fresh.
+			cards = [...HOME_SUGGESTION_POOL]
+				.sort(() => Math.random() - 0.5)
+				.slice(0, 3)
+				.map((p) => ({ text: t(p.key), icon: p.icon }));
+		}
+		for (const card of cards) {
+			const el = sugRow.createDiv({ cls: "semlink-search-welcome-sug" });
+			el.createSpan({ cls: "semlink-search-welcome-sug-icon", text: card.icon });
+			el.createSpan({ cls: "semlink-search-welcome-sug-text", text: card.text });
+			el.addEventListener("click", () => {
+				// A run is already in flight — don't start a second one.
+				if (this.isGenerating) return;
+				this.setInputWithWikilinks(card.text);
+				void this.runSearch();
+			});
+		}
+
+		// Index stats cards (best-effort; never fails the welcome screen).
+		void this.renderWelcomeStats(welcome);
+
 		this.updateHomeIconVisibility();
+	}
+
+	/** Best-effort welcome extras: index stats as a small muted line.
+	 *  Never fails the welcome. */
+	private async renderWelcomeStats(welcome: HTMLElement): Promise<void> {
+		let indexedNotes = 0;
+		let activeChunks = 0;
+		try {
+			const s = await this.store.getStats();
+			indexedNotes = s.indexedNotes;
+			activeChunks = s.activeChunks;
+		} catch {
+			// Index stats are cosmetic — ignore any failure.
+		}
+
+		// Small line: "已索引 N 篇笔记 · X 个片段".
+		welcome.createDiv({
+			cls: "semlink-search-welcome-stats",
+			text: t("searchWelcomeStats")
+				.replace("{notes}", indexedNotes.toLocaleString())
+				.replace("{chunks}", activeChunks.toLocaleString()),
+		});
 	}
 
 	/** Home icon is the "back to start" button — it only makes sense once a
@@ -1263,6 +1451,35 @@ export class SemanticSearchView extends ItemView {
 	private updateHomeIconVisibility(): void {
 		const onHome = !!this.messagesEl.querySelector(".semlink-search-welcome");
 		this.newChatBtnEl?.toggleClass("is-hidden", onHome);
+	}
+
+	/** Re-render language-dependent UI after a language switch (settings). */
+	refreshLanguage(): void {
+		// Input placeholder.
+		this.inputEl.setAttr("data-placeholder", t("searchPlaceholder"));
+		this.inputEl.setAttr("aria-label", t("searchPlaceholder"));
+		// Header icon tooltips.
+		if (this.menuBtnEl) {
+			this.menuBtnEl.setAttr("aria-label", t("historyTitle"));
+			this.menuBtnEl.setAttr("title", t("historyTitle"));
+		}
+		if (this.newChatBtnEl) {
+			this.newChatBtnEl.setAttr("aria-label", t("searchNewChat"));
+			this.newChatBtnEl.setAttr("title", t("searchNewChat"));
+		}
+		if (this.settingsBtnEl) {
+			this.settingsBtnEl.setAttr("aria-label", t("settingsTitle"));
+			this.settingsBtnEl.setAttr("title", t("settingsTitle"));
+		}
+		// State-dependent tooltips (expand/collapse, send/stop).
+		this.applyInputExpanded();
+		this.setSendButtonState(this.isGenerating ? "stop" : "idle");
+		// Re-render the welcome screen (greeting, suggestions, stats) in the
+		// new language when it's currently shown.
+		if (this.messagesEl.querySelector(".semlink-search-welcome")) {
+			this.messagesEl.querySelector(".semlink-search-welcome")?.remove();
+			this.renderWelcome();
+		}
 	}
 
 	/** Time-slot key of the greeting for the current hour. */
@@ -1395,7 +1612,7 @@ export class SemanticSearchView extends ItemView {
 					const thinking = (msg.thinking || []).map((s) => s as ThinkingStep);
 					if (thinking.length > 0) this.renderThinking(bubble, thinking, msg.elapsedSec || 0);
 					const answerEl = bubble.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
-					await MarkdownRenderer.render(this.app, msg.content, answerEl, "", this);
+					await MarkdownRenderer.render(this.app, protectHyphens(msg.content), answerEl, "", this);
 					if (msg.sources && msg.sources.length > 0) {
 						const usedSources = msg.sources.map((p) => ({ notePath: p, heading: "", contentPreview: "" }));
 						this.renderSources(bubble, usedSources as any, false);
@@ -1433,30 +1650,67 @@ export class SemanticSearchView extends ItemView {
 		const closeBtn = header.createEl("button", { cls: "semlink-search-icon-btn clickable-icon" });
 		setIcon(closeBtn, "x");
 		const list = drawer.createDiv({ cls: "semlink-history-list" });
-		if (sessions.length === 0) {
-			list.createDiv({ cls: "semlink-history-empty", text: t("historyEmpty") });
-		}
-		for (const session of this.history.list()) {
-			const item = list.createDiv({ cls: "semlink-history-item" });
-			const info = item.createDiv({ cls: "semlink-history-item-info" });
-			info.createDiv({ cls: "semlink-history-item-title", text: session.title });
-			const date = new Date(session.updatedAt);
-			const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-			info.createDiv({ cls: "semlink-history-item-meta", text: `${timeStr} · ${session.messages.length} ${t("historyMessages")}` });
-			// Delete button
-			const delBtn = item.createEl("button", { cls: "semlink-history-item-del clickable-icon" });
-			setIcon(delBtn, "trash");
-			delBtn.addEventListener("click", (e) => {
-				e.stopPropagation();
-				this.history.deleteSession(session.id);
-				void this.history.save();
-				item.remove();
-			});
-			item.addEventListener("click", () => {
-				this.closeHistoryDrawer(backdrop, drawer);
-				void this.loadSession(session);
-			});
-		}
+
+		// Paged, time-grouped list: by default only the last month of sessions
+		// is shown; "展示更多" reveals another PAGE at a time.
+		const all = this.history.list(); // newest first
+		const now = Date.now();
+		const MONTH_MS = 30 * 24 * 3600 * 1000;
+		const PAGE = 100;
+		let visibleCount = all.filter((s) => s.updatedAt >= now - MONTH_MS).length;
+		// No sessions in the month window but older ones exist → show one page
+		// so the list isn't empty (the "show more" button remains).
+		if (all.length > 0 && visibleCount === 0) visibleCount = Math.min(PAGE, all.length);
+
+		const renderList = (): void => {
+			list.empty();
+			if (all.length === 0) {
+				list.createDiv({ cls: "semlink-history-empty", text: t("historyEmpty") });
+				return;
+			}
+			// Group the visible window by recency bucket (today → earlier).
+			// Each group gets ONE container holding the items, so the left
+			// rule is a single continuous line per group (like tool-call).
+			let lastKey = "";
+			let groupEl: HTMLElement | null = null;
+			for (const session of all.slice(0, visibleCount)) {
+				const key = historyBucket(session.updatedAt, now);
+				if (key !== lastKey) {
+					list.createDiv({ cls: "semlink-history-group", text: t(HISTORY_GROUP_KEYS[key]) });
+					groupEl = list.createDiv({ cls: "semlink-history-group-items" });
+					lastKey = key;
+				}
+				const item = groupEl!.createDiv({ cls: "semlink-history-item" });
+				const info = item.createDiv({ cls: "semlink-history-item-info" });
+				info.createDiv({ cls: "semlink-history-item-title", text: session.title });
+				const date = new Date(session.updatedAt);
+				const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+				info.createDiv({ cls: "semlink-history-item-meta", text: `${timeStr} · ${session.messages.length} ${t("historyMessages")}` });
+				// Delete button
+				const delBtn = item.createEl("button", { cls: "semlink-history-item-del clickable-icon" });
+				setIcon(delBtn, "trash");
+				delBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					this.history.deleteSession(session.id);
+					void this.history.save();
+					item.remove();
+				});
+				item.addEventListener("click", () => {
+					this.closeHistoryDrawer(backdrop, drawer);
+					void this.loadSession(session);
+				});
+			}
+			// "展示更多" — another PAGE of older sessions.
+			if (visibleCount < all.length) {
+				const more = list.createDiv({ cls: "semlink-history-more", text: t("historyShowMore") });
+				more.addEventListener("click", () => {
+					visibleCount += PAGE;
+					renderList();
+				});
+			}
+		};
+		renderList();
+
 		// Animate in
 		requestAnimationFrame(() => {
 			drawer.addClass("semlink-history-drawer-open");
@@ -1553,7 +1807,25 @@ export class SemanticSearchView extends ItemView {
 			this.sanitizeBubbleContent(content);
 			bubble.appendChild(content);
 		} else {
-			bubble.textContent = text;
+			// Resolve [[...]] tokens into clickable wiki links at render time
+			// (plain-text queries / history without segments).
+			this.appendTextWithWikilinks(bubble, text);
+		}
+	}
+
+	/** Append text, resolving [[...]] tokens into clickable wikilink chips
+	 *  (unresolvable tokens stay as plain text). */
+	private appendTextWithWikilinks(container: HTMLElement, text: string): void {
+		for (const part of text.split(/(\[\[[^\]]*\]\])/g).filter((s) => s.length > 0)) {
+			const m = part.match(/^\[\[(.+?)\]\]$/);
+			if (m) {
+				const target = m[1].split("|")[0].trim();
+				const resolved = this.resolveNotePath(target);
+				if (resolved) container.appendChild(this.createWikilink(resolved));
+				else container.append(part);
+			} else {
+				container.append(part);
+			}
 		}
 	}
 

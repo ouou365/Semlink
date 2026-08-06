@@ -390,6 +390,42 @@
     font-size: 13px;
 }
 
+/* Time-group header (今天 / 昨天 / 3天前 …) inside the history list. */
+.semlink-history-group {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-faint);
+    padding: 10px 10px 2px;
+}
+
+/* "展示更多" pager at the bottom of the history list. */
+.semlink-history-more {
+    margin: 8px;
+    padding: 8px 10px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    border: 1px dashed var(--background-modifier-border);
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.semlink-history-more:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+/* One container per time group — the left rule is a single continuous
+   line per group (traceable top-to-bottom, like the tool-call rule). */
+.semlink-history-group-items {
+    display: flex;
+    flex-direction: column;
+    margin-left: 6px;
+    padding-left: 8px;
+    border-left: 2px solid var(--background-modifier-border);
+}
+
 .semlink-history-item {
     display: flex;
     align-items: center;
@@ -435,6 +471,13 @@
     color: var(--text-faint);
     cursor: pointer;
     flex-shrink: 0;
+    /* Only on hover — keeps the list clean at rest. */
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.semlink-history-item:hover .semlink-history-item-del {
+    opacity: 1;
 }
 
 .semlink-history-item-del:hover {
@@ -475,10 +518,22 @@
     gap: 16px;
     padding: 40px 20px;
     color: var(--text-muted);
+    animation: semlink-welcome-fade 0.3s ease;
 }
 
-.semlink-search-welcome-icon {
-    font-size: 64px;
+@keyframes semlink-welcome-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* The greeting emoji above the text (no background, no animation). */
+.semlink-search-welcome-emoji {
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
     line-height: 1;
 }
 
@@ -497,6 +552,58 @@
     color: var(--text-muted);
     max-width: 280px;
     line-height: 1.5;
+}
+
+/* Clickable example prompt cards — one click starts a search. */
+.semlink-search-welcome-sugs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    max-width: 280px;
+}
+
+.semlink-search-welcome-sug {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    background: var(--background-primary);
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    text-align: left;
+    transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+/* Leading emoji badge on each prompt card. */
+.semlink-search-welcome-sug-icon {
+    font-size: 16px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.semlink-search-welcome-sug-text {
+    /* Single line — overflow truncates with an ellipsis. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.semlink-search-welcome-sug:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+    transform: translateY(-1px);
+    border-color: var(--interactive-accent);
+}
+
+/* Index stats as a small muted line: "已索引 N 篇笔记 · X 个片段". */
+.semlink-search-welcome-stats {
+    font-size: 12px;
+    color: var(--text-faint);
+    margin-top: 2px;
 }
 
 .semlink-search-welcome-hint {
@@ -563,12 +670,14 @@
 
 .semlink-msg-loading {
     color: var(--text-muted);
-    font-style: italic;
     cursor: pointer;
     user-select: none;
     display: flex;
     align-items: center;
     gap: 6px;
+    /* Non-italic with a normal weight — plain status line, no pill. */
+    font-style: normal;
+    font-size: 14px;
 }
 
 /* Expand marker on the LEFT, same as .semlink-thinking-summary::before. */
@@ -582,22 +691,20 @@
 }
 
 .semlink-msg-loading-text {
-    font-style: italic;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    /* Room for the italic glyph overhang so the right edge isn't clipped. */
-    padding-right: 0.3em;
 }
 
-/* Fixed-width slot for the animated dots: growing dots never move the
-   marker (the text stays put while the dots pulse). Dots render upright
-   (not italic) so they never get clipped by the reserved width. */
+/* Fixed-width slot for the animated dots + closing paren: growing dots
+   never move the marker (the text stays put while the dots pulse). Dots
+   render upright (not italic) so they never get clipped by the reserved
+   width. Right-aligned so the "）" stays at a fixed position. */
 .semlink-msg-loading-dots {
     display: inline-block;
-    min-width: 1.5em;
-    text-align: left;
+    min-width: 2.4em;
+    text-align: right;
     flex-shrink: 0;
     font-style: normal;
     padding-right: 0.15em;
@@ -1008,7 +1115,7 @@
 .semlink-msg-answer.markdown-rendered ul,
 .semlink-msg-answer.markdown-rendered ol {
     margin: 0.4em 0;
-    padding-left: 1.5em;
+    padding-left: 0.5em;
 }
 
 .semlink-msg-answer.markdown-rendered code {
@@ -1202,7 +1309,7 @@
 
 .semlink-tool-call-pre {
     font-family: var(--font-monospace);
-    font-size: 14px;
+    font-size: 12px;
     line-height: 1.4;
     white-space: pre-wrap;
     word-break: break-word;
@@ -1223,9 +1330,8 @@
 /* Model thought block inside the thinking process */
 .semlink-thinking-thought {
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.4;
     color: var(--text-muted);
-    font-style: italic;
     white-space: pre-wrap;
     word-break: break-word;
     margin: 6px 0 0;
@@ -1238,6 +1344,7 @@
     align-items: center;
     gap: 8px;
     padding: 4px 8px;
+    min-height: 36px;
     border-radius: 4px;
     font-size: 14px;
     line-height: 1.4;
