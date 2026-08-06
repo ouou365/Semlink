@@ -1032,7 +1032,7 @@
 
 .semlink-search-sources-summary {
     cursor: pointer;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-muted);
     user-select: none;
@@ -1069,11 +1069,22 @@
 
 .semlink-thinking-summary {
     cursor: pointer;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-muted);
     user-select: none;
     list-style: none;
+}
+
+/* While the thinking panel is expanded, pin its header ("思考了 N 秒") to
+   the top of the scrollable conversation so it can be collapsed from
+   anywhere. Sticky headers stack: an expanded tool call's summary pins
+   right below this one (same background = seamless). */
+.semlink-thinking[open] > .semlink-thinking-summary {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f5f6f7;
 }
 
 .semlink-thinking-summary::-webkit-details-marker {
@@ -1094,13 +1105,14 @@
 .semlink-thinking-live-body {
     margin-top: -8px;
     padding: 0 8px;
-    border-radius: 8px;
-    font-size: 12px;
-    /* Live thinking preview also uses a white card; the top padding stays
-       0 so the loading line → first tool-call gap keeps its tuned 8px
-       (tool-call's own margin-top). */
-    background: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    font-size: 14px;
+    /* Same look as the finished thinking panel: gray #f5f6f7 card, no own
+       border — the live preview must not look different from the final
+       state. The top padding stays 0 so the loading line → first tool-call
+       gap keeps its tuned 8px (tool-call's own margin-top). */
+    background: #f5f6f7;
+    border: none;
 }
 
 .semlink-thinking-live-body .semlink-thinking-thought,
@@ -1136,7 +1148,7 @@
 
 .semlink-tool-call-summary {
     cursor: pointer;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 600;
     /* Quiet row, not a white bar: muted text on the gray panel, so the
        tools never compete with the answer (the "主"). */
@@ -1160,42 +1172,57 @@
     display: none;
 }
 
-.semlink-tool-call-summary::before {
-    content: "▸ ";
+/* While a tool call is EXPANDED, pin its header row to the top of the
+   scrollable conversation so it can be collapsed again from anywhere.
+   The background matches the thinking panel (#f5f6f7) so content passing
+   underneath stays hidden; the hover tint still gives feedback.
+   top: 20px keeps it BELOW the pinned thinking header ("思考了 N 秒"),
+   so the two sticky rows never overlap. */
+.semlink-tool-call[open] > .semlink-tool-call-summary {
+    position: sticky;
+    top: 20px;
+    z-index: 1;
+    background: #f5f6f7;
 }
 
-.semlink-tool-call[open] > .semlink-tool-call-summary::before {
-    content: "▾ ";
+.semlink-tool-call[open] > .semlink-tool-call-summary:hover {
+    /* Opaque tint: a translucent one would let the pinned thinking header
+       show through while hovering and distract. */
+    background: #e8e9ea;
 }
 
 .semlink-tool-call-label {
-    font-size: 11px;
+    font-size: 14px;
     color: var(--text-muted);
     margin: 4px 0 2px;
+    /* Align the label with the rule below it — the whole expanded block
+       sits indented under the summary for a clearer hierarchy. */
+    padding-left: 12px;
 }
 
 .semlink-tool-call-pre {
     font-family: var(--font-monospace);
-    font-size: 11px;
+    font-size: 14px;
     line-height: 1.4;
     white-space: pre-wrap;
     word-break: break-word;
     /* No max-height: content flows fully — per-block scrollbars would
        nest inside the thinking panel's own scrolling. */
-    margin: 0;
-    padding: 5px 8px;
-    /* Very subtle block on the gray panel — deliberately quiet so the
-       expanded content stays secondary to the answer. */
-    background: var(--background-modifier-hover);
+    margin: 0 0 0 12px;
+    padding: 5px 8px 5px 10px;
+    /* Left rule instead of a background block: request/response content
+       reads as an indented continuation of the tool row, not a card. */
+    background: transparent;
     border: none;
-    border-radius: 4px;
+    border-left: 2px solid var(--background-modifier-border);
+    border-radius: 0;
     color: var(--text-normal);
 }
 
 /* New conversation button (above the input) */
 /* Model thought block inside the thinking process */
 .semlink-thinking-thought {
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.5;
     color: var(--text-muted);
     font-style: italic;
@@ -1203,7 +1230,6 @@
     word-break: break-word;
     margin: 6px 0 0;
     padding: 4px 8px;
-    border-left: 2px solid var(--background-modifier-border);
 }
 
 /* One-line reference source rows */
@@ -1213,7 +1239,7 @@
     gap: 8px;
     padding: 4px 8px;
     border-radius: 4px;
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.4;
     cursor: pointer;
     /* No own box — text directly on the white panel (white only on the
@@ -1221,6 +1247,17 @@
     border: none;
     background: transparent;
     overflow: hidden;
+}
+
+/* Reference number column, paper-style: fixed width, right-aligned so
+   multi-digit indexes line up ("[10]" under "[1]"). */
+.semlink-search-source-index {
+    flex: 0 0 auto;
+    min-width: 26px;
+    text-align: right;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
 }
 
 .semlink-search-source-row:hover {
@@ -1239,7 +1276,7 @@
 
 .semlink-search-source-path {
     color: var(--text-faint);
-    font-size: 11px;
+    font-size: 14px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

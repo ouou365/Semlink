@@ -809,10 +809,11 @@ export class SemanticSearchView extends ItemView {
 		this.renderSourceRows(list, results);
 	}
 
-	/** One-line source rows (title + path), no similarity badge. */
+	/** One-line source rows (title + path), numbered like paper references. */
 	private renderSourceRows(container: HTMLElement, results: SearchResult[]): void {
-		for (const r of results) {
+		for (const [i, r] of results.entries()) {
 			const row = container.createDiv({ cls: "semlink-search-source-row" });
+			row.createSpan({ cls: "semlink-search-source-index", text: `[${i + 1}]` });
 			const title = r.heading || this.basename(r.notePath);
 			row.createSpan({ cls: "semlink-search-source-title", text: title });
 			row.createSpan({ cls: "semlink-search-source-path", text: r.notePath });
@@ -1663,11 +1664,19 @@ export class SemanticSearchView extends ItemView {
 			// Keep the subtitle in sync even when the compact state itself
 			// didn't flip (e.g. another session was loaded while scrolled
 			// down — the question text must follow the new session).
-			const text = this.firstQuestion;
+			const text = this.truncateSubtitle(this.firstQuestion);
 			if (this.firstQuestionEl.textContent !== text) {
 				this.firstQuestionEl.textContent = text;
 			}
 		}
+	}
+
+	/** Keep the subtitle to at most 20 characters, appending "..." when cut.
+	 *  Unicode-safe (emoji etc. are never split in half). */
+	private truncateSubtitle(text: string): string {
+		const chars = Array.from(text);
+		if (chars.length <= 20) return text;
+		return chars.slice(0, 20).join("") + "...";
 	}
 
 	/** Update the context-usage donut with the latest turn's token count. */
@@ -1794,9 +1803,9 @@ export class SemanticSearchView extends ItemView {
 		const m = Math.floor((s % 3600) / 60);
 		const sec = s % 60;
 		const parts: string[] = [];
-		if (h > 0) parts.push(`${h}小时`);
-		if (m > 0) parts.push(`${m}分`);
-		if (sec > 0 || parts.length === 0) parts.push(`${sec}秒`);
+		if (h > 0) parts.push(`${h} 小时`);
+		if (m > 0) parts.push(`${m} 分`);
+		if (sec > 0 || parts.length === 0) parts.push(`${sec} 秒`);
 		return parts.join("");
 	}
 
