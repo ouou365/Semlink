@@ -3,7 +3,7 @@
 	"name": "Semlink",
 	"version": "0.8.0",
 	"minAppVersion": "1.6.0",
-	"description": "AI assistant for Obsidian: drop PDF/Word/PPT for AI to process, chat with your notes, search semantically",
+	"description": "AI assistant for Obsidian: chat with your notes, drag in notes for Q&A, semantic search via MCP",
 	"author": "Ouzhongyuan",
 	"isDesktopOnly": true
 }
