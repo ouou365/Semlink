@@ -2,7 +2,7 @@
 // Semlink - Plugin Entry Point
 // ========================================
 
-import { Notice, Plugin, TFile, FileSystemAdapter, addIcon } from "obsidian";
+import { Notice, Plugin, TFile, FileSystemAdapter, WorkspaceSidedock, addIcon } from "obsidian";
 import { join } from "path";
 import { DEFAULT_SETTINGS, type SmartVaultSettings } from "./src/types";
 import { VectorStore } from "./src/vector-store";
@@ -424,8 +424,14 @@ export default class SmartVaultPlugin extends Plugin {
 			}
 		}
 		if (leaf) {
-			// revealLeaf is @since 1.7.2 (above our declared minAppVersion);
-			// setActiveLeaf (0.16.3+) keeps 1.6.0 compatibility.
+			// setActiveLeaf only focuses the leaf — it does NOT uncollapse a
+			// collapsed sidebar (revealLeaf does, but it's @since 1.7.2, above
+			// our declared minAppVersion). Expand the right dock explicitly so
+			// clicking the ribbon button always reveals the panel.
+			const rightDock = this.app.workspace.rightSplit;
+			if (rightDock instanceof WorkspaceSidedock && rightDock.collapsed) {
+				rightDock.expand();
+			}
 			workspace.setActiveLeaf(leaf, { focus: true });
 		}
 	}

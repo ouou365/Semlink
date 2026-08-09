@@ -104,10 +104,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			.setDesc(t("languageDesc"))
 			.addDropdown((dropdown) =>
 				dropdown
-					.addOptions({ "zh": "中文", "en": "English" })
+					.addOptions({ auto: t("langAuto"), zh: "中文", en: "English" })
 					.setValue(this.plugin.settings.language)
 					.onChange(async (value) => {
-						this.plugin.settings.language = value as "zh" | "en";
+						this.plugin.settings.language = value as "auto" | "zh" | "en";
 						await this.plugin.saveSettings();
 						this.display();
 					})

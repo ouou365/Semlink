@@ -59,7 +59,7 @@ export const DEFAULT_CHAT_PROVIDERS: ChatProvider[] = [
 
 /** Plugin settings persisted via Obsidian loadData/saveData */
 export interface SmartVaultSettings {
-	language: "zh" | "en";
+	language: "auto" | "zh" | "en";
 	provider: EmbeddingProvider;
 	siliconFlowApiKey: string;
 	huggingFaceApiKey: string;
@@ -81,7 +81,7 @@ export interface SmartVaultSettings {
 }
 
 export const DEFAULT_SETTINGS: SmartVaultSettings = {
-	language: "zh",
+	language: "auto",
 	provider: "siliconflow",
 	siliconFlowApiKey: "",
 	huggingFaceApiKey: "",

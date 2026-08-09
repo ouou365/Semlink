@@ -3,11 +3,20 @@
 // ========================================
 
 export type Lang = "zh" | "en";
+export type LangSetting = "auto" | Lang;
 
 let currentLang: Lang = "zh";
 
-export function setLang(lang: Lang) {
-	currentLang = lang;
+/** Obsidian stores its UI language in localStorage under "language"
+ *  (e.g. "zh-CN", "en-US", "de"). Any zh-* prefix maps to zh, everything
+ *  else falls back to English. */
+function detectObsidianLang(): Lang {
+	const appLang = (window.localStorage.getItem("language") || "").toLowerCase();
+	return appLang.startsWith("zh") ? "zh" : "en";
+}
+
+export function setLang(lang: LangSetting) {
+	currentLang = lang === "auto" ? detectObsidianLang() : lang;
 }
 
 export function getLang(): Lang {
@@ -51,6 +60,7 @@ const S: Strings = {
 	botDisconnected: { zh: "机器人已断开", en: "Bot disconnected" },
 	botPrereq: { zh: "流程：扫码创建应用（自动预置权限与 im.message.receive_v1 事件订阅）→ 在飞书里给机器人发送 /bind 验证码完成绑定，无需在开放平台后台手动配置", en: "Flow: scan to create the app (permissions + im.message.receive_v1 pre-applied) → send /bind <code> to the bot to finish. No manual Feishu admin config needed" },
 	language: { zh: "语言", en: "Language" },
+	langAuto: { zh: "跟随 Obsidian", en: "Follow Obsidian" },
 	languageDesc: { zh: "界面显示语言", en: "Interface language" },
 	provider: { zh: "嵌入服务", en: "Embedding Provider" },
 	providerDesc: { zh: "选择嵌入向量生成服务", en: "Choose embedding vector generation service" },
