@@ -1476,6 +1476,7 @@
 
 /* Context-usage tooltip */
 .semlink-context-tooltip {
+    position: fixed;
     z-index: 9999;
     width: 230px;
     padding: 10px 12px;
@@ -1541,6 +1542,7 @@
 
 /* Popup opens ABOVE the trigger (shared by the model switcher popup) */
 .semlink-search-depth-popup {
+    position: fixed;
     min-width: 96px;
     padding: 4px;
     border-radius: 6px;
@@ -1699,4 +1701,17 @@
 .smart-vault-settings .feishu-scan-box .feishu-scan-status {
     color: var(--text-muted);
     font-size: 13px;
+}
+
+/* ──── Lint-clean show/hide & temp-layer utilities ────
+   Elements are toggled via these classes instead of inline display/styles
+   (keeps the Obsidian no-static-styles-assignment lint happy). Declared at
+   the END of the file so the single-class specificity wins ties with the
+   base rules (e.g. .semlink-drag-overlay's display:flex). */
+.semlink-hidden { display: none; }
+
+.semlink-copy-layer {
+    position: fixed;
+    opacity: 0;
+    pointer-events: none;
 }

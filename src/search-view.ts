@@ -25,6 +25,15 @@ export const SEARCH_VIEW_TYPE = "semlink-semantic-search";
 const DEFAULT_LIMIT = 10;
 const DEFAULT_THRESHOLD = 0.3;
 
+/** Replace an element's contents with the given SVG markup. Uses the DOM
+ *  parser instead of innerHTML (keeps the Obsidian lint rules clean) and
+ *  yields the exact same element tree for the imported .svg assets. */
+function setSvgIcon(el: HTMLElement, svg: string): void {
+	el.empty();
+	const root = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
+	if (root && root.tagName !== "parsererror") el.appendChild(root);
+}
+
 /** Static prompt pool shown on the welcome screen — three are picked at
  *  random each render (icon + i18n key). */
 const HOME_SUGGESTION_POOL: Array<{ key: string; icon: string }> = [
@@ -193,9 +202,8 @@ export class SemanticSearchView extends ItemView {
 				"aria-hidden": "true",
 			},
 		});
-		homeSvg.innerHTML =
-			'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>' +
-			'<polyline points="9 22 9 12 15 12 15 22"/>';
+		homeSvg.createSvg("path", { attr: { d: "m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" } });
+		homeSvg.createSvg("polyline", { attr: { points: "9 22 9 12 15 12 15 22" } });
 		newChatBtn.addEventListener("click", () => {
 			this.startNewSession();
 			this.messagesEl.empty();
@@ -209,7 +217,7 @@ export class SemanticSearchView extends ItemView {
 		// Centered brand (logo + "Semlink" — always stays).
 		const brand = header.createDiv({ cls: "semlink-search-brand-group" });
 		const logoEl = brand.createDiv({ cls: "semlink-search-logo" });
-		logoEl.innerHTML = logoSvg;
+		setSvgIcon(logoEl, logoSvg);
 		brand.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
 		// Right icon group: context-usage ring + settings.
 		const rightIcons = header.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
@@ -299,9 +307,8 @@ export class SemanticSearchView extends ItemView {
 		// just the input) attaches them, with a guidance overlay shown while
 		// dragging. The overlay guides the user; the drop reuses the same
 		// handleFileDrop path (dedup makes double-handling safe).
-		this.dragOverlayEl = contentEl.createDiv({ cls: "semlink-drag-overlay" });
+		this.dragOverlayEl = contentEl.createDiv({ cls: "semlink-drag-overlay semlink-hidden" });
 		this.dragOverlayEl.createSpan({ text: t("dragOverlayHint") });
-		this.dragOverlayEl.style.display = "none";
 
 		let panelDragDepth = 0;
 		contentEl.addEventListener("dragover", (e) => {
@@ -313,13 +320,13 @@ export class SemanticSearchView extends ItemView {
 			e.preventDefault();
 			e.stopPropagation();
 			panelDragDepth++;
-			this.dragOverlayEl.style.display = "flex";
+			this.dragOverlayEl.removeClass("semlink-hidden");
 		});
 		contentEl.addEventListener("dragleave", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
 			panelDragDepth = Math.max(0, panelDragDepth - 1);
-			if (panelDragDepth === 0) this.dragOverlayEl.style.display = "none";
+			if (panelDragDepth === 0) this.dragOverlayEl.addClass("semlink-hidden");
 		});
 		// Capture-phase drop on document (Obsidian's own handlers would
 		// otherwise swallow it), scoped to this panel. The input-wrapper
@@ -334,7 +341,7 @@ export class SemanticSearchView extends ItemView {
 				e.preventDefault();
 				e.stopPropagation();
 				panelDragDepth = 0;
-				this.dragOverlayEl.style.display = "none";
+				this.dragOverlayEl.addClass("semlink-hidden");
 				void this.handleFileDrop(e);
 				this.inputEl.focus();
 			},
@@ -347,7 +354,7 @@ export class SemanticSearchView extends ItemView {
 			cls: "semlink-search-input-hint",
 			text: t("searchInputHint"),
 		});
-		this.inputHintEl.style.display = "none";
+		this.inputHintEl.addClass("semlink-hidden");
 		// Contenteditable input so dropped-note chips can mix INLINE with the
 		// typed text (a plain textarea can only hold text).
 		this.inputEl = inputRow.createDiv({
@@ -427,17 +434,15 @@ export class SemanticSearchView extends ItemView {
 			// when hovering the ring.
 			const usageEl = this.headerRightIconsEl.createDiv({ cls: "semlink-context-usage" });
 			const ringEl = usageEl.createDiv({ cls: "semlink-context-ring" });
-			ringEl.innerHTML =
-				'<svg viewBox="0 0 36 36">' +
-				'<circle class="ring-bg" cx="18" cy="18" r="15.9"></circle>' +
-				'<circle class="ring-fg" cx="18" cy="18" r="15.9"></circle>' +
-				"</svg>";
+			const ringSvg = ringEl.createSvg("svg", { attr: { viewBox: "0 0 36 36" } });
+			ringSvg.createSvg("circle", { cls: "ring-bg", attr: { cx: 18, cy: 18, r: 15.9 } });
+			ringSvg.createSvg("circle", { cls: "ring-fg", attr: { cx: 18, cy: 18, r: 15.9 } });
 			this.contextRingEl = ringEl;
 			this.contextPctEl = null;
 			this.contextUsageEl = usageEl;
 			// Hidden until the first message is sent (no context usage to show
 			// on an empty conversation).
-			usageEl.style.display = "none";
+			usageEl.addClass("semlink-hidden");
 			// Move the ring to the LEFT of the settings button.
 			if (this.settingsBtnEl) {
 				this.headerRightIconsEl.insertBefore(usageEl, this.settingsBtnEl);
@@ -464,7 +469,7 @@ export class SemanticSearchView extends ItemView {
 		const modelTrigger = modelEl.createSpan({ cls: "semlink-search-model-trigger" });
 		// LLM icon instead of the verbose "provider/model" text label.
 		this.modelNameEl = modelTrigger.createSpan({ cls: "semlink-search-model-name" });
-		this.modelNameEl.innerHTML = llmIconSvg;
+		setSvgIcon(this.modelNameEl, llmIconSvg);
 		this.modelTriggerEl = modelTrigger;
 		modelTrigger.addEventListener("click", (e) => {
 			e.stopPropagation();
@@ -480,7 +485,7 @@ export class SemanticSearchView extends ItemView {
 			attr: { "aria-label": t("searchExpandInput"), title: t("searchExpandInput") },
 		});
 		this.expandBtnEl = expandBtn;
-		expandBtn.innerHTML = expandIconSvg;
+		setSvgIcon(expandBtn, expandIconSvg);
 		expandBtn.addEventListener("click", () => {
 			this.inputExpanded = !this.inputExpanded;
 			this.applyInputExpanded();
@@ -546,9 +551,8 @@ export class SemanticSearchView extends ItemView {
 			const svg = btn.createSvg("svg", {
 				attr: { viewBox: "0 0 1040 1024", "aria-hidden": "true" },
 			});
-			svg.innerHTML =
-				'<path fill="currentColor" d="M512 64c60.5 0 119.2 11.8 174.4 35.2 53.3 22.6 101.3 54.9 142.4 96 41.2 41.2 73.5 89.1 96 142.4C948.2 392.8 960 451.5 960 512s-11.8 119.2-35.2 174.4c-22.6 53.3-54.9 101.3-96 142.4-41.2 41.2-89.1 73.5-142.4 96C631.2 948.2 572.5 960 512 960s-119.2-11.8-174.4-35.2c-53.3-22.6-101.3-54.9-142.4-96-41.2-41.2-73.5-89.1-96-142.4C75.8 631.2 64 572.5 64 512s11.8-119.2 35.2-174.4c22.6-53.3 54.9-101.3 96-142.4 41.2-41.2 89.1-73.5 142.4-96C392.8 75.8 451.5 64 512 64m0-64C229.2 0 0 229.2 0 512s229.2 512 512 512 512-229.2 512-512S794.8 0 512 0z"/>' +
-				'<path fill="currentColor" d="M716 304H308c-2.2 0-4 1.8-4 4v408c0 2.2 1.8 4 4 4h408c2.2 0 4-1.8 4-4V308c0-2.2-1.8-4-4-4z"/>';
+			svg.createSvg("path", { attr: { fill: "currentColor", d: "M512 64c60.5 0 119.2 11.8 174.4 35.2 53.3 22.6 101.3 54.9 142.4 96 41.2 41.2 73.5 89.1 96 142.4C948.2 392.8 960 451.5 960 512s-11.8 119.2-35.2 174.4c-22.6 53.3-54.9 101.3-96 142.4-41.2 41.2-89.1 73.5-142.4 96C631.2 948.2 572.5 960 512 960s-119.2-11.8-174.4-35.2c-53.3-22.6-101.3-54.9-142.4-96-41.2-41.2-73.5-89.1-96-142.4C75.8 631.2 64 572.5 64 512s11.8-119.2 35.2-174.4c22.6-53.3 54.9-101.3 96-142.4 41.2-41.2 89.1-73.5 142.4-96C392.8 75.8 451.5 64 512 64m0-64C229.2 0 0 229.2 0 512s229.2 512 512 512 512-229.2 512-512S794.8 0 512 0z" } });
+			svg.createSvg("path", { attr: { fill: "currentColor", d: "M716 304H308c-2.2 0-4 1.8-4 4v408c0 2.2 1.8 4 4 4h408c2.2 0 4-1.8 4-4V308c0-2.2-1.8-4-4-4z" } });
 			btn.setAttr("aria-label", t("searchStop"));
 			btn.setAttr("title", t("searchStop"));
 		}
@@ -558,10 +562,10 @@ export class SemanticSearchView extends ItemView {
 	private applyInputExpanded(): void {
 		this.inputEl.toggleClass("is-expanded", this.inputExpanded);
 		// The keyboard hint appears only in the tall editor.
-		if (this.inputHintEl) this.inputHintEl.style.display = this.inputExpanded ? "" : "none";
+		if (this.inputHintEl) this.inputHintEl.toggleClass("semlink-hidden", !this.inputExpanded);
 		const btn = this.expandBtnEl;
 		if (!btn) return;
-		btn.innerHTML = this.inputExpanded ? collapseIconSvg : expandIconSvg;
+		setSvgIcon(btn, this.inputExpanded ? collapseIconSvg : expandIconSvg);
 		const label = t(this.inputExpanded ? "searchCollapseInput" : "searchExpandInput");
 		btn.setAttr("aria-label", label);
 		btn.setAttr("title", label);
@@ -594,7 +598,7 @@ export class SemanticSearchView extends ItemView {
 		this.appendUserMessage(query, userContent);
 		await this.recordUserMessage(query, segments);
 		// First message sent → the context-usage ring becomes relevant.
-		if (this.contextUsageEl) this.contextUsageEl.style.display = "";
+		if (this.contextUsageEl) this.contextUsageEl.removeClass("semlink-hidden");
 		this.clearInputText();
 		// Sending restores the input to its compact height (expand icon back).
 		if (this.inputExpanded) {
@@ -658,8 +662,7 @@ export class SemanticSearchView extends ItemView {
 				const loadingTextEl = loadingEl.createDiv({ cls: "semlink-msg-loading" });
 				const loadingTextSpan = loadingTextEl.createSpan({ cls: "semlink-msg-loading-text", text: t("searchThinking") });
 				const loadingDotsSpan = loadingTextEl.createSpan({ cls: "semlink-msg-loading-dots" });
-				const streamEl = loadingEl.createDiv({ cls: "semlink-msg-stream" });
-				streamEl.style.display = "none";
+				const streamEl = loadingEl.createDiv({ cls: "semlink-msg-stream semlink-hidden" });
 
 				// Status indicator: the elapsed-seconds counter ticks along once
 				// per second (the phase label itself stays static — no dots).
@@ -671,8 +674,8 @@ export class SemanticSearchView extends ItemView {
 					}
 				};
 				const startDots = (label: string): void => {
-					loadingTextEl.style.display = "";
-					streamEl.style.display = "none";
+					loadingTextEl.removeClass("semlink-hidden");
+					streamEl.addClass("semlink-hidden");
 					streamEl.textContent = "";
 					stopAnswerAnim();
 					// Static status text — NO animated dots ("思考了 14 秒（生成
@@ -730,25 +733,25 @@ export class SemanticSearchView extends ItemView {
 				// the finished answer's thinking section will show.
 				const liveSteps: ThinkingStep[] = [firstStep];
 				const liveBody = loadingEl.createDiv({ cls: "semlink-thinking-live-body" });
-				liveBody.style.display = "none";
+				liveBody.addClass("semlink-hidden");
 				// Steps rendered so far. New steps are APPENDED (never a full
 				// re-render) so an expanded tool call stays expanded while the
 				// model keeps producing steps.
 				let renderedSteps = 0;
 				const refreshLiveBody = (): void => {
-					if (liveBody.style.display === "none") return;
+					if (liveBody.hasClass("semlink-hidden")) return;
 					while (renderedSteps < liveSteps.length) {
 						this.renderThinkingSteps(liveBody, [liveSteps[renderedSteps]]);
 						renderedSteps++;
 					}
 				};
 				loadingTextEl.addEventListener("click", () => {
-					if (liveBody.style.display === "none") {
-						liveBody.style.display = "";
+					if (liveBody.hasClass("semlink-hidden")) {
+						liveBody.removeClass("semlink-hidden");
 						refreshLiveBody();
 						loadingTextEl.addClass("is-open");
 					} else {
-						liveBody.style.display = "none";
+						liveBody.addClass("semlink-hidden");
 						loadingTextEl.removeClass("is-open");
 					}
 				});
@@ -776,8 +779,8 @@ export class SemanticSearchView extends ItemView {
 					(text) => {
 							// Answer streaming started.
 							stopAnswerAnim();
-							loadingTextEl.style.display = "none";
-							streamEl.style.display = "";
+							loadingTextEl.addClass("semlink-hidden");
+							streamEl.removeClass("semlink-hidden");
 							streamEl.textContent = text;
 						},
 						() => {
@@ -797,8 +800,8 @@ export class SemanticSearchView extends ItemView {
 							// Transient failure — show ZCode-style retry
 							// progress instead of a frozen status.
 							stopAnswerAnim();
-							loadingTextEl.style.display = "";
-							streamEl.style.display = "none";
+							loadingTextEl.removeClass("semlink-hidden");
+							streamEl.addClass("semlink-hidden");
 							loadingTextSpan.textContent = t("searchReconnecting")
 								.replace("{n}", String(attempt))
 								.replace("{total}", String(total));
@@ -1549,7 +1552,7 @@ export class SemanticSearchView extends ItemView {
 		// Clear the subtitle until a question is asked.
 		this.firstQuestion = "";
 		// No conversation → hide the context-usage ring again.
-		if (this.contextUsageEl) this.contextUsageEl.style.display = "none";
+		if (this.contextUsageEl) this.contextUsageEl.addClass("semlink-hidden");
 	}
 
 	/** Record a user question into the current session (creating one if needed). */
@@ -1634,7 +1637,7 @@ export class SemanticSearchView extends ItemView {
 		this.updateHomeIconVisibility();
 		// Restoring a conversation with content → show the context-usage ring.
 		if (this.contextUsageEl && session.messages.length > 0) {
-			this.contextUsageEl.style.display = "";
+			this.contextUsageEl.removeClass("semlink-hidden");
 		}
 		let lastUserQuery = "";
 		for (const msg of session.messages) {
@@ -1678,7 +1681,8 @@ export class SemanticSearchView extends ItemView {
 		const sessions = await this.history.load();
 		// Attach to the view's contentEl (not document.body) so the drawer is
 		// positioned relative to the search panel, not the whole Obsidian window.
-		this.contentEl.style.position = "relative";
+		// The view root's CSS already sets position: relative (anchors the
+		// full-panel drag overlay), nothing needed here.
 		// Backdrop
 		const backdrop = this.contentEl.createDiv({ cls: "semlink-history-backdrop" });
 		// Drawer panel
@@ -2019,19 +2023,16 @@ export class SemanticSearchView extends ItemView {
 		if (!this.contextRingEl) return;
 		// Lazily create the tooltip on document.body (see onOpen comment).
 		if (!this.tooltipEl) {
-			this.tooltipEl = document.body.createDiv({ cls: "semlink-context-tooltip" });
-			this.tooltipEl.style.position = "fixed";
+			this.tooltipEl = document.body.createDiv({ cls: "semlink-context-tooltip semlink-hidden" });
 			// Hovering the tooltip itself keeps it open (otherwise moving the
 			// mouse from the ring onto the tooltip hides it immediately).
 			this.tooltipEl.addEventListener("mouseenter", () => {
 				// Pointer arrived — cancel any pending hide (gap crossing).
 				if (this.tooltipHideTimer) window.clearTimeout(this.tooltipHideTimer);
 				this.tooltipHideTimer = null;
-				if (this.tooltipEl) this.tooltipEl.style.display = "block";
+				if (this.tooltipEl) this.tooltipEl.removeClass("semlink-hidden");
 			});
 			this.tooltipEl.addEventListener("mouseleave", () => this.hideContextTooltip());
-			this.tooltipEl.style.display = "none";
-			this.tooltipEl.style.zIndex = "9999";
 		}
 		const el = this.tooltipEl;
 		const bd = this.lastBreakdown;
@@ -2088,8 +2089,7 @@ export class SemanticSearchView extends ItemView {
 		const rect = this.contextRingEl.getBoundingClientRect();
 		el.style.left = Math.max(8, rect.left - el.offsetWidth + rect.width + 8) + "px";
 		el.style.top = rect.bottom + 8 + "px";
-		el.style.transform = "";
-		el.style.display = "block";
+		el.removeClass("semlink-hidden");
 
 		// Keep it inside the viewport.
 		const vw = window.innerWidth;
@@ -2125,7 +2125,7 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	private hideContextTooltip(): void {
-		if (this.tooltipEl) this.tooltipEl.style.display = "none";
+		if (this.tooltipEl) this.tooltipEl.addClass("semlink-hidden");
 	}
 
 	private categoryLabel(key: string): string {
@@ -2142,7 +2142,7 @@ export class SemanticSearchView extends ItemView {
 	// ──── Model switcher popup ────
 
 	private toggleModelPopup(): void {
-		if (this.modelPopupEl && this.modelPopupEl.style.display === "block") {
+		if (this.modelPopupEl && !this.modelPopupEl.hasClass("semlink-hidden")) {
 			this.hideModelPopup();
 		} else {
 			this.showModelPopup();
@@ -2154,10 +2154,7 @@ export class SemanticSearchView extends ItemView {
 		// Lazily create the popup on document.body so fixed positioning is
 		// not thrown off by transformed/clipping ancestors.
 		if (!this.modelPopupEl) {
-			this.modelPopupEl = document.body.createDiv({ cls: "semlink-search-depth-popup semlink-search-model-popup" });
-			this.modelPopupEl.style.position = "fixed";
-			this.modelPopupEl.style.display = "none";
-			this.modelPopupEl.style.zIndex = "9999";
+			this.modelPopupEl = document.body.createDiv({ cls: "semlink-search-depth-popup semlink-search-model-popup semlink-hidden" });
 		}
 		const popup = this.modelPopupEl;
 		popup.empty();
@@ -2184,7 +2181,7 @@ export class SemanticSearchView extends ItemView {
 		const rect = this.modelTriggerEl.getBoundingClientRect();
 		popup.style.left = rect.left + "px";
 		popup.style.bottom = (window.innerHeight - rect.top + 4) + "px";
-		popup.style.display = "block";
+		popup.removeClass("semlink-hidden");
 
 		// Keep it inside the viewport.
 		const vw = window.innerWidth;
@@ -2194,7 +2191,7 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	private hideModelPopup(): void {
-		if (this.modelPopupEl) this.modelPopupEl.style.display = "none";
+		if (this.modelPopupEl) this.modelPopupEl.addClass("semlink-hidden");
 	}
 
 	/** Refresh the model label and the context ring after switching. */
@@ -2202,7 +2199,7 @@ export class SemanticSearchView extends ItemView {
 		// The indicator is a static LLM icon — nothing to relabel, but keep
 		// the icon in sync in case the element was rebuilt.
 		if (this.modelNameEl) {
-			this.modelNameEl.innerHTML = llmIconSvg;
+			setSvgIcon(this.modelNameEl, llmIconSvg);
 		}
 		// The context window may differ across models — recompute the ring
 		// against the last turn's usage.
@@ -2218,8 +2215,7 @@ export class SemanticSearchView extends ItemView {
 		} catch {
 			const ta = document.createElement("textarea");
 			ta.value = text;
-			ta.style.position = "fixed";
-			ta.style.opacity = "0";
+			ta.className = "semlink-copy-layer";
 			document.body.appendChild(ta);
 			ta.select();
 			document.execCommand("copy");

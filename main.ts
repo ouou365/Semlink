@@ -424,7 +424,9 @@ export default class SmartVaultPlugin extends Plugin {
 			}
 		}
 		if (leaf) {
-			await workspace.revealLeaf(leaf);
+			// revealLeaf is @since 1.7.2 (above our declared minAppVersion);
+			// setActiveLeaf (0.16.3+) keeps 1.6.0 compatibility.
+			workspace.setActiveLeaf(leaf, { focus: true });
 		}
 	}
 

@@ -15,7 +15,7 @@ export function installFeishuWebSocket(): void {
 	g.__semlinkWsInstalled = true;
 
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		// eslint-disable-next-line @typescript-eslint/no-var-requires -- "ws" is an optional dependency; require() keeps it out of the bundle
 		const WS = require("ws");
 		g.WebSocket = WS;
 		return;
