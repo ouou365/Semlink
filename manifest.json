@@ -3,7 +3,7 @@
 	"name": "Semlink",
 	"version": "0.8.0",
 	"minAppVersion": "1.6.0",
-	"description": "Semantic search for Vault notes via MCP, enabling AI tools to search and read your notes.",
+	"description": "Semantic search for Obsidian Vault via MCP — AI clients can search, read, and organize your notes",
 	"author": "Ouzhongyuan",
 	"isDesktopOnly": true
 }
