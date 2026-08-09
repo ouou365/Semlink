@@ -218,6 +218,26 @@
     height: 100%;
     padding: 0;
     overflow: hidden;
+    /* Anchors the full-panel drag overlay. */
+    position: relative;
+}
+
+/* Full-panel drag guidance overlay: covers the whole view while a file is
+   dragged over it, prompting the user to drop and attach to the chat. */
+.semlink-drag-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--interactive-accent);
+    background: color-mix(in srgb, var(--background-primary) 72%, transparent);
+    border: 2px dashed var(--interactive-accent);
+    border-radius: 8px;
+    pointer-events: none;
 }
 
 /* Header (top) */
@@ -689,13 +709,11 @@
     font-size: 14px;
     /* Pin the live loading line ("思考了 X 秒（...）") to the top of the
        scrollable conversation so the status + elapsed time stay visible
-       while the answer is still being generated. Matches the sticky
-       behavior of the thinking and tool-call headers once finished.
-       top: 0 because the live preview isn't inside a #f5f6f7 panel yet. */
+       while the answer is still being generated. No background — the
+       thinking-in-progress line stays flat on the card. */
     position: sticky;
     top: 0;
     z-index: 1;
-    background: #f5f6f7;
 }
 
 /* Expand marker on the LEFT, same as .semlink-thinking-summary::before. */
@@ -708,22 +726,69 @@
     content: "▾ ";
 }
 
+/* When the live thinking preview is EXPANDED (shown), give the loading line
+   the same gray panel background as the preview below it — they read as one
+   connected block. Collapsed (thinking only) stays backgroundless. */
+.semlink-msg-loading.is-open {
+    background: #f5f6f7;
+    border-radius: 6px 6px 0 0;
+}
+
 .semlink-msg-loading-text {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* Shimmer: a vertical highlight band sweeps HORIZONTALLY through the
+       text (90° gradient = left-to-right band, background-position runs
+       along X). Narrow band (40%–60%), grayscale + theme-aware so the
+       text stays readable. */
+    background: linear-gradient(
+        90deg,
+        var(--text-muted) 0%,
+        var(--text-muted) 40%,
+        #b6bac1 50%,
+        var(--text-muted) 60%,
+        var(--text-muted) 100%
+    );
+    background-size: 240% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: semlink-shimmer 1.4s linear infinite;
 }
 
-/* The closing "）" — no reserved slot anymore: the animated dots were
-   removed, so the paren sits flush against the status text. The negative
-   margin cancels the container's gap:6px (which the dots used to need),
-   so "思考了7秒（搜索中）" shows no visible space. */
+/* Dark themes: a near-white highlight reads well on the dark panel. */
+.theme-dark .semlink-msg-loading-text {
+    background: linear-gradient(
+        90deg,
+        var(--text-muted) 0%,
+        var(--text-muted) 40%,
+        #f4f4f5 50%,
+        var(--text-muted) 60%,
+        var(--text-muted) 100%
+    );
+}
+
+@keyframes semlink-shimmer {
+    0% {
+        background-position: 100% 0;
+    }
+    100% {
+        background-position: -100% 0;
+    }
+}
+
+/* The closing "）" now lives inside the text span (so the shimmer covers
+   the whole line) — this span stays empty and is hidden entirely. */
+.semlink-msg-loading-dots:empty {
+    display: none;
+}
+
 .semlink-msg-loading-dots {
     display: inline-block;
     flex-shrink: 0;
     font-style: normal;
-    margin-left: -6px;
 }
 
 .semlink-msg-empty {

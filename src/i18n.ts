@@ -167,7 +167,7 @@ const S: Strings = {
 
 	// ──── Semantic Search View ────
 	searchViewTitle:   { zh: "语义搜索",          en: "Semantic Search" },
-	searchPlaceholder: { zh: "向我提问…",          en: "Ask me a question…" },
+	searchPlaceholder: { zh: "有问题尽管问，还能拖入文档让我帮你处理哦", en: "Ask me anything — or drop in documents for me to handle" },
 	searchButton:      { zh: "搜索",              en: "Search" },
 	searchSend:        { zh: "发送",              en: "Send" },
 	searchStop:        { zh: "停止生成",           en: "Stop" },
@@ -209,7 +209,7 @@ const S: Strings = {
 	searchSugReview:   { zh: "做近期知识积累复盘", en: "Review my recent knowledge accumulation" },
 	searchSugDuplicates:    { zh: "查找高度相似重复笔记", en: "Find highly similar duplicate notes" },
 	// ── Knowledge-base organization / management ──
-	searchSugMonthlyTpl:    { zh: "生成月度知识复盘模板", en: "Create a monthly review template" },
+	searchSugMonthlyTpl:    { zh: "生成月度知识复盘", en: "Create a monthly review" },
 	// Welcome index stats line.
 	searchWelcomeStats: { zh: "已索引 {notes} 篇笔记 · {chunks} 个片段", en: "{notes} notes · {chunks} chunks indexed" },
 	searchNoChatModel: { zh: "未配置对话模型",      en: "No chat model configured" },
@@ -260,6 +260,7 @@ const S: Strings = {
 	searchSources:     { zh: "参考来源",           en: "Sources" },
 	searchNoChatProvider: { zh: "未配置对话供应商，显示检索结果列表（可在 设置 → 对话 中配置）", en: "No chat provider configured — showing results list (configure one in Settings → Chat)" },
 	attachAdded: { zh: "已添加 {n} 个拖入的笔记", en: "Added {n} dropped note(s)" },
+	dragOverlayHint: { zh: "📎 松开以附加到对话", en: "📎 Drop to attach to the chat" },
 	searchRemoveAttachment: { zh: "移除附件", en: "Remove attachment" },
 	cmdOpenSearch:     { zh: "打开语义搜索侧边栏",  en: "Open Semantic Search sidebar" },
 

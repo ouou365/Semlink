@@ -120,6 +120,8 @@ export class SemanticSearchView extends ItemView {
 	// Dropped note attachments (vault-relative paths) rendered as inline chips
 	// mixed with the input text.
 	private attachments: string[] = [];
+	/** Full-panel drag guidance overlay (shown while dragging over the view). */
+	private dragOverlayEl!: HTMLElement;
 	/** basename → vault path cache for drop resolution (vault.getFiles() is
 	 * expensive on large vaults; build it once and reuse). */
 	private basenameCache: Map<string, string> | null = null;
@@ -290,6 +292,51 @@ export class SemanticSearchView extends ItemView {
 				dragDepth = 0;
 				wrapper.removeClass("semlink-attach-bar-drag");
 				void this.handleFileDrop(e);
+			},
+			true,
+		);
+		// WHOLE-PANEL drag & drop: dropping notes anywhere in the view (not
+		// just the input) attaches them, with a guidance overlay shown while
+		// dragging. The overlay guides the user; the drop reuses the same
+		// handleFileDrop path (dedup makes double-handling safe).
+		this.dragOverlayEl = contentEl.createDiv({ cls: "semlink-drag-overlay" });
+		this.dragOverlayEl.createSpan({ text: t("dragOverlayHint") });
+		this.dragOverlayEl.style.display = "none";
+
+		let panelDragDepth = 0;
+		contentEl.addEventListener("dragover", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+		});
+		contentEl.addEventListener("dragenter", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			panelDragDepth++;
+			this.dragOverlayEl.style.display = "flex";
+		});
+		contentEl.addEventListener("dragleave", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			panelDragDepth = Math.max(0, panelDragDepth - 1);
+			if (panelDragDepth === 0) this.dragOverlayEl.style.display = "none";
+		});
+		// Capture-phase drop on document (Obsidian's own handlers would
+		// otherwise swallow it), scoped to this panel. The input-wrapper
+		// handler above still runs first for its own zone; handleFileDrop is
+		// idempotent, so double delivery is harmless.
+		this.registerDomEvent(
+			document,
+			"drop",
+			(e) => {
+				const target = e.target;
+				if (!(target instanceof Element) || !target.closest(".semlink-search-view")) return;
+				e.preventDefault();
+				e.stopPropagation();
+				panelDragDepth = 0;
+				this.dragOverlayEl.style.display = "none";
+				void this.handleFileDrop(e);
+				this.inputEl.focus();
 			},
 			true,
 		);
@@ -633,10 +680,12 @@ export class SemanticSearchView extends ItemView {
 					// second.
 					const render = (): void => {
 						const secs = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
-						loadingTextSpan.textContent = t("searchThinkingElapsed")
-							.replace("{seconds}", String(secs))
-							.replace("{status}", label);
-						loadingDotsSpan.textContent = "）";
+						// Plain number ("1 秒", "10 秒") — no zero padding.
+						loadingTextSpan.textContent =
+							t("searchThinkingElapsed")
+								.replace("{seconds}", String(secs))
+								.replace("{status}", label) + "）";
+						loadingDotsSpan.textContent = "";
 					};
 					answerAnim = window.setInterval(render, 1000);
 					render();

@@ -20,10 +20,10 @@ Ask questions in natural language: Semlink retrieves the most relevant notes, fe
 
 - Click the Semlink icon in the left ribbon (or run **Semlink: Open Search**)
 - Type a question — the model first thinks, then calls tools if it needs more, then answers with sources below
-- **Drag & drop** notes into the input to attach them (`[[links]]` are supported inline)
+- **Drag & drop**: drop notes ANYWHERE in the panel — a guidance overlay appears while dragging — to attach them to the input (`[[links]]` supported inline)
 - **History**: every conversation is saved; open it from the menu button, first question shown as the header subtitle
 - **Model switcher**: pick any model from any configured provider; the context-usage ring and cache hit rate are shown next to it
-- **Home question cards**: clickable example prompts (60+), one of them always about the note you are currently reading
+- **Home question cards**: a curated pool of example prompts (recent notes / the "reading" topic / summarize the current note / knowledge review / duplicate notes / monthly review), three picked at random per visit
 
 ### Tools
 
