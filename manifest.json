@@ -1,9 +1,9 @@
 {
 	"id": "semlink",
 	"name": "Semlink",
-	"version": "0.8.1",
+	"version": "0.8.2",
 	"minAppVersion": "1.6.0",
-	"description": "AI assistant for Obsidian: chat with your notes, drag in notes for Q&A, semantic search via MCP",
+	"description": "AI assistant for your Vault: chat with your notes, drag in notes for Q&A, semantic search via MCP",
 	"author": "Ouzhongyuan",
 	"isDesktopOnly": true
 }
