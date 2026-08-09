@@ -3,7 +3,7 @@
 	"name": "Semlink",
 	"version": "0.8.0",
 	"minAppVersion": "1.6.0",
-	"description": "Semantic search for Obsidian Vault via MCP — AI clients can search, read, and organize your notes",
+	"description": "AI assistant for Obsidian: drop PDF/Word/PPT for AI to process, chat with your notes, search semantically",
 	"author": "Ouzhongyuan",
 	"isDesktopOnly": true
 }
