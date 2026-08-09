@@ -12,3 +12,4 @@ node_modules/
 
 # ZCode 内部工作文件
 .zcode/
+*.zip
