@@ -42,9 +42,9 @@ export class AddFeishuBotModal extends Modal {
 						new Notice(t("botVerifyFailed"));
 						return;
 					}
-					const ok = await verifyFeishuApp(appId, appSecret);
-					if (!ok) {
-						new Notice(t("botVerifyFailed"));
+					const result = await verifyFeishuApp(appId, appSecret);
+					if (!result.ok) {
+						new Notice(result.error ? `${t("botVerifyFailed")}（${result.error}）` : t("botVerifyFailed"));
 						return;
 					}
 					this.plugin.settings.feishuBots.push({

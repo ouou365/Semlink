@@ -90,6 +90,11 @@ export class FeishuBot {
 	/** Cap on how many turns we keep, to bound context size. */
 	private readonly MAX_HISTORY_TURNS = 10;
 	private started = false;
+	/** Pre-flight retry timer — a failed credential check (e.g. a one-off
+	 *  network blip) is retried automatically instead of leaving the bot
+	 *  stuck at "未连接" until a plugin reload. */
+	private retryTimer: number | null = null;
+	private readonly RETRY_INTERVAL_MS = 60 * 1000;
 
 	constructor(config: FeishuBotConfig, ask: FeishuAskHandler, onStateChange?: (config: FeishuBotConfig) => void) {
 		this.config = config;
@@ -115,14 +120,19 @@ export class FeishuBot {
 		// failure (code 10014 "app unauthorized", etc.). Fail fast with a clear
 		// lastError instead of letting the WS hang silently with no signal.
 		console.log("[Semlink] Feishu pre-flight: verifying app credentials…");
-		const ok = await verifyFeishuApp(this.config.appId, this.config.appSecret);
-		if (!ok) {
-			const msg = "凭据无效或应用未发布（tenant_access_token 获取失败）。请到飞书开放平台确认应用已发布生效。";
+		const result = await verifyFeishuApp(this.config.appId, this.config.appSecret);
+		if (!result.ok) {
+			const detail = result.error ? `（${result.error}）` : "";
+			const msg = `凭据无效或应用未发布：tenant_access_token 获取失败${detail}。请到飞书开放平台确认应用已发布生效。`;
 			console.error("[Semlink] Feishu pre-flight FAILED:", msg);
 			this.config.connected = false;
 			this.config.lastError = msg;
 			this.onStateChange?.(this.config);
 			this.started = false;
+			// A one-off network blip must not leave the bot stuck at "未连接"
+			// until the user reloads the plugin — retry periodically; once a
+			// retry passes, the WS connection continues as normal.
+			this.scheduleRetry();
 			return;
 		}
 		console.log("[Semlink] Feishu pre-flight OK, starting WS long connection…");
@@ -206,6 +216,10 @@ export class FeishuBot {
 	}
 
 	async stop(): Promise<void> {
+		if (this.retryTimer !== null) {
+			window.clearTimeout(this.retryTimer);
+			this.retryTimer = null;
+		}
 		if (this.livenessTimer !== null) {
 			window.clearTimeout(this.livenessTimer);
 			this.livenessTimer = null;
@@ -220,6 +234,20 @@ export class FeishuBot {
 		this.config.connected = false;
 		this.started = false;
 		this.onStateChange?.(this.config);
+	}
+
+	/** Retry the credential pre-flight after a failure (one timer at a time;
+	 *  start() itself is re-entrant since it resets `started` on failure). */
+	private scheduleRetry(): void {
+		if (this.retryTimer !== null) return;
+		this.retryTimer = window.setTimeout(() => {
+			this.retryTimer = null;
+			if (this.started) return;
+			console.log("[Semlink] Feishu pre-flight retry…");
+			void this.start().catch((e) => {
+				console.error("[Semlink] Feishu retry start failed:", e);
+			});
+		}, this.RETRY_INTERVAL_MS);
 	}
 
 	// ──── Message handling ────

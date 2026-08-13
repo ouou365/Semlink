@@ -485,7 +485,12 @@ export class DbEngine {
 		if (results.length === 0 || results[0].values.length === 0) {
 			this.allVectors = new Float32Array(0);
 			this.allVectorIds = [];
-			this.cacheLoaded = true;
+			// Do NOT set cacheLoaded here. This path runs when no vectors exist
+			// yet — often at startup, before indexing/embedding finishes. If we
+			// cached the empty state, every later search would run against an
+			// empty cache and silently return no results (even after vectors
+			// are written to the DB). Leaving cacheLoaded false lets the next
+			// search retry the load once vectors are available.
 			return;
 		}
 

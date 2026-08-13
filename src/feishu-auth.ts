@@ -218,11 +218,19 @@ export function startFeishuRegister(
 	return { promise, abort: () => controller.abort() };
 }
 
+/** Result of a credential probe: ok + the raw Feishu error (code/msg) when
+ *  the token request failed, so the UI can distinguish "bad secret" (10003)
+ *  from "app not published" / IP whitelist etc. */
+export interface FeishuAppVerifyResult {
+	ok: boolean;
+	error?: string;
+}
+
 /**
  * Validate an appId/appSecret pair by requesting a tenant_access_token.
  * The bot needs this credential to start its long connection.
  */
-export async function verifyFeishuApp(appId: string, appSecret: string): Promise<boolean> {
+export async function verifyFeishuApp(appId: string, appSecret: string): Promise<FeishuAppVerifyResult> {
 	try {
 		const resp = await requestUrl({
 			url: "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
@@ -232,8 +240,9 @@ export async function verifyFeishuApp(appId: string, appSecret: string): Promise
 			throw: false,
 		});
 		const data: any = typeof resp.json === "object" ? resp.json : {};
-		return !!data?.tenant_access_token;
-	} catch {
-		return false;
+		if (data?.tenant_access_token) return { ok: true };
+		return { ok: false, error: `code=${data?.code ?? "?"} msg=${data?.msg ?? "?"}` };
+	} catch (e) {
+		return { ok: false, error: e instanceof Error ? e.message : String(e) };
 	}
 }

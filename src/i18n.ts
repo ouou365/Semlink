@@ -222,6 +222,22 @@ const S: Strings = {
 	searchSugMonthlyTpl:    { zh: "生成月度知识复盘", en: "Create a monthly review" },
 	// Welcome index stats line.
 	searchWelcomeStats: { zh: "已索引 {notes} 篇笔记 · {chunks} 个片段", en: "{notes} notes · {chunks} chunks indexed" },
+	// Welcome "related notes" card: notes semantically similar to the active note.
+	searchRelatedTitle:      { zh: "相关笔记",                            en: "Related notes" },
+	searchRelatedSub:        { zh: "基于当前笔记《{name}》",               en: "Based on \"{name}\"" },
+	searchRelatedLoading:    { zh: "正在寻找相关笔记…",                    en: "Finding related notes…" },
+	searchRelatedEmpty:      { zh: "暂未发现相关笔记",                    en: "No related notes found" },
+	searchRelatedNotIndexed: { zh: "当前笔记尚未索引，索引完成后可查看",    en: "This note isn't indexed yet" },
+	// Semantic map (force-directed graph of related notes).
+	mapButtonTitle:   { zh: "语义地图",                         en: "Semantic Map" },
+	mapViewTitle:     { zh: "语义地图",                         en: "Semantic Map" },
+	relatedButtonTitle: { zh: "相关笔记",                       en: "Related notes" },
+	mapNoActiveNote:  { zh: "请先打开一篇笔记",                  en: "Open a note to start the map" },
+	mapNoApiKey:      { zh: "未配置 Embedding，无法生成地图",     en: "Configure an embedding key to build the map" },
+	mapNotIndexed:    { zh: "当前笔记尚未索引",                  en: "This note isn't indexed yet" },
+	mapClear:         { zh: "清空地图",                         en: "Clear map" },
+	mapEmpty:         { zh: "暂无相关笔记",                     en: "No related notes" },
+	mapNoVectors:     { zh: "向量索引尚未就绪，请等待索引完成后再试", en: "Vector index isn't ready yet — wait for indexing to finish" },
 	searchNoChatModel: { zh: "未配置对话模型",      en: "No chat model configured" },
 	searchCopy:        { zh: "复制",                en: "Copy" },
 	searchSave:        { zh: "保存",                en: "Save" },

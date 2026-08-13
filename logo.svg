@@ -1,0 +1,31 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Semlink">
+  <!-- 语义能量场（外层光晕） -->
+  <circle cx="512" cy="512" r="350" fill="currentColor" opacity="0.05"/>
+  <circle cx="512" cy="512" r="250" fill="currentColor" opacity="0.08"/>
+
+  <!-- 节点间连接网络（Link：菱形外环） -->
+  <path d="M512 232 L792 512 L512 792 L232 512 Z"
+        fill="none" stroke="currentColor" stroke-width="26"
+        stroke-linejoin="round" opacity="0.5"/>
+
+  <!-- 中心辐射连接（节点连向语义核心） -->
+  <g stroke="currentColor" stroke-width="34" stroke-linecap="round">
+    <line x1="512" y1="512" x2="512" y2="232"/>
+    <line x1="512" y1="512" x2="792" y2="512"/>
+    <line x1="512" y1="512" x2="512" y2="792"/>
+    <line x1="512" y1="512" x2="232" y2="512"/>
+  </g>
+
+  <!-- 外围节点（被连接的笔记 / 知识） -->
+  <g fill="currentColor">
+    <circle cx="512" cy="232" r="54"/>
+    <circle cx="792" cy="512" r="54"/>
+    <circle cx="512" cy="792" r="54"/>
+    <circle cx="232" cy="512" r="54"/>
+  </g>
+
+  <!-- 中心语义核心（发光球体，代表向量嵌入 / AI 语义中心） -->
+  <circle cx="512" cy="512" r="150" fill="currentColor" opacity="0.14"/>
+  <circle cx="512" cy="512" r="108" fill="currentColor" opacity="0.22"/>
+  <circle cx="512" cy="512" r="74" fill="currentColor"/>
+</svg>

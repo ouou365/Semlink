@@ -635,6 +635,291 @@
     margin-top: 2px;
 }
 
+/* "Related notes" card: notes semantically similar to the active note. */
+.semlink-search-welcome-related {
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: left;
+}
+
+.semlink-search-welcome-related-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.semlink-search-welcome-related-icon svg {
+    width: 14px;
+    height: 14px;
+    color: var(--interactive-accent);
+}
+
+.semlink-search-welcome-related-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.semlink-search-welcome-related-sub {
+    font-size: 11px;
+    color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.semlink-search-welcome-related-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.semlink-search-welcome-related-loading,
+.semlink-search-welcome-related-empty {
+    font-size: 12px;
+    color: var(--text-faint);
+    padding: 6px 4px;
+}
+
+.semlink-search-welcome-related-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 8px 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    background: var(--background-primary);
+    cursor: pointer;
+    transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.semlink-search-welcome-related-item-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.semlink-search-welcome-related-item-path {
+    font-size: 11px;
+    color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.semlink-search-welcome-related-item:hover {
+    background: var(--background-modifier-hover);
+    transform: translateY(-1px);
+    border-color: var(--interactive-accent);
+}
+
+/* ────────────────────────────────────────────────────────────
+   Semantic Map: toolbar, brand title line, graph canvas, map mode
+   ──────────────────────────────────────────────────────────── */
+
+/* Function-button toolbar, sits above the input inside the footer. */
+.semlink-search-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.semlink-search-toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.semlink-search-toolbar-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.semlink-search-toolbar-btn.is-active {
+    background: var(--background-modifier-hover);
+    color: var(--interactive-accent);
+}
+
+/* Clear button: map-only, pushed to the far right; hidden elsewhere. */
+.semlink-search-toolbar-btn-right {
+    margin-left: auto;
+}
+
+.semlink-search-toolbar-btn.is-hidden {
+    display: none;
+}
+
+.semlink-search-toolbar-btn-icon svg {
+    width: 15px;
+    height: 15px;
+}
+
+.semlink-search-toolbar-btn-text {
+    line-height: 1;
+    white-space: nowrap;
+}
+
+/* Brand second line: the current view name (e.g. "语义地图"). Collapses to
+   nothing when empty (chat mode) via :empty, so it never wastes vertical
+   space outside map mode. */
+.semlink-search-view-title {
+    flex: 1 1 100%;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.semlink-search-view-title:empty {
+    display: none;
+}
+
+/* Graph canvas container: fills the middle area in map mode. */
+.semlink-search-graph {
+    flex: 1 1 0;
+    position: relative;
+    display: none;
+    min-height: 0;
+}
+
+.semlink-search-graph canvas {
+    display: block;
+}
+
+/* Centered placeholder when the map has nothing to show yet. */
+.semlink-search-graph-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-muted);
+    padding: 20px;
+    pointer-events: none;
+}
+
+/* Map mode: show the graph canvas + title, hide the chat surfaces + input. */
+.is-map-mode .semlink-search-graph {
+    display: block;
+}
+
+.is-map-mode .semlink-search-messages,
+.is-map-mode .semlink-search-status,
+.is-map-mode .semlink-search-input-wrapper,
+.is-map-mode .semlink-search-welcome {
+    display: none;
+}
+
+/* ── Related-notes list view (toolbar "相关笔记") ── */
+
+.semlink-search-related-view {
+    flex: 1 1 0;
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px 20px;
+    overflow-y: auto;
+}
+
+.is-related-mode .semlink-search-related-view {
+    display: flex;
+}
+
+.is-related-mode .semlink-search-messages,
+.is-related-mode .semlink-search-status,
+.is-related-mode .semlink-search-input-wrapper,
+.is-related-mode .semlink-search-welcome,
+.is-related-mode .semlink-search-graph {
+    display: none;
+}
+
+.semlink-search-related-head {
+    text-align: center;
+    margin-bottom: 2px;
+}
+
+.semlink-search-related-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.semlink-search-related-sub {
+    font-size: 12px;
+    color: var(--text-faint);
+    margin-top: 3px;
+}
+
+.semlink-search-related-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+.semlink-search-related-loading,
+.semlink-search-related-empty {
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 13px;
+    padding: 24px 8px;
+}
+
+.semlink-search-related-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 8px 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    background: var(--background-primary);
+    cursor: pointer;
+    transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.semlink-search-related-item-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.semlink-search-related-item-path {
+    font-size: 11px;
+    color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.semlink-search-related-item:hover {
+    background: var(--background-modifier-hover);
+    transform: translateY(-1px);
+    border-color: var(--interactive-accent);
+}
+
 .semlink-search-welcome-hint {
     font-size: 12px;
     color: var(--text-muted);
@@ -990,9 +1275,9 @@
 /* Expanded tall editor: half the window height, content scrolls. The footer
    grows and the messages area above shrinks to make room. */
 .semlink-search-input.is-expanded {
-    min-height: 50vh;
-    height: 50vh;
-    max-height: 50vh;
+    min-height: 35vh;
+    height: 35vh;
+    max-height: 35vh;
 }
 
 /* Keyboard hint under the input — hidden by default (JS toggles it in the
@@ -1205,6 +1490,14 @@
     font-size: 14px;
 }
 
+/* Tables match the body text size (Obsidian's default table text is
+   smaller than the surrounding markdown). */
+.semlink-msg-answer.markdown-rendered table,
+.semlink-msg-answer.markdown-rendered table th,
+.semlink-msg-answer.markdown-rendered table td {
+    font-size: 14px;
+}
+
 .semlink-msg-answer.markdown-rendered pre {
     max-width: 100%;
     overflow-x: auto;
@@ -1343,7 +1636,7 @@
     /* Quiet row, not a white bar: muted text on the gray panel, so the
        tools never compete with the answer (the "主"). */
     color: var(--text-muted);
-    user-select: none;
+    user-select: text;
     list-style: none;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1351,6 +1644,13 @@
     margin: 0;
     padding: 2px 4px;
     border-radius: 3px;
+}
+
+/* Selected text inside the summary row turns accent-colored so a drag
+   selection is clearly visible on the quiet gray panel. */
+.semlink-tool-call-summary::selection {
+    color: var(--interactive-accent);
+    background: var(--text-selection);
 }
 
 .semlink-tool-call-summary:hover {

@@ -29,6 +29,40 @@ export type ThinkingStep =
 	| { type: "thought"; text: string }
 	| { type: "tool"; name: string; args: any; result: string };
 
+/** Agent style for the chat system prompt: "classic" answers from snippets
+ *  with minimal tool use, "proactive" actively reads related notes. */
+export type AgentMode = "classic" | "proactive";
+
+/** Analysis/overview-heavy prompts get the "enhanced" depth: full-note reads
+ *  allowed and a larger per-result cap, so the model can read related
+ *  protocol/design docs before answering. Shared by the sidebar search and
+ *  the Feishu bot (identical behavior on both surfaces). */
+export function inferAgentDepth(query: string): "standard" | "enhanced" {
+	return /介绍|概述|分析|总结|梳理|归纳|对比|设计需求|如何设计|怎么设计|评估|方案|深入|是什么/.test(query)
+		? "enhanced"
+		: "standard";
+}
+
+/** Basename without extension (e.g. "S-101电子海图安装_更新（MIBT）产品说明"). */
+function noteBasename(path: string): string {
+	const slash = path.lastIndexOf("/");
+	const name = slash >= 0 ? path.slice(slash + 1) : path;
+	const dot = name.lastIndexOf(".");
+	return dot > 0 ? name.slice(0, dot) : name;
+}
+
+/** Build the initial retrieval context fed into the system prompt — the
+ *  exact format the sidebar search uses. Shared so the Feishu bot feeds the
+ *  model the identical context shape. */
+export function buildNoteContext(results: Array<{ heading: string; notePath: string; contentPreview: string }>): string {
+	return results
+		.map((r, i) => {
+			const title = r.heading || noteBasename(r.notePath);
+			return `[${i + 1}] ${title}（${r.notePath}）\n${r.contentPreview}`;
+		})
+		.join("\n\n");
+}
+
 /** One request's prompt-cache usage sample. A turn averages these by TOKEN
  *  weight (Σhit / Σtotal), never by request count — small requests would
  *  otherwise drag the displayed hit rate down. */
@@ -140,6 +174,34 @@ export class ChatClient {
 		return this.getActiveModel()?.model.contextWindow ?? null;
 	}
 
+	/** Two agent styles — they share the tool guidance but differ in how
+	 *  aggressively the model reads notes:
+	 *  - "classic": conservative — answer from the snippets unless clearly
+	 *    insufficient, minimal tool use.
+	 *  - "proactive": verify-first — treat referenced docs as reading
+	 *    signals, actively read related notes before answering (default). */
+	private buildSystemPrompt(agentMode: AgentMode, depthHint: string, context: string): string {
+		const shared =
+			"对于「列出/找到所有提到某关键词的笔记」这类问题，grep_notes 一次调用即可完成：totalFiles 是匹配总数，paths 字段就是完整文件清单（completeList 为 true 时），直接列出即可，不要再次调用工具、不要用更大 limit 或不同措辞重复检索。" +
+			"初始检索片段仅供参考，可能无法覆盖所有情况。当问题明显属于以下类型时，请直接调用对应工具，不要依赖初始检索片段：涉及「最近/最新/何时记录/最近修改」等时间判断的问题用 list_indexed_detailed（已按修改时间倒序，取前几条即可）；需要全库概览或列举笔记用 list_indexed；精确关键词、编号、日期、代码片段用 grep_notes。" +
+			depthHint +
+			"请勿编造笔记中不存在的信息。回答使用与问题相同的语言。" +
+			"\n\n以下是初始检索到的相关笔记内容：\n" + context;
+		if (agentMode === "classic") {
+			return (
+				"你是 Semlink 的笔记问答助手。回答步骤：① 先思考用户的问题，用简短文字写出你的分析并形成初步结论（这段分析会展示给用户，请写清楚但不要太长）；② 只有发现信息不足时才调用工具补充（search_notes / get_note / get_section / grep_notes 等），不要一上来就盲目调用工具；③ 信息足够后立即给出最终回答，不要反复调用工具。" +
+				"注意：初始检索提供的是笔记片段（截断预览），可能不完整。对于穷举性、准确性要求高的问题（如「包含哪些部分」「有哪些功能」），请调用 get_note 读取相关笔记的完整内容验证后再给出最终回答。" +
+				shared
+			);
+		}
+		return (
+			"你是 Semlink 的笔记问答助手。回答步骤：① 先思考用户的问题，用简短文字写出你的分析并形成初步结论（这段分析会展示给用户，请写清楚但不要太长）；② 在分析中明确判断：初始片段是否足以完整回答？是否需要读取关联笔记验证？③ 若片段不足、或问题需要完整信息（分析/总结/设计需求/协议细节/对比类问题，或片段中提到了相关文档），请主动调用工具读取验证（search_notes / get_note / get_section / grep_notes 等），不要只凭截断片段下结论；④ 信息齐全后给出完整、有条理的最终回答，不要反复调用工具。" +
+			"注意：初始检索提供的是笔记片段（截断预览），可能不完整。当片段中提到相关文档（如某协议文档、设计文档、资料名）时，应视为需要读取的信号：先 get_note 读取最相关的一篇，再根据内容决定是否继续读取（一次最多读 3-5 篇，避免铺开）。" +
+			"介绍/概述类问题（「XX 是什么」「介绍下 XX」「XX 的功能有哪些」）有一个固定套路：先确认初始片段里有没有该主题的定义、定位、全称这类宏观信息——若没有，第一步就用 search_notes 检索「XX 介绍 / XX 是什么」，或 grep_notes 检索「XX（全称|即|是|定义）」定位定义类笔记并读取，不要先扎进细节文档；读完定义后再读细节文档补全。回答时先讲「是什么」（定义/定位/背景），再展开细节。" +
+			shared
+		);
+	}
+
 	/**
 	 * Ask the active chat model to answer `question` given the retrieved note
 	 * context. The model may call Semlink tools to gather more information.
@@ -173,6 +235,7 @@ export class ChatClient {
 		onThinking?: (step: ThinkingStep) => void,
 		onRetry?: (attempt: number, total: number) => void,
 		signal?: AbortSignal,
+		agentMode: AgentMode = "proactive",
 	): Promise<ChatResult> {
 		// Use the SELECTED model (and its owning provider) — the model switcher
 		// may pick any model from any configured provider.
@@ -183,14 +246,7 @@ export class ChatClient {
 		const depthHint = depth === "enhanced"
 			? "读取笔记时可以适当使用 get_note 读取整篇笔记以获得完整信息，注意控制读取的笔记数量。"
 			: "读取笔记时请优先使用 get_section 只读取相关章节，避免用 get_note 读取整篇长笔记，以控制上下文占用。";
-		const systemPrompt =
-			"你是 Semlink 的笔记问答助手。回答步骤：① 先思考用户的问题，用简短文字写出你的分析并形成初步结论（这段分析会展示给用户，请写清楚但不要太长）；② 只有发现信息不足时才调用工具补充（search_notes / get_note / get_section / grep_notes 等），不要一上来就盲目调用工具；③ 信息足够后立即给出最终回答，不要反复调用工具。" +
-			"注意：初始检索提供的是笔记片段（截断预览），可能不完整。对于穷举性、准确性要求高的问题（如「包含哪些部分」「有哪些功能」），请调用 get_note 读取相关笔记的完整内容验证后再给出最终回答。" +
-			"对于「列出/找到所有提到某关键词的笔记」这类问题，grep_notes 一次调用即可完成：totalFiles 是匹配总数，paths 字段就是完整文件清单（completeList 为 true 时），直接列出即可，不要再次调用工具、不要用更大 limit 或不同措辞重复检索。" +
-			"初始检索片段仅供参考，可能无法覆盖所有情况。当问题明显属于以下类型时，请直接调用对应工具，不要依赖初始检索片段：涉及「最近/最新/何时记录/最近修改」等时间判断的问题用 list_indexed_detailed（已按修改时间倒序，取前几条即可）；需要全库概览或列举笔记用 list_indexed；精确关键词、编号、日期、代码片段用 grep_notes。" +
-			depthHint +
-			"请勿编造笔记中不存在的信息。回答使用与问题相同的语言。" +
-			"\n\n以下是初始检索到的相关笔记内容：\n" + context;
+		const systemPrompt = this.buildSystemPrompt(agentMode, depthHint, context);
 
 		// Per-depth cap on a single tool result (enhanced reads full notes).
 		if (this.tools) {
@@ -489,6 +545,15 @@ export class ChatClient {
 			thinking.push(step);
 			onThinking?.(step);
 			messages.push({ role: "assistant", content: analysis });
+		}
+		// Hand over to the answer phase: the analysis often ends with "I need
+		// to read more notes" — without this nudge the model tends to answer
+		// anyway (without the tools) instead of acting on its own plan.
+		if (analysis) {
+			messages.push({
+				role: "user",
+				content: "（回答阶段）现在开始正式回答：若你上面的分析提到信息不足、或需要读取笔记验证（如片段中提到的关联文档、协议细节），请先调用工具读取；之后输出完整、有条理的最终回答。最终回答不要重复分析内容，直接给出完整答案。",
+			});
 		}
 
 		for (let round = 0; round < MAX_TOOL_ITERATIONS; round++) {
@@ -800,6 +865,15 @@ export class ChatClient {
 			thinking.push(step);
 			onThinking?.(step);
 			messages.push({ role: "assistant", content: [{ type: "text", text: analysis }] });
+		}
+		// Hand over to the answer phase: the analysis often ends with "I need
+		// to read more notes" — without this nudge the model tends to answer
+		// anyway (without the tools) instead of acting on its own plan.
+		if (analysis) {
+			messages.push({
+				role: "user",
+				content: "（回答阶段）现在开始正式回答：若你上面的分析提到信息不足、或需要读取笔记验证（如片段中提到的关联文档、协议细节），请先调用工具读取；之后输出完整、有条理的最终回答。最终回答不要重复分析内容，直接给出完整答案。",
+			});
 		}
 
 		for (let round = 0; round < MAX_TOOL_ITERATIONS; round++) {

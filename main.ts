@@ -4,11 +4,11 @@
 
 import { Notice, Plugin, TFile, FileSystemAdapter, WorkspaceSidedock, addIcon } from "obsidian";
 import { join } from "path";
-import { DEFAULT_SETTINGS, type SmartVaultSettings } from "./src/types";
+import { DEFAULT_SETTINGS, type SmartVaultSettings, type HistoryMessage } from "./src/types";
 import { VectorStore } from "./src/vector-store";
 import { IndexQueue } from "./src/index-queue";
 import { EmbeddingClient } from "./src/embedding-client";
-import { ChatClient } from "./src/chat-client";
+import { ChatClient, inferAgentDepth, buildNoteContext } from "./src/chat-client";
 import { SemlinkTools } from "./src/chat-tools";
 import { Scheduler } from "./src/scheduler";
 import { ProgressTracker } from "./src/progress";
@@ -336,27 +336,35 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 	}
 
-	/** Shared QA pipeline used by Feishu bots (embed → search → chat). */
+	/** Shared QA pipeline used by Feishu bots — mirrors the sidebar search
+	 *  view's runSearch exactly (same context builder, same depth heuristic,
+	 *  same native history array) so both surfaces answer identically. */
 	private buildFeishuAskHandler(): FeishuAskHandler {
 		return async (question, onToken, history, signal, onThinking) => {
 			const embedResult = await this.client.embed([question]);
 			const results = await this.store.search(embedResult.embeddings[0], 10, 0.3);
-			const context = this.buildFeishuContext(results.slice(0, 5));
-			// Fold conversation history into the question so the LLM has
-			// multi-turn context (chat-client.chat itself is stateless).
-			let fullQuestion = question;
-			if (history && history.length > 0) {
-				const transcript = history
-					.map((t) => `${t.role === "user" ? "用户" : "助手"}：${t.content}`)
-					.join("\n\n");
-				fullQuestion = `以下是之前的对话历史：\n${transcript}\n\n用户最新问题：${question}`;
-			}
+			const context = buildNoteContext(results.slice(0, 5));
+			// Same as the sidebar: prior turns as a native message array
+			// (chat-client expands them; sliding-window truncation applies).
+			const historyMessages: HistoryMessage[] = (history || []).map((t) => ({
+				role: t.role,
+				content: t.content,
+				timestamp: Date.now(),
+			}));
 			// Bridge chat-client's onToolCall into our per-event onThinking, so
 			// the Feishu bot can stream each tool call into the thinking panel.
 			const onToolCall = onThinking
 				? (name: string, args: any) => onThinking({ type: "tool", name, args })
 				: undefined;
-			const chatResult = await this.chatClient.chat(context, fullQuestion, undefined, onToolCall, "standard", onToken);
+			// Same depth heuristic as the sidebar (介绍/分析/总结 → enhanced).
+			const chatResult = await this.chatClient.chat(
+				context,
+				question,
+				historyMessages,
+				onToolCall,
+				inferAgentDepth(question),
+				onToken,
+			);
 			// Honor an abort signal by rejecting (the bot treats this as stopped).
 			if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 			return {
@@ -365,12 +373,6 @@ export default class SmartVaultPlugin extends Plugin {
 				usedNotes: chatResult.usedNotes,
 			};
 		};
-	}
-
-	private buildFeishuContext(results: Array<{ heading: string; notePath: string; contentPreview: string }>): string {
-		return results
-			.map((r, i) => `[${i + 1}] ${r.heading || r.notePath}（${r.notePath}）\n${r.contentPreview}`)
-			.join("\n\n");
 	}
 
 	// ──── Indexing ────
