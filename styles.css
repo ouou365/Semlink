@@ -887,8 +887,10 @@
 
 .semlink-search-related-item {
     display: flex;
-    flex-direction: column;
-    gap: 1px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     padding: 8px 12px;
     border: 1px solid var(--background-modifier-border);
     border-radius: 8px;
@@ -898,6 +900,8 @@
 }
 
 .semlink-search-related-item-title {
+    flex: 1;
+    min-width: 0;
     font-size: 13px;
     font-weight: 500;
     color: var(--text-normal);
@@ -906,12 +910,11 @@
     white-space: nowrap;
 }
 
-.semlink-search-related-item-path {
-    font-size: 11px;
+.semlink-search-related-item-score {
+    flex-shrink: 0;
+    font-size: 12px;
     color: var(--text-faint);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 }
 
 .semlink-search-related-item:hover {

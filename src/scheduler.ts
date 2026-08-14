@@ -10,6 +10,7 @@ import { EmbeddingClient } from "./embedding-client";
 import { ProgressTracker } from "./progress";
 import { ActivityGate } from "./activity-gate";
 import { makePreview } from "./chunker";
+import { extractHeadings } from "./section-utils";
 import { t } from "./i18n";
 
 export class Scheduler {
@@ -29,6 +30,8 @@ export class Scheduler {
 	private concurrency = 5; // 并发 embedding 请求数
 	private saveInterval = 10; // 每处理 N 个笔记存盘一次
 	private processedSinceSave = 0;
+	/** Guards backfillDocVectors against concurrent runs (onload + manual index). */
+	private backfilling = false;
 	/** Note-count baseline for the current run. 0 = full scan (increment each
 	 *  note); >0 = incremental run (only "add" actions raise the real total,
 	 *  "update"/"delete" keep the status-bar count steady to avoid flicker). */
@@ -164,6 +167,12 @@ export class Scheduler {
 			// Always scan to set totalNotes count, even if queue has items
 			if (scan) {
 				await this.scanVault();
+				// Backfill document-level vectors for notes indexed before this
+				// feature existed. Only embeds heading text (1 call/note in a
+				// single batch), so it's far cheaper than re-embedding chunks.
+				// Runs once per full scan; a fast no-op when every note already
+				// has a doc vector.
+				await this.backfillDocVectors();
 			}
 
 			this.progress.setPhase("embedding");
@@ -269,6 +278,21 @@ export class Scheduler {
 			allEmbeddings.push(...batch);
 		}
 
+		// Build the document-level vector from the note's heading tree. Done
+		// OUTSIDE the transaction because embed() yields (network), and the
+		// transaction below must not span a yield (close() could fire mid-yield
+		// and lose the in-memory DB). Only the DB write goes inside the tx.
+		const docHeadingText = this.buildDocVectorText(content);
+		let docEmbedding: number[] | null = null;
+		if (docHeadingText) {
+			try {
+				const docResult = await this.client.embed([docHeadingText]);
+				docEmbedding = docResult.embeddings[0];
+			} catch (e) {
+				console.warn(`[Semlink] doc-vector embed failed for ${notePath}:`, e);
+			}
+		}
+
 		// Wrap all DB writes for this note in a single transaction
 		// IMPORTANT: do NOT yield before DB writes — if close() fires during yield,
 		// the in-memory DB won't contain this note's data and it will be lost.
@@ -294,6 +318,11 @@ export class Scheduler {
 			// Save embeddings (UPDATE chunks SET vector = ... WHERE id = ?)
 			await this.store.saveEmbeddings(chunkIds, allEmbeddings);
 
+			// Save the document-level (heading) vector in the same transaction.
+			if (docEmbedding) {
+				await this.store.saveDocEmbedding(notePath, docEmbedding, mtime, docHeadingText);
+			}
+
 			// Delete stale chunks for this note (if update)
 			if (action === "update") {
 				await this.store.deleteStaleChunks(notePath);
@@ -313,6 +342,96 @@ export class Scheduler {
 		this.progress.setAvgResponseMs(this.client.avgResponseMs);
 		this.progress.setFileChunkProgress("");
 		return true;
+	}
+
+	/** Build the text used to embed a note's document-level vector: the full
+	 *  heading tree, de-prefixed (no leading #), de-duplicated while preserving
+	 *  order, truncated to stay well under the model's token limit. Returns ""
+	 *  for notes with no headings. */
+	private buildDocVectorText(content: string): string {
+		const headings = extractHeadings(content);
+		const seen = new Set<string>();
+		const titles: string[] = [];
+		for (const h of headings) {
+			const title = h.replace(/^#+\s+/, "").trim();
+			if (title && !seen.has(title)) {
+				seen.add(title);
+				titles.push(title);
+			}
+		}
+		// Heading skeleton (de-duplicated) + the document's opening content.
+		// Headings alone are too generic — Introduction/References/前言/目录
+		// appear in almost every doc, so heading-only vectors produced high-
+		// similarity false positives between unrelated notes. The opening
+		// content (≈ chunk[0]) anchors the vector in what the doc actually
+		// says, which is far more discriminative.
+		let text = titles.join(" / ");
+		const opening = content.slice(0, 1500).trim();
+		if (opening) {
+			text = text ? text + "\n\n" + opening : opening;
+		}
+		if (!text) return "";
+		// ~6000 chars ≈ 1500 tokens, safely below bge-m3's 8192 limit.
+		if (text.length > 6000) text = text.slice(0, 6000);
+		return text;
+	}
+
+	/** Generate document-level vectors for indexed notes that lack one. Only
+	 *  embeds heading text (one batched call), never re-embeds chunks. Called
+	 *  after a full scan so related-notes works immediately without waiting
+	 *  for every note to be modified. */
+	async backfillDocVectors(): Promise<number> {
+		// Guard against concurrent runs: onload and a manual full index could
+		// both trigger this — the second caller is a no-op.
+		if (this.backfilling) return 0;
+		this.backfilling = true;
+		try {
+			// Bump DOC_VECTOR_ALGO_VERSION whenever buildDocVectorText changes.
+			// prepareDocVectorBackfill clears stale vectors on a version change so
+			// they get regenerated with the new logic (otherwise old vectors would
+			// be skipped as "already present" and the new algorithm never applies).
+			const DOC_VECTOR_ALGO_VERSION = 2;
+			await this.store.prepareDocVectorBackfill(DOC_VECTOR_ALGO_VERSION);
+
+			const indexed = await this.store.getAllIndexedPaths();
+			if (indexed.size === 0) return 0;
+			const existing = await this.store.getDocVectorNotePaths();
+			const missing = Array.from(indexed).filter((p) => !existing.has(p));
+			if (missing.length === 0) return 0;
+
+			console.log(`[Semlink] Backfilling document vectors for ${missing.length} notes…`);
+			const tasks: Array<{ notePath: string; mtime: number; headingText: string }> = [];
+			for (const notePath of missing) {
+				if (this.aborted) break;
+				const file = this.vault.getAbstractFileByPath(notePath);
+				if (!file || !(file instanceof TFile)) continue;
+				try {
+					const content = await this.vault.read(file);
+					const headingText = this.buildDocVectorText(content);
+					if (headingText) tasks.push({ notePath, mtime: file.stat.mtime, headingText });
+				} catch {
+					// unreadable file — skip
+				}
+			}
+			if (tasks.length === 0 || this.aborted) return 0;
+
+			try {
+				const texts = tasks.map((t) => t.headingText);
+				const embedResult = await this.client.embedAll(texts);
+				const allVecs: number[][] = [];
+				for (const batch of embedResult.embeddings) allVecs.push(...batch);
+				for (let i = 0; i < tasks.length; i++) {
+					await this.store.saveDocEmbedding(tasks[i].notePath, allVecs[i], tasks[i].mtime, tasks[i].headingText);
+				}
+				console.log(`[Semlink] Document vectors backfilled: ${tasks.length}`);
+				return tasks.length;
+			} catch (e) {
+				console.warn("[Semlink] doc-vector backfill embed failed:", e);
+				return 0;
+			}
+		} finally {
+			this.backfilling = false;
+		}
 	}
 
 	/** Process multiple notes concurrently with limited parallelism */

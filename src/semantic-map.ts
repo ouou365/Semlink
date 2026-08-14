@@ -36,6 +36,8 @@ interface MapLink {
 export class SemanticMapController {
 	private container: HTMLElement;
 	private onNodeClick: (path: string) => void;
+	/** "open note" handler — triggered by Ctrl/Cmd+click on a node. */
+	private onNodeDblClick: (path: string) => void;
 	// force-graph mutates node objects; typed loosely to avoid generic friction.
 	private graph: any = null;
 	private nodes = new Map<string, MapNode>();
@@ -45,9 +47,10 @@ export class SemanticMapController {
 	private textColor = "#ddd";
 	private fontFamily = "sans-serif";
 
-	constructor(container: HTMLElement, onNodeClick: (path: string) => void) {
+	constructor(container: HTMLElement, onNodeClick: (path: string) => void, onNodeDblClick: (path: string) => void) {
 		this.container = container;
 		this.onNodeClick = onNodeClick;
+		this.onNodeDblClick = onNodeDblClick;
 	}
 
 	/** Create the force-graph instance inside the container. Idempotent. */
@@ -62,8 +65,12 @@ export class SemanticMapController {
 
 		const g = new ForceGraph(this.container) as any;
 		g.nodeRelSize(5)
-			.nodeLabel((n: any) => n.name || n.id)
-			.nodeColor((n: any) => (n.isCenter ? this.accent : muted))
+			.nodeLabel((n: any) => `${n.name || n.id}  ·  Ctrl+点击打开`)
+			.nodeColor((n: any) => {
+				if (n.isCenter) return this.accent;
+				if (n.expanded) return this.textColor; // explored node — brighter
+				return muted; // unexpanded leaf — grey
+			})
 			.linkColor(() => linkCol)
 			.linkWidth(1)
 			.linkDirectionalArrowLength(3)
@@ -84,8 +91,16 @@ export class SemanticMapController {
 				ctx.fillStyle = this.textColor;
 				ctx.fillText(label, node.x, (node.y ?? 0) + 6 / globalScale);
 			})
-			.onNodeClick((n: any) => {
-				if (n && n.path) this.onNodeClick(n.path);
+			.onNodeClick((n: any, ev: any) => {
+				if (!n || !n.path) return;
+				// Ctrl/Cmd+click opens the note; a plain click expands the node's
+				// neighbours. Using a modifier key avoids the latency of a
+				// timer-based double-click detection.
+				if (ev && (ev.ctrlKey || ev.metaKey)) {
+					this.onNodeDblClick(n.path);
+				} else {
+					this.onNodeClick(n.path);
+				}
 			});
 		this.graph = g;
 		this.resize();
@@ -162,6 +177,12 @@ export class SemanticMapController {
 	}
 
 	setCenter(path: string): void {
+		// Only one center at a time: clear the previous center so the most
+		// recently clicked node is the sole center (highlighted + accent color).
+		if (this.centerPath && this.centerPath !== path) {
+			const prev = this.nodes.get(this.centerPath);
+			if (prev) prev.isCenter = false;
+		}
 		this.centerPath = path;
 		const n = this.nodes.get(path);
 		if (n) n.isCenter = true;

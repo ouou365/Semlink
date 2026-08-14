@@ -286,10 +286,10 @@ export class McpServer {
 								default: 10,
 							},
 							threshold: {
-								type: "number",
-								description: "相似度阈值 0-1（默认 0.4）",
-								default: 0.4,
-							},
+									type: "number",
+									description: "相似度阈值 0-1（默认 0.2）",
+									default: 0.2,
+								},
 						},
 						required: ["path"],
 					},
@@ -528,25 +528,12 @@ export class McpServer {
 		};
 	}
 
-	private async toolGetSimilarNotes(path: string, limit = 10, threshold = 0.4) {
-		// Get chunks for this note to use as reference
-		const chunks = await this.store.getChunksByNotePath(path);
-		if (chunks.length === 0) {
-			return {
-				content: [{ type: "text", text: `No indexed chunks found for: ${path}` }],
-				isError: true,
-			};
-		}
-
-		// Use the first chunk's embedding area for search
-		// Re-embed the first chunk's content
-		const embedResult = await this.client.embed([chunks[0].content]);
-		const queryVec = embedResult.embeddings[0];
-
-		const results = await this.store.search(queryVec, limit + 5, threshold);
-
-		// Filter out the original note
-		const filtered = results.filter((r) => r.notePath !== path).slice(0, limit);
+	private async toolGetSimilarNotes(path: string, limit = 10, threshold = 0.2) {
+		// Max-pooling over the note's own chunks (see DbEngine.searchRelatedNotes):
+		// symmetric note→note similarity, works for large docs whose opening is
+		// boilerplate. Default threshold 0.2 — bge-m3 cosine scores for related
+		// notes often land in 0.25–0.5.
+		const results = await this.store.searchRelatedNotes(path, limit, threshold, 6);
 
 		return {
 			content: [
@@ -554,8 +541,8 @@ export class McpServer {
 					type: "text",
 					text: JSON.stringify({
 						sourcePath: path,
-						totalResults: filtered.length,
-						results: filtered.map((r) => ({
+						totalResults: results.length,
+						results: results.map((r) => ({
 							path: r.notePath,
 							heading: r.heading,
 							preview: r.contentPreview,

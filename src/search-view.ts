@@ -1616,8 +1616,9 @@ export class SemanticSearchView extends ItemView {
 			}
 			for (const r of top) {
 				const item = list.createDiv({ cls: "semlink-search-related-item" });
-				item.createDiv({ cls: "semlink-search-related-item-title", text: r.heading || this.basename(r.notePath) });
-				item.createDiv({ cls: "semlink-search-related-item-path", text: r.notePath });
+				item.createDiv({ cls: "semlink-search-related-item-title", text: this.basename(r.notePath) });
+				item.createDiv({ cls: "semlink-search-related-item-score", text: Math.round(r.score * 100) + "%" });
+				item.title = r.notePath; // hover for full path
 				item.addEventListener("click", () => { void this.openNote(r.notePath, r.preview); });
 			}
 		} catch {
@@ -1678,7 +1679,11 @@ export class SemanticSearchView extends ItemView {
 	/** Initialize (once) and populate the map, restoring the archive if any. */
 	private enterMapMode(): void {
 		if (!this.mapController) {
-			this.mapController = new SemanticMapController(this.mapGraphEl, (p) => this.handleMapNodeClick(p));
+			this.mapController = new SemanticMapController(
+				this.mapGraphEl,
+				(p) => this.handleMapNodeClick(p),
+				(p) => this.handleMapNodeDblClick(p),
+			);
 			try {
 				this.mapController.init();
 			} catch (e) {
@@ -1700,16 +1705,26 @@ export class SemanticSearchView extends ItemView {
 		if (this.currentMode !== "map" || !this.mapController) return;
 		this.mapController.resize();
 
+		const path = this.getActiveNotePath();
+		const pathOk = !!path && /\.(md|txt|markdown)$/i.test(path);
+
 		const archive = this.mapArchive.load();
 		if (archive && archive.nodes.length > 0) {
 			// Resume the previous exploration (positions + expanded flags).
 			this.mapController.loadArchive(archive);
+			// The archive is a single global snapshot, so after switching notes
+			// it often doesn't contain the currently open note — the map would
+			// show stale nodes and look "empty" relative to the Related list.
+			// If the current note isn't in the restored graph, expand it so its
+			// neighbours appear too.
+			if (pathOk && this.hasApiKey() && !this.mapController.hasNode(path!)) {
+				void this.expandMapNode(path!, true);
+			}
 			return;
 		}
 
 		// No archive yet: seed the map from the currently open note.
-		const path = this.getActiveNotePath();
-		if (!path || !/\.(md|txt|markdown)$/i.test(path)) {
+		if (!pathOk) {
 			this.showMapMessage("mapNoActiveNote");
 			return;
 		}
@@ -1717,7 +1732,9 @@ export class SemanticSearchView extends ItemView {
 			this.showMapMessage("mapNoApiKey");
 			return;
 		}
-		void this.expandMapNode(path, true);
+		// Seed: zoom-to-fit on the first expansion so the initial graph is framed.
+		// Subsequent clicks pass doZoomToFit=false to preserve the user's view.
+		void this.expandMapNode(path, true, true);
 	}
 
 	/** Resolve the "current note": prefer the truly active leaf, fall back to
@@ -1733,40 +1750,39 @@ export class SemanticSearchView extends ItemView {
 	 *  toolGetSimilarNotes. Returns up to `limit` related notes (empty if the
 	 *  note isn't indexed yet). */
 	private async getRelatedNotes(notePath: string, limit = 6): Promise<{ notePath: string; heading: string; preview: string; score: number }[]> {
-		const chunks = await this.store.getChunksByNotePath(notePath);
-		if (chunks.length === 0) return [];
-		const embedResult = await this.client.embed([chunks[0].content]);
-		// bge-m3 cosine scores for related notes often land in 0.25–0.5; the
-		// old 0.4 threshold filtered almost everything out. Be permissive and
-		// let sort + slice do the ranking.
-		const results = await this.store.search(embedResult.embeddings[0], limit + 8, 0.2);
+		// Max-pooling over the note's own chunks (computed in the DB engine):
+		// probes several chunks spread across the whole document and keeps
+		// each target note's best score. Symmetric, and lets large docs be
+		// represented by their real topical sections instead of only chunks[0]
+		// — which was a boilerplate header for some docs, yielding empty lists.
+		const results = await this.store.searchRelatedNotes(notePath, limit, 0.2, 6);
 		if (results.length === 0) {
 			console.warn("[Semlink] related-notes search returned 0 results for", notePath, "— is the vector index loaded?");
 		} else {
 			console.log("[Semlink] related-notes:", results.length, "hits, top score", results[0].score.toFixed(3));
 		}
-		const best = new Map<string, { notePath: string; heading: string; preview: string; score: number }>();
-		for (const r of results) {
-			if (r.notePath === notePath) continue;
-			const prev = best.get(r.notePath);
-			if (!prev || r.score > prev.score) {
-				best.set(r.notePath, { notePath: r.notePath, heading: r.heading, preview: r.contentPreview, score: r.score });
-			}
-		}
-		return Array.from(best.values()).sort((a, b) => b.score - a.score).slice(0, limit);
+		return results.map((r) => ({
+			notePath: r.notePath,
+			heading: r.heading,
+			preview: r.contentPreview,
+			score: r.score,
+		}));
 	}
 
 	/** Grow the map around `path`: open the note and add its neighbours. Existing
 	 *  nodes/links are kept, so the map expands progressively. `isCenter` marks
 	 *  the seed node. A no-op refetch guard skips already-expanded nodes. */
-	private async expandMapNode(path: string, isCenter: boolean): Promise<void> {
+	private async expandMapNode(path: string, isCenter: boolean, doZoomToFit = false): Promise<void> {
 		if (!this.mapController) return;
 		const name = this.basename(path);
 		this.mapController.addNode(path, name, { isCenter });
 		if (isCenter) this.mapController.setCenter(path);
 
 		if (this.mapController.isExpanded(path)) {
-			void this.openNote(path, "");
+			// Already expanded: single click is a no-op (double click opens the
+			// note). Previously this called openNote, which made a single click
+			// on an already-expanded node open the document — unwanted now that
+			// click = expand, dblclick = open.
 			return;
 		}
 
@@ -1777,13 +1793,13 @@ export class SemanticSearchView extends ItemView {
 			// Ensure the seed node exists even if it had no neighbours.
 			this.mapController.addNode(path, name, { isCenter });
 			for (const r of related) {
-				this.mapController.addNode(r.notePath, r.heading || this.basename(r.notePath));
+				this.mapController.addNode(r.notePath, this.basename(r.notePath));
 				this.mapController.addLink(path, r.notePath);
 			}
 			this.mapController.markExpanded(path);
 			this.mapController.render();
 			this.mapController.reheat();
-			if (isCenter) this.mapController.zoomToFit();
+			if (doZoomToFit) this.mapController.zoomToFit();
 			this.scheduleMapSave();
 		} catch {
 			this.showMapMessage("mapEmpty");
@@ -1792,8 +1808,14 @@ export class SemanticSearchView extends ItemView {
 
 	/** Node click handler: open the note and grow the map around it. */
 	private handleMapNodeClick(path: string): void {
+		// Single click: make this node the center and expand its related notes.
+		// (Ctrl/Cmd+click opens the note — see handleMapNodeDblClick.)
+		void this.expandMapNode(path, true);
+	}
+
+	private handleMapNodeDblClick(path: string): void {
+		// Double click: open the note.
 		void this.openNote(path, "");
-		void this.expandMapNode(path, false);
 	}
 
 	/** Debounced auto-save of the current map (layout + structure). */

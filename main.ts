@@ -86,6 +86,13 @@ export default class SmartVaultPlugin extends Plugin {
 		this.watcher = new VaultWatcher(this.app, this.scheduler, this.settings);
 		this.watcher.start(this.settings.autoIndex);
 
+		// Background: ensure document-level vectors exist (one-time backfill if
+		// the table is empty or an algorithm bump cleared it). Runs async —
+		// never blocks plugin load; a no-op when the index is empty.
+		void this.scheduler.backfillDocVectors().then((n) => {
+			if (n > 0) new Notice(`Semlink: ${t("noticeDocVectorsReady").replace("{n}", String(n))}`);
+		}).catch(() => { /* best-effort; falls back to chunk max-pooling */ });
+
 		// Status bar
 		this.statusBarEl = this.addStatusBarItem();
 		this.statusBarEl.addClass("smart-vault-status-bar");

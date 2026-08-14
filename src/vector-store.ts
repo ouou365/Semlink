@@ -137,8 +137,12 @@ export class VectorStore {
 			case "pruneOrphanedPaths": return e.pruneOrphanedPaths(args[0]);
 			case "getStats": return e.getStats();
 			case "saveEmbeddings": return e.saveEmbeddings(args[0], args[1]);
+			case "saveDocEmbedding": return e.saveDocEmbedding(args[0], args[1], args[2], args[3]);
+			case "getDocVectorNotePaths": return e.getDocVectorNotePaths();
+			case "prepareDocVectorBackfill": return e.prepareDocVectorBackfill(args[0]);
 			case "loadVectorCache": return e.loadVectorCache();
 			case "search": return e.search(args[0], args[1], args[2]);
+			case "searchRelatedNotes": return e.searchRelatedNotes(args[0], args[1], args[2], args[3]);
 			case "textSearch": return e.textSearch(args[0], args[1], args[2]);
 			case "enqueue": return e.enqueue(args[0], args[1], args[2]);
 			case "enqueueMany": return e.enqueueMany(args[0]);
@@ -236,6 +240,18 @@ export class VectorStore {
 	async saveEmbeddings(chunkIds: string[], embeddings: number[][]): Promise<void> {
 		await this.call("saveEmbeddings", [chunkIds, embeddings]);
 	}
+	/** Save a document-level vector (heading-tree embedding) for one note. */
+	async saveDocEmbedding(notePath: string, embedding: number[], mtime: number, headingText: string): Promise<void> {
+		await this.call("saveDocEmbedding", [notePath, embedding, mtime, headingText]);
+	}
+	/** Note paths that already have a document vector (for backfill skip). */
+	async getDocVectorNotePaths(): Promise<Set<string>> {
+		return await this.call("getDocVectorNotePaths");
+	}
+	/** Clear stale doc vectors when the algorithm version changes (migration). */
+	async prepareDocVectorBackfill(version: number): Promise<boolean> {
+		return await this.call("prepareDocVectorBackfill", [version]);
+	}
 	async loadVectorCache(): Promise<void> { await this.call("loadVectorCache"); }
 
 	async search(queryEmbedding: number[], limit = 10, threshold = 0.3): Promise<SearchResult[]> {
@@ -245,6 +261,13 @@ export class VectorStore {
 			return await this.searchSyncSliced(queryEmbedding, limit, threshold);
 		}
 		return await this.call("search", [queryEmbedding, limit, threshold]);
+	}
+
+	/** Note→note "related notes" via max-pooling over the source note's chunks
+	 *  (see DbEngine.searchRelatedNotes). Runs in the worker; in sync-fallback
+	 *  mode it runs synchronously without time-slicing (rare, degraded path). */
+	async searchRelatedNotes(notePath: string, limit = 10, threshold = 0.2, maxProbes = 6): Promise<SearchResult[]> {
+		return await this.call("searchRelatedNotes", [notePath, limit, threshold, maxProbes]);
 	}
 
 	/** Sync-fallback search: scan in slices, yielding between them. */

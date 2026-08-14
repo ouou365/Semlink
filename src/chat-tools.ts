@@ -90,7 +90,7 @@ export class SemlinkTools {
 					properties: {
 						path: { type: "string", description: "参考笔记路径" },
 						limit: { type: "number", description: "返回结果数量上限（默认 10）" },
-						threshold: { type: "number", description: "相似度阈值 0-1（默认 0.4）" },
+						threshold: { type: "number", description: "相似度阈值 0-1（默认 0.2）" },
 					},
 					required: ["path"],
 				},
@@ -227,20 +227,18 @@ export class SemlinkTools {
 		return this.truncate(section);
 	}
 
-	private async toolGetSimilarNotes(path: string, limit = 10, threshold = 0.4): Promise<string> {
-		const chunks = await this.store.getChunksByNotePath(path);
-		if (chunks.length === 0) return `Error: no indexed chunks found for: ${path}`;
-
-		const embedResult = await this.client.embed([chunks[0].content]);
-		const results = await this.store.search(embedResult.embeddings[0], limit + 5, threshold);
-		const filtered = results.filter((r) => r.notePath !== path).slice(0, limit);
+	private async toolGetSimilarNotes(path: string, limit = 10, threshold = 0.2): Promise<string> {
+		// Max-pooling over the note's own chunks (see DbEngine.searchRelatedNotes):
+		// symmetric note→note similarity; probes chunks across the whole doc
+		// instead of only chunks[0] (which is boilerplate for some large docs).
+		const results = await this.store.searchRelatedNotes(path, limit, threshold, 6);
 
 		return this.truncate(
 			JSON.stringify(
 				{
 					sourcePath: path,
-					totalResults: filtered.length,
-					results: filtered.map((r) => ({
+					totalResults: results.length,
+					results: results.map((r) => ({
 						path: r.notePath,
 						heading: r.heading,
 						preview: r.contentPreview,

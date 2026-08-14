@@ -132,6 +132,7 @@ const S: Strings = {
 	noticeStartIndex: { zh: "开始索引...", en: "Starting index..." },
 	noticeIndexPaused: { zh: "索引已暂停", en: "Index paused" },
 	noticeIndexResumed: { zh: "索引已恢复", en: "Index resumed" },
+	noticeDocVectorsReady: { zh: "已生成 {n} 篇文档向量，相关笔记已增强", en: "Generated {n} doc vectors; related notes enhanced" },
 	noticeAuthFailed: { zh: "API Key 无效或未配置，请在设置中填写有效的 SiliconFlow API Key", en: "API Key is invalid or not configured. Please set a valid SiliconFlow API Key in Settings" },
 	noticeAuthFailedShort: { zh: "API Key 认证失败，索引已暂停", en: "API Key authentication failed, indexing paused" },
 

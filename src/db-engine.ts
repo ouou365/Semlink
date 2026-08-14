@@ -29,7 +29,17 @@ export class DbEngine {
 	// In-memory vector cache for fast search
 	private allVectors: Float32Array | null = null;
 	private allVectorIds: string[] = [];
+	// Reverse lookup chunk-id → index into allVectors, so searchRelatedNotes
+	// can fetch a stored vector by id without re-reading the DB.
+	private vectorIdToIndex: Map<string, number> = new Map();
 	private cacheLoaded = false;
+
+	// In-memory cache for DOCUMENT-level vectors (one per note, from headings).
+	// Separate from the chunk cache above so the two search paths never mix.
+	private allDocVectors: Float32Array | null = null;
+	private allDocNotePaths: string[] = [];
+	private docPathToIndex: Map<string, number> = new Map();
+	private docCacheLoaded = false;
 
 	constructor(dataDir: string) {
 		this.dataDir = dataDir;
@@ -111,6 +121,19 @@ export class DbEngine {
 			CREATE TABLE IF NOT EXISTS meta (
 				key TEXT PRIMARY KEY,
 				value TEXT
+			);
+		`);
+
+		// Document-level vectors: one per note, derived from its heading tree.
+		// Kept in a SEPARATE table so it never pollutes the chunk search cache
+		// (loadVectorCache reads chunks.vector) or the note-count stats
+		// (getStats counts DISTINCT note_path in chunks).
+		this.db!.run(`
+			CREATE TABLE IF NOT EXISTS note_doc_vectors (
+				note_path TEXT PRIMARY KEY,
+				vector BLOB NOT NULL,
+				mtime INTEGER NOT NULL,
+				heading_text TEXT DEFAULT ''
 			);
 		`);
 
@@ -232,9 +255,14 @@ export class DbEngine {
 		this.db.run("DELETE FROM chunks");
 		this.db.run("DELETE FROM queue");
 		this.db.run("DELETE FROM meta");
+		this.db.run("DELETE FROM note_doc_vectors");
 		this.allVectors = null;
 		this.allVectorIds = [];
 		this.cacheLoaded = false;
+		this.allDocVectors = null;
+		this.allDocNotePaths = [];
+		this.docPathToIndex.clear();
+		this.docCacheLoaded = false;
 
 		// Delete legacy vectors.bin if it still exists
 		const vecPath = join(this.dataDir, VECTORS_FILE_LEGACY);
@@ -259,6 +287,10 @@ export class DbEngine {
 		this.allVectors = null;
 		this.allVectorIds = [];
 		this.cacheLoaded = false;
+		this.allDocVectors = null;
+		this.allDocNotePaths = [];
+		this.docPathToIndex.clear();
+		this.docCacheLoaded = false;
 	}
 
 	// ──── Chunk CRUD ────
@@ -321,7 +353,9 @@ export class DbEngine {
 			"DELETE FROM chunks WHERE note_path = ?",
 			[notePath]
 		);
+		this.db!.run("DELETE FROM note_doc_vectors WHERE note_path = ?", [notePath]);
 		this.cacheLoaded = false;
+		this.docCacheLoaded = false;
 		return result.changes;
 	}
 
@@ -340,8 +374,13 @@ export class DbEngine {
 			"UPDATE chunks SET note_path = ? WHERE note_path = ?",
 			[newPath, oldPath]
 		);
-		if (result.changes > 0) {
+		const docResult = this.db!.run(
+			"UPDATE note_doc_vectors SET note_path = ? WHERE note_path = ?",
+			[newPath, oldPath]
+		);
+		if (result.changes > 0 || docResult.changes > 0) {
 			this.cacheLoaded = false;
+			this.docCacheLoaded = false;
 		}
 		return result.changes;
 	}
@@ -385,11 +424,13 @@ export class DbEngine {
 		for (const path of indexed) {
 			if (!existingPaths.has(path)) {
 				this.db!.run("DELETE FROM chunks WHERE note_path = ?", [path]);
+				this.db!.run("DELETE FROM note_doc_vectors WHERE note_path = ?", [path]);
 				removed++;
 			}
 		}
 		if (removed > 0) {
 			this.cacheLoaded = false;
+			this.docCacheLoaded = false;
 		}
 		return removed;
 	}
@@ -472,6 +513,22 @@ export class DbEngine {
 		this.cacheLoaded = false;
 	}
 
+	/** Save a document-level vector (derived from the note's heading tree).
+	 *  One row per note, keyed by note_path. Mirrors saveEmbeddings'
+	 *  Float32Array → Buffer → BLOB serialization. */
+	saveDocEmbedding(notePath: string, embedding: number[], mtime: number, headingText: string): void {
+		const vec = new Float32Array(EMBEDDING_DIM);
+		for (let j = 0; j < Math.min(embedding.length, EMBEDDING_DIM); j++) {
+			vec[j] = embedding[j];
+		}
+		const blob = Buffer.from(vec.buffer);
+		this.db!.run(
+			"INSERT OR REPLACE INTO note_doc_vectors (note_path, vector, mtime, heading_text) VALUES (?, ?, ?, ?)",
+			[blob, notePath, mtime, headingText]
+		);
+		this.docCacheLoaded = false;
+	}
+
 	/**
 	 * Load all vectors into a contiguous Float32Array for fast search.
 	 */
@@ -498,11 +555,13 @@ export class DbEngine {
 		const numVectors = rows.length;
 		const ids: string[] = [];
 		const allVec = new Float32Array(numVectors * EMBEDDING_DIM);
+		this.vectorIdToIndex.clear();
 
 		for (let i = 0; i < numVectors; i++) {
 			const id = rows[i][0] as string;
 			const blob = rows[i][1] as Uint8Array;
 			ids.push(id);
+			this.vectorIdToIndex.set(id, i);
 
 			// Copy blob bytes into the contiguous array
 			const vecView = new Float32Array(blob.buffer, blob.byteOffset, EMBEDDING_DIM);
@@ -516,13 +575,123 @@ export class DbEngine {
 		console.log(`[Semlink] Loaded ${numVectors} vectors into cache (${(numVectors * EMBEDDING_DIM * BYTES_PER_FLOAT / 1024 / 1024).toFixed(1)}MB)`);
 	}
 
+	/** Load all DOCUMENT-level vectors into a contiguous Float32Array. Mirrors
+	 *  loadVectorCache but for the note_doc_vectors table. Kept separate so
+	 *  chunk search and document search never share state. */
+	loadDocVectorCache(): void {
+		if (this.docCacheLoaded) return;
+
+		const results = this.db!.exec("SELECT note_path, vector FROM note_doc_vectors");
+
+		if (results.length === 0 || results[0].values.length === 0) {
+			this.allDocVectors = new Float32Array(0);
+			this.allDocNotePaths = [];
+			// Do NOT set docCacheLoaded here — same reason as loadVectorCache:
+			// at startup the table may be empty before backfill runs, and
+			// caching the empty state would make later searches return nothing.
+			return;
+		}
+
+		const rows = results[0].values;
+		const numDocs = rows.length;
+		const paths: string[] = [];
+		const allVec = new Float32Array(numDocs * EMBEDDING_DIM);
+		this.docPathToIndex.clear();
+
+		for (let i = 0; i < numDocs; i++) {
+			const np = rows[i][0] as string;
+			const blob = rows[i][1] as Uint8Array;
+			paths.push(np);
+			this.docPathToIndex.set(np, i);
+			const vecView = new Float32Array(blob.buffer, blob.byteOffset, EMBEDDING_DIM);
+			allVec.set(vecView, i * EMBEDDING_DIM);
+		}
+
+		this.allDocVectors = allVec;
+		this.allDocNotePaths = paths;
+		this.docCacheLoaded = true;
+	}
+
+	/** All note paths that already have a document vector (for backfill skip). */
+	getDocVectorNotePaths(): Set<string> {
+		const results = this.db!.exec("SELECT note_path FROM note_doc_vectors");
+		const out = new Set<string>();
+		if (results.length > 0) {
+			for (const row of results[0].values as any[]) out.add(row[0] as string);
+		}
+		return out;
+	}
+
+	/** Migration hook: when the doc-vector algorithm changes (version bumped
+	 *  by the scheduler), clear all stale doc vectors so backfill regenerates
+	 *  them with the new logic. Version is stored in meta, so this only fires
+	 *  once per change. Returns true if a reset happened. */
+	prepareDocVectorBackfill(version: number): boolean {
+		const r = this.db!.exec("SELECT value FROM meta WHERE key = 'doc_vector_algo_version'");
+		const stored = (r.length > 0 && r[0].values.length > 0) ? String(r[0].values[0][0]) : null;
+		if (stored === String(version)) return false;
+		this.db!.run("DELETE FROM note_doc_vectors");
+		this.db!.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('doc_vector_algo_version', ?)", [String(version)]);
+		this.docCacheLoaded = false;
+		return true;
+	}
+
+	/** Document→document similarity: take the source note's doc vector and scan
+	 *  every other doc vector by cosine. O(numNotes) — typically sub-millisecond
+	 *  for hundreds of notes. This is the symmetric, sampling-free path used
+	 *  when the source note has a heading-derived doc vector. */
+	searchByDocVector(srcIdx: number, srcNotePath: string, limit: number, threshold: number): SearchResult[] {
+		this.loadDocVectorCache();
+		if (!this.allDocVectors || this.allDocNotePaths.length === 0) return [];
+
+		const dim = EMBEDDING_DIM;
+		const numDocs = this.allDocNotePaths.length;
+
+		// Normalize the source doc vector into a unit query.
+		const srcOffset = srcIdx * dim;
+		const query = new Float32Array(dim);
+		let qNorm = 0;
+		for (let j = 0; j < dim; j++) {
+			query[j] = this.allDocVectors![srcOffset + j];
+			qNorm += query[j] * query[j];
+		}
+		qNorm = Math.sqrt(qNorm);
+		if (qNorm === 0) return [];
+		for (let j = 0; j < dim; j++) query[j] /= qNorm;
+
+		// Cosine scan over all other doc vectors (same math as searchSlice).
+		const scores: Array<{ index: number; score: number }> = [];
+		for (let i = 0; i < numDocs; i++) {
+			if (i === srcIdx) continue; // skip self
+			const offset = i * dim;
+			let dot = 0;
+			let normB = 0;
+			for (let j = 0; j < dim; j++) {
+				const v = this.allDocVectors![offset + j];
+				dot += query[j] * v;
+				normB += v * v;
+			}
+			const score = normB > 0 ? dot / Math.sqrt(normB) : 0;
+			if (score >= threshold) scores.push({ index: i, score });
+		}
+
+		scores.sort((a, b) => b.score - a.score);
+		return scores.slice(0, limit).map((s) => ({
+			chunkId: "",
+			notePath: this.allDocNotePaths[s.index],
+			heading: "",
+			contentPreview: "",
+			score: Math.round(s.score * 10000) / 10000,
+		}));
+	}
+
 	/**
 	 * Semantic search: find top-K chunks most similar to the query vector.
 	 * Uses brute-force cosine similarity. This is the other main-thread hot
 	 * path — tens of thousands of 1024-dim dot products per query. Running it
 	 * in the worker keeps it off the UI thread.
 	 */
-	search(queryEmbedding: number[], limit = 10, threshold = 0.3): SearchResult[] {
+	search(queryEmbedding: number[] | Float32Array, limit = 10, threshold = 0.3): SearchResult[] {
 		this.loadVectorCache();
 
 		if (!this.allVectors || this.allVectorIds.length === 0) {
@@ -584,7 +753,7 @@ export class DbEngine {
 	}
 
 	/** Normalized query vector (unit length) for cosine similarity. */
-	private normalizeQuery(queryEmbedding: number[]): Float32Array {
+	private normalizeQuery(queryEmbedding: number[] | Float32Array): Float32Array {
 		const dim = EMBEDDING_DIM;
 		const query = new Float32Array(dim);
 		let queryNorm = 0;
@@ -611,7 +780,7 @@ export class DbEngine {
 	 * (the worker path uses the monolithic search() instead).
 	 */
 	searchSlice(
-		queryEmbedding: number[],
+		queryEmbedding: number[] | Float32Array,
 		startIdx: number,
 		endIdx: number,
 		threshold = 0.3,
@@ -636,6 +805,110 @@ export class DbEngine {
 			if (score >= threshold) {
 				out.push({ chunkId: this.allVectorIds[i], score });
 			}
+		}
+		return out;
+	}
+
+	/**
+	 * Find notes semantically similar to `notePath` via max-pooling over the
+	 * source note's own chunks.
+	 *
+	 * Unlike search() (one query vector → chunk hits), this probes several of
+	 * the source note's chunks — uniformly sampled across the WHOLE document,
+	 * not just the opening — runs each as a query, and aggregates hits to the
+	 * NOTE level by keeping each target note's best (max) score.
+	 *
+	 * Why: the old approach used only chunks[0] as the note's representative,
+	 * which made "related notes" asymmetric. S-100's opening is a boilerplate
+	 * copyright page, so its related list came back empty even though S-98
+	 * listed S-100. Sampling across the document and taking the per-note max
+	 * restores symmetry and lets large docs be represented by their real
+	 * topical sections instead of their header.
+	 *
+	 * Runs entirely on already-stored vectors (no embedding API call); costs
+	 * min(maxProbes, chunkCount) brute-force scans.
+	 */
+	searchRelatedNotes(
+		notePath: string,
+		limit = 10,
+		threshold = 0.2,
+		maxProbes = 6,
+	): SearchResult[] {
+		// Prefer the document-level vector (whole-note heading embedding) when
+		// available: symmetric, sampling-free, O(numNotes). Falls back to chunk
+		// max-pooling for notes that haven't been backfilled yet.
+		this.loadDocVectorCache();
+		const srcDocIdx = this.docPathToIndex.get(notePath);
+		if (srcDocIdx !== undefined) {
+			const docResults = this.searchByDocVector(srcDocIdx, notePath, limit, threshold);
+			if (docResults.length > 0) return docResults;
+			// Empty doc-vector result (e.g. threshold too high): fall through to
+			// chunk max-pooling as a last resort.
+		}
+
+		this.loadVectorCache();
+		if (!this.allVectors || this.allVectorIds.length === 0) return [];
+
+		// Source note's active chunk ids, in document order (rowid = insertion
+		// order; the same ordering the old chunks[0] approach relied on).
+		const rows = this.db!.exec(
+			"SELECT id FROM chunks WHERE note_path = ? AND status = 'active' AND vector IS NOT NULL ORDER BY rowid",
+			[notePath],
+		);
+		if (rows.length === 0 || rows[0].values.length === 0) return [];
+		const ids: string[] = rows[0].values.map((r: any[]) => r[0] as string);
+
+		// Probe chunks spread across the whole document (midpoint sampling so
+		// head, middle and tail are all represented).
+		const probed = this.uniformSampleIds(ids, maxProbes);
+
+		const dim = EMBEDDING_DIM;
+		// Each probe contributes its own top-K chunk hits; widen a bit so the
+		// note-level aggregation still has enough candidates after de-dup.
+		const perQueryLimit = limit + 8;
+		// best[targetNotePath] = highest-scoring SearchResult seen across probes.
+		const best = new Map<string, SearchResult>();
+
+		for (const cid of probed) {
+			const qIdx = this.vectorIdToIndex.get(cid);
+			if (qIdx === undefined) continue;
+
+			// Build a query vector from this probe's stored embedding.
+			const qOffset = qIdx * dim;
+			const query = new Float32Array(dim);
+			for (let j = 0; j < dim; j++) query[j] = this.allVectors![qOffset + j];
+
+			// Use search() — it normalizes the query, ranks ALL chunks by cosine
+			// score, and returns the top-perQueryLimit with metadata attached.
+			// (searchSlice must NOT be used here: it returns hits UNORDERED, in
+			// cache-index order, so slicing it would keep the first-N-by-position
+			// instead of the top-N-by-score — which produced unrelated results.)
+			const hits = this.search(query, perQueryLimit, threshold);
+
+			// Aggregate to note level: keep each target note's best hit.
+			for (const h of hits) {
+				if (h.notePath === notePath) continue; // skip self
+				const prev = best.get(h.notePath);
+				if (!prev || h.score > prev.score) best.set(h.notePath, h);
+			}
+		}
+
+		// Rank target notes by best score, take top `limit`.
+		return Array.from(best.values())
+			.sort((a, b) => b.score - a.score)
+			.slice(0, limit);
+	}
+
+	/** Pick up to `n` ids spread evenly across `ids` (midpoint of each stride),
+	 *  so head, middle and tail are all represented. Returns all ids when the
+	 *  note has fewer than `n` chunks. */
+	private uniformSampleIds(ids: string[], n: number): string[] {
+		const len = ids.length;
+		if (len <= n) return ids.slice();
+		const out: string[] = [];
+		const step = len / n;
+		for (let i = 0; i < n; i++) {
+			out.push(ids[Math.floor((i + 0.5) * step)]);
 		}
 		return out;
 	}

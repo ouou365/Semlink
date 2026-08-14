@@ -58,8 +58,12 @@ async function handle(op: string, args: any[]): Promise<any> {
 		case "pruneOrphanedPaths": return engine.pruneOrphanedPaths(args[0]);
 		case "getStats": return engine.getStats();
 		case "saveEmbeddings": return engine.saveEmbeddings(args[0], args[1]);
+		case "saveDocEmbedding": return engine.saveDocEmbedding(args[0], args[1], args[2], args[3]);
+		case "getDocVectorNotePaths": return engine.getDocVectorNotePaths();
+		case "prepareDocVectorBackfill": return engine.prepareDocVectorBackfill(args[0]);
 		case "loadVectorCache": return engine.loadVectorCache();
 		case "search": return engine.search(args[0], args[1], args[2]);
+		case "searchRelatedNotes": return engine.searchRelatedNotes(args[0], args[1], args[2], args[3]);
 		case "textSearch": return engine.textSearch(args[0], args[1], args[2]);
 		// queue ops
 		case "enqueue": return engine.enqueue(args[0], args[1], args[2]);
