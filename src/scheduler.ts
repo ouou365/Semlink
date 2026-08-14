@@ -9,7 +9,7 @@ import { IndexQueue } from "./index-queue";
 import { EmbeddingClient } from "./embedding-client";
 import { ProgressTracker } from "./progress";
 import { ActivityGate } from "./activity-gate";
-import { makePreview } from "./chunker";
+import { makePreview, isSparseContent } from "./chunker";
 import { extractHeadings } from "./section-utils";
 import { t } from "./i18n";
 
@@ -268,7 +268,14 @@ export class Scheduler {
 		this.progress.setPhase("embedding");
 		this.progress.setNetworkStatus(this.client.networkStatus);
 
-		const texts = chunks.map((c) => c.content);
+		// Sparse chunks (table separators | | |, dashes ---, whitespace-only)
+		// collapse to the same embedding vector → false-positive ~1.0 similarity
+		// between unrelated docs. Skip embedding them; they're still inserted
+		// below as active/NULL, which loadVectorCache excludes via
+		// `vector IS NOT NULL`, so they never pollute the vector space.
+		const embeddableChunks = chunks.filter((c) => !isSparseContent(c.content));
+
+		const texts = embeddableChunks.map((c) => c.content);
 		const embedResult = await this.client.embedAll(texts, (batchIdx, totalBatches) => {
 			this.progress.setFileChunkProgress(`${batchIdx + 1}/${totalBatches}`);
 		});
@@ -299,7 +306,6 @@ export class Scheduler {
 		await this.store.beginTransaction();
 		try {
 			// Insert chunk metadata first (so UPDATE in saveEmbeddings can find them)
-			const chunkIds = chunks.map((c) => c.id);
 			const now = Date.now();
 			for (let i = 0; i < chunks.length; i++) {
 				await this.store.insertChunk({
@@ -315,8 +321,10 @@ export class Scheduler {
 				});
 			}
 
-			// Save embeddings (UPDATE chunks SET vector = ... WHERE id = ?)
-			await this.store.saveEmbeddings(chunkIds, allEmbeddings);
+			// Save embeddings (UPDATE chunks SET vector = ... WHERE id = ?).
+			// Only embeddable chunks get a vector; sparse chunks stay active/NULL
+			// (excluded from search by the `vector IS NOT NULL` filter).
+			await this.store.saveEmbeddings(embeddableChunks.map((c) => c.id), allEmbeddings);
 
 			// Save the document-level (heading) vector in the same transaction.
 			if (docEmbedding) {

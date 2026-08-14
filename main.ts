@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS, type SmartVaultSettings, type HistoryMessage } from "
 import { VectorStore } from "./src/vector-store";
 import { IndexQueue } from "./src/index-queue";
 import { EmbeddingClient } from "./src/embedding-client";
+import { RerankerClient } from "./src/reranker-client";
 import { ChatClient, inferAgentDepth, buildNoteContext } from "./src/chat-client";
 import { SemlinkTools } from "./src/chat-tools";
 import { Scheduler } from "./src/scheduler";
@@ -28,6 +29,7 @@ export default class SmartVaultPlugin extends Plugin {
 	store!: VectorStore;
 	queue!: IndexQueue;
 	client!: EmbeddingClient;
+	reranker!: RerankerClient;
 	chatClient!: ChatClient;
 	chatTools!: SemlinkTools;
 	scheduler!: Scheduler;
@@ -67,6 +69,7 @@ export default class SmartVaultPlugin extends Plugin {
 
 		this.queue = new IndexQueue(this.store);
 		this.client = new EmbeddingClient(this.settings);
+		this.reranker = new RerankerClient(this.settings);
 		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault, () => this.app.workspace.getActiveFile()?.path ?? null);
 		this.chatClient = new ChatClient(this.settings, this.chatTools);
 		// Indexing pauses while the user is actively working (clicks, typing,
@@ -137,7 +140,7 @@ export default class SmartVaultPlugin extends Plugin {
 
 		// Semantic Search sidebar view
 		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SemanticSearchView(
-			leaf, this.store, this.client, this.app.vault, this.chatClient, dataDir,
+			leaf, this.store, this.client, this.reranker, this.app.vault, this.chatClient, dataDir,
 		));
 
 		// Register the custom Semlink logo as a named Obsidian icon so that both
@@ -251,6 +254,7 @@ export default class SmartVaultPlugin extends Plugin {
 			(leaf.view as SemanticSearchView).refreshLanguage?.();
 		}
 		this.client?.updateSettings(this.settings);
+		this.reranker?.updateSettings(this.settings);
 		this.chatClient?.updateSettings(this.settings);
 		this.scheduler?.updateSettings(this.settings);
 		this.mcpServer?.updateSettings(this.settings);
@@ -400,6 +404,27 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 
 		new Notice(`Semlink: ${t("noticeStartIndex")}`);
+		this.scheduler.run();
+	}
+
+	/** Force a full rebuild: wipe ALL vectors and re-embed every note. Use after
+	 *  changing chunk filters (e.g. the sparse-chunk skip) or to fix a corrupted
+	 *  index. Unlike startFullIndex, this purges already-stored vectors too. */
+	async rebuildAll() {
+		if (this.scheduler.isRunning) {
+			new Notice(`Semlink: ${t("noticeIndexRunning")}`);
+			return;
+		}
+		const hasApiKey = this.settings.provider === "huggingface"
+			? !!this.settings.huggingFaceApiKey
+			: !!this.settings.siliconFlowApiKey;
+		if (!hasApiKey) {
+			new Notice(`Semlink: ${t("noticeNoApiKey")}`);
+			return;
+		}
+		new Notice(`Semlink: ${t("noticeRebuildStarted")}`);
+		await this.store.clearAll();
+		this.progress.reset();
 		this.scheduler.run();
 	}
 

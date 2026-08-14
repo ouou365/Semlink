@@ -166,3 +166,13 @@ export function makePreview(content: string, maxLen = 200): string {
 	if (clean.length <= maxLen) return clean;
 	return clean.slice(0, maxLen) + "...";
 }
+
+/** Whether a chunk is too sparse to embed meaningfully. Chunks that are only
+ *  markdown table separators (| | |), dashes (---), or whitespace collapse to
+ *  the SAME embedding vector and produce false-positive ~1.0 similarity
+ *  between totally unrelated documents. We strip structural / punctuation
+ *  chars and require a minimum of "effective" characters (CJK + alphanumerics). */
+export function isSparseContent(content: string, minChars = 20): boolean {
+	const effective = content.replace(/[\s|\-=:_*#>`~\[\](){}<>"'.,;:!?/\\]+/g, "").length;
+	return effective < minChars;
+}

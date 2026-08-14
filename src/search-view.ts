@@ -10,6 +10,7 @@
 import { ItemView, MarkdownRenderer, MarkdownView, WorkspaceLeaf, TFile, Vault, Notice, setIcon } from "obsidian";
 import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
+import type { RerankerClient } from "./reranker-client";
 import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
 import { inferAgentDepth, buildNoteContext } from "./chat-client";
 import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
@@ -88,6 +89,7 @@ const ANSWER_CONTEXT_SIZE = 5;
 export class SemanticSearchView extends ItemView {
 	private store: VectorStore;
 	private client: EmbeddingClient;
+	private reranker: RerankerClient;
 	private chatClient: ChatClient;
 	private vault: Vault;
 	private history: ChatHistoryStore;
@@ -165,6 +167,7 @@ export class SemanticSearchView extends ItemView {
 		leaf: WorkspaceLeaf,
 		store: VectorStore,
 		client: EmbeddingClient,
+		reranker: RerankerClient,
 		vault: Vault,
 		chatClient: ChatClient,
 		dataDir: string,
@@ -172,6 +175,7 @@ export class SemanticSearchView extends ItemView {
 		super(leaf);
 		this.store = store;
 		this.client = client;
+		this.reranker = reranker;
 		this.vault = vault;
 		this.chatClient = chatClient;
 		this.history = new ChatHistoryStore(dataDir);
@@ -696,11 +700,19 @@ export class SemanticSearchView extends ItemView {
 			let results: SearchResult[] = [];
 			if (!hasAttachments) {
 				const embedResult = await this.client.embed([query]);
+				// Over-recall when the reranker is on so the cross-encoder can
+				// re-order a real candidate pool, then keep the top DEFAULT_LIMIT.
+				const rerankOn = this.reranker.isEnabled;
+				const recall = rerankOn ? Math.max(DEFAULT_LIMIT * 3, 20) : DEFAULT_LIMIT;
 				results = await this.store.search(
 					embedResult.embeddings[0],
-					DEFAULT_LIMIT,
+					recall,
 					DEFAULT_THRESHOLD,
 				);
+				if (rerankOn && results.length > 1) {
+					const reranked = await this.rerankByQuery(query, results);
+					if (reranked) results = reranked.slice(0, DEFAULT_LIMIT);
+				}
 			}
 
 			loadingEl.empty();
@@ -1750,23 +1762,59 @@ export class SemanticSearchView extends ItemView {
 	 *  toolGetSimilarNotes. Returns up to `limit` related notes (empty if the
 	 *  note isn't indexed yet). */
 	private async getRelatedNotes(notePath: string, limit = 6): Promise<{ notePath: string; heading: string; preview: string; score: number }[]> {
-		// Max-pooling over the note's own chunks (computed in the DB engine):
-		// probes several chunks spread across the whole document and keeps
-		// each target note's best score. Symmetric, and lets large docs be
-		// represented by their real topical sections instead of only chunks[0]
-		// — which was a boilerplate header for some docs, yielding empty lists.
-		const results = await this.store.searchRelatedNotes(notePath, limit, 0.2, 6);
+		// Over-recall when the reranker is on so the cross-encoder has a real
+		// candidate pool to re-order; otherwise recall exactly `limit`.
+		const recall = this.reranker.isEnabled ? Math.max(limit * 4, 20) : limit;
+		let results = await this.store.searchRelatedNotes(notePath, recall, 0.2, 6);
 		if (results.length === 0) {
 			console.warn("[Semlink] related-notes search returned 0 results for", notePath, "— is the vector index loaded?");
 		} else {
-			console.log("[Semlink] related-notes:", results.length, "hits, top score", results[0].score.toFixed(3));
+			console.log("[Semlink] related recall:", results.length, "hits, top embedding score", results[0].score.toFixed(3));
 		}
-		return results.map((r) => ({
+
+		// Re-rank with the cross-encoder to suppress "same vocabulary, different
+		// concept" false positives (e.g. two maritime standards sharing only
+		// boilerplate wording). Falls back silently if disabled / failing.
+		if (this.reranker.isEnabled && results.length > 1) {
+			const reranked = await this.rerankResults(notePath, results);
+			if (reranked) {
+				console.log("[Semlink] related after rerank, top rerank score", reranked[0].score.toFixed(3));
+				results = reranked;
+			}
+		}
+
+		return results.slice(0, limit).map((r) => ({
 			notePath: r.notePath,
 			heading: r.heading,
 			preview: r.contentPreview,
 			score: r.score,
 		}));
+	}
+
+	/** Re-rank `results` by relevance to an arbitrary `query` text. Shared by
+	 *  the related-notes flow (query built from the source note) and the chat
+	 *  search flow (query = the user's typed question). Documents = each
+	 *  candidate's heading + preview. Returns null if reranking is unavailable
+	 *  or failed, so the caller keeps the embedding ordering. */
+	private async rerankByQuery(query: string, results: SearchResult[]): Promise<SearchResult[] | null> {
+		if (!this.reranker.isEnabled || results.length <= 1) return null;
+		const documents = results.map((r) => (r.heading ? r.heading + "\n" : "") + r.contentPreview);
+		const ranked = await this.reranker.rerank(query, documents);
+		if (!ranked) return null;
+		// Reorder by rerank score; overwrite the score with the reranker's.
+		return ranked.map((rr) => ({ ...results[rr.index], score: rr.score }));
+	}
+
+	/** Build a query from the source note (its first chunk) and re-rank. */
+	private async rerankResults(notePath: string, results: SearchResult[]): Promise<SearchResult[] | null> {
+		let query = this.basename(notePath);
+		try {
+			const chunks = await this.store.getChunksByNotePath(notePath);
+			if (chunks.length > 0) query = chunks[0].content.slice(0, 1500);
+		} catch {
+			// keep basename as the query
+		}
+		return this.rerankByQuery(query, results);
 	}
 
 	/** Grow the map around `path`: open the note and add its neighbours. Existing
@@ -1806,10 +1854,12 @@ export class SemanticSearchView extends ItemView {
 		}
 	}
 
-	/** Node click handler: open the note and grow the map around it. */
+	/** Node click handler: open the note AND grow the map around it. */
 	private handleMapNodeClick(path: string): void {
-		// Single click: make this node the center and expand its related notes.
-		// (Ctrl/Cmd+click opens the note — see handleMapNodeDblClick.)
+		// Single click opens the note and expands its related notes around it.
+		// (Ctrl/Cmd+click opens the note WITHOUT re-centering the map — see
+		// handleMapNodeDblClick.)
+		void this.openNote(path, "");
 		void this.expandMapNode(path, true);
 	}
 

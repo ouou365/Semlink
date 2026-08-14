@@ -351,6 +351,50 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		// ── Reranker (cross-encoder re-ranking of related-note recall) ──
+		new Setting(containerEl)
+			.setName(t("rerankerTitle"))
+			.setDesc(t("rerankerDesc"))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.rerankerEnabled)
+					.onChange(async (value) => {
+						this.plugin.settings.rerankerEnabled = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(t("rerankerModel"))
+			.setDesc(t("rerankerModelDesc"))
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						"BAAI/bge-reranker-v2-m3": "BAAI/bge-reranker-v2-m3",
+						"Pro/BAAI/bge-reranker-v2-m3": "Pro/BAAI/bge-reranker-v2-m3",
+						"netease-youdao/bce-reranker-base_v1": "netease-youdao/bce-reranker-base_v1",
+					})
+					.setValue(this.plugin.settings.rerankerModel)
+					.onChange(async (value) => {
+						this.plugin.settings.rerankerModel = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// ── Re-embed (force full rebuild) ──
+		new Setting(containerEl)
+			.setName(t("rebuildIndex"))
+			.setDesc(t("rebuildIndexDesc"))
+			.addButton((btn) =>
+				btn
+					.setButtonText(t("rebuildIndex"))
+					.setWarning()
+					.onClick(async () => {
+						if (!window.confirm(t("rebuildConfirm"))) return;
+						await this.plugin.rebuildAll();
+					})
+			);
 	}
 
 	// ══════════════════════════════════════

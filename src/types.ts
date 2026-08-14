@@ -65,6 +65,8 @@ export interface SmartVaultSettings {
 	huggingFaceApiKey: string;
 	apiBase: string;
 	embeddingModel: string;
+	rerankerEnabled: boolean;
+	rerankerModel: string;
 	mcpPort: number;
 	mcpApiKey: string;
 	chunkSize: number;
@@ -87,6 +89,8 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	huggingFaceApiKey: "",
 	apiBase: "https://api.siliconflow.cn",
 	embeddingModel: "BAAI/bge-m3",
+	rerankerEnabled: false,
+	rerankerModel: "BAAI/bge-reranker-v2-m3",
 	mcpPort: 3001,
 	mcpApiKey: "",
 	chunkSize: 800,
