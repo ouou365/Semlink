@@ -4,7 +4,7 @@
 
 import { Notice, Plugin, TFile, FileSystemAdapter, WorkspaceSidedock, addIcon } from "obsidian";
 import { join } from "path";
-import { DEFAULT_SETTINGS, type SmartVaultSettings, type HistoryMessage } from "./src/types";
+import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
 import { VectorStore } from "./src/vector-store";
 import { IndexQueue } from "./src/index-queue";
 import { EmbeddingClient } from "./src/embedding-client";
@@ -72,6 +72,11 @@ export default class SmartVaultPlugin extends Plugin {
 		this.reranker = new RerankerClient(this.settings);
 		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault, () => this.app.workspace.getActiveFile()?.path ?? null);
 		this.chatClient = new ChatClient(this.settings, this.chatTools);
+		// Persist the active chat model whenever it changes (search-view picker
+		// or the General settings dropdown).
+		this.chatClient.setModelChangeHandler(() => {
+			void this.saveSettings();
+		});
 		// Indexing pauses while the user is actively working (clicks, typing,
 		// scrolling) so heavy scans never make the frontend feel laggy.
 		this.activityGate = new ActivityGate();
@@ -128,7 +133,7 @@ export default class SmartVaultPlugin extends Plugin {
 		await this.updateInitialStatusBar();
 
 		// Start MCP server
-		if (this.settings.siliconFlowApiKey || this.settings.huggingFaceApiKey) {
+		if (activeEmbeddingProvider(this.settings).apiKey) {
 			await this.startMcpServer();
 		}
 
@@ -243,6 +248,13 @@ export default class SmartVaultPlugin extends Plugin {
 	async loadSettings() {
 		const data = await this.loadData();
 		this.settings = { ...DEFAULT_SETTINGS, ...data };
+		// Data written before the embedding-provider list existed carries the
+		// flat provider/apiBase/*ApiKey/embeddingModel fields — fold them into
+		// the list once so the new UI and clients see one source of truth.
+		const raw = data as Partial<SmartVaultSettings> | null | undefined;
+		const hasProviders = Array.isArray(raw?.embeddingProviders)
+			&& (raw.embeddingProviders?.length ?? 0) > 0;
+		if (!hasProviders) migrateEmbeddingSettings(this.settings);
 	}
 
 	async saveSettings() {
@@ -394,9 +406,7 @@ export default class SmartVaultPlugin extends Plugin {
 			return;
 		}
 
-		const hasApiKey = this.settings.provider === "huggingface"
-			? !!this.settings.huggingFaceApiKey
-			: !!this.settings.siliconFlowApiKey;
+		const hasApiKey = !!activeEmbeddingProvider(this.settings).apiKey;
 
 		if (!hasApiKey) {
 			new Notice(`Semlink: ${t("noticeNoApiKey")}`);
@@ -415,9 +425,7 @@ export default class SmartVaultPlugin extends Plugin {
 			new Notice(`Semlink: ${t("noticeIndexRunning")}`);
 			return;
 		}
-		const hasApiKey = this.settings.provider === "huggingface"
-			? !!this.settings.huggingFaceApiKey
-			: !!this.settings.siliconFlowApiKey;
+		const hasApiKey = !!activeEmbeddingProvider(this.settings).apiKey;
 		if (!hasApiKey) {
 			new Notice(`Semlink: ${t("noticeNoApiKey")}`);
 			return;

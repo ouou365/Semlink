@@ -588,10 +588,6 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	private hasApiKey(): boolean {
-		const provider = (this.client as any).provider as string | undefined;
-		if (provider === "huggingface") {
-			return !!(this.client as any).huggingFaceApiKey;
-		}
 		return !!(this.client as any).apiKey;
 	}
 

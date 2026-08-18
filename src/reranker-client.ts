@@ -14,6 +14,7 @@
 
 import { requestUrl } from "obsidian";
 import type { SmartVaultSettings } from "./types";
+import { activeEmbeddingProvider } from "./types";
 
 export interface RerankResult {
 	/** Index into the original documents array passed to rerank(). */
@@ -38,10 +39,28 @@ export class RerankerClient {
 
 	private apply(s: SmartVaultSettings): void {
 		this.enabled = !!s.rerankerEnabled;
-		// Reuse the embedding account's SiliconFlow key + base URL.
-		this.apiKey = s.siliconFlowApiKey;
-		this.apiBase = s.apiBase;
-		this.model = s.rerankerModel || "BAAI/bge-reranker-v2-m3";
+		// The reranker model is keyed `${providerId}/${modelId}` (e.g.
+		// "siliconflow-cn/BAAI/bge-reranker-v2-m3"); the owning provider's
+		// key + region drive the /v1/rerank call. Model ids themselves contain
+		// "/", so the first segment is treated as a provider only when it names
+		// a known SiliconFlow provider — otherwise the whole value is a legacy
+		// model id and the active SiliconFlow provider is used.
+		const stored = s.rerankerModel || "BAAI/bge-reranker-v2-m3";
+		const sep = stored.indexOf("/");
+		const pid = sep > 0 ? stored.slice(0, sep) : "";
+		const hasProvider = pid && s.embeddingProviders.some(
+			(p) => p.id === pid && p.kind === "siliconflow",
+		);
+		const picked = hasProvider
+			? s.embeddingProviders.find((p) => p.id === pid)
+			: undefined;
+		this.model = picked ? stored.slice(sep + 1) : stored;
+		const active = activeEmbeddingProvider(s);
+		const provider = picked
+			?? (active.kind === "siliconflow" ? active : undefined)
+			?? s.embeddingProviders.find((p) => p.kind === "siliconflow");
+		this.apiKey = provider?.apiKey || "";
+		this.apiBase = provider?.apiBase || "https://api.siliconflow.cn";
 	}
 
 	/** Whether reranking is actually usable (enabled AND a key is present). */

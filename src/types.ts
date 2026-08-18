@@ -2,8 +2,106 @@
 // Semlink - Core Type Definitions
 // ========================================
 
-/** Embedding service provider */
+/** Embedding service provider family (determines endpoint shape + model catalog) */
 export type EmbeddingProvider = "siliconflow" | "huggingface";
+
+/** One embedding provider entry (SiliconFlow CN / Global, Hugging Face, …).
+ *  SiliconFlow's two regions are separate providers so each keeps its own
+ *  key and endpoint; the active one is selected in the General tab. */
+export interface EmbeddingProviderConfig {
+	/** Stable id: "siliconflow-cn" | "siliconflow-global" | "huggingface" */
+	id: string;
+	/** Display name shown in settings. */
+	name: string;
+	/** Provider family. */
+	kind: EmbeddingProvider;
+	/** API base URL (region endpoint for SiliconFlow). */
+	apiBase: string;
+	/** API key for this provider. */
+	apiKey: string;
+	/** Selected embedding model for this provider. */
+	model: string;
+}
+
+/** Built-in embedding providers. Order matters: the first entry is the
+ *  fallback when no active id resolves. */
+export const DEFAULT_EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
+	{
+		id: "siliconflow-cn",
+		name: "SiliconFlow 中国大陆",
+		kind: "siliconflow",
+		apiBase: "https://api.siliconflow.cn",
+		apiKey: "",
+		model: "BAAI/bge-m3",
+	},
+	{
+		id: "siliconflow-global",
+		name: "SiliconFlow 全球",
+		kind: "siliconflow",
+		apiBase: "https://api.siliconflow.com",
+		apiKey: "",
+		model: "BAAI/bge-m3",
+	},
+	{
+		id: "huggingface",
+		name: "Hugging Face",
+		kind: "huggingface",
+		apiBase: "https://api-inference.huggingface.co",
+		apiKey: "",
+		model: "BAAI/bge-m3",
+	},
+];
+
+/** Resolve the active embedding provider config from persisted settings. */
+export function activeEmbeddingProvider(s: SmartVaultSettings): EmbeddingProviderConfig {
+	return (
+		s.embeddingProviders.find((p) => p.id === s.embeddingProviderId) ??
+		s.embeddingProviders[0] ??
+		DEFAULT_EMBEDDING_PROVIDERS[0]
+	);
+}
+
+/** Migrate the legacy flat embedding fields (provider/apiBase/*ApiKey/
+ *  embeddingModel) into the new provider list. Runs once on load for data
+ *  written before the provider-list settings existed. Idempotent for data
+ *  that already carries the list. */
+export function migrateEmbeddingSettings(s: SmartVaultSettings): void {
+	const providers = s.embeddingProviders;
+	if (!Array.isArray(providers) || providers.length === 0) {
+		s.embeddingProviders = DEFAULT_EMBEDDING_PROVIDERS.map((p) => ({ ...p }));
+	}
+	const list = s.embeddingProviders;
+	const legacyId = s.provider === "huggingface"
+		? "huggingface"
+		: (s.apiBase || "").includes("siliconflow.com")
+			? "siliconflow-global"
+			: "siliconflow-cn";
+	const active = list.find((p) => p.id === legacyId) ?? list[0];
+	if (active) {
+		if (active.kind === "huggingface") {
+			if (!active.apiKey) active.apiKey = s.huggingFaceApiKey || "";
+		} else {
+			if (!active.apiKey) active.apiKey = s.siliconFlowApiKey || "";
+		}
+		if (!active.model) active.model = s.embeddingModel || active.model;
+	}
+	s.embeddingProviderId = legacyId;
+
+	// Legacy reranker model without a provider prefix (the whole string is the
+	// model id, e.g. "BAAI/bge-reranker-v2-m3" — note model ids contain "/")
+	// → pin it to the active SiliconFlow provider so it reads as
+	// `${providerId}/${modelId}` like the chat models.
+	const rr = s.rerankerModel || "";
+	if (rr) {
+		const sep = rr.indexOf("/");
+		const pid = sep > 0 ? rr.slice(0, sep) : "";
+		const isNewFormat = pid && list.some((p) => p.id === pid);
+		if (!isNewFormat) {
+			const sf = (active?.kind === "siliconflow" ? active : list.find((p) => p.kind === "siliconflow")) ?? list[0];
+			if (sf) s.rerankerModel = `${sf.id}/${rr}`;
+		}
+	}
+}
 
 /** Chat completion API wire format */
 export type ChatApiFormat = "openai" | "anthropic";
@@ -60,13 +158,22 @@ export const DEFAULT_CHAT_PROVIDERS: ChatProvider[] = [
 /** Plugin settings persisted via Obsidian loadData/saveData */
 export interface SmartVaultSettings {
 	language: "auto" | "zh" | "en";
+	/** Legacy flat fields — deprecated since the embedding-provider list
+	 *  (migrated on load; kept so older data.json shapes stay readable). */
 	provider: EmbeddingProvider;
 	siliconFlowApiKey: string;
 	huggingFaceApiKey: string;
 	apiBase: string;
 	embeddingModel: string;
+	/** Active embedding provider id (index into embeddingProviders). */
+	embeddingProviderId: string;
+	/** Embedding provider list (SiliconFlow CN/Global, Hugging Face, …). */
+	embeddingProviders: EmbeddingProviderConfig[];
 	rerankerEnabled: boolean;
 	rerankerModel: string;
+	/** Persisted active chat model, keyed `${providerId}/${modelId}` ("" = auto
+	 *  → first model of the first usable provider). */
+	activeChatModel: string;
 	mcpPort: number;
 	mcpApiKey: string;
 	chunkSize: number;
@@ -89,8 +196,11 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	huggingFaceApiKey: "",
 	apiBase: "https://api.siliconflow.cn",
 	embeddingModel: "BAAI/bge-m3",
+	embeddingProviderId: "siliconflow-cn",
+	embeddingProviders: DEFAULT_EMBEDDING_PROVIDERS.map((p) => ({ ...p })),
 	rerankerEnabled: false,
-	rerankerModel: "BAAI/bge-reranker-v2-m3",
+	rerankerModel: "siliconflow-cn/BAAI/bge-reranker-v2-m3",
+	activeChatModel: "",
 	mcpPort: 3001,
 	mcpApiKey: "",
 	chunkSize: 800,

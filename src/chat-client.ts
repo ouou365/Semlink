@@ -96,14 +96,43 @@ export class ChatClient {
 	/** Currently selected model, keyed `${providerId}/${modelId}` (null = use
 	 *  the first model of the active provider). */
 	private activeModelKey: string | null = null;
+	/** Called after the active model changes, so the caller can persist it. */
+	private onModelChange: (() => void) | null = null;
 
 	constructor(settings: SmartVaultSettings, tools: SemlinkTools | null = null) {
 		this.settings = settings;
 		this.tools = tools;
+		this.syncPersistedModel();
 	}
 
 	updateSettings(settings: SmartVaultSettings) {
 		this.settings = settings;
+		this.syncPersistedModel();
+	}
+
+	/** Restore the persisted active model (settings.activeChatModel) when it
+	 *  still resolves; otherwise fall back to the first-model default. */
+	private syncPersistedModel(): void {
+		const key = this.settings.activeChatModel;
+		if (!key) {
+			this.activeModelKey = null;
+			return;
+		}
+		const sep = key.indexOf("/");
+		const pid = key.slice(0, sep);
+		const mid = key.slice(sep + 1);
+		const provider = (this.settings.chatProviders || []).find((p) => p.id === pid);
+		if (provider && provider.models.some((m) => m.id === mid)) {
+			this.activeModelKey = key;
+		} else {
+			this.activeModelKey = null;
+		}
+	}
+
+	/** Wire a callback that runs after the active model changes (used by the
+	 *  plugin to persist settings.activeChatModel). */
+	setModelChangeHandler(handler: () => void): void {
+		this.onModelChange = handler;
 	}
 
 	/**
@@ -144,7 +173,8 @@ export class ChatClient {
 		return { provider, model: provider.models[0] };
 	}
 
-	/** Switch the active chat model (must exist in the given provider). */
+	/** Switch the active chat model (must exist in the given provider). Also
+	 *  records it in settings and notifies the persist callback. */
 	setActiveModel(providerId: string, modelId: string): boolean {
 		const providers = this.settings.chatProviders || [];
 		const provider = providers.find((p) => p.id === providerId);
@@ -152,6 +182,8 @@ export class ChatClient {
 			return false;
 		}
 		this.activeModelKey = `${providerId}/${modelId}`;
+		this.settings.activeChatModel = this.activeModelKey;
+		this.onModelChange?.();
 		return true;
 	}
 

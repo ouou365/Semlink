@@ -5,6 +5,7 @@
 import { App, Vault, TFile, TAbstractFile, Notice } from "obsidian";
 import type { Scheduler } from "./scheduler";
 import type { SmartVaultSettings } from "./types";
+import { activeEmbeddingProvider } from "./types";
 import { t } from "./i18n";
 
 /** Grace period (ms) after startup during which events are ignored */
@@ -117,7 +118,7 @@ export class VaultWatcher {
 	/** Start the scheduler in incremental mode (no full scan) */
 	private noKeyNoticeShown = false;
 	private ensureSchedulerRunning() {
-		if (!this.settings.siliconFlowApiKey) {
+		if (!activeEmbeddingProvider(this.settings).apiKey) {
 			if (!this.noKeyNoticeShown) {
 				this.noKeyNoticeShown = true;
 				new Notice(`Semlink: ${t("noticeNoApiKey")}`, 6000);

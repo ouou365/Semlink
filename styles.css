@@ -201,59 +201,381 @@
     font-weight: 600;
 }
 
-/* Models tab: left provider nav + right detail panel */
-.smart-vault-settings .semlink-models-layout {
-    display: flex;
-    gap: 16px;
-    align-items: flex-start;
-}
-
-.smart-vault-settings .semlink-models-nav {
+/* Models tab: DSH-style provider list */
+.smart-vault-settings .semlink-provider-rows {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    min-width: 150px;
-    max-width: 200px;
-    flex-shrink: 0;
-    border-right: 1px solid var(--background-modifier-border);
-    padding-right: 12px;
+    gap: 6px;
 }
 
-.smart-vault-settings .semlink-models-nav-item {
-    text-align: left;
-    padding: 6px 10px;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 13px;
+.smart-vault-settings .semlink-provider-row {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    background: var(--background-secondary);
+    overflow: hidden;
+}
+
+.smart-vault-settings .semlink-provider-row.is-open {
+    border-color: var(--interactive-accent);
+}
+
+.smart-vault-settings .semlink-provider-row-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+}
+
+.smart-vault-settings .semlink-provider-identity {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.smart-vault-settings .semlink-provider-name {
+    font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.smart-vault-settings .semlink-models-nav-item:hover {
+.smart-vault-settings .semlink-provider-tag {
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 4px;
     background: var(--background-modifier-hover);
-    color: var(--text-normal);
+    color: var(--text-muted);
+    flex-shrink: 0;
 }
 
-.smart-vault-settings .semlink-models-nav-item.is-active {
-    background: var(--background-modifier-hover);
-    color: var(--text-normal);
-    font-weight: 600;
-    box-shadow: inset 2px 0 0 var(--interactive-accent);
+.smart-vault-settings .semlink-provider-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
 }
 
-.smart-vault-settings .semlink-models-nav-add {
-    color: var(--text-faint);
+.smart-vault-settings .semlink-provider-dot.is-configured {
+    background: var(--color-green);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-green) 25%, transparent);
+}
+
+.smart-vault-settings .semlink-provider-dot.is-missing {
+    background: var(--color-red);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-red) 25%, transparent);
+}
+
+.smart-vault-settings .semlink-provider-badge {
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+    color: var(--interactive-accent);
+    flex-shrink: 0;
+}
+
+/* Kind marker rendered inside a Setting's name row (model-level tags). */
+.smart-vault-settings .semlink-inline-tag {
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.smart-vault-settings .semlink-provider-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-provider-editor {
+    border-top: 1px solid var(--background-modifier-border);
+    padding: 12px;
+    background: var(--background-primary);
+}
+
+.smart-vault-settings .semlink-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.smart-vault-settings .semlink-btn:hover {
+    background: var(--background-modifier-hover);
+}
+
+.smart-vault-settings .semlink-btn-danger {
+    color: var(--text-error);
+    border-color: color-mix(in srgb, var(--text-error) 40%, transparent);
+}
+
+.smart-vault-settings .semlink-btn-danger:hover {
+    background: color-mix(in srgb, var(--text-error) 10%, transparent);
+}
+
+.smart-vault-settings .semlink-btn-cta {
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.smart-vault-settings .semlink-btn-cta:hover {
+    background: var(--interactive-accent-hover);
+    color: var(--text-on-accent);
+}
+
+.smart-vault-settings .semlink-provider-add {
+    margin-top: 14px;
+}
+
+.smart-vault-settings .semlink-provider-add-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.smart-vault-settings .semlink-add-card {
     border: 1px dashed var(--background-modifier-border);
-    margin-top: 4px;
+    border-radius: 8px;
+    padding: 12px;
+    background: var(--background-secondary);
 }
 
-.smart-vault-settings .semlink-models-detail {
+.smart-vault-settings .semlink-add-card-title {
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.smart-vault-settings .semlink-add-card-body {
+    border-top: 1px solid var(--background-modifier-border);
+    padding-top: 8px;
+    margin-top: 8px;
+}
+
+.smart-vault-settings .semlink-hint {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-top: 8px;
+    padding: 0 2px;
+}
+
+.smart-vault-settings .semlink-draft-error,
+.smart-vault-settings .semlink-model-error {
+    color: var(--text-error);
+    font-size: 12px;
+    margin-top: 6px;
+}
+
+/* Model list inside a provider editor */
+.smart-vault-settings .semlink-model-list {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 10px;
+    margin: 10px 0 4px;
+    background: var(--background-secondary);
+}
+
+.smart-vault-settings .semlink-model-list-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.smart-vault-settings .semlink-model-list-title {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.smart-vault-settings .semlink-model-list-count {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.smart-vault-settings .semlink-link-btn {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--interactive-accent);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 4px;
+}
+
+.smart-vault-settings .semlink-link-btn:hover {
+    text-decoration: underline;
+}
+
+.smart-vault-settings .semlink-link-btn:disabled {
+    color: var(--text-faint);
+    cursor: default;
+    text-decoration: none;
+}
+
+.smart-vault-settings .semlink-model-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.smart-vault-settings .semlink-input {
     flex: 1;
     min-width: 0;
+    padding: 5px 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 13px;
+}
+
+.smart-vault-settings .semlink-input:focus {
+    border-color: var(--interactive-accent);
+    outline: none;
+}
+
+.smart-vault-settings .semlink-input-ctx {
+    flex: 0 0 110px;
+}
+
+.smart-vault-settings .semlink-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-icon-btn:hover {
+    background: var(--background-modifier-hover);
+}
+
+.smart-vault-settings .semlink-icon-btn-danger:hover {
+    color: var(--text-error);
+    background: color-mix(in srgb, var(--text-error) 10%, transparent);
+}
+
+.smart-vault-settings .semlink-add-model-btn {
+    margin-top: 4px;
+    background: transparent;
+    border: none;
+    color: var(--interactive-accent);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 4px;
+}
+
+.smart-vault-settings .semlink-add-model-btn:hover {
+    text-decoration: underline;
+}
+
+/* Embedding params collapsible section (former Embedding tab) */
+.smart-vault-settings .semlink-embedding-params {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    margin: 18px 0;
+    background: var(--background-secondary);
+}
+
+.smart-vault-settings .semlink-embedding-params-summary {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-normal);
+    list-style: none;
+}
+
+.smart-vault-settings .semlink-embedding-params-summary::-webkit-details-marker {
+    display: none;
+}
+
+.smart-vault-settings .semlink-embedding-params-summary::before {
+    content: "▶";
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+}
+
+.smart-vault-settings .semlink-embedding-params[open] .semlink-embedding-params-summary::before {
+    transform: rotate(90deg);
+}
+
+.smart-vault-settings .semlink-embedding-params-summary:hover {
+    background: var(--background-modifier-hover);
+    border-radius: 8px;
+}
+
+.smart-vault-settings .semlink-embedding-params-hint {
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.smart-vault-settings .semlink-embedding-params-body {
+    border-top: 1px solid var(--background-modifier-border);
+    padding: 4px 14px 8px;
+    background: var(--background-primary);
+    border-radius: 0 0 8px 8px;
+}
+
+/* Model-fetch modal */
+.semlink-fetch-modal .semlink-fetch-desc {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+
+.semlink-fetch-modal .semlink-fetch-list {
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 6px;
+    margin-bottom: 12px;
+}
+
+.semlink-fetch-modal .semlink-fetch-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.semlink-fetch-modal .semlink-fetch-item:hover {
+    background: var(--background-modifier-hover);
+}
+
+.semlink-fetch-modal .semlink-fetch-existing {
+    color: var(--color-green);
+    font-size: 12px;
+}
+
+/* Delete-provider modal */
+.semlink-delete-modal .semlink-delete-desc {
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.smart-vault-settings .setting-item-description.is-error {
+    color: var(--text-error);
 }
 
 /* Chat models modal */
