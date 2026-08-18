@@ -29,8 +29,8 @@ const S: Strings = {
 	// ──── Settings Tab ────
 	settingsTitle: { zh: "Semlink 设置", en: "Semlink Settings" },
 	tabGeneral: { zh: "通用", en: "General" },
-	tabEmbedding: { zh: "嵌入", en: "Embedding" },
-	tabChat: { zh: "对话", en: "Chat" },
+	tabEmbedding: { zh: "索引", en: "Index" },
+	tabModels: { zh: "模型", en: "Models" },
 	tabMcp: { zh: "MCP", en: "MCP" },
 	tabBot: { zh: "机器人", en: "Bot" },
 	botSection: { zh: "飞书机器人", en: "Feishu Bot" },

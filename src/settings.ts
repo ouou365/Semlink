@@ -12,7 +12,7 @@ import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { t } from "./i18n";
 
-type SettingsTab = "general" | "embedding" | "chat" | "mcp" | "bot";
+type SettingsTab = "general" | "embedding" | "models" | "mcp" | "bot";
 
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
@@ -21,6 +21,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	private indexBtnCurrentState: "resume" | "pause" | "none" = "none";
 	private indexBtnLoading = false;
 	private activeTab: SettingsTab = "general";
+	/** Models tab: which provider is selected in the left nav — the fixed
+	 *  SiliconFlow embedding entry ("siliconflow") or an index into
+	 *  chatProviders (a chat provider like DeepSeek). */
+	private activeModelProvider: "siliconflow" | number = "siliconflow";
 	private feishuScanHandle: FeishuScanHandle | null = null;
 
 	constructor(app: App, plugin: SmartVaultPlugin) {
@@ -58,8 +62,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			case "embedding":
 				this.renderEmbeddingTab(panelEl);
 				break;
-			case "chat":
-				this.renderChatTab(panelEl);
+			case "models":
+				this.renderModelsTab(panelEl);
 				break;
 			case "mcp":
 				this.renderMcpTab(panelEl);
@@ -75,7 +79,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const tabs: Array<{ id: SettingsTab; label: string }> = [
 			{ id: "general", label: t("tabGeneral") },
 			{ id: "embedding", label: t("tabEmbedding") },
-			{ id: "chat", label: t("tabChat") },
+			{ id: "models", label: t("tabModels") },
 			{ id: "mcp", label: t("tabMcp") },
 			{ id: "bot", label: t("tabBot") },
 		];
@@ -175,7 +179,142 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	// Tab: Embedding — embedding model & embedding params
 	// ══════════════════════════════════════
 	private renderEmbeddingTab(containerEl: HTMLElement): void {
-		// ── Section: Embedding Model ──
+		// Model & provider configuration moved to the "Models" tab — this tab
+		// now only holds embedding request parameters and the rebuild action.
+		new Setting(containerEl).setName(t("sectionEmbedding")).setHeading();
+
+		new Setting(containerEl)
+			.setName(t("chunkSize"))
+			.setDesc(t("chunkSizeDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(200, 2000, 100)
+					.setValue(this.plugin.settings.chunkSize)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.chunkSize = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(t("chunkOverlap"))
+			.setDesc(t("chunkOverlapDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(0, 500, 50)
+					.setValue(this.plugin.settings.chunkOverlap)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.chunkOverlap = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(t("batchSize"))
+			.setDesc(t("batchSizeDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 128, 1)
+					.setValue(this.plugin.settings.batchSize)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.batchSize = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName(t("requestDelay"))
+			.setDesc(t("requestDelayDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(0, 1000, 50)
+					.setValue(this.plugin.settings.requestDelayMs)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.requestDelayMs = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// ── Re-embed (force full rebuild) ──
+		new Setting(containerEl)
+			.setName(t("rebuildIndex"))
+			.setDesc(t("rebuildIndexDesc"))
+			.addButton((btn) =>
+				btn
+					.setButtonText(t("rebuildIndex"))
+					.setWarning()
+					.onClick(async () => {
+						if (!window.confirm(t("rebuildConfirm"))) return;
+						await this.plugin.rebuildAll();
+					})
+			);
+	}
+
+	// ══════════════════════════════════════
+	// Tab: Models — provider list (left) + selected provider detail (right)
+	// ══════════════════════════════════════
+	private renderModelsTab(containerEl: HTMLElement): void {
+		const layoutEl = containerEl.createDiv({ cls: "semlink-models-layout" });
+
+		// ── Left nav: fixed SiliconFlow entry + dynamic chat providers ──
+		const navEl = layoutEl.createDiv({ cls: "semlink-models-nav" });
+		const navBtn = (label: string, active: boolean, onClick: () => void) => {
+			const btn = navEl.createEl("button", { cls: "semlink-models-nav-item", text: label });
+			if (active) btn.addClass("is-active");
+			btn.addEventListener("click", onClick);
+		};
+
+		navBtn(t("providerSiliconFlow"), this.activeModelProvider === "siliconflow", () => {
+			this.activeModelProvider = "siliconflow";
+			this.display();
+		});
+
+		const providers = this.plugin.settings.chatProviders;
+		for (let pi = 0; pi < providers.length; pi++) {
+			navBtn(providers[pi].name || `Provider ${pi + 1}`, this.activeModelProvider === pi, () => {
+				this.activeModelProvider = pi;
+				this.display();
+			});
+		}
+
+		// Add a new (chat) provider and select it right away.
+		const addBtn = navEl.createEl("button", {
+			cls: "semlink-models-nav-item semlink-models-nav-add",
+			text: `＋ ${t("chatAddProvider")}`,
+		});
+		addBtn.addEventListener("click", async () => {
+			providers.push({
+				id: `provider-${Date.now()}`,
+				name: "New Provider",
+				baseUrl: "",
+				apiKey: "",
+				apiFormat: "openai",
+				models: [],
+			});
+			this.activeModelProvider = providers.length - 1;
+			await this.plugin.saveSettings();
+			this.display();
+		});
+
+		// ── Right: detail of the selected provider ──
+		const detailEl = layoutEl.createDiv({ cls: "semlink-models-detail" });
+		if (typeof this.activeModelProvider === "number" && this.activeModelProvider < providers.length) {
+			this.renderChatProvider(detailEl, this.activeModelProvider);
+		} else {
+			// "siliconflow", or a stale index after a provider was deleted.
+			this.activeModelProvider = "siliconflow";
+			this.renderSiliconFlowDetail(detailEl);
+		}
+	}
+
+	/** Right-hand detail for the SiliconFlow entry: embedding provider, API
+	 *  base/key, embedding model and reranker. Same fields the embedding tab
+	 *  used to render — data layout unchanged, only the entry point moved. */
+	private renderSiliconFlowDetail(containerEl: HTMLElement): void {
 		new Setting(containerEl).setName(t("sectionModel")).setHeading();
 
 		// Provider selection
@@ -293,65 +432,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				);
 		}
 
-		// ── Section: Embedding Parameters ──
-		new Setting(containerEl).setName(t("sectionEmbedding")).setHeading();
-
-		new Setting(containerEl)
-			.setName(t("chunkSize"))
-			.setDesc(t("chunkSizeDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(200, 2000, 100)
-					.setValue(this.plugin.settings.chunkSize)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.chunkSize = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t("chunkOverlap"))
-			.setDesc(t("chunkOverlapDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 500, 50)
-					.setValue(this.plugin.settings.chunkOverlap)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.chunkOverlap = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t("batchSize"))
-			.setDesc(t("batchSizeDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(1, 128, 1)
-					.setValue(this.plugin.settings.batchSize)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.batchSize = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t("requestDelay"))
-			.setDesc(t("requestDelayDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 1000, 50)
-					.setValue(this.plugin.settings.requestDelayMs)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.requestDelayMs = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
 		// ── Reranker (cross-encoder re-ranking of related-note recall) ──
 		new Setting(containerEl)
 			.setName(t("rerankerTitle"))
@@ -381,27 +461,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
-
-		// ── Re-embed (force full rebuild) ──
-		new Setting(containerEl)
-			.setName(t("rebuildIndex"))
-			.setDesc(t("rebuildIndexDesc"))
-			.addButton((btn) =>
-				btn
-					.setButtonText(t("rebuildIndex"))
-					.setWarning()
-					.onClick(async () => {
-						if (!window.confirm(t("rebuildConfirm"))) return;
-						await this.plugin.rebuildAll();
-					})
-			);
-	}
-
-	// ══════════════════════════════════════
-	// Tab: Chat — chat providers & models
-	// ══════════════════════════════════════
-	private renderChatTab(containerEl: HTMLElement): void {
-		this.renderChatModelsSection(containerEl);
 	}
 
 	// ══════════════════════════════════════
@@ -606,33 +665,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			});
 	}
 
-	// ──── Chat Models Section ────
-
-	private renderChatModelsSection(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName(t("sectionChat")).setHeading();
-
-		const providers = this.plugin.settings.chatProviders;
-		for (let pi = 0; pi < providers.length; pi++) {
-			this.renderChatProvider(containerEl, pi);
-		}
-
-		// Add provider button
-		new Setting(containerEl)
-			.addButton((btn) => {
-				btn.setButtonText(t("chatAddProvider")).setClass("mod-cta").onClick(async () => {
-					providers.push({
-						id: `provider-${Date.now()}`,
-						name: "New Provider",
-						baseUrl: "",
-						apiKey: "",
-						apiFormat: "openai",
-						models: [],
-					});
-					await this.plugin.saveSettings();
-					this.display();
-				});
-			});
-	}
+	// ──── Chat provider detail (rendered into the Models tab's right panel) ────
 
 	private renderChatProvider(containerEl: HTMLElement, index: number): void {
 		const provider = this.plugin.settings.chatProviders[index];
