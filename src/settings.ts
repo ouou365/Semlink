@@ -642,10 +642,10 @@ function embeddingModelsOf(p: EmbeddingProviderConfig): string[] {
 	return [];
 }
 
-/** One option per configured chat model, keyed `${providerId}/${modelId}`.
- *  Only providers with a key AND a base URL are listed (same usability rule
- *  as ChatClient.getActiveProvider), so the dropdown can only select a
- *  working chat model. */
+/** One option per usable chat model, keyed `${providerId}/${modelId}`.
+ *  Sources: chat providers with a key AND a base URL, plus the kind-tagged
+ *  "chat" entries of embedding providers (SiliconFlow CN/Global, Hugging
+ *  Face) that have a key — matching what ChatClient.getActiveModel resolves. */
 function chatModelOptions(plugin: SmartVaultPlugin): Record<string, string> {
 	const options: Record<string, string> = {};
 	for (const p of plugin.settings.chatProviders) {
@@ -653,6 +653,14 @@ function chatModelOptions(plugin: SmartVaultPlugin): Record<string, string> {
 		if (!p.baseUrl || !p.baseUrl.trim()) continue;
 		for (const m of p.models) {
 			options[`${p.id}/${m.id}`] = `${p.name || p.id}/${m.id}`;
+		}
+	}
+	for (const p of plugin.settings.embeddingProviders) {
+		if (!p.apiKey || !p.apiKey.trim()) continue;
+		if (!p.apiBase || !p.apiBase.trim()) continue;
+		for (const m of p.models ?? []) {
+			if ((m.kind ?? "chat") !== "chat") continue;
+			options[`${p.id}/${m.id}`] = `${p.name}/${m.id}`;
 		}
 	}
 	return options;

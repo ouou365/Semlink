@@ -121,7 +121,7 @@ export class ChatClient {
 		const sep = key.indexOf("/");
 		const pid = key.slice(0, sep);
 		const mid = key.slice(sep + 1);
-		const provider = (this.settings.chatProviders || []).find((p) => p.id === pid);
+		const provider = this.allChatProviders().find((p) => p.id === pid);
 		if (provider && provider.models.some((m) => m.id === mid)) {
 			this.activeModelKey = key;
 		} else {
@@ -136,11 +136,33 @@ export class ChatClient {
 	}
 
 	/**
+	 * Every source of chat models, unified: the user-managed chat providers,
+	 * plus the kind-tagged "chat" entries of embedding providers (SiliconFlow
+	 * CN/Global, Hugging Face) — those providers serve chat completions too,
+	 * so a model added as "对话" in their list is selectable and usable.
+	 * Bridged to the ChatProvider shape (no writes back to the settings).
+	 */
+	private allChatProviders(): ChatProvider[] {
+		const fromEmbedding: ChatProvider[] = (this.settings.embeddingProviders || [])
+			.filter((p) => p.apiKey && p.apiKey.trim() !== "" && p.apiBase && p.apiBase.trim() !== "")
+			.map((p) => ({
+				id: p.id,
+				name: p.name || p.id,
+				baseUrl: p.apiBase,
+				apiKey: p.apiKey,
+				apiFormat: p.apiFormat ?? "openai",
+				models: (p.models ?? []).filter((m) => (m.kind ?? "chat") === "chat"),
+			}))
+			.filter((p) => p.models.length > 0);
+		return [...(this.settings.chatProviders || []), ...fromEmbedding];
+	}
+
+	/**
 	 * Return the first configured chat provider (non-empty apiKey and baseUrl),
 	 * or null if none is usable.
 	 */
 	getActiveProvider(): ChatProvider | null {
-		const providers = this.settings.chatProviders || [];
+		const providers = this.allChatProviders();
 		return providers.find(
 			(p) => p.apiKey && p.apiKey.trim() !== "" && p.baseUrl && p.baseUrl.trim() !== "",
 		) || null;
@@ -155,7 +177,7 @@ export class ChatClient {
 	 *  first model of the active provider when nothing is selected / the
 	 *  selection became invalid (e.g. provider removed in settings). */
 	getActiveModel(): { provider: ChatProvider; model: ChatModel } | null {
-		const providers = this.settings.chatProviders || [];
+		const providers = this.allChatProviders();
 		if (this.activeModelKey) {
 			const sep = this.activeModelKey.indexOf("/");
 			const pid = this.activeModelKey.slice(0, sep);
@@ -176,7 +198,7 @@ export class ChatClient {
 	/** Switch the active chat model (must exist in the given provider). Also
 	 *  records it in settings and notifies the persist callback. */
 	setActiveModel(providerId: string, modelId: string): boolean {
-		const providers = this.settings.chatProviders || [];
+		const providers = this.allChatProviders();
 		const provider = providers.find((p) => p.id === providerId);
 		if (!provider || !provider.models.some((m) => m.id === modelId)) {
 			return false;
@@ -189,7 +211,7 @@ export class ChatClient {
 
 	/** Providers + their models for the model-switcher dropdown. */
 	getModelOptions(): Array<{ providerId: string; providerName: string; models: ChatModel[] }> {
-		return (this.settings.chatProviders || [])
+		return this.allChatProviders()
 			.filter((p) => p.models && p.models.length > 0)
 			.map((p) => ({ providerId: p.id, providerName: p.name || p.id, models: p.models }));
 	}

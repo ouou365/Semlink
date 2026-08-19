@@ -931,6 +931,10 @@ interface ModelListOptions {
 	 *  matches a built-in entry. Defaults to true; embedding-provider editors
 	 *  disable it because they want the live endpoint's full model list. */
 	catalogShortcut?: boolean;
+	/** Called after a structural change (add/remove a row, adopt fetched
+	 *  models) so the surrounding page can re-render — e.g. the General tab's
+	 *  model dropdowns derive their options from these lists. */
+	onStructuralChange?: () => void;
 }
 
 interface ModelListHandle {
@@ -1022,6 +1026,7 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 			rmBtn.addEventListener("click", () => {
 				models.splice(mi, 1);
 				opts.onChange(models);
+				opts.onStructuralChange?.();
 				rerender();
 			});
 		});
@@ -1031,6 +1036,7 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 	addBtn.addEventListener("click", () => {
 		opts.getModels().push({ id: "", contextWindow: defaultContextFor("chat") });
 		opts.onChange(opts.getModels());
+		opts.onStructuralChange?.();
 		rerender();
 	});
 
@@ -1082,6 +1088,7 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 						: { id, contextWindow: ctx, kind });
 				}
 				opts.onChange([...byId.values()]);
+				opts.onStructuralChange?.();
 				rerender();
 			}).open();
 		} catch (e) {
@@ -1231,6 +1238,9 @@ function renderEmbeddingProviderEditor(
 		// Embedding editors need the live endpoint's full list (incl. bge
 		// etc.), not the chat-only catalog shortcut.
 		catalogShortcut: false,
+		// Adding/removing models feeds the General tab's embedding/chat model
+		// dropdowns — re-render the page (scroll preserved) so they update.
+		onStructuralChange: refresh,
 		getModels: () => {
 			const base = p.models && p.models.length > 0 ? [...p.models] : [];
 			if (!base.some((m) => m.id === p.model)) {
@@ -1324,6 +1334,7 @@ function renderChatProviderEditor(
 	modelHandle = renderModelList(slot, {
 		app: plugin.app,
 		plugin,
+		onStructuralChange: refresh,
 		getModels: () => provider.models,
 		onChange: (models) => {
 			provider.models = models;
