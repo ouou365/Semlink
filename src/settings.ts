@@ -9,10 +9,10 @@ import type { EmbeddingProviderConfig, IndexProgress, SmartVaultSettings } from 
 import { activeEmbeddingProvider } from "./types";
 import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
-import { EMPTY_MODELS_TAB_STATE, embeddingModelChoices, renderModelsTab, type ModelsTabState } from "./settings-models";
+import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
 import { t } from "./i18n";
 
-type SettingsTab = "general" | "models" | "mcp" | "bot";
+type SettingsTab = "general" | "mcp" | "bot";
 
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
@@ -21,15 +21,42 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	private indexBtnCurrentState: "resume" | "pause" | "none" = "none";
 	private indexBtnLoading = false;
 	private activeTab: SettingsTab = "general";
-	/** Models tab: which provider's editor is expanded / which add card is open. */
+	/** Provider-list state (models management, embedded in the General tab):
+	 *  which provider's editor is expanded / which add card is open. */
 	private modelsState: ModelsTabState = { ...EMPTY_MODELS_TAB_STATE };
 	/** Whether the collapsible embedding-params section is expanded. */
 	private embeddingParamsOpen = false;
+	/** Whether the collapsible index-management section is expanded. */
+	private indexOpen = false;
 	private feishuScanHandle: FeishuScanHandle | null = null;
 
 	constructor(app: App, plugin: SmartVaultPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
+	}
+
+	/** The nearest scrollable ancestor of the settings content (Obsidian's
+	 *  settings pane scrolls a `.vertical-tab-content-container`). */
+	private findScrollContainer(): HTMLElement | null {
+		let el: HTMLElement | null = this.containerEl.parentElement;
+		while (el) {
+			const style = getComputedStyle(el);
+			if (style.overflowY === "auto" || style.overflowY === "scroll") return el;
+			el = el.parentElement;
+		}
+		return null;
+	}
+
+	/** Re-render the current tab while keeping the scroll position — row
+	 *  expand/collapse and provider create/delete re-render the whole page,
+	 *  which would otherwise jump back to the top. */
+	private refreshPreservingScroll(): void {
+		const scroller = this.findScrollContainer();
+		const top = scroller?.scrollTop ?? 0;
+		this.display();
+		requestAnimationFrame(() => {
+			if (scroller) scroller.scrollTop = top;
+		});
 	}
 
 	display(): void {
@@ -59,9 +86,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			case "general":
 				this.renderGeneralTab(panelEl);
 				break;
-			case "models":
-				renderModelsTab(this.plugin, panelEl, this.modelsState, () => this.display());
-				break;
 			case "mcp":
 				this.renderMcpTab(panelEl);
 				break;
@@ -75,7 +99,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const navEl = containerEl.createDiv({ cls: "semlink-settings-tabs" });
 		const tabs: Array<{ id: SettingsTab; label: string }> = [
 			{ id: "general", label: t("tabGeneral") },
-			{ id: "models", label: t("tabModels") },
 			{ id: "mcp", label: t("tabMcp") },
 			{ id: "bot", label: t("tabBot") },
 		];
@@ -113,21 +136,23 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// ── Section: Model configuration (embedding + chat + reranker) ──
+		// ── Section: Model configuration (embedding + chat) ──
 		new Setting(containerEl).setName(t("modelConfigSection")).setHeading();
 
 		// Embedding model — one dropdown entry per (service, model) combo,
-		// e.g. "api.siliconflow.com/BAAI/bge-m3"; picking one sets both the
+		// e.g. "SiliconFlow CN/BAAI/bge-m3"; picking one sets both the
 		// active embedding service and its model.
 		new Setting(containerEl)
 			.setName(t("embeddingModel"))
-			.setDesc(t("embeddingModelDesc"))
 			.addDropdown((dropdown) => {
 				const options = embeddingModelComboOptions(this.plugin.settings);
 				const active = activeEmbeddingProvider(this.plugin.settings);
 				const currentKey = `${active.id}::${active.model}`;
-				if (!(currentKey in options)) {
-					options[currentKey] = `${embeddingHost(active)}/${active.model}`;
+				// Keep a custom (non-catalog) model selectable, but only while
+				// its provider has a key — unconfigured services must not be
+				// selectable here.
+				if (active.apiKey.trim() && !(currentKey in options)) {
+					options[currentKey] = `${active.name}/${active.model}`;
 				}
 				dropdown
 					.addOptions(options)
@@ -147,20 +172,19 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// Chat model — the model the conversational search answers with.
 		new Setting(containerEl)
 			.setName(t("chatModel"))
-			.setDesc(t("chatModelDesc"))
 			.addDropdown((dropdown) => {
 				const options = chatModelOptions(this.plugin);
 				const persisted = this.plugin.settings.activeChatModel;
 				const active = this.plugin.chatClient.getActiveModel();
+				// Only selectable options are keyed providers; a persisted or
+				// resolved model whose provider lost its key just shows blank.
 				let current = persisted && persisted in options
 					? persisted
 					: active ? `${active.provider.id}/${active.model.id}` : "";
 				if (!(current in options)) {
+					current = "";
 					if (Object.keys(options).length === 0) {
 						options[""] = t("chatModelEmpty");
-						current = "";
-					} else if (current) {
-						options[current] = current;
 					}
 				}
 				dropdown
@@ -175,57 +199,42 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(containerEl)
-			.setName(t("rerankerTitle"))
-			.setDesc(t("rerankerDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.rerankerEnabled)
-					.onChange(async (value) => {
-						this.plugin.settings.rerankerEnabled = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		// Reranker model — keyed `${providerId}/${modelId}` (one entry per
-		// SiliconFlow provider × reranker model), like the chat models.
-		new Setting(containerEl)
-			.setName(t("rerankerModel"))
-			.setDesc(t("rerankerModelDesc"))
-			.addDropdown((dropdown) => {
-				const options = rerankerModelOptions(this.plugin.settings);
-				let value = this.plugin.settings.rerankerModel;
-				if (!(value in options)) {
-					// Model ids contain "/", so a value is new-format only when
-					// its first segment names a known provider; otherwise the
-					// whole string is a legacy model id. Either way, select the
-					// matching model on the first SiliconFlow provider.
-					const sep = value.indexOf("/");
-					const pid = sep > 0 ? value.slice(0, sep) : "";
-					const hasProvider = pid && this.plugin.settings.embeddingProviders.some(
-						(p) => p.id === pid && p.kind === "siliconflow",
-					);
-					const mid = hasProvider ? value.slice(sep + 1) : value;
-					const match = Object.keys(options).find((k) => k.endsWith(`/${mid}`));
-					value = match ?? "";
-				}
-				dropdown
-					.addOptions(options)
-					.setValue(value)
-					.onChange(async (v) => {
-						if (!v) return;
-						this.plugin.settings.rerankerModel = v;
-						await this.plugin.saveSettings();
-					});
-			});
+		// ── Provider management (former Models tab) directly under the model
+		// configuration: embedding + chat providers, add/edit/remove, fetch.
+		renderModelsTab(this.plugin, containerEl, this.modelsState, () => this.refreshPreservingScroll());
 
 		// ── Secondary: embedding parameters (click to expand) ──
 		this.renderEmbeddingParamsSection(containerEl);
 
-		// ── Section: Index Management ──
-		new Setting(containerEl).setName(t("sectionIndex")).setHeading();
+		// ── Index Management (collapsible, like the embedding parameters) ──
+		this.renderIndexManagementSection(containerEl);
 
+		// Report Bug
 		new Setting(containerEl)
+			.setName(t("reportBug"))
+			.setDesc(t("reportBugDesc"))
+			.addButton((btn) =>
+				btn
+					.setButtonText(t("reportBugButton"))
+					.onClick(() => {
+						window.location.href = "mailto:ozy2013xm@gmail.com?subject=Semlink Bug Report";
+					})
+			);
+	}
+
+	/** Former "Index Management" heading, collapsed like the embedding
+	 *  parameters: exclude paths, auto-index and the full reindex action. */
+	private renderIndexManagementSection(containerEl: HTMLElement): void {
+		const details = containerEl.createEl("details", { cls: "semlink-collapsible" });
+		details.open = this.indexOpen;
+		details.addEventListener("toggle", () => {
+			this.indexOpen = details.open;
+		});
+		const summary = details.createEl("summary", { cls: "semlink-collapsible-summary" });
+		summary.createSpan({ text: t("sectionIndex") });
+		const body = details.createDiv({ cls: "semlink-collapsible-body" });
+
+		new Setting(body)
 			.setName(t("excludePaths"))
 			.setDesc(t("excludePathsDesc"))
 			.addTextArea((text) =>
@@ -241,7 +250,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				(setting.controlEl.querySelector("textarea") as HTMLTextAreaElement).rows = 4;
 			});
 
-		new Setting(containerEl)
+		new Setting(body)
 			.setName(t("autoIndex"))
 			.setDesc(t("autoIndexDesc"))
 			.addToggle((toggle) =>
@@ -253,7 +262,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
+		new Setting(body)
 			.setName(t("fullReindex"))
 			.setDesc(t("fullReindexDesc"))
 			.addButton((btn) => {
@@ -266,31 +275,18 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					}
 				});
 			});
-
-		// Report Bug
-		new Setting(containerEl)
-			.setName(t("reportBug"))
-			.setDesc(t("reportBugDesc"))
-			.addButton((btn) =>
-				btn
-					.setButtonText(t("reportBugButton"))
-					.onClick(() => {
-						window.location.href = "mailto:ozy2013xm@gmail.com?subject=Semlink Bug Report";
-					})
-			);
 	}
 
 	/** Former "Embedding" tab, demoted to a collapsible secondary section. */
 	private renderEmbeddingParamsSection(containerEl: HTMLElement): void {
-		const details = containerEl.createEl("details", { cls: "semlink-embedding-params" });
+		const details = containerEl.createEl("details", { cls: "semlink-collapsible" });
 		details.open = this.embeddingParamsOpen;
 		details.addEventListener("toggle", () => {
 			this.embeddingParamsOpen = details.open;
 		});
-		const summary = details.createEl("summary", { cls: "semlink-embedding-params-summary" });
+		const summary = details.createEl("summary", { cls: "semlink-collapsible-summary" });
 		summary.createSpan({ text: t("sectionEmbedding") });
-		summary.createSpan({ cls: "semlink-embedding-params-hint", text: t("embeddingParamsHint") });
-		const body = details.createDiv({ cls: "semlink-embedding-params-body" });
+		const body = details.createDiv({ cls: "semlink-collapsible-body" });
 
 		new Setting(body)
 			.setName(t("chunkSize"))
@@ -615,48 +611,48 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 /** One combined option per (embedding service, model) pair, keyed
  *  `${providerId}::${modelId}` and labelled like
- *  `api.siliconflow.com/BAAI/bge-m3`. */
+ *  `SiliconFlow CN/BAAI/bge-m3` (provider display name + model). The models
+ *  come from what the user configured on the Models tab (the provider's
+ *  kind-tagged model list, or the current embedding model) — NOT the built-in
+ *  catalog. Only providers with a key are listed. */
 function embeddingModelComboOptions(settings: SmartVaultSettings): Record<string, string> {
 	const options: Record<string, string> = {};
 	for (const p of settings.embeddingProviders) {
-		for (const model of Object.keys(embeddingModelChoices(p.kind))) {
-			options[`${p.id}::${model}`] = `${embeddingHost(p)}/${model}`;
+		if (!p.apiKey || !p.apiKey.trim()) continue;
+		const seen = new Set<string>();
+		for (const model of embeddingModelsOf(p)) {
+			if (seen.has(model)) continue;
+			seen.add(model);
+			options[`${p.id}::${model}`] = `${p.name}/${model}`;
 		}
 	}
 	return options;
 }
 
-/** The apiBase without protocol/trailing slash, e.g. "api.siliconflow.com". */
-function embeddingHost(p: EmbeddingProviderConfig): string {
-	return (p.apiBase || "").replace(/^https?:\/\//, "").replace(/\/+$/, "");
+/** The embedding models configured for a provider: the kind-tagged "embedding"
+ *  entries of its model list, falling back to the current embedding model,
+ *  and finally to nothing (no built-in catalog). */
+function embeddingModelsOf(p: EmbeddingProviderConfig): string[] {
+	const configured = (p.models ?? [])
+		.filter((m) => (m.kind ?? "chat") === "embedding")
+		.map((m) => m.id)
+		.filter((id) => id.length > 0);
+	if (configured.length > 0) return configured;
+	if (p.model && p.model.trim().length > 0) return [p.model];
+	return [];
 }
 
-/** One option per configured chat model, keyed `${providerId}/${modelId}`. */
+/** One option per configured chat model, keyed `${providerId}/${modelId}`.
+ *  Only providers with a key AND a base URL are listed (same usability rule
+ *  as ChatClient.getActiveProvider), so the dropdown can only select a
+ *  working chat model. */
 function chatModelOptions(plugin: SmartVaultPlugin): Record<string, string> {
 	const options: Record<string, string> = {};
 	for (const p of plugin.settings.chatProviders) {
+		if (!p.apiKey || !p.apiKey.trim()) continue;
+		if (!p.baseUrl || !p.baseUrl.trim()) continue;
 		for (const m of p.models) {
 			options[`${p.id}/${m.id}`] = `${p.name || p.id}/${m.id}`;
-		}
-	}
-	return options;
-}
-
-/** Reranker models offered by SiliconFlow providers. */
-const RERANKER_MODELS = [
-	"BAAI/bge-reranker-v2-m3",
-	"Pro/BAAI/bge-reranker-v2-m3",
-	"netease-youdao/bce-reranker-base_v1",
-];
-
-/** One reranker option per (SiliconFlow provider, model) pair, keyed
- *  `${providerId}/${modelId}`. */
-function rerankerModelOptions(settings: SmartVaultSettings): Record<string, string> {
-	const options: Record<string, string> = {};
-	for (const p of settings.embeddingProviders) {
-		if (p.kind !== "siliconflow") continue;
-		for (const model of RERANKER_MODELS) {
-			options[`${p.id}/${model}`] = `${p.name}/${model}`;
 		}
 	}
 	return options;

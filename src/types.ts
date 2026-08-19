@@ -21,6 +21,12 @@ export interface EmbeddingProviderConfig {
 	apiKey: string;
 	/** Selected embedding model for this provider. */
 	model: string;
+	/** API wire format for model-list fetch (embedding requests are
+	 *  unaffected). Defaults to "openai". */
+	apiFormat?: ChatApiFormat;
+	/** Optional kind-tagged model list, managed like a chat provider's. The
+	 *  first "embedding" entry stays in sync with `model`. */
+	models?: ChatModel[];
 }
 
 /** Built-in embedding providers. Order matters: the first entry is the
@@ -28,19 +34,23 @@ export interface EmbeddingProviderConfig {
 export const DEFAULT_EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
 	{
 		id: "siliconflow-cn",
-		name: "SiliconFlow 中国大陆",
+		name: "SiliconFlow CN",
 		kind: "siliconflow",
 		apiBase: "https://api.siliconflow.cn",
 		apiKey: "",
 		model: "BAAI/bge-m3",
+		apiFormat: "openai",
+		models: [],
 	},
 	{
 		id: "siliconflow-global",
-		name: "SiliconFlow 全球",
+		name: "SiliconFlow",
 		kind: "siliconflow",
 		apiBase: "https://api.siliconflow.com",
 		apiKey: "",
 		model: "BAAI/bge-m3",
+		apiFormat: "openai",
+		models: [],
 	},
 	{
 		id: "huggingface",
@@ -49,6 +59,8 @@ export const DEFAULT_EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
 		apiBase: "https://api-inference.huggingface.co",
 		apiKey: "",
 		model: "BAAI/bge-m3",
+		apiFormat: "openai",
+		models: [],
 	},
 ];
 
@@ -86,30 +98,23 @@ export function migrateEmbeddingSettings(s: SmartVaultSettings): void {
 		if (!active.model) active.model = s.embeddingModel || active.model;
 	}
 	s.embeddingProviderId = legacyId;
-
-	// Legacy reranker model without a provider prefix (the whole string is the
-	// model id, e.g. "BAAI/bge-reranker-v2-m3" — note model ids contain "/")
-	// → pin it to the active SiliconFlow provider so it reads as
-	// `${providerId}/${modelId}` like the chat models.
-	const rr = s.rerankerModel || "";
-	if (rr) {
-		const sep = rr.indexOf("/");
-		const pid = sep > 0 ? rr.slice(0, sep) : "";
-		const isNewFormat = pid && list.some((p) => p.id === pid);
-		if (!isNewFormat) {
-			const sf = (active?.kind === "siliconflow" ? active : list.find((p) => p.kind === "siliconflow")) ?? list[0];
-			if (sf) s.rerankerModel = `${sf.id}/${rr}`;
-		}
-	}
 }
 
 /** Chat completion API wire format */
 export type ChatApiFormat = "openai" | "anthropic";
 
+/** Model category tag shown on model rows (chat = the default for the chat
+ *  provider list; the rest mark models fetched from a mixed catalog like
+ *  SiliconFlow's, which also serves speech/image/video/translation models). */
+export type ChatModelKind = "embedding" | "chat" | "rerank" | "tts" | "asr" | "image" | "video" | "translate";
+
 /** A single chat model definition */
 export interface ChatModel {
 	id: string;
 	contextWindow: number;
+	/** Model category tag (defaults to "chat"). Informational only — the chat
+	 *  client still sends every listed model as a chat completion. */
+	kind?: ChatModelKind;
 }
 
 /** A chat model provider configuration */
@@ -149,8 +154,8 @@ export const DEFAULT_CHAT_PROVIDERS: ChatProvider[] = [
 		apiKey: "",
 		apiFormat: "openai",
 		models: [
-			{ id: "deepseek-v4-flash", contextWindow: 200000 },
-			{ id: "deepseek-v4-pro", contextWindow: 200000 },
+			{ id: "deepseek-v4-flash", contextWindow: 1000000 },
+			{ id: "deepseek-v4-pro", contextWindow: 1000000 },
 		],
 	},
 ];
@@ -169,11 +174,12 @@ export interface SmartVaultSettings {
 	embeddingProviderId: string;
 	/** Embedding provider list (SiliconFlow CN/Global, Hugging Face, …). */
 	embeddingProviders: EmbeddingProviderConfig[];
-	rerankerEnabled: boolean;
-	rerankerModel: string;
 	/** Persisted active chat model, keyed `${providerId}/${modelId}` ("" = auto
 	 *  → first model of the first usable provider). */
 	activeChatModel: string;
+	/** Persisted model-kind cache (endpoint baseUrl → modelId → kind), so the
+	 *  probe-based classification survives Obsidian restarts. */
+	modelKindCache?: Record<string, Record<string, string>>;
 	mcpPort: number;
 	mcpApiKey: string;
 	chunkSize: number;
@@ -198,8 +204,6 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	embeddingModel: "BAAI/bge-m3",
 	embeddingProviderId: "siliconflow-cn",
 	embeddingProviders: DEFAULT_EMBEDDING_PROVIDERS.map((p) => ({ ...p })),
-	rerankerEnabled: false,
-	rerankerModel: "siliconflow-cn/BAAI/bge-reranker-v2-m3",
 	activeChatModel: "",
 	mcpPort: 3001,
 	mcpApiKey: "",

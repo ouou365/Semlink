@@ -8,7 +8,7 @@
 
 import { App, Modal, Setting, requestUrl, setIcon } from "obsidian";
 import type SmartVaultPlugin from "../main";
-import type { ChatApiFormat, ChatModel, ChatProvider, EmbeddingProvider, EmbeddingProviderConfig } from "./types";
+import type { ChatApiFormat, ChatModel, ChatModelKind, ChatProvider, EmbeddingProvider, EmbeddingProviderConfig } from "./types";
 import { t } from "./i18n";
 
 // ──── Tab state (owned by SmartVaultSettingTab, survives re-renders) ────
@@ -16,13 +16,10 @@ import { t } from "./i18n";
 export interface ModelsTabState {
 	/** Which provider's editor card is expanded, if any. */
 	editing: { kind: "embedding" | "chat"; id: string } | null;
-	/** Which add-card is open below the list. */
-	adding: "catalog" | "custom" | null;
 }
 
 export const EMPTY_MODELS_TAB_STATE: ModelsTabState = {
 	editing: null,
-	adding: null,
 };
 
 // ──── Provider catalog (chat) ────
@@ -53,68 +50,483 @@ interface CatalogEntry {
 	models: ChatModel[];
 }
 
+/**
+ * Built-in chat provider directory, statically embedded from the pi-ai
+ * provider catalog (`@earendil-works/pi-ai` — the same catalog the
+ * deepseek-harness ships). baseUrl follows Semlink's wire convention:
+ * OpenAI-compatible endpoints hit `${baseUrl}/v1/chat/completions` and
+ * Anthropic-compatible ones `${baseUrl}/v1/messages`, so trailing "/v1" on
+ * the upstream base URL is dropped. Entries that need account-specific paths
+ * carry "{placeholder}" segments the user fills in on creation.
+ */
 const CHAT_CATALOG: CatalogEntry[] = [
 	{
-		name: "DeepSeek",
-		baseUrl: "https://api.deepseek.com",
+		name: "Amazon Bedrock",
+		baseUrl: "https://bedrock-runtime.{region}.amazonaws.com",
 		apiFormat: "openai",
 		models: [
-			{ id: "deepseek-v4-flash", contextWindow: 200000 },
-			{ id: "deepseek-v4-pro", contextWindow: 200000 },
+			{ id: "amazon.nova-pro-v1:0", contextWindow: 300000 },
+			{ id: "anthropic.claude-fable-5", contextWindow: 1000000 },
+			{ id: "anthropic.claude-haiku-4-5-20251001-v1:0", contextWindow: 200000 },
 		],
 	},
 	{
-		name: t("catalogOpenAI"),
-		baseUrl: "https://api.openai.com/v1",
+		name: "Ant Ling",
+		baseUrl: "https://api.ant-ling.com",
 		apiFormat: "openai",
 		models: [
-			{ id: "gpt-4o", contextWindow: 128000 },
-			{ id: "gpt-4o-mini", contextWindow: 128000 },
+			{ id: "Ling-2.6-1T", contextWindow: 262144 },
+			{ id: "Ling-2.6-flash", contextWindow: 262144 },
+			{ id: "Ring-2.6-1T", contextWindow: 262144 },
 		],
 	},
 	{
-		name: t("catalogAnthropic"),
+		name: "Anthropic",
 		baseUrl: "https://api.anthropic.com",
 		apiFormat: "anthropic",
 		models: [
+			{ id: "claude-opus-4-6", contextWindow: 1000000 },
 			{ id: "claude-sonnet-4-5", contextWindow: 200000 },
 			{ id: "claude-haiku-4-5", contextWindow: 200000 },
 		],
 	},
 	{
-		name: t("catalogMoonshot"),
-		baseUrl: "https://api.moonshot.cn/v1",
-		apiFormat: "openai",
-		models: [{ id: "kimi-k2", contextWindow: 128000 }],
-	},
-	{
-		name: t("catalogZhipu"),
-		baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-		apiFormat: "openai",
-		models: [{ id: "glm-4.5", contextWindow: 128000 }],
-	},
-	{
-		name: t("catalogQwen"),
-		baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+		name: "Azure OpenAI",
+		baseUrl: "https://{resource}.openai.azure.com/openai",
 		apiFormat: "openai",
 		models: [
-			{ id: "qwen-max", contextWindow: 32000 },
-			{ id: "qwen-plus", contextWindow: 128000 },
+			{ id: "gpt-4o", contextWindow: 128000 },
+			{ id: "gpt-4.1", contextWindow: 1047576 },
+			{ id: "gpt-4o-mini", contextWindow: 128000 },
+		],
+	},
+	{
+		name: "Baseten",
+		baseUrl: "https://inference.baseten.co",
+		apiFormat: "openai",
+		models: [
+			{ id: "deepseek-ai/DeepSeek-V4-Pro", contextWindow: 262144 },
+			{ id: "deepseek-ai/DeepSeek-V4-Flash-0731", contextWindow: 1048576 },
+			{ id: "moonshotai/Kimi-K2.5", contextWindow: 262000 },
+		],
+	},
+	{
+		name: "Cerebras",
+		baseUrl: "https://api.cerebras.ai",
+		apiFormat: "openai",
+		models: [
+			{ id: "gpt-oss-120b", contextWindow: 131072 },
+			{ id: "gemma-4-31b", contextWindow: 131072 },
+		],
+	},
+	{
+		name: "Cloudflare AI Gateway",
+		baseUrl: "https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_slug}",
+		apiFormat: "openai",
+		models: [
+			{ id: "claude-sonnet-4-5", contextWindow: 200000 },
+			{ id: "claude-haiku-4-5", contextWindow: 200000 },
+			{ id: "gpt-4o", contextWindow: 128000 },
+		],
+	},
+	{
+		name: "Cloudflare Workers AI",
+		baseUrl: "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai",
+		apiFormat: "openai",
+		models: [
+			{ id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", contextWindow: 24000 },
+			{ id: "@cf/meta/llama-4-scout-17b-16e-instruct", contextWindow: 131000 },
+			{ id: "@cf/moonshotai/kimi-k2.6", contextWindow: 262144 },
+		],
+	},
+	{
+		name: "DeepSeek",
+		baseUrl: "https://api.deepseek.com",
+		apiFormat: "openai",
+		models: [
+			{ id: "deepseek-v4-flash", contextWindow: 1000000 },
+			{ id: "deepseek-v4-pro", contextWindow: 1000000 },
+		],
+	},
+	// SiliconFlow doubles as a chat provider (DeepSeek/Qwen/GLM etc.), so its
+	// two regions also appear in the Add-provider dropdown — same display name
+	// as the fixed embedding entries in the list above.
+	{
+		name: "SiliconFlow CN",
+		baseUrl: "https://api.siliconflow.cn",
+		apiFormat: "openai",
+		models: [
+			{ id: "deepseek-ai/DeepSeek-V3.2", contextWindow: 163840 },
+			{ id: "Qwen/Qwen3-235B-A22B", contextWindow: 262144 },
+			{ id: "THUDM/GLM-4-Plus", contextWindow: 131072 },
+		],
+	},
+	{
+		name: "SiliconFlow",
+		baseUrl: "https://api.siliconflow.com",
+		apiFormat: "openai",
+		models: [
+			{ id: "deepseek-ai/DeepSeek-V3.2", contextWindow: 163840 },
+			{ id: "Qwen/Qwen3-235B-A22B", contextWindow: 262144 },
+			{ id: "THUDM/GLM-4-Plus", contextWindow: 131072 },
+		],
+	},
+	{
+		name: "Fireworks",
+		baseUrl: "https://api.fireworks.ai/inference",
+		apiFormat: "openai",
+		models: [
+			{ id: "accounts/fireworks/models/deepseek-v4-flash", contextWindow: 1000000 },
+			{ id: "accounts/fireworks/models/deepseek-v4-pro", contextWindow: 1000000 },
+			{ id: "accounts/fireworks/models/gpt-oss-120b", contextWindow: 131072 },
+		],
+	},
+	{
+		name: "GitHub Copilot",
+		baseUrl: "https://api.individual.githubcopilot.com",
+		apiFormat: "openai",
+		models: [
+			{ id: "claude-opus-4-6", contextWindow: 1000000 },
+			{ id: "claude-sonnet-4-5", contextWindow: 200000 },
+			{ id: "gpt-4o", contextWindow: 128000 },
+		],
+	},
+	{
+		name: "Google",
+		baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+		apiFormat: "openai",
+		models: [
+			{ id: "gemini-2.5-pro", contextWindow: 1048576 },
+			{ id: "gemini-2.5-flash", contextWindow: 1048576 },
+			{ id: "gemini-2.5-flash-lite", contextWindow: 1048576 },
+		],
+	},
+	{
+		name: "Google Vertex",
+		baseUrl: "https://{region}-aiplatform.googleapis.com/v1beta",
+		apiFormat: "openai",
+		models: [
+			{ id: "gemini-2.5-pro", contextWindow: 1048576 },
+			{ id: "gemini-2.5-flash", contextWindow: 1048576 },
+		],
+	},
+	{
+		name: "Groq",
+		baseUrl: "https://api.groq.com/openai",
+		apiFormat: "openai",
+		models: [
+			{ id: "llama-3.3-70b-versatile", contextWindow: 131072 },
+			{ id: "llama-3.1-8b-instant", contextWindow: 131072 },
+			{ id: "openai/gpt-oss-120b", contextWindow: 131072 },
+		],
+	},
+	{
+		name: "Hugging Face",
+		baseUrl: "https://router.huggingface.co",
+		apiFormat: "openai",
+		models: [
+			{ id: "deepseek-ai/DeepSeek-V3.2", contextWindow: 163840 },
+			{ id: "deepseek-ai/DeepSeek-R1", contextWindow: 64000 },
+			{ id: "meta-llama/Llama-3.3-70B-Instruct", contextWindow: 131072 },
+		],
+	},
+	{
+		name: "Kimi For Coding",
+		baseUrl: "https://api.kimi.com/coding",
+		apiFormat: "anthropic",
+		models: [
+			{ id: "kimi-for-coding", contextWindow: 262144 },
+			{ id: "kimi-for-coding-highspeed", contextWindow: 262144 },
+			{ id: "k3", contextWindow: 1048576 },
+		],
+	},
+	{
+		name: "MiniMax",
+		baseUrl: "https://api.minimax.io/anthropic",
+		apiFormat: "anthropic",
+		models: [
+			{ id: "MiniMax-M3", contextWindow: 1000000 },
+			{ id: "MiniMax-M2.7", contextWindow: 204800 },
+		],
+	},
+	{
+		name: "MiniMax CN",
+		baseUrl: "https://api.minimaxi.com/anthropic",
+		apiFormat: "anthropic",
+		models: [
+			{ id: "MiniMax-M3", contextWindow: 1000000 },
+			{ id: "MiniMax-M2.7", contextWindow: 204800 },
+		],
+	},
+	{
+		name: "Mistral",
+		baseUrl: "https://api.mistral.ai",
+		apiFormat: "openai",
+		models: [
+			{ id: "mistral-large-latest", contextWindow: 131072 },
+			{ id: "codestral-latest", contextWindow: 256000 },
+			{ id: "devstral-latest", contextWindow: 262144 },
+		],
+	},
+	{
+		name: "Moonshot AI",
+		baseUrl: "https://api.moonshot.ai",
+		apiFormat: "openai",
+		models: [
+			{ id: "kimi-k2.5", contextWindow: 262144 },
+			{ id: "kimi-k2-thinking", contextWindow: 262144 },
+			{ id: "kimi-k2-0905-preview", contextWindow: 262144 },
+		],
+	},
+	{
+		name: "Moonshot AI CN",
+		baseUrl: "https://api.moonshot.cn",
+		apiFormat: "openai",
+		models: [
+			{ id: "kimi-k2.5", contextWindow: 262144 },
+			{ id: "kimi-k2-thinking", contextWindow: 262144 },
+			{ id: "kimi-k2-0905-preview", contextWindow: 262144 },
+		],
+	},
+	{
+		name: "NVIDIA",
+		baseUrl: "https://integrate.api.nvidia.com",
+		apiFormat: "openai",
+		models: [
+			{ id: "meta/llama-3.1-70b-instruct", contextWindow: 128000 },
+			{ id: "meta/llama-3.1-8b-instruct", contextWindow: 16000 },
+			{ id: "google/gemma-3-12b-it", contextWindow: 131072 },
+		],
+	},
+	{
+		name: "OpenAI",
+		baseUrl: "https://api.openai.com",
+		apiFormat: "openai",
+		models: [
+			{ id: "gpt-4o", contextWindow: 128000 },
+			{ id: "gpt-4.1", contextWindow: 1047576 },
+			{ id: "gpt-4o-mini", contextWindow: 128000 },
+		],
+	},
+	{
+		name: "OpenAI Codex",
+		baseUrl: "https://chatgpt.com/backend-api",
+		apiFormat: "openai",
+		models: [
+			{ id: "gpt-5.4", contextWindow: 272000 },
+			{ id: "gpt-5.4-mini", contextWindow: 272000 },
+			{ id: "gpt-5.3-codex-spark", contextWindow: 128000 },
+		],
+	},
+	{
+		name: "OpenRouter",
+		baseUrl: "https://openrouter.ai/api",
+		apiFormat: "openai",
+		models: [
+			{ id: "anthropic/claude-sonnet-4-5", contextWindow: 200000 },
+			{ id: "anthropic/claude-haiku-4-5", contextWindow: 200000 },
+			{ id: "meta-llama/llama-3.3-70b-instruct", contextWindow: 131072 },
+		],
+	},
+	{
+		name: "Qwen Token Plan",
+		baseUrl: "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode",
+		apiFormat: "openai",
+		models: [
+			{ id: "deepseek-v4-flash", contextWindow: 1000000 },
+			{ id: "deepseek-v4-pro", contextWindow: 1000000 },
+			{ id: "glm-5", contextWindow: 202752 },
+		],
+	},
+	{
+		name: "Qwen Token Plan CN",
+		baseUrl: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode",
+		apiFormat: "openai",
+		models: [
+			{ id: "deepseek-v4-flash", contextWindow: 1000000 },
+			{ id: "deepseek-v4-pro", contextWindow: 1000000 },
+			{ id: "glm-5", contextWindow: 202752 },
+		],
+	},
+	{
+		name: "Qwen Token Plan Individual",
+		baseUrl: "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode",
+		apiFormat: "openai",
+		models: [
+			{ id: "qwen3.6-flash", contextWindow: 1000000 },
+			{ id: "qwen3.7-max", contextWindow: 1000000 },
+			{ id: "deepseek-v4-pro", contextWindow: 1000000 },
+		],
+	},
+	{
+		name: "Together",
+		baseUrl: "https://api.together.ai",
+		apiFormat: "openai",
+		models: [
+			{ id: "deepseek-ai/DeepSeek-V4-Pro", contextWindow: 512000 },
+			{ id: "meta-llama/Llama-3.3-70B-Instruct-Turbo", contextWindow: 131072 },
+			{ id: "google/gemma-4-31B-it", contextWindow: 262144 },
+		],
+	},
+	{
+		name: "Vercel AI Gateway",
+		baseUrl: "https://ai-gateway.vercel.sh",
+		apiFormat: "anthropic",
+		models: [
+			{ id: "alibaba/qwen-3-235b", contextWindow: 262144 },
+			{ id: "alibaba/qwen-3.6-max-preview", contextWindow: 240000 },
+			{ id: "anthropic/claude-sonnet-4-5", contextWindow: 200000 },
+		],
+	},
+	{
+		name: "xAI",
+		baseUrl: "https://api.x.ai",
+		apiFormat: "openai",
+		models: [
+			{ id: "grok-4.6", contextWindow: 500000 },
+			{ id: "grok-4.5", contextWindow: 500000 },
+			{ id: "grok-4.3", contextWindow: 1000000 },
+		],
+	},
+	{
+		name: "Xiaomi",
+		baseUrl: "https://api.xiaomimimo.com",
+		apiFormat: "openai",
+		models: [
+			{ id: "mimo-v2-pro", contextWindow: 1048576 },
+			{ id: "mimo-v2-flash", contextWindow: 262144 },
+			{ id: "mimo-v2.5", contextWindow: 1048576 },
+		],
+	},
+	{
+		name: "Xiaomi Token Plan AMS",
+		baseUrl: "https://token-plan-ams.xiaomimimo.com",
+		apiFormat: "openai",
+		models: [
+			{ id: "mimo-v2-pro", contextWindow: 1048576 },
+			{ id: "mimo-v2.5", contextWindow: 1048576 },
+		],
+	},
+	{
+		name: "Xiaomi Token Plan CN",
+		baseUrl: "https://token-plan-cn.xiaomimimo.com",
+		apiFormat: "openai",
+		models: [
+			{ id: "mimo-v2-pro", contextWindow: 1048576 },
+			{ id: "mimo-v2.5", contextWindow: 1048576 },
+		],
+	},
+	{
+		name: "Xiaomi Token Plan SGP",
+		baseUrl: "https://token-plan-sgp.xiaomimimo.com",
+		apiFormat: "openai",
+		models: [
+			{ id: "mimo-v2-pro", contextWindow: 1048576 },
+			{ id: "mimo-v2.5", contextWindow: 1048576 },
+		],
+	},
+	{
+		name: "Z.AI",
+		baseUrl: "https://api.z.ai/api/coding/paas/v4",
+		apiFormat: "openai",
+		models: [
+			{ id: "glm-5.2", contextWindow: 1000000 },
+			{ id: "glm-5-turbo", contextWindow: 200000 },
+			{ id: "glm-4.7", contextWindow: 204800 },
+		],
+	},
+	{
+		name: "Z.AI Coding CN",
+		baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+		apiFormat: "openai",
+		models: [
+			{ id: "glm-5.2", contextWindow: 1000000 },
+			{ id: "glm-5-turbo", contextWindow: 200000 },
+			{ id: "glm-4.7", contextWindow: 204800 },
 		],
 	},
 ];
 
 // ──── Fetch available models ────
 
-/** Query an OpenAI/Anthropic-compatible endpoint for its model ids. */
-async function fetchAvailableModels(
-	baseUrl: string,
+/** Model kinds. Cost-conscious classification: rerank (and known embedding
+ *  ids) come from keywords with zero requests; everything else is probed
+ *  against the embedding endpoint only — a model that fails it is "unknown".
+ *  Chat/speech/image/video/translation models are deliberately NOT probed or
+ *  tagged, since a per-model chat probe is the expensive part. */
+export type ModelKind = "embedding" | "chat" | "rerank" | "tts" | "asr" | "image" | "video" | "translate" | "unknown";
+
+export interface FetchedModel {
+	id: string;
+	kind: ModelKind;
+	/** Context window reported by the endpoint itself, when it carries one
+	 *  (non-standard but common, e.g. OpenRouter's `context_length`). */
+	contextWindow?: number;
+}
+
+/**
+ * Keyword classification — zero network requests. Only rerank (and known
+ * embedding ids) is unambiguous enough to tag from the id alone; speech,
+ * image, video and translation models are deliberately left "unknown" (they
+ * are not worth a per-model probe).
+ */
+function classifyById(modelId: string): ModelKind | null {
+	const id = modelId.toLowerCase();
+	if (/rerank/.test(id)) return "rerank";
+	if (/(^|[^a-z])(bge|e5|gte)([^a-z]|$)|embedding|text-embedding/.test(id)) return "embedding";
+	return null;
+}
+
+/** Response fields providers use to report a model's context window. The
+ *  OpenAI-compatible `GET /models` spec only guarantees `id`, so these are
+ *  best-effort grabs of the common spellings. */
+const CONTEXT_FIELDS = [
+	"context_length",
+	"contextWindow",
+	"context_window",
+	"max_context_length",
+	"max_input_tokens",
+] as const;
+
+/** Read a model entry's context window from the response, if present. */
+function contextOf(entry: unknown): number | undefined {
+	if (typeof entry !== "object" || entry === null) return undefined;
+	const obj = entry as Record<string, unknown>;
+	for (const field of CONTEXT_FIELDS) {
+		const v = obj[field];
+		if (typeof v === "number" && v > 0) return Math.floor(v);
+		if (typeof v === "string") {
+			const n = parseInt(v, 10);
+			if (!isNaN(n) && n > 0) return n;
+		}
+	}
+	return undefined;
+}
+
+/** Probe order: chat first (most models are chat, early exit), then
+ *  embedding. Rerank is matched by keyword and never probed. */
+const PROBE_ORDER: Array<"chat" | "embedding"> = ["chat", "embedding"];
+
+/** Session cache of per-endpoint classification results (keyed by base URL)
+ *  so re-opening the picker does not re-probe everything. Persisted across
+ *  restarts through settings.modelKindCache. */
+const classifyCache = new Map<string, Map<string, ModelKind>>();
+
+/** `v1`-anchored base URL: keeps an existing `/v1` suffix instead of
+ *  doubling it ("https://api.openai.com/v1" → same; "https://api.deepseek.com"
+ *  → "https://api.deepseek.com/v1"). */
+function v1Base(base: string): string {
+	return base.endsWith("/v1") ? base : `${base}/v1`;
+}
+
+/** Query an OpenAI/Anthropic-compatible endpoint for its model ids, keeping
+ *  any context window the response reports per model. */
+async function fetchModelIds(
+	base: string,
 	apiKey: string,
 	apiFormat: ChatApiFormat,
-): Promise<string[]> {
-	const base = (baseUrl || "").trim().replace(/\/+$/, "");
-	if (!base) throw new Error(t("fetchNeedsBaseUrl"));
-	const url = apiFormat === "anthropic" ? `${base}/v1/models` : `${base}/models`;
+): Promise<Array<{ id: string; contextWindow?: number }>> {
+	const url = `${v1Base(base)}/models`;
 	const headers: Record<string, string> = apiFormat === "anthropic"
 		? { "x-api-key": apiKey, "anthropic-version": "2023-06-01" }
 		: { Authorization: `Bearer ${apiKey}` };
@@ -124,9 +536,190 @@ async function fetchAvailableModels(
 	}
 	const data = (resp.json as { data?: unknown })?.data;
 	if (!Array.isArray(data)) return [];
-	return data
-		.map((m: unknown) => (typeof (m as { id?: unknown })?.id === "string" ? (m as { id: string }).id : ""))
-		.filter((id: string) => id.length > 0);
+	const out: Array<{ id: string; contextWindow?: number }> = [];
+	for (const entry of data) {
+		if (typeof entry !== "object" || entry === null) continue;
+		const id = (entry as { id?: unknown }).id;
+		if (typeof id !== "string" || id.length === 0) continue;
+		const ctx = contextOf(entry);
+		out.push(ctx === undefined ? { id } : { id, contextWindow: ctx });
+	}
+	return out;
+}
+
+/** Probe one endpoint family with a minimal request; 200 means the model is
+ *  served there. A transport failure is treated as "no", never a throw. */
+async function probeKind(
+	base: string,
+	apiKey: string,
+	model: string,
+	kind: "chat" | "embedding",
+): Promise<boolean> {
+	const v1 = v1Base(base);
+	const url = kind === "chat" ? `${v1}/chat/completions` : `${v1}/embeddings`;
+	const body: unknown = kind === "chat"
+		? { model, messages: [{ role: "user", content: "hi" }], max_tokens: 1 }
+		: { model, input: "hi", encoding_format: "float" };
+	try {
+		const resp = await requestUrl({
+			url,
+			method: "POST",
+			headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+			throw: false,
+		});
+		return resp.status === 200;
+	} catch {
+		return false;
+	}
+}
+
+/** Classify one model: keyword hint first (zero requests), then probe the
+ *  chat and embedding endpoints with early exit on the first 200. */
+async function classifyModel(
+	base: string,
+	apiKey: string,
+	model: string,
+): Promise<ModelKind> {
+	const hinted = classifyById(model);
+	if (hinted !== null) return hinted;
+	for (const kind of PROBE_ORDER) {
+		if (await probeKind(base, apiKey, model, kind)) return kind;
+	}
+	return "unknown";
+}
+
+/** Run `fn` over items with at most `limit` concurrent executions. */
+async function runPool<T>(
+	items: readonly T[],
+	limit: number,
+	fn: (item: T) => Promise<void>,
+): Promise<void> {
+	let i = 0;
+	const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+		while (i < items.length) {
+			const item = items[i++];
+			await fn(item);
+		}
+	});
+	await Promise.all(workers);
+}
+
+/**
+ * Fetch the endpoint's models and classify each: rerank/embedding ids come
+ * from keywords (zero requests); everything else is probed against the chat
+ * and embedding endpoints (chat first, early exit) and tagged "unknown" when
+ * neither answers. Results are session-cached AND persisted to
+ * settings.modelKindCache (keyed by base URL — no credentials) so a restart
+ * does not re-probe the same endpoint.
+ * @param plugin - used for the persisted cache.
+ * @param onProgress - called as classification advances (done/total).
+ */
+async function fetchAvailableModels(
+	plugin: SmartVaultPlugin,
+	baseUrl: string,
+	apiKey: string,
+	apiFormat: ChatApiFormat,
+	useCatalog = true,
+	onProgress?: (done: number, total: number) => void,
+): Promise<FetchedModel[]> {
+	const base = (baseUrl || "").trim().replace(/\/+$/, "");
+	if (!base) throw new Error(t("fetchNeedsBaseUrl"));
+	// Catalog shortcut: a built-in entry answers locally — no network, no key.
+	if (useCatalog) {
+		const local = catalogModelsFor(base);
+		if (local) return local;
+	}
+	const entries = await fetchModelIds(base, apiKey, apiFormat);
+	if (entries.length === 0) return [];
+	// Anthropic-format providers serve chat models only — skip the probes.
+	if (apiFormat === "anthropic") {
+		return entries.map((e) => ({ id: e.id, kind: "chat" as const, ...(e.contextWindow === undefined ? {} : { contextWindow: e.contextWindow }) }));
+	}
+	// Cache keyed by base URL only (the model directory of an endpoint does
+	// not depend on the key, and keys must never be persisted).
+	const cacheKey = base;
+	let cache = classifyCache.get(cacheKey);
+	if (!cache) {
+		cache = new Map();
+		classifyCache.set(cacheKey, cache);
+		const saved = plugin.settings.modelKindCache?.[cacheKey];
+		if (saved) {
+			for (const [modelId, kind] of Object.entries(saved)) {
+				cache.set(modelId, kind as ModelKind);
+			}
+		}
+	}
+	const results: FetchedModel[] = [];
+	let done = 0;
+	await runPool(entries, 4, async (e) => {
+		let kind = cache!.get(e.id);
+		if (!kind) {
+			kind = await classifyModel(base, apiKey, e.id);
+			cache!.set(e.id, kind);
+		}
+		results.push({ id: e.id, kind, ...(e.contextWindow === undefined ? {} : { contextWindow: e.contextWindow }) });
+		done++;
+		onProgress?.(done, entries.length);
+	});
+	// Persist the updated classification for this endpoint.
+	const savedObj: Record<string, string> = {};
+	for (const [modelId, kind] of cache) savedObj[modelId] = kind;
+	plugin.settings.modelKindCache = { ...(plugin.settings.modelKindCache ?? {}), [cacheKey]: savedObj };
+	void plugin.saveSettings();
+	return results;
+}
+
+/** Look up a model's context window in the built-in catalog by id — the
+ *  fetch API only returns model ids, so catalog-known models (e.g.
+ *  deepseek-v4-flash → 1M) keep their real capacity instead of the generic
+ *  128k fallback. */
+function catalogContextWindow(modelId: string): number | undefined {
+	for (const entry of CHAT_CATALOG) {
+		for (const m of entry.models) {
+			if (m.id === modelId) return m.contextWindow;
+		}
+	}
+	return undefined;
+}
+
+/** Default context window for models the catalog does not describe. */
+const DEFAULT_CONTEXT_WINDOW = 128000;
+
+/** Default per-category capacity: chat models get the generic 128k context
+ *  window, embedding models a 8k max-input (bge-m3's standard limit). */
+function defaultContextFor(kind: ChatModelKind): number {
+	return kind === "embedding" ? 8192 : DEFAULT_CONTEXT_WINDOW;
+}
+
+/**
+ * Catalog shortcut — DSH-style: when the endpoint matches a built-in catalog
+ * entry, the models come straight from the local directory (with their real
+ * context windows), no network request and no API key needed. Returns null
+ * for endpoints the catalog does not describe.
+ */
+function catalogModelsFor(base: string): FetchedModel[] | null {
+	const norm = base.toLowerCase();
+	for (const entry of CHAT_CATALOG) {
+		const entryBase = entry.baseUrl.replace(/\/+$/, "").toLowerCase();
+		if (entryBase === norm) {
+			return entry.models.map((m) => ({ id: m.id, kind: "chat" as const, contextWindow: m.contextWindow }));
+		}
+	}
+	return null;
+}
+
+/** Compact token-count spelling: 1000000 → "1M", 262144 → "256K". */
+export function formatContext(tokens: number): string {
+	if (tokens >= 1000000) {
+		const m = tokens / 1000000;
+		return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
+	}
+	if (tokens >= 1000) {
+		const k = tokens / 1000;
+		return `${Number.isInteger(k) ? k : k.toFixed(1)}K`;
+	}
+	return String(tokens);
 }
 
 /** Candidate-picker modal (checkbox list); adopts the checked ids. */
@@ -135,7 +728,7 @@ class FetchModelsModal extends Modal {
 
 	constructor(
 		app: App,
-		private ids: string[],
+		private models: FetchedModel[],
 		private existing: ReadonlySet<string>,
 		private onAdopt: (ids: string[]) => void,
 	) {
@@ -150,21 +743,50 @@ class FetchModelsModal extends Modal {
 		contentEl.createDiv({ cls: "semlink-fetch-desc", text: t("fetchDescription") });
 
 		const listEl = contentEl.createDiv({ cls: "semlink-fetch-list" });
-		for (const id of this.ids) {
+		for (const model of this.models) {
 			const label = listEl.createEl("label", { cls: "semlink-fetch-item" });
 			const cb = label.createEl("input", { attr: { type: "checkbox" } });
 			// Everything already configured starts unchecked, so adopting a
-			// selection never silently rewrites a tuned context window.
-			if (!this.existing.has(id)) {
-				cb.checked = true;
-				this.picked.add(id);
+			// selection never silently rewrites a tuned context window. Among
+			// new models only chat-kind ones are pre-checked — this picker
+			// feeds the chat model list, and embedding/rerank models are shown
+			// for reference but usually not what the user wants here.
+			if (!this.existing.has(model.id)) {
+				if (model.kind === "chat") {
+					cb.checked = true;
+					this.picked.add(model.id);
+				}
 			}
 			cb.addEventListener("change", () => {
-				if (cb.checked) this.picked.add(id);
-				else this.picked.delete(id);
+				if (cb.checked) this.picked.add(model.id);
+				else this.picked.delete(model.id);
 			});
-			label.createSpan({ text: id });
-			if (this.existing.has(id)) {
+			label.createSpan({ text: model.id });
+			// Kind tag: the three probed categories get accent colors, the
+			// id-hinted ones (speech/image/video/translation) a neutral pill.
+			const kindCls = model.kind === "embedding"
+				? "is-embedding"
+				: model.kind === "chat"
+					? "is-chat"
+					: model.kind === "rerank"
+						? "is-rerank"
+						: null;
+			if (model.kind !== "unknown") {
+				label.createSpan({
+					cls: `semlink-fetch-kind${kindCls ? ` ${kindCls}` : ""}`,
+					// The kind key must go through t() — showing the raw key
+					// would print "modelTagChat" etc.
+					text: t(modelKindKey(model.kind)),
+				});
+			}
+			// Show the context window when the endpoint or the catalog
+			// reported one (e.g. "1M"), right-aligned, so adopting is an
+			// informed choice.
+			const ctx = model.contextWindow ?? catalogContextWindow(model.id);
+			if (ctx !== undefined) {
+				label.createSpan({ cls: "semlink-fetch-ctx", text: formatContext(ctx) });
+			}
+			if (this.existing.has(model.id)) {
 				label.createSpan({ cls: "semlink-fetch-existing", text: "✓" });
 			}
 		}
@@ -180,6 +802,46 @@ class FetchModelsModal extends Modal {
 						this.close();
 					})
 			);
+	}
+
+	onClose() {
+		this.contentEl.empty();
+	}
+}
+
+/** Modal hosting the "Add provider" (catalog) or "Add a custom provider"
+ *  create card. Closes on cancel or after a provider is created. */
+class AddProviderModal extends Modal {
+	constructor(
+		app: App,
+		private plugin: SmartVaultPlugin,
+		private kind: "catalog" | "custom",
+		private onCreated: (provider: ChatProvider) => void,
+	) {
+		super(app);
+		this.modalEl.addClass("semlink-add-provider-modal");
+		// The modal lives outside the settings pane, but its inner forms
+		// reuse the `.smart-vault-settings .semlink-*` styles — scoping the
+		// modal itself with the same class makes those selectors match.
+		this.modalEl.addClass("smart-vault-settings");
+	}
+
+	onOpen() {
+		this.titleEl.setText(this.kind === "catalog" ? t("addProvider") : t("customTitle"));
+		const { contentEl } = this;
+		contentEl.empty();
+		const opts = {
+			onCancel: () => this.close(),
+			onCreated: (provider: ChatProvider) => {
+				this.close();
+				this.onCreated(provider);
+			},
+		};
+		if (this.kind === "catalog") {
+			renderAddCatalogCard(contentEl, this.plugin, opts);
+		} else {
+			renderCustomCard(contentEl, this.plugin, opts);
+		}
 	}
 
 	onClose() {
@@ -223,6 +885,32 @@ class DeleteProviderModal extends Modal {
 
 // ──── Model list editor (shared by chat editors and create cards) ────
 
+/** The model-category choices offered per model row. */
+const MODEL_KINDS: readonly ChatModelKind[] = [
+	"chat",
+	"embedding",
+	"rerank",
+	"tts",
+	"asr",
+	"image",
+	"video",
+	"translate",
+];
+
+/** i18n key for a model-category label. */
+function modelKindKey(kind: ChatModelKind): string {
+	switch (kind) {
+		case "embedding": return "modelTagEmbedding";
+		case "rerank": return "modelTagRerank";
+		case "tts": return "modelTagTts";
+		case "asr": return "modelTagAsr";
+		case "image": return "modelTagImage";
+		case "video": return "modelTagVideo";
+		case "translate": return "modelTagTranslate";
+		default: return "modelTagChat";
+	}
+}
+
 export interface ModelProbe {
 	baseUrl: string;
 	apiKey: string;
@@ -231,12 +919,18 @@ export interface ModelProbe {
 
 interface ModelListOptions {
 	app: App;
+	/** Plugin for the persisted model-kind cache. */
+	plugin: SmartVaultPlugin;
 	/** Read the current model rows (may be replaced after each change). */
 	getModels: () => ChatModel[];
 	/** Persist a (possibly new) model list. */
 	onChange: (models: ChatModel[]) => void;
 	/** Current endpoint facts for the fetch action. */
 	probe: () => ModelProbe;
+	/** Allow the local-catalog shortcut (no key needed) when the endpoint
+	 *  matches a built-in entry. Defaults to true; embedding-provider editors
+	 *  disable it because they want the live endpoint's full model list. */
+	catalogShortcut?: boolean;
 }
 
 interface ModelListHandle {
@@ -250,9 +944,6 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 	const section = containerEl.createDiv({ cls: "semlink-model-list" });
 	const headEl = section.createDiv({ cls: "semlink-model-list-head" });
 	headEl.createSpan({ cls: "semlink-model-list-title", text: t("chatModels") });
-	// Model-level type marker: these are chat models (providers carry no
-	// embedding/chat label).
-	headEl.createSpan({ cls: "semlink-provider-tag", text: t("modelTagChat") });
 	const countEl = headEl.createSpan({ cls: "semlink-model-list-count" });
 	const fetchBtn = headEl.createEl("button", { cls: "semlink-link-btn", text: t("fetchModels") });
 	const rowsEl = section.createDiv({ cls: "semlink-model-rows" });
@@ -264,7 +955,13 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 
 	const updateProbeState = () => {
 		const { baseUrl, apiKey } = opts.probe();
-		const ok = baseUrl.trim().length > 0 && apiKey.trim().length > 0;
+		const base = baseUrl.trim();
+		// A built-in catalog match needs no key at all (DSH-style shortcut);
+		// anything else needs both base URL and key to interrogate.
+		const catalogHit = opts.catalogShortcut !== false
+			&& base.length > 0
+			&& catalogModelsFor(base) !== null;
+		const ok = catalogHit || (base.length > 0 && apiKey.trim().length > 0);
 		(fetchBtn as HTMLButtonElement).disabled = !ok || fetching;
 		fetchBtn.setAttr("title", ok ? "" : t("fetchNeedsBaseUrl"));
 	};
@@ -275,6 +972,21 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 		rowsEl.empty();
 		models.forEach((model, mi) => {
 			const rowEl = rowsEl.createDiv({ cls: "semlink-model-row" });
+			// Model-category selector sits before the model id (嵌入/对话/重排序).
+			const kindSel = rowEl.createEl("select", { cls: "semlink-input semlink-model-kind" });
+			for (const kind of MODEL_KINDS) {
+				kindSel.createEl("option", { value: kind, text: t(modelKindKey(kind)) });
+			}
+			kindSel.value = model.kind ?? "chat";
+			kindSel.addEventListener("change", () => {
+				model.kind = kindSel.value as ChatModelKind;
+				// Embedding models have a max-input limit, not a chat context
+				// window — the placeholder follows the row's category.
+				ctxInput.setAttr("placeholder", model.kind === "embedding"
+					? t("embedMaxInput")
+					: t("chatContextWindow"));
+				opts.onChange(models);
+			});
 			const idInput = rowEl.createEl("input", {
 				cls: "semlink-input",
 				attr: { placeholder: t("chatModelId") },
@@ -286,7 +998,13 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 			});
 			const ctxInput = rowEl.createEl("input", {
 				cls: "semlink-input semlink-input-ctx",
-				attr: { placeholder: t("chatContextWindow"), type: "number", min: "1" },
+				attr: {
+					placeholder: (model.kind ?? "chat") === "embedding"
+						? t("embedMaxInput")
+						: t("chatContextWindow"),
+					type: "number",
+					min: "1",
+				},
 			});
 			ctxInput.value = String(model.contextWindow);
 			ctxInput.addEventListener("input", () => {
@@ -311,7 +1029,7 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 	};
 
 	addBtn.addEventListener("click", () => {
-		opts.getModels().push({ id: "", contextWindow: 128000 });
+		opts.getModels().push({ id: "", contextWindow: defaultContextFor("chat") });
 		opts.onChange(opts.getModels());
 		rerender();
 	});
@@ -323,18 +1041,45 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 		updateProbeState();
 		errorEl.style.display = "none";
 		try {
-			const ids = await fetchAvailableModels(baseUrl, apiKey, apiFormat);
-			if (ids.length === 0) {
+			const models = await fetchAvailableModels(
+				opts.plugin,
+				baseUrl,
+				apiKey,
+				apiFormat,
+				opts.catalogShortcut !== false,
+				(done, total) => {
+					fetchBtn.setText(t("classifying").replace("{done}", String(done)).replace("{total}", String(total)));
+				},
+			);
+			if (models.length === 0) {
 				errorEl.setText(t("fetchEmpty"));
 				errorEl.style.display = "block";
 				return;
 			}
 			const current = opts.getModels();
 			const known = new Set(current.map((m) => m.id).filter((id) => id.length > 0));
-			new FetchModelsModal(opts.app, ids, known, (picked) => {
+			new FetchModelsModal(opts.app, models, known, (picked) => {
 				const byId = new Map(opts.getModels().map((m) => [m.id, m]));
 				for (const id of picked) {
-					if (!byId.has(id)) byId.set(id, { id, contextWindow: 128000 });
+					const found = models.find((fm) => fm.id === id);
+					if (!found) continue;
+					const existing = byId.get(id);
+					// Refresh the kind + context window of models already in
+					// the list too: the endpoint classification and the
+					// catalog are more accurate than the generic defaults.
+					// Unknown classification keeps the current kind; when the
+					// response and catalog both lack a context window, the
+					// existing value is kept rather than reset to the fallback.
+					const kind: ChatModelKind = found.kind !== "unknown"
+						? found.kind
+						: existing?.kind ?? "chat";
+					const ctx = found.contextWindow
+						?? catalogContextWindow(id)
+						?? existing?.contextWindow
+						?? defaultContextFor(kind);
+					byId.set(id, existing
+						? { ...existing, id, contextWindow: ctx, kind }
+						: { id, contextWindow: ctx, kind });
 				}
 				opts.onChange([...byId.values()]);
 				rerender();
@@ -367,10 +1112,14 @@ interface RowOptions {
 	onDelete?: () => void;
 }
 
-/** Create one provider row; returns the editor slot below the row head. */
+/** Create one provider row; returns the editor slot below the row head.
+ *  Clicking the row head toggles the editor (like the collapsible sections) —
+ *  there is no separate Edit button; only Remove stays as a button. */
 function createProviderRow(listEl: HTMLElement, opts: RowOptions): HTMLElement {
 	const row = listEl.createDiv({ cls: `semlink-provider-row${opts.editing ? " is-open" : ""}` });
 	const head = row.createDiv({ cls: "semlink-provider-row-head" });
+	head.addEventListener("click", opts.onEdit);
+	head.createSpan({ cls: "semlink-row-chevron", text: "▶" });
 	const identity = head.createDiv({ cls: "semlink-provider-identity" });
 	identity.createSpan({ cls: "semlink-provider-name", text: opts.name });
 	if (opts.tag) identity.createSpan({ cls: "semlink-provider-tag", text: opts.tag });
@@ -385,20 +1134,45 @@ function createProviderRow(listEl: HTMLElement, opts: RowOptions): HTMLElement {
 	}
 	if (opts.badge) identity.createSpan({ cls: "semlink-provider-badge", text: opts.badge });
 	const actions = head.createDiv({ cls: "semlink-provider-actions" });
-	actions.createEl("button", { cls: "semlink-btn", text: t("edit") })
-		.addEventListener("click", opts.onEdit);
 	if (opts.onDelete) {
-		actions.createEl("button", { cls: "semlink-btn semlink-btn-danger", text: t("remove") })
-			.addEventListener("click", opts.onDelete);
+		const delBtn = actions.createEl("button", { cls: "semlink-btn semlink-btn-danger", text: t("remove") });
+		// The head toggles the editor — stop the click from also toggling.
+		delBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			opts.onDelete!();
+		});
 	}
 	return row.createDiv({ cls: "semlink-provider-editor" });
 }
 
 // ──── Editors ────
 
-/** Editor for one fixed embedding provider (region + key + embedding model).
- *  The reranker stays on the General tab. */
-function renderEmbeddingProviderEditor(slot: HTMLElement, plugin: SmartVaultPlugin, p: EmbeddingProviderConfig): void {
+/** Editor for one embedding provider, using the same display logic as the
+ *  chat providers: 显示名称 → Base URL → API 协议 → API 密钥 → 模型列表.
+ *  The model list is kind-tagged; the first "embedding" entry stays in sync
+ *  with `p.model` (the embedding model the runtime actually uses). */
+function renderEmbeddingProviderEditor(
+	slot: HTMLElement,
+	plugin: SmartVaultPlugin,
+	p: EmbeddingProviderConfig,
+	refresh: () => void,
+): void {
+	// Display name — saved on every change; the row header (and any other
+	// name-derived label) is refreshed on blur so it follows without needing
+	// a tab switch, without stealing focus mid-typing.
+	new Setting(slot)
+		.setName(t("chatProviderName"))
+		.addText((text) => {
+			text
+				.setValue(p.name)
+				.onChange(async (value) => {
+					p.name = value;
+					await plugin.saveSettings();
+				});
+			text.inputEl.addEventListener("blur", refresh);
+		});
+
+	// Base URL
 	new Setting(slot)
 		.setName(p.kind === "huggingface" ? t("chatBaseUrl") : t("apiBase"))
 		.addText((text) =>
@@ -411,28 +1185,24 @@ function renderEmbeddingProviderEditor(slot: HTMLElement, plugin: SmartVaultPlug
 				})
 		);
 
-	// Embedding model — the model-level type marker (嵌入) lives here, since
-	// the provider itself carries no embedding/chat label.
+	// API protocol (drives the model-list fetch; embedding requests use the
+	// provider family regardless)
 	new Setting(slot)
-		.setName(t("embeddingModel"))
-		.addDropdown((dropdown) => {
-			const options: Record<string, string> = {};
-			for (const model of Object.keys(embeddingModelChoices(p.kind))) {
-				options[model] = model;
-			}
-			if (!(p.model in options)) options[p.model] = p.model;
+		.setName(t("chatApiFormat"))
+		.addDropdown((dropdown) =>
 			dropdown
-				.addOptions(options)
-				.setValue(p.model)
+				.addOptions({
+					"openai": t("chatFormatOpenAI"),
+					"anthropic": t("chatFormatAnthropic"),
+				})
+				.setValue(p.apiFormat ?? "openai")
 				.onChange(async (value) => {
-					p.model = value;
+					p.apiFormat = value as ChatApiFormat;
 					await plugin.saveSettings();
-				});
-		})
-		.then((setting) => {
-			setting.nameEl.createSpan({ cls: "semlink-provider-tag semlink-inline-tag", text: t("modelTagEmbedding") });
-		});
+				})
+		);
 
+	// API key
 	new Setting(slot)
 		.setName(t("apiKey"))
 		.setDesc(p.kind === "huggingface"
@@ -452,36 +1222,58 @@ function renderEmbeddingProviderEditor(slot: HTMLElement, plugin: SmartVaultPlug
 			if (input) input.type = "password";
 		});
 
-	slot.createDiv({ cls: "semlink-hint", text: t("embedModelHint") });
+	// Model list — same editor as chat providers (kind selector + fetch + add/
+	// remove). The persisted list is `p.models`; the current embedding model
+	// is always shown as the first (embedding) row and kept in sync.
+	renderModelList(slot, {
+		app: plugin.app,
+		plugin,
+		// Embedding editors need the live endpoint's full list (incl. bge
+		// etc.), not the chat-only catalog shortcut.
+		catalogShortcut: false,
+		getModels: () => {
+			const base = p.models && p.models.length > 0 ? [...p.models] : [];
+			if (!base.some((m) => m.id === p.model)) {
+				base.unshift({ id: p.model, contextWindow: defaultContextFor("embedding"), kind: "embedding" });
+			}
+			return base;
+		},
+		onChange: (models) => {
+			p.models = models;
+			const emb = models.find((m) => (m.kind ?? "chat") === "embedding");
+			if (emb && emb.id) p.model = emb.id;
+			void plugin.saveSettings();
+		},
+		probe: () => ({ baseUrl: p.apiBase, apiKey: p.apiKey, apiFormat: p.apiFormat ?? "openai" }),
+	});
 }
 
-/** Editor for one existing chat provider (saves on change). */
+/** Editor for one existing chat provider (saves on change). Fields appear in
+ *  order: name → base URL → protocol → API key → model list. */
 function renderChatProviderEditor(
 	slot: HTMLElement,
 	plugin: SmartVaultPlugin,
 	provider: ChatProvider,
+	refresh: () => void,
 ): void {
-	const modelHandle = renderModelList(slot, {
-		app: plugin.app,
-		getModels: () => provider.models,
-		onChange: (models) => {
-			provider.models = models;
-			void plugin.saveSettings();
-		},
-		probe: () => ({ baseUrl: provider.baseUrl, apiKey: provider.apiKey, apiFormat: provider.apiFormat }),
-	});
+	// The model list is rendered last; the probe-state refresh below needs a
+	// handle, so it is assigned at the end and dereferenced lazily.
+	let modelHandle: ModelListHandle | null = null;
 
+	// Display name — saved on every change; refresh the row header on blur so
+	// the rename shows without a tab switch (and without losing focus).
 	new Setting(slot)
 		.setName(t("chatProviderName"))
-		.addText((text) =>
+		.addText((text) => {
 			text
 				.setPlaceholder("DeepSeek")
 				.setValue(provider.name)
 				.onChange(async (value) => {
 					provider.name = value;
 					await plugin.saveSettings();
-				})
-		);
+				});
+			text.inputEl.addEventListener("blur", refresh);
+		});
 
 	new Setting(slot)
 		.setName(t("chatBaseUrl"))
@@ -492,26 +1284,9 @@ function renderChatProviderEditor(
 				.onChange(async (value) => {
 					provider.baseUrl = value;
 					await plugin.saveSettings();
-					modelHandle.updateProbeState();
+					modelHandle?.updateProbeState();
 				})
 		);
-
-	new Setting(slot)
-		.setName(t("chatApiKey"))
-		.addText((text) =>
-			text
-				.setPlaceholder("sk-...")
-				.setValue(provider.apiKey)
-				.onChange(async (value) => {
-					provider.apiKey = value;
-					await plugin.saveSettings();
-					modelHandle.updateProbeState();
-				})
-		)
-		.then((setting) => {
-			const input = setting.controlEl.querySelector("input") as HTMLInputElement | null;
-			if (input) input.type = "password";
-		});
 
 	new Setting(slot)
 		.setName(t("chatApiFormat"))
@@ -525,9 +1300,37 @@ function renderChatProviderEditor(
 				.onChange(async (value) => {
 					provider.apiFormat = value as ChatApiFormat;
 					await plugin.saveSettings();
-					modelHandle.updateProbeState();
+					modelHandle?.updateProbeState();
 				})
 		);
+
+	new Setting(slot)
+		.setName(t("chatApiKey"))
+		.addText((text) =>
+			text
+				.setPlaceholder("sk-...")
+				.setValue(provider.apiKey)
+				.onChange(async (value) => {
+					provider.apiKey = value;
+					await plugin.saveSettings();
+					modelHandle?.updateProbeState();
+				})
+		)
+		.then((setting) => {
+			const input = setting.controlEl.querySelector("input") as HTMLInputElement | null;
+			if (input) input.type = "password";
+		});
+
+	modelHandle = renderModelList(slot, {
+		app: plugin.app,
+		plugin,
+		getModels: () => provider.models,
+		onChange: (models) => {
+			provider.models = models;
+			void plugin.saveSettings();
+		},
+		probe: () => ({ baseUrl: provider.baseUrl, apiKey: provider.apiKey, apiFormat: provider.apiFormat }),
+	});
 }
 
 // ──── Create cards (add provider / add custom provider) ────
@@ -565,15 +1368,9 @@ function renderDraftEditor(
 	const errorEl = slot.createDiv({ cls: "semlink-draft-error" });
 	errorEl.style.display = "none";
 	let busy = false;
-
-	const modelHandle = renderModelList(slot, {
-		app: plugin.app,
-		getModels: () => draft.models,
-		onChange: (models) => {
-			draft.models = models;
-		},
-		probe: () => ({ baseUrl: draft.baseUrl, apiKey: draft.apiKey, apiFormat: draft.apiFormat }),
-	});
+	// The model list is rendered last (after protocol + key); the probe-state
+	// refresh above needs a handle, so it is assigned lazily.
+	let modelHandle: ModelListHandle | null = null;
 
 	if (opts.route) {
 		new Setting(slot)
@@ -624,25 +1421,9 @@ function renderDraftEditor(
 				.setValue(draft.baseUrl)
 				.onChange((value) => {
 					draft.baseUrl = value;
-					modelHandle.updateProbeState();
+					modelHandle?.updateProbeState();
 				})
 		);
-
-	new Setting(slot)
-		.setName(t("chatApiKey"))
-		.addText((text) =>
-			text
-				.setPlaceholder("sk-...")
-				.setValue(draft.apiKey)
-				.onChange((value) => {
-					draft.apiKey = value;
-					modelHandle.updateProbeState();
-				})
-		)
-		.then((setting) => {
-			const input = setting.controlEl.querySelector("input") as HTMLInputElement | null;
-			if (input) input.type = "password";
-		});
 
 	new Setting(slot)
 		.setName(t("chatApiFormat"))
@@ -655,9 +1436,35 @@ function renderDraftEditor(
 				.setValue(draft.apiFormat)
 				.onChange((value) => {
 					draft.apiFormat = value as ChatApiFormat;
-					modelHandle.updateProbeState();
+					modelHandle?.updateProbeState();
 				})
 		);
+
+	new Setting(slot)
+		.setName(t("chatApiKey"))
+		.addText((text) =>
+			text
+				.setPlaceholder("sk-...")
+				.setValue(draft.apiKey)
+				.onChange((value) => {
+					draft.apiKey = value;
+					modelHandle?.updateProbeState();
+				})
+		)
+		.then((setting) => {
+			const input = setting.controlEl.querySelector("input") as HTMLInputElement | null;
+			if (input) input.type = "password";
+		});
+
+	modelHandle = renderModelList(slot, {
+		app: plugin.app,
+		plugin,
+		getModels: () => draft.models,
+		onChange: (models) => {
+			draft.models = models;
+		},
+		probe: () => ({ baseUrl: draft.baseUrl, apiKey: draft.apiKey, apiFormat: draft.apiFormat }),
+	});
 
 	new Setting(slot)
 		.addButton((btn) => btn.setButtonText(t("cancel")).onClick(() => opts.onCancel()))
@@ -701,36 +1508,19 @@ function renderDraftEditor(
 		});
 }
 
-/** "Add provider" card: pick a catalog entry, then fill in the details. */
+/** "Add provider" card: pick a catalog entry, then fill in the details.
+ *  Rendered inside the AddProviderModal. */
 function renderAddCatalogCard(
 	containerEl: HTMLElement,
 	plugin: SmartVaultPlugin,
-	state: ModelsTabState,
-	refresh: () => void,
+	opts: { onCancel: () => void; onCreated: (provider: ChatProvider) => void },
 ): void {
 	const card = containerEl.createDiv({ cls: "semlink-add-card" });
 	card.createDiv({ cls: "semlink-add-card-title", text: t("addProvider") });
 
 	let draft: ChatProviderDraft = draftFromCatalog(CHAT_CATALOG[0]);
-	const bodyEl = card.createDiv({ cls: "semlink-add-card-body" });
 
-	const rerenderDraft = () => {
-		bodyEl.empty();
-		renderDraftEditor(bodyEl, plugin, draft, {
-			submitLabel: t("create"),
-			submitBusyLabel: t("creating"),
-			onCancel: () => {
-				state.adding = null;
-				refresh();
-			},
-			onCreated: (provider) => {
-				state.adding = null;
-				state.editing = { kind: "chat", id: provider.id };
-				refresh();
-			},
-		});
-	};
-
+	// The catalog dropdown sits ABOVE the provider fields (display name first).
 	new Setting(card)
 		.setName(t("catalogLabel"))
 		.addDropdown((dropdown) =>
@@ -742,6 +1532,18 @@ function renderAddCatalogCard(
 					rerenderDraft();
 				})
 		);
+
+	const bodyEl = card.createDiv({ cls: "semlink-add-card-body" });
+
+	const rerenderDraft = () => {
+		bodyEl.empty();
+		renderDraftEditor(bodyEl, plugin, draft, {
+			submitLabel: t("create"),
+			submitBusyLabel: t("creating"),
+			onCancel: opts.onCancel,
+			onCreated: opts.onCreated,
+		});
+	};
 
 	rerenderDraft();
 }
@@ -756,12 +1558,12 @@ function draftFromCatalog(entry: CatalogEntry): ChatProviderDraft {
 	};
 }
 
-/** "Add a custom provider" card: route id + full details. */
+/** "Add a custom provider" card: route id + full details. Rendered inside
+ *  the AddProviderModal. */
 function renderCustomCard(
 	containerEl: HTMLElement,
 	plugin: SmartVaultPlugin,
-	state: ModelsTabState,
-	refresh: () => void,
+	opts: { onCancel: () => void; onCreated: (provider: ChatProvider) => void },
 ): void {
 	const card = containerEl.createDiv({ cls: "semlink-add-card" });
 	card.createDiv({ cls: "semlink-add-card-title", text: t("customTitle") });
@@ -785,15 +1587,8 @@ function renderCustomCard(
 				routeState.value = v;
 			},
 		},
-		onCancel: () => {
-			state.adding = null;
-			refresh();
-		},
-		onCreated: (provider) => {
-			state.adding = null;
-			state.editing = { kind: "chat", id: provider.id };
-			refresh();
-		},
+		onCancel: opts.onCancel,
+		onCreated: opts.onCreated,
 	});
 }
 
@@ -825,11 +1620,27 @@ export function renderModelsTab(
 			editing,
 			onEdit: () => {
 				state.editing = editing ? null : { kind: "embedding", id: p.id };
-				state.adding = null;
 				refresh();
 			},
+			onDelete: () => {
+				new DeleteProviderModal(plugin.app, p.name, () => {
+					plugin.settings.embeddingProviders = plugin.settings.embeddingProviders.filter(
+						(x) => x.id !== p.id,
+					);
+					// If the removed provider was the active embedding service,
+					// fall back to the first remaining one (or none — the
+					// runtime then falls back to its built-in default).
+					if (plugin.settings.embeddingProviderId === p.id) {
+						plugin.settings.embeddingProviderId = plugin.settings.embeddingProviders[0]?.id ?? "";
+					}
+					if (state.editing?.kind === "embedding" && state.editing.id === p.id) {
+						state.editing = null;
+					}
+					void plugin.saveSettings().then(() => refresh());
+				}).open();
+			},
 		});
-		if (editing) renderEmbeddingProviderEditor(slot, plugin, p);
+		if (editing) renderEmbeddingProviderEditor(slot, plugin, p, refresh);
 	}
 
 	for (const provider of plugin.settings.chatProviders) {
@@ -840,7 +1651,6 @@ export function renderModelsTab(
 			editing,
 			onEdit: () => {
 				state.editing = editing ? null : { kind: "chat", id: provider.id };
-				state.adding = null;
 				refresh();
 			},
 			onDelete: () => {
@@ -855,28 +1665,24 @@ export function renderModelsTab(
 				}).open();
 			},
 		});
-		if (editing) renderChatProviderEditor(slot, plugin, provider);
+		if (editing) renderChatProviderEditor(slot, plugin, provider, refresh);
 	}
 
-	// ── Add actions / create cards ──
+	// ── Add actions (open the create modal) ──
 	const addBlock = containerEl.createDiv({ cls: "semlink-provider-add" });
-	if (state.adding === "catalog") {
-		renderAddCatalogCard(addBlock, plugin, state, refresh);
-	} else if (state.adding === "custom") {
-		renderCustomCard(addBlock, plugin, state, refresh);
-	} else {
-		const actions = addBlock.createDiv({ cls: "semlink-provider-add-actions" });
-		actions.createEl("button", { cls: "semlink-btn semlink-btn-cta", text: `＋ ${t("addProvider")}` })
-			.addEventListener("click", () => {
-				state.adding = "catalog";
-				state.editing = null;
+	const actions = addBlock.createDiv({ cls: "semlink-provider-add-actions" });
+	actions.createEl("button", { cls: "semlink-btn semlink-btn-cta", text: `＋ ${t("addProvider")}` })
+		.addEventListener("click", () => {
+			new AddProviderModal(plugin.app, plugin, "catalog", (provider) => {
+				state.editing = { kind: "chat", id: provider.id };
 				refresh();
-			});
-		actions.createEl("button", { cls: "semlink-btn", text: `＋ ${t("addCustomProvider")}` })
-			.addEventListener("click", () => {
-				state.adding = "custom";
-				state.editing = null;
+			}).open();
+		});
+	actions.createEl("button", { cls: "semlink-btn", text: `＋ ${t("addCustomProvider")}` })
+		.addEventListener("click", () => {
+			new AddProviderModal(plugin.app, plugin, "custom", (provider) => {
+				state.editing = { kind: "chat", id: provider.id };
 				refresh();
-			});
-	}
+			}).open();
+		});
 }

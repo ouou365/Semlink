@@ -225,6 +225,23 @@
     justify-content: space-between;
     gap: 12px;
     padding: 8px 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.smart-vault-settings .semlink-provider-row-head:hover {
+    background: var(--background-modifier-hover);
+}
+
+.smart-vault-settings .semlink-row-chevron {
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-provider-row.is-open .semlink-row-chevron {
+    transform: rotate(90deg);
 }
 
 .smart-vault-settings .semlink-provider-identity {
@@ -232,6 +249,7 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
+    flex: 1;
 }
 
 .smart-vault-settings .semlink-provider-name {
@@ -278,16 +296,16 @@
     flex-shrink: 0;
 }
 
-/* Kind marker rendered inside a Setting's name row (model-level tags). */
-.smart-vault-settings .semlink-inline-tag {
-    margin-left: 8px;
-    vertical-align: middle;
-}
-
 .smart-vault-settings .semlink-provider-actions {
     display: flex;
     gap: 6px;
     flex-shrink: 0;
+}
+
+/* The editor area is hidden while the row is collapsed — an empty editor
+   would otherwise add a white padded strip below the row head. */
+.smart-vault-settings .semlink-provider-row:not(.is-open) .semlink-provider-editor {
+    display: none;
 }
 
 .smart-vault-settings .semlink-provider-editor {
@@ -444,6 +462,12 @@
     flex: 0 0 110px;
 }
 
+/* Model-category selector (对话/嵌入/重排序/语音…/图像…/视频/翻译) */
+.smart-vault-settings .semlink-model-kind {
+    flex: 0 0 96px;
+    padding: 5px 4px;
+}
+
 .smart-vault-settings .semlink-icon-btn {
     display: inline-flex;
     align-items: center;
@@ -482,15 +506,15 @@
     text-decoration: underline;
 }
 
-/* Embedding params collapsible section (former Embedding tab) */
-.smart-vault-settings .semlink-embedding-params {
+/* Collapsible settings sections (embedding parameters, index management) */
+.smart-vault-settings .semlink-collapsible {
     border: 1px solid var(--background-modifier-border);
     border-radius: 8px;
     margin: 18px 0;
     background: var(--background-secondary);
 }
 
-.smart-vault-settings .semlink-embedding-params-summary {
+.smart-vault-settings .semlink-collapsible-summary {
     display: flex;
     align-items: baseline;
     gap: 10px;
@@ -501,33 +525,27 @@
     list-style: none;
 }
 
-.smart-vault-settings .semlink-embedding-params-summary::-webkit-details-marker {
+.smart-vault-settings .semlink-collapsible-summary::-webkit-details-marker {
     display: none;
 }
 
-.smart-vault-settings .semlink-embedding-params-summary::before {
+.smart-vault-settings .semlink-collapsible-summary::before {
     content: "▶";
     font-size: 10px;
     color: var(--text-muted);
     transition: transform 0.15s ease;
 }
 
-.smart-vault-settings .semlink-embedding-params[open] .semlink-embedding-params-summary::before {
+.smart-vault-settings .semlink-collapsible[open] .semlink-collapsible-summary::before {
     transform: rotate(90deg);
 }
 
-.smart-vault-settings .semlink-embedding-params-summary:hover {
+.smart-vault-settings .semlink-collapsible-summary:hover {
     background: var(--background-modifier-hover);
     border-radius: 8px;
 }
 
-.smart-vault-settings .semlink-embedding-params-hint {
-    font-weight: 400;
-    font-size: 12px;
-    color: var(--text-muted);
-}
-
-.smart-vault-settings .semlink-embedding-params-body {
+.smart-vault-settings .semlink-collapsible-body {
     border-top: 1px solid var(--background-modifier-border);
     padding: 4px 14px 8px;
     background: var(--background-primary);
@@ -566,6 +584,49 @@
 .semlink-fetch-modal .semlink-fetch-existing {
     color: var(--color-green);
     font-size: 12px;
+}
+
+.semlink-fetch-modal .semlink-fetch-ctx {
+    font-size: 11px;
+    color: var(--text-faint);
+    font-family: var(--font-monospace);
+    margin-left: auto;
+}
+
+.semlink-fetch-modal .semlink-fetch-kind {
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 4px;
+    background: var(--background-modifier-hover);
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.semlink-fetch-modal .semlink-fetch-kind.is-embedding {
+    color: var(--color-green);
+    background: color-mix(in srgb, var(--color-green) 15%, transparent);
+}
+
+.semlink-fetch-modal .semlink-fetch-kind.is-chat {
+    color: var(--interactive-accent);
+    background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+}
+
+.semlink-fetch-modal .semlink-fetch-kind.is-rerank {
+    color: var(--color-orange);
+    background: color-mix(in srgb, var(--color-orange) 15%, transparent);
+}
+
+/* Add-provider modal */
+.semlink-add-provider-modal {
+    width: min(600px, 92vw);
+}
+
+.semlink-add-provider-modal .semlink-add-card {
+    border: none;
+    background: transparent;
+    padding: 0;
 }
 
 /* Delete-provider modal */

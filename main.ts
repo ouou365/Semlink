@@ -8,7 +8,6 @@ import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, ty
 import { VectorStore } from "./src/vector-store";
 import { IndexQueue } from "./src/index-queue";
 import { EmbeddingClient } from "./src/embedding-client";
-import { RerankerClient } from "./src/reranker-client";
 import { ChatClient, inferAgentDepth, buildNoteContext } from "./src/chat-client";
 import { SemlinkTools } from "./src/chat-tools";
 import { Scheduler } from "./src/scheduler";
@@ -29,7 +28,6 @@ export default class SmartVaultPlugin extends Plugin {
 	store!: VectorStore;
 	queue!: IndexQueue;
 	client!: EmbeddingClient;
-	reranker!: RerankerClient;
 	chatClient!: ChatClient;
 	chatTools!: SemlinkTools;
 	scheduler!: Scheduler;
@@ -69,7 +67,6 @@ export default class SmartVaultPlugin extends Plugin {
 
 		this.queue = new IndexQueue(this.store);
 		this.client = new EmbeddingClient(this.settings);
-		this.reranker = new RerankerClient(this.settings);
 		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault, () => this.app.workspace.getActiveFile()?.path ?? null);
 		this.chatClient = new ChatClient(this.settings, this.chatTools);
 		// Persist the active chat model whenever it changes (search-view picker
@@ -145,7 +142,7 @@ export default class SmartVaultPlugin extends Plugin {
 
 		// Semantic Search sidebar view
 		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SemanticSearchView(
-			leaf, this.store, this.client, this.reranker, this.app.vault, this.chatClient, dataDir,
+			leaf, this.store, this.client, this.app.vault, this.chatClient, dataDir,
 		));
 
 		// Register the custom Semlink logo as a named Obsidian icon so that both
@@ -266,7 +263,6 @@ export default class SmartVaultPlugin extends Plugin {
 			(leaf.view as SemanticSearchView).refreshLanguage?.();
 		}
 		this.client?.updateSettings(this.settings);
-		this.reranker?.updateSettings(this.settings);
 		this.chatClient?.updateSettings(this.settings);
 		this.scheduler?.updateSettings(this.settings);
 		this.mcpServer?.updateSettings(this.settings);
