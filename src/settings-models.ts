@@ -37,7 +37,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
 	"googlevertex": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11.995 20.216a1.892 1.892 0 100 3.785 1.892 1.892 0 000-3.785zm0 2.806a.927.927 0 11.927-.914.914.914 0 01-.927.914z" fill="#4285F4"/><path clipRule="evenodd" d="M21.687 14.144c.237.038.452.16.605.344a.978.978 0 01-.18 1.3l-8.24 6.082a1.892 1.892 0 00-1.147-1.508l8.28-6.08a.991.991 0 01.682-.138z" fill="#669DF6" fillRule="evenodd"/><path clipRule="evenodd" d="M10.122 21.842l-8.217-6.066a.952.952 0 01-.206-1.287.978.978 0 011.287-.206l8.28 6.08a1.893 1.893 0 00-1.144 1.479z" fill="#AECBFA" fillRule="evenodd"/><path d="M4.273 4.475a.978.978 0 01-.965-.965V1.09a.978.978 0 111.943 0v2.42a.978.978 0 01-.978.965zM4.247 13.034a.978.978 0 100-1.956.978.978 0 000 1.956zM4.247 10.19a.978.978 0 100-1.956.978.978 0 000 1.956zM4.247 7.332a.978.978 0 100-1.956.978.978 0 000 1.956z" fill="#AECBFA"/><path d="M19.718 7.307a.978.978 0 01-.965-.979v-2.42a.965.965 0 011.93 0v2.42a.964.964 0 01-.965.979zM19.743 13.047a.978.978 0 100-1.956.978.978 0 000 1.956zM19.743 10.151a.978.978 0 100-1.956.978.978 0 000 1.956zM19.743 2.068a.978.978 0 100-1.956.978.978 0 000 1.956z" fill="#4285F4"/><path d="M11.995 15.917a.978.978 0 01-.965-.965v-2.459a.978.978 0 011.943 0v2.433a.976.976 0 01-.978.991zM11.995 18.762a.978.978 0 100-1.956.978.978 0 000 1.956zM11.995 10.64a.978.978 0 100-1.956.978.978 0 000 1.956zM11.995 7.783a.978.978 0 100-1.956.978.978 0 000 1.956z" fill="#669DF6"/><path d="M15.856 10.177a.978.978 0 01-.965-.965v-2.42a.977.977 0 011.702-.763.979.979 0 01.241.763v2.42a.978.978 0 01-.978.965zM15.869 4.913a.978.978 0 100-1.956.978.978 0 000 1.956zM15.869 15.853a.978.978 0 100-1.956.978.978 0 000 1.956zM15.869 12.996a.978.978 0 100-1.956.978.978 0 000 1.956z" fill="#4285F4"/><path d="M8.121 15.853a.978.978 0 100-1.956.978.978 0 000 1.956zM8.121 7.783a.978.978 0 100-1.956.978.978 0 000 1.956zM8.121 4.913a.978.978 0 100-1.957.978.978 0 000 1.957zM8.134 12.996a.978.978 0 01-.978-.94V9.611a.965.965 0 011.93 0v2.445a.966.966 0 01-.952.94z" fill="#AECBFA"/></svg>`,
 	"groq": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12.036 2c-3.853-.035-7 3-7.036 6.781-.035 3.782 3.055 6.872 6.908 6.907h2.42v-2.566h-2.292c-2.407.028-4.38-1.866-4.408-4.23-.029-2.362 1.901-4.298 4.308-4.326h.1c2.407 0 4.358 1.915 4.365 4.278v6.305c0 2.342-1.944 4.25-4.323 4.279a4.375 4.375 0 01-3.033-1.252l-1.851 1.818A7 7 0 0012.029 22h.092c3.803-.056 6.858-3.083 6.879-6.816v-6.5C18.907 4.963 15.817 2 12.036 2z"/></svg>`,
 	"huggingface": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2.25 11.535c0-3.407 1.847-6.554 4.844-8.258a9.822 9.822 0 019.687 0c2.997 1.704 4.844 4.851 4.844 8.258 0 5.266-4.337 9.535-9.687 9.535S2.25 16.8 2.25 11.535z" fill="#FF9D0B"/><path d="M11.938 20.086c4.797 0 8.687-3.829 8.687-8.551 0-4.722-3.89-8.55-8.687-8.55-4.798 0-8.688 3.828-8.688 8.55 0 4.722 3.89 8.55 8.688 8.55z" fill="#FFD21E"/><path d="M11.875 15.113c2.457 0 3.25-2.156 3.25-3.263 0-.576-.393-.394-1.023-.089-.582.283-1.365.675-2.224.675-1.798 0-3.25-1.693-3.25-.586 0 1.107.79 3.263 3.25 3.263h-.003z" fill="#FF323D"/><path d="M14.76 9.21c.32.108.445.753.767.585.447-.233.707-.708.659-1.204a1.235 1.235 0 00-.879-1.059 1.262 1.262 0 00-1.33.394c-.322.384-.377.92-.14 1.36.153.283.638-.177.925-.079l-.002.003zm-5.887 0c-.32.108-.448.753-.768.585a1.226 1.226 0 01-.658-1.204c.048-.495.395-.913.878-1.059a1.262 1.262 0 011.33.394c.322.384.377.92.14 1.36-.152.283-.64-.177-.925-.079l.003.003zm1.12 5.34a2.166 2.166 0 011.325-1.106c.07-.02.144.06.219.171l.192.306c.069.1.139.175.209.175.074 0 .15-.074.223-.172l.205-.302c.08-.11.157-.188.234-.165.537.168.986.536 1.25 1.026.932-.724 1.275-1.905 1.275-2.633 0-.508-.306-.426-.81-.19l-.616.296c-.52.24-1.148.48-1.824.48-.676 0-1.302-.24-1.823-.48l-.589-.283c-.52-.248-.838-.342-.838.177 0 .703.32 1.831 1.187 2.56l.18.14z" fill="#3A3B45"/><path d="M17.812 10.366a.806.806 0 00.813-.8c0-.441-.364-.8-.813-.8a.806.806 0 00-.812.8c0 .442.364.8.812.8zm-11.624 0a.806.806 0 00.812-.8c0-.441-.364-.8-.812-.8a.806.806 0 00-.813.8c0 .442.364.8.813.8zM4.515 13.073c-.405 0-.765.162-1.017.46a1.455 1.455 0 00-.333.925 1.801 1.801 0 00-.485-.074c-.387 0-.737.146-.985.409a1.41 1.41 0 00-.2 1.722 1.302 1.302 0 00-.447.694c-.06.222-.12.69.2 1.166a1.267 1.267 0 00-.093 1.236c.238.533.81.958 1.89 1.405l.24.096c.768.3 1.473.492 1.478.494.89.243 1.808.375 2.732.394 1.465 0 2.513-.443 3.115-1.314.93-1.342.842-2.575-.274-3.763l-.151-.154c-.692-.684-1.155-1.69-1.25-1.912-.195-.655-.71-1.383-1.562-1.383-.46.007-.889.233-1.15.605-.25-.31-.495-.553-.715-.694a1.87 1.87 0 00-.993-.312zm14.97 0c.405 0 .767.162 1.017.46.216.262.333.588.333.925.158-.047.322-.071.487-.074.388 0 .738.146.985.409a1.41 1.41 0 01.2 1.722c.22.178.377.422.445.694.06.222.12.69-.2 1.166.244.37.279.836.093 1.236-.238.533-.81.958-1.889 1.405l-.239.096c-.77.3-1.475.492-1.48.494-.89.243-1.808.375-2.732.394-1.465 0-2.513-.443-3.115-1.314-.93-1.342-.842-2.575.274-3.763l.151-.154c.695-.684 1.157-1.69 1.252-1.912.195-.655.708-1.383 1.56-1.383.46.007.889.233 1.15.605.25-.31.495-.553.718-.694.244-.162.523-.265.814-.3l.176-.012z" fill="#FF9D0B"/><path d="M9.785 20.132c.688-.994.638-1.74-.305-2.667-.945-.928-1.495-2.288-1.495-2.288s-.205-.788-.672-.714c-.468.074-.81 1.25.17 1.971.977.721-.195 1.21-.573.534-.375-.677-1.405-2.416-1.94-2.751-.532-.332-.907-.148-.782.541.125.687 2.357 2.35 2.14 2.707-.218.362-.983-.42-.983-.42S2.953 14.9 2.43 15.46c-.52.558.398 1.026 1.7 1.803 1.308.778 1.41.985 1.225 1.28-.187.295-3.07-2.1-3.34-1.083-.27 1.011 2.943 1.304 2.745 2.006-.2.7-2.265-1.324-2.685-.537-.425.79 2.913 1.718 2.94 1.725 1.075.276 3.813.859 4.77-.522zm4.432 0c-.687-.994-.64-1.74.305-2.667.943-.928 1.493-2.288 1.493-2.288s.205-.788.675-.714c.465.074.807 1.25-.17 1.971-.98.721.195 1.21.57.534.377-.677 1.407-2.416 1.94-2.751.532-.332.91-.148.782.541-.125.687-2.355 2.35-2.137 2.707.215.362.98-.42.98-.42S21.05 14.9 21.57 15.46c.52.558-.395 1.026-1.7 1.803-1.308.778-1.408.985-1.225 1.28.187.295 3.07-2.1 3.34-1.083.27 1.011-2.94 1.304-2.743 2.006.2.7 2.263-1.324 2.685-.537.423.79-2.912 1.718-2.94 1.725-1.077.276-3.815.859-4.77-.522z" fill="#FFD21E"/></svg>`,
-	"kimiforcoding": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.846 0a1.923 1.923 0 110 3.846H20.15a.226.226 0 01-.227-.226V1.923C19.923.861 20.784 0 21.846 0z" fill="#1783FF"/><path d="M11.065 11.199l7.257-7.2c.137-.136.06-.41-.116-.41H14.3a.164.164 0 00-.117.051l-7.82 7.756c-.122.12-.302.013-.302-.179V3.82c0-.127-.083-.23-.185-.23H3.186c-.103 0-.186.103-.186.23V19.77c0 .128.083.23.186.23h2.69c.103 0 .186-.102.186-.23v-3.25c0-.069.025-.135.069-.178l2.424-2.406a.158.158 0 01.205-.023l6.484 4.772a7.677 7.677 0 003.453 1.283c.108.012.2-.095.2-.23v-3.06c0-.117-.07-.212-.164-.227a5.028 5.028 0 01-2.027-.807l-5.613-4.064c-.117-.078-.132-.279-.028-.381z" fill="#fff"/></svg>`,
+	"kimiforcoding": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.846 0a1.923 1.923 0 110 3.846H20.15a.226.226 0 01-.227-.226V1.923C19.923.861 20.784 0 21.846 0z" fill="#1783FF"/><path d="M11.065 11.199l7.257-7.2c.137-.136.06-.41-.116-.41H14.3a.164.164 0 00-.117.051l-7.82 7.756c-.122.12-.302.013-.302-.179V3.82c0-.127-.083-.23-.185-.23H3.186c-.103 0-.186.103-.186.23V19.77c0 .128.083.23.186.23h2.69c.103 0 .186-.102.186-.23v-3.25c0-.069.025-.135.069-.178l2.424-2.406a.158.158 0 01.205-.023l6.484 4.772a7.677 7.677 0 003.453 1.283c.108.012.2-.095.2-.23v-3.06c0-.117-.07-.212-.164-.227a5.028 5.028 0 01-2.027-.807l-5.613-4.064c-.117-.078-.132-.279-.028-.381z" fill="#1a1a1a"/></svg>`,
 	"minimax": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><defs><linearGradient id="g0" x1="0%" x2="100.182%" y1="50.057%" y2="50.057%"><stop offset="0%" stopColor="#E2167E"/><stop offset="100%" stopColor="#FE603C"/></linearGradient></defs><path d="M16.278 2c1.156 0 2.093.927 2.093 2.07v12.501a.74.74 0 00.744.709.74.74 0 00.743-.709V9.099a2.06 2.06 0 012.071-2.049A2.06 2.06 0 0124 9.1v6.561a.649.649 0 01-.652.645.649.649 0 01-.653-.645V9.1a.762.762 0 00-.766-.758.762.762 0 00-.766.758v7.472a2.037 2.037 0 01-2.048 2.026 2.037 2.037 0 01-2.048-2.026v-12.5a.785.785 0 00-.788-.753.785.785 0 00-.789.752l-.001 15.904A2.037 2.037 0 0113.441 22a2.037 2.037 0 01-2.048-2.026V18.04c0-.356.292-.645.652-.645.36 0 .652.289.652.645v1.934c0 .263.142.506.372.638.23.131.514.131.744 0a.734.734 0 00.372-.638V4.07c0-1.143.937-2.07 2.093-2.07zm-5.674 0c1.156 0 2.093.927 2.093 2.07v11.523a.648.648 0 01-.652.645.648.648 0 01-.652-.645V4.07a.785.785 0 00-.789-.78.785.785 0 00-.789.78v14.013a2.06 2.06 0 01-2.07 2.048 2.06 2.06 0 01-2.071-2.048V9.1a.762.762 0 00-.766-.758.762.762 0 00-.766.758v3.8a2.06 2.06 0 01-2.071 2.049A2.06 2.06 0 010 12.9v-1.378c0-.357.292-.646.652-.646.36 0 .653.29.653.646V12.9c0 .418.343.757.766.757s.766-.339.766-.757V9.099a2.06 2.06 0 012.07-2.048 2.06 2.06 0 012.071 2.048v8.984c0 .419.343.758.767.758.423 0 .766-.339.766-.758V4.07c0-1.143.937-2.07 2.093-2.07z" fill="url(#g0)" fillRule="nonzero"/></svg>`,
 	"minimaxcn": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><defs><linearGradient id="g0" x1="0%" x2="100.182%" y1="50.057%" y2="50.057%"><stop offset="0%" stopColor="#E2167E"/><stop offset="100%" stopColor="#FE603C"/></linearGradient></defs><path d="M16.278 2c1.156 0 2.093.927 2.093 2.07v12.501a.74.74 0 00.744.709.74.74 0 00.743-.709V9.099a2.06 2.06 0 012.071-2.049A2.06 2.06 0 0124 9.1v6.561a.649.649 0 01-.652.645.649.649 0 01-.653-.645V9.1a.762.762 0 00-.766-.758.762.762 0 00-.766.758v7.472a2.037 2.037 0 01-2.048 2.026 2.037 2.037 0 01-2.048-2.026v-12.5a.785.785 0 00-.788-.753.785.785 0 00-.789.752l-.001 15.904A2.037 2.037 0 0113.441 22a2.037 2.037 0 01-2.048-2.026V18.04c0-.356.292-.645.652-.645.36 0 .652.289.652.645v1.934c0 .263.142.506.372.638.23.131.514.131.744 0a.734.734 0 00.372-.638V4.07c0-1.143.937-2.07 2.093-2.07zm-5.674 0c1.156 0 2.093.927 2.093 2.07v11.523a.648.648 0 01-.652.645.648.648 0 01-.652-.645V4.07a.785.785 0 00-.789-.78.785.785 0 00-.789.78v14.013a2.06 2.06 0 01-2.07 2.048 2.06 2.06 0 01-2.071-2.048V9.1a.762.762 0 00-.766-.758.762.762 0 00-.766.758v3.8a2.06 2.06 0 01-2.071 2.049A2.06 2.06 0 010 12.9v-1.378c0-.357.292-.646.652-.646.36 0 .653.29.653.646V12.9c0 .418.343.757.766.757s.766-.339.766-.757V9.099a2.06 2.06 0 012.07-2.048 2.06 2.06 0 012.071 2.048v8.984c0 .419.343.758.767.758.423 0 .766-.339.766-.758V4.07c0-1.143.937-2.07 2.093-2.07z" fill="url(#g0)" fillRule="nonzero"/></svg>`,
 	"mistral": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3.428 3.4h3.429v3.428H3.428V3.4zm13.714 0h3.43v3.428h-3.43V3.4z" fill="gold"/><path d="M3.428 6.828h6.857v3.429H3.429V6.828zm10.286 0h6.857v3.429h-6.857V6.828z" fill="#FFAF00"/><path d="M3.428 10.258h17.144v3.428H3.428v-3.428z" fill="#FF8205"/><path d="M3.428 13.686h3.429v3.428H3.428v-3.428zm6.858 0h3.429v3.428h-3.429v-3.428zm6.856 0h3.43v3.428h-3.43v-3.428z" fill="#FA500F"/><path d="M0 17.114h10.286v3.429H0v-3.429zm13.714 0H24v3.429H13.714v-3.429z" fill="#E10500"/></svg>`,
@@ -356,6 +356,7 @@ const CHAT_CATALOG: CatalogEntry[] = [
 		baseUrl: "https://openrouter.ai/api",
 		apiFormat: "openai",
 		models: [
+			{ id: "baai/bge-m3", contextWindow: 8192, kind: "embedding" },
 			{ id: "anthropic/claude-sonnet-4-5", contextWindow: 200000 },
 			{ id: "anthropic/claude-haiku-4-5", contextWindow: 200000 },
 			{ id: "meta-llama/llama-3.3-70b-instruct", contextWindow: 131072 },
@@ -946,13 +947,13 @@ class FetchModelsModal extends Modal {
 			this.rows.set(model.id, row);
 			this.listEl.appendChild(row);
 		}
-		// "No match" hint when the filter yields nothing.
+		// "No match" hint when the filter yields nothing. A merely-empty list
+		// (e.g. mid-refresh) shows nothing — the head already carries the
+		// refresh progress label.
 		if (this.emptyEl) {
-			const has = this.rows.size > 0;
-			this.emptyEl.style.display = has ? "none" : "block";
-			this.emptyEl.setText(this.filter.length > 0
-				? t("fetchNoMatch")
-				: t("fetchLoading"));
+			const showNoMatch = this.rows.size === 0 && this.filter.length > 0;
+			this.emptyEl.style.display = showNoMatch ? "block" : "none";
+			if (showNoMatch) this.emptyEl.setText(t("fetchNoMatch"));
 		}
 	}
 }
@@ -975,7 +976,7 @@ class AddProviderModal extends Modal {
 	}
 
 	onOpen() {
-		this.titleEl.setText(this.kind === "catalog" ? t("addProvider") : t("customTitle"));
+		this.titleEl.setText(this.kind === "catalog" ? t("pickProvider") : t("customTitle"));
 		const { contentEl } = this;
 		contentEl.empty();
 		const opts = {
@@ -986,7 +987,7 @@ class AddProviderModal extends Modal {
 			},
 		};
 		if (this.kind === "catalog") {
-			renderAddCatalogCard(contentEl, this.plugin, opts);
+			renderProviderCatalogGrid(contentEl, this.plugin, opts);
 		} else {
 			renderCustomCard(contentEl, this.plugin, opts);
 		}
@@ -1348,6 +1349,19 @@ function providerLogo(name: string): string | undefined {
 	return PROVIDER_LOGOS[name.toLowerCase().replace(/[^a-z0-9]/g, "")];
 }
 
+/** Append the provider's brand logo to `target`, or a fallback circle with
+ *  the name's initial when no brand logo is known (e.g. custom providers). */
+function appendProviderLogo(target: HTMLElement, name: string, logoCls: string): void {
+	const logo = providerLogo(name);
+	if (logo) {
+		const logoEl = target.createDiv({ cls: logoCls });
+		logoEl.innerHTML = logo;
+		return;
+	}
+	const initial = (name || "").trim().charAt(0).toUpperCase() || "?";
+	target.createDiv({ cls: "semlink-provider-fallback", text: initial });
+}
+
 /** Create one provider row. The row is compact: logo + name + status +
  *  buttons (编辑 opens the provider-detail modal, 删除 removes it); the whole
  *  row is draggable to reorder. No inline expansion. */
@@ -1363,11 +1377,7 @@ function createProviderRow(listEl: HTMLElement, opts: RowOptions): HTMLElement {
 	});
 	setIcon(grip, "grip-vertical");
 	const identity = head.createDiv({ cls: "semlink-provider-identity" });
-	const logo = providerLogo(opts.name);
-	if (logo) {
-		const logoEl = identity.createDiv({ cls: "semlink-provider-logo" });
-		logoEl.innerHTML = logo;
-	}
+	appendProviderLogo(identity, opts.name, "semlink-provider-logo");
 	identity.createSpan({ cls: "semlink-provider-name", text: opts.name });
 	if (opts.tag) identity.createSpan({ cls: "semlink-provider-tag", text: opts.tag });
 	if (opts.dot) {
@@ -1447,10 +1457,10 @@ class ProviderEditorModal extends Modal {
 	}
 
 	onOpen() {
-		this.titleEl.setText(this.provider.name || this.provider.id);
+		this.titleEl.setText(t("editProvider"));
 		const { contentEl } = this;
 		contentEl.empty();
-		renderProviderEditor(contentEl, this.plugin, this.provider, this.refresh);
+		renderProviderEditor(contentEl, this.plugin, this.provider, this.refresh, () => this.close());
 	}
 
 	onClose() {
@@ -1468,34 +1478,36 @@ function renderProviderEditor(
 	plugin: SmartVaultPlugin,
 	p: ModelProvider,
 	refresh: () => void,
+	close: () => void,
 ): void {
+	// Draft copy: edits are staged on the draft and only written back (and
+	// saved) when 确定 is clicked; 取消 discards them.
+	const draft: ModelProvider = {
+		...p,
+		models: p.models.map((m) => ({ ...m })),
+	};
 	// The model list is rendered last; the probe-state refresh below needs a
 	// handle, so it is assigned at the end and dereferenced lazily.
 	let modelHandle: ModelListHandle | null = null;
 
-	// Display name — saved on every change; the row header is refreshed on
-	// blur so it follows without needing a tab switch.
 	new Setting(slot)
 		.setName(t("chatProviderName"))
-		.addText((text) => {
+		.addText((text) =>
 			text
-				.setValue(p.name)
-				.onChange(async (value) => {
-					p.name = value;
-					await plugin.saveSettings();
-				});
-			text.inputEl.addEventListener("blur", refresh);
-		});
+				.setValue(draft.name)
+				.onChange((value) => {
+					draft.name = value;
+				})
+		);
 
 	new Setting(slot)
 		.setName(t("chatBaseUrl"))
 		.addText((text) =>
 			text
 				.setPlaceholder("https://api.siliconflow.cn")
-				.setValue(p.apiBase)
-				.onChange(async (value) => {
-					p.apiBase = value;
-					await plugin.saveSettings();
+				.setValue(draft.apiBase)
+				.onChange((value) => {
+					draft.apiBase = value;
 					modelHandle?.updateProbeState();
 				})
 		);
@@ -1508,10 +1520,9 @@ function renderProviderEditor(
 					"openai": t("chatFormatOpenAI"),
 					"anthropic": t("chatFormatAnthropic"),
 				})
-				.setValue(p.apiFormat ?? "openai")
-				.onChange(async (value) => {
-					p.apiFormat = value as ChatApiFormat;
-					await plugin.saveSettings();
+				.setValue(draft.apiFormat ?? "openai")
+				.onChange((value) => {
+					draft.apiFormat = value as ChatApiFormat;
 					modelHandle?.updateProbeState();
 				})
 		);
@@ -1521,10 +1532,9 @@ function renderProviderEditor(
 		.addText((text) =>
 			text
 				.setPlaceholder("sk-...")
-				.setValue(p.apiKey)
-				.onChange(async (value) => {
-					p.apiKey = value;
-					await plugin.saveSettings();
+				.setValue(draft.apiKey)
+				.onChange((value) => {
+					draft.apiKey = value;
 					modelHandle?.updateProbeState();
 				})
 		)
@@ -1536,16 +1546,25 @@ function renderProviderEditor(
 	modelHandle = renderModelList(slot, {
 		app: plugin.app,
 		plugin,
-		// Adding/removing models feeds the General tab's embedding/chat model
-		// dropdowns — re-render the page (scroll preserved) so they update.
-		onStructuralChange: refresh,
-		getModels: () => p.models,
+		getModels: () => draft.models,
 		onChange: (models) => {
-			p.models = models;
-			void plugin.saveSettings();
+			draft.models = models;
 		},
-		probe: () => ({ baseUrl: p.apiBase, apiKey: p.apiKey, apiFormat: p.apiFormat ?? "openai" }),
+		probe: () => ({ baseUrl: draft.apiBase, apiKey: draft.apiKey, apiFormat: draft.apiFormat ?? "openai" }),
 	});
+
+	// Footer: commit the staged draft on 确定, discard it on 取消.
+	const footer = slot.createDiv({ cls: "semlink-editor-footer" });
+	footer.createEl("button", { cls: "semlink-btn", text: t("cancel") })
+		.addEventListener("click", close);
+	footer.createEl("button", { cls: "semlink-btn semlink-btn-cta", text: t("confirm") })
+		.addEventListener("click", async () => {
+			Object.assign(p, draft);
+			p.models = draft.models;
+			await plugin.saveSettings();
+			refresh();
+			close();
+		});
 }
 
 // ──── Create cards (add provider / add custom provider) ────
@@ -1558,17 +1577,9 @@ interface ChatProviderDraft {
 	models: ChatModel[];
 }
 
-const ROUTE_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
-
 interface DraftEditorOptions {
 	submitLabel: string;
 	submitBusyLabel: string;
-	/** Present on the custom-provider card: the route-id field. */
-	route?: {
-		/** Live route-id value (read at submit time). */
-		getValue: () => string;
-		onChange: (v: string) => void;
-	};
 	onCancel: () => void;
 	onCreated: (provider: ModelProvider) => void;
 }
@@ -1586,36 +1597,6 @@ function renderDraftEditor(
 	// The model list is rendered last (after protocol + key); the probe-state
 	// refresh above needs a handle, so it is assigned lazily.
 	let modelHandle: ModelListHandle | null = null;
-
-	if (opts.route) {
-		new Setting(slot)
-			.setName(t("customRoute"))
-			.setDesc(t("customRouteHint"))
-			.addText((text) =>
-				text
-					.setPlaceholder("acme-gateway")
-					.setValue(opts.route!.getValue())
-					.onChange((value) => opts.route!.onChange(value))
-			)
-			.then((setting) => {
-				const input = setting.controlEl.querySelector("input") as HTMLInputElement | null;
-				const updateHint = () => {
-					const v = (input?.value ?? "").trim();
-					if (v.length > 0 && !ROUTE_PATTERN.test(v)) {
-						setting.descEl.setText(t("customRouteInvalid"));
-						setting.descEl.addClass("is-error");
-					} else if (plugin.settings.providers.some((p) => p.id === v)) {
-						setting.descEl.setText(t("customRouteTaken"));
-						setting.descEl.addClass("is-error");
-					} else {
-						setting.descEl.setText(t("customRouteHint"));
-						setting.descEl.removeClass("is-error");
-					}
-				};
-				input?.addEventListener("input", updateHint);
-				updateHint();
-			});
-	}
 
 	new Setting(slot)
 		.setName(t("chatProviderName"))
@@ -1686,17 +1667,8 @@ function renderDraftEditor(
 		.addButton((btn) => {
 			btn.setButtonText(opts.submitLabel).setClass("mod-cta").onClick(async () => {
 				if (busy) return;
-				errorEl.style.display = "none";
-				const routeValue = opts.route ? opts.route.getValue().trim() : "";
-				const routeInvalid = routeValue.length > 0 && !ROUTE_PATTERN.test(routeValue);
-				const routeTaken = routeValue.length > 0
-					&& plugin.settings.providers.some((p) => p.id === routeValue);
-				if (opts.route && (routeInvalid || routeTaken)) {
-					errorEl.setText(routeInvalid ? t("customRouteInvalid") : t("customRouteTaken"));
-					errorEl.style.display = "block";
-					return;
-				}
-				if (!draft.baseUrl.trim()) {
+			errorEl.style.display = "none";
+			if (!draft.baseUrl.trim()) {
 					errorEl.setText(t("customNeedsBaseUrl"));
 					errorEl.style.display = "block";
 					return;
@@ -1709,7 +1681,7 @@ function renderDraftEditor(
 				busy = true;
 				btn.setButtonText(opts.submitBusyLabel).setDisabled(true);
 				const provider: ModelProvider = {
-					id: opts.route ? routeValue : `provider-${Date.now()}`,
+					id: `provider-${Date.now()}`,
 					name: draft.name.trim() || draft.baseUrl.trim(),
 					apiBase: draft.baseUrl.trim(),
 					apiKey: draft.apiKey,
@@ -1723,54 +1695,64 @@ function renderDraftEditor(
 		});
 }
 
-/** "Add provider" card: pick a catalog entry, then fill in the details.
- *  Rendered inside the AddProviderModal. */
-function renderAddCatalogCard(
+/** Catalog entries pinned to the front of the picker grid with a star, in
+ *  display order (first = leftmost). */
+const FEATURED_PROVIDERS = ["OpenRouter", "SiliconFlow"];
+
+/** Step 1 of "Add provider": a 3-column grid of catalog cards (logo + name).
+ *  Clicking a card creates the provider pre-filled from that catalog entry
+ *  (apiKey empty, models from the catalog) and hands it to onCreated, which
+ *  closes this modal and opens the provider editor (step 2). */
+function renderProviderCatalogGrid(
 	containerEl: HTMLElement,
 	plugin: SmartVaultPlugin,
 	opts: { onCancel: () => void; onCreated: (provider: ModelProvider) => void },
 ): void {
-	const card = containerEl.createDiv({ cls: "semlink-add-card" });
-	card.createDiv({ cls: "semlink-add-card-title", text: t("addProvider") });
-
-	let draft: ChatProviderDraft = draftFromCatalog(CHAT_CATALOG[0]);
-
-	// The catalog dropdown sits ABOVE the provider fields (display name first).
-	new Setting(card)
-		.setName(t("catalogLabel"))
-		.addDropdown((dropdown) =>
-			dropdown
-				.addOptions(Object.fromEntries(CHAT_CATALOG.map((c, i) => [String(i), c.name])))
-				.setValue("0")
-				.onChange((value) => {
-					draft = draftFromCatalog(CHAT_CATALOG[parseInt(value, 10)]);
-					rerenderDraft();
-				})
-		);
-
-	const bodyEl = card.createDiv({ cls: "semlink-add-card-body" });
-
-	const rerenderDraft = () => {
-		bodyEl.empty();
-		renderDraftEditor(bodyEl, plugin, draft, {
-			submitLabel: t("create"),
-			submitBusyLabel: t("creating"),
-			onCancel: opts.onCancel,
-			onCreated: opts.onCreated,
+	const grid = containerEl.createDiv({ cls: "semlink-add-provider-grid" });
+	// Featured providers are pinned to the front in FEATURED_PROVIDERS order;
+	// Array#sort is stable, so the rest keep their catalog order.
+	const featuredRank = (name: string) => {
+		const i = FEATURED_PROVIDERS.indexOf(name);
+		return i === -1 ? FEATURED_PROVIDERS.length : i;
+	};
+	const ordered = [...CHAT_CATALOG].sort((a, b) => featuredRank(a.name) - featuredRank(b.name));
+	for (const entry of ordered) {
+		const card = grid.createDiv({ cls: "semlink-add-provider-card" });
+		if (FEATURED_PROVIDERS.includes(entry.name)) {
+			card.createSpan({ cls: "semlink-add-provider-star", text: "⭐" });
+		}
+		const logo = providerLogo(entry.name);
+		if (logo) {
+			const logoEl = card.createDiv({ cls: "semlink-add-provider-card-logo" });
+			logoEl.innerHTML = logo;
+		} else {
+			card.createDiv({ cls: "semlink-add-provider-card-fallback", text: entry.name.charAt(0).toUpperCase() });
+		}
+		card.createDiv({ cls: "semlink-add-provider-card-name", text: entry.name });
+		card.addEventListener("click", async () => {
+			const provider: ModelProvider = {
+				id: `provider-${Date.now()}`,
+				name: entry.name,
+				apiBase: entry.baseUrl,
+				apiKey: "",
+				apiFormat: entry.apiFormat,
+				models: entry.models.map((m) => ({ ...m })),
+			};
+			plugin.settings.providers.push(provider);
+			await plugin.saveSettings();
+			opts.onCreated(provider);
 		});
-	};
+	}
 
-	rerenderDraft();
-}
-
-function draftFromCatalog(entry: CatalogEntry): ChatProviderDraft {
-	return {
-		name: entry.name,
-		baseUrl: entry.baseUrl,
-		apiKey: "",
-		apiFormat: entry.apiFormat,
-		models: entry.models.map((m) => ({ ...m })),
-	};
+	// Trailing "custom provider" chip: closes this catalog modal and opens the
+	// custom-provider form in its place, reusing the same onCreated callback.
+	const customCard = grid.createDiv({ cls: "semlink-add-provider-card semlink-add-provider-card-custom" });
+	customCard.createDiv({ cls: "semlink-add-provider-card-fallback", text: "＋" });
+	customCard.createDiv({ cls: "semlink-add-provider-card-name", text: t("customProvider") });
+	customCard.addEventListener("click", () => {
+		opts.onCancel();
+		new AddProviderModal(plugin.app, plugin, "custom", opts.onCreated).open();
+	});
 }
 
 /** "Add a custom provider" card: route id + full details. Rendered inside
@@ -1781,9 +1763,7 @@ function renderCustomCard(
 	opts: { onCancel: () => void; onCreated: (provider: ModelProvider) => void },
 ): void {
 	const card = containerEl.createDiv({ cls: "semlink-add-card" });
-	card.createDiv({ cls: "semlink-add-card-title", text: t("customTitle") });
 
-	const routeState = { value: "" };
 	const draft: ChatProviderDraft = {
 		name: "",
 		baseUrl: "",
@@ -1796,12 +1776,6 @@ function renderCustomCard(
 	renderDraftEditor(bodyEl, plugin, draft, {
 		submitLabel: t("create"),
 		submitBusyLabel: t("creating"),
-		route: {
-			getValue: () => routeState.value,
-			onChange: (v) => {
-				routeState.value = v;
-			},
-		},
 		onCancel: opts.onCancel,
 		onCreated: opts.onCreated,
 	});
@@ -1834,19 +1808,15 @@ export function renderModelsTab(
 
 	const listEl = containerEl.createDiv({ cls: "semlink-provider-rows" });
 
-	for (let i = 0; i < providers.length; i++) {
-		const p = providers[i];
-		// Mark the provider that hosts the active embedding model.
-		const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
-		const active = p.id === activePid;
-		createProviderRow(listEl, {
-			name: p.name,
-			// No embedding/chat tag on the provider — the distinction lives on
-			// the models inside each editor. The badge just marks the provider
-			// currently used as the embedding service.
-			dot: p.apiKey ? "configured" : "missing",
-			badge: active ? t("embedInUse") : undefined,
-			index: i,
+		for (let i = 0; i < providers.length; i++) {
+			const p = providers[i];
+			// Used by the delete handler below: if the deleted provider hosts
+			// the active embedding model, clear that selection.
+			const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
+			createProviderRow(listEl, {
+				name: p.name,
+				dot: p.apiKey ? "configured" : "missing",
+				index: i,
 			onEdit: () => {
 				new ProviderEditorModal(plugin.app, plugin, p, refresh).open();
 			},
@@ -1868,21 +1838,17 @@ export function renderModelsTab(
 		});
 	}
 
-	// ── Add actions (open the create modal) ──
-	const addBlock = containerEl.createDiv({ cls: "semlink-provider-add" });
-	const actions = addBlock.createDiv({ cls: "semlink-provider-add-actions" });
-	actions.createEl("button", { cls: "semlink-btn semlink-btn-cta", text: `＋ ${t("addProvider")}` })
-		.addEventListener("click", () => {
-			new AddProviderModal(plugin.app, plugin, "catalog", (provider) => {
-				refresh();
-				new ProviderEditorModal(plugin.app, plugin, provider, refresh).open();
-			}).open();
-		});
-	actions.createEl("button", { cls: "semlink-btn", text: `＋ ${t("addCustomProvider")}` })
-		.addEventListener("click", () => {
-			new AddProviderModal(plugin.app, plugin, "custom", (provider) => {
-				refresh();
-				new ProviderEditorModal(plugin.app, plugin, provider, refresh).open();
-			}).open();
-		});
-}
+		// ── Add actions (open the create modal) ──
+		const addBlock = containerEl.createDiv({ cls: "semlink-provider-add" });
+		const actions = addBlock.createDiv({ cls: "semlink-provider-add-actions" });
+		actions.createEl("button", { cls: "semlink-btn semlink-btn-cta", text: `＋ ${t("addProvider")}` })
+			.addEventListener("click", () => {
+				new AddProviderModal(plugin.app, plugin, "catalog", () => {
+					// No second step: the picked provider is appended to the
+					// list as a new row; edit it later via the row's 编辑 button.
+					// The trailing "custom" chip inside the catalog grid opens
+					// the custom-provider form and reuses this same callback.
+					refresh();
+				}).open();
+			});
+	}

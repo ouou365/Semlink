@@ -277,7 +277,7 @@ const S: Strings = {
 
 	// ──── Chat Model Provider ────
 	sectionChat:         { zh: "对话模型",              en: "Chat Models" },
-	chatProviderName:    { zh: "显示名称",            en: "Display Name" },
+	chatProviderName:    { zh: "供应商名称",          en: "Provider Name" },
 	chatBaseUrl:         { zh: "Base URL",             en: "Base URL" },
 	chatApiKey:          { zh: "API Key",              en: "API Key" },
 	chatApiFormat:       { zh: "API 格式",              en: "API Format" },
@@ -311,8 +311,11 @@ const S: Strings = {
 	credentialConfigured: { zh: "密钥已配置",       en: "Key configured" },
 	credentialMissing:  { zh: "密钥未配置",         en: "Key missing" },
 	edit:               { zh: "编辑",              en: "Edit" },
+	editProvider:       { zh: "编辑供应商",         en: "Edit provider" },
 	remove:             { zh: "删除",              en: "Remove" },
 	addProvider:        { zh: "添加供应商",         en: "Add provider" },
+	pickProvider:       { zh: "选择供应商",         en: "Select a provider" },
+	customProvider:     { zh: "自定义供应商",        en: "Custom" },
 	addCustomProvider:  { zh: "添加自定义供应商",    en: "Add a custom provider" },
 	modelsCount:        { zh: "{count} 个模型",     en: "{count} models" },
 	embedInUse:         { zh: "使用中",            en: "In use" },
@@ -330,6 +333,7 @@ const S: Strings = {
 	create:             { zh: "创建",              en: "Create" },
 	creating:           { zh: "创建中...",         en: "Creating..." },
 	cancel:             { zh: "取消",              en: "Cancel" },
+	confirm:            { zh: "确定",              en: "Confirm" },
 	apply:              { zh: "应用",              en: "Apply" },
 	applying:           { zh: "应用中...",         en: "Applying..." },
 	deleteTitle:        { zh: "删除 {provider}？",  en: "Delete {provider}?" },

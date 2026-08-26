@@ -303,6 +303,22 @@
     display: block;
 }
 
+/* Fallback identity circle for providers without a known brand logo
+ * (e.g. custom providers): the name's initial. */
+.smart-vault-settings .semlink-provider-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--background-modifier-hover);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+}
+
 .smart-vault-settings .semlink-provider-name {
     font-weight: 600;
     white-space: nowrap;
@@ -406,6 +422,109 @@
 .smart-vault-settings .semlink-provider-add-actions {
     display: flex;
     gap: 8px;
+}
+
+/* Add-provider step 1: flowing catalog chips (logo + name, content-width,
+ * wrapped — as many per row as fit) */
+.smart-vault-settings .semlink-add-provider-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: flex-start;
+    gap: 8px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 2px 4px 8px 2px;
+}
+
+.smart-vault-settings .semlink-add-provider-card {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.smart-vault-settings .semlink-add-provider-card:hover {
+    border-color: var(--interactive-accent);
+    background: var(--background-modifier-hover);
+}
+
+.smart-vault-settings .semlink-add-provider-star {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.smart-vault-settings .semlink-add-provider-card-logo {
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-add-provider-card-logo svg {
+    height: 22px;
+    width: auto;
+    max-width: 90px;
+}
+
+.smart-vault-settings .semlink-add-provider-card-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 22px;
+    width: 22px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--background-modifier-hover);
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.smart-vault-settings .semlink-add-provider-card-custom {
+    border-style: dashed;
+}
+
+.smart-vault-settings .semlink-add-provider-card-custom .semlink-add-provider-card-name {
+    color: var(--text-muted);
+}
+
+.smart-vault-settings .semlink-add-provider-card-name {
+    font-size: 12px;
+    color: var(--text-normal);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Provider editor footer: 取消 / 确定 actions */
+.smart-vault-settings .semlink-editor-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Provider editor modal: brand logo beside the title */
+.smart-vault-settings .semlink-editor-title-logo {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 6px;
+    vertical-align: -3px;
+}
+
+.smart-vault-settings .semlink-editor-title-logo svg {
+    height: 18px;
+    width: auto;
 }
 
 .smart-vault-settings .semlink-add-card {
@@ -2255,6 +2374,31 @@
     /* Opaque tint: a translucent one would let the pinned thinking header
        show through while hovering and distract. */
     background: #e8e9ea;
+}
+
+/* Tool-call response block: collapsed by default; the "返回 ›" summary
+ * toggles it (arrow rotates when open). */
+.semlink-tool-call-response-summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    display: inline-block;
+}
+
+.semlink-tool-call-response-summary::-webkit-details-marker {
+    display: none;
+}
+
+.semlink-tool-call-response-summary::after {
+    content: "›";
+    margin-left: 4px;
+    color: var(--text-faint);
+    display: inline-block;
+    transition: transform 0.12s ease;
+}
+
+.semlink-tool-call-response[open] > .semlink-tool-call-response-summary::after {
+    transform: rotate(90deg);
 }
 
 .semlink-tool-call-label {

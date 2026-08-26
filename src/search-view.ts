@@ -1381,8 +1381,14 @@ export class SemanticSearchView extends ItemView {
 				callDetails.createDiv({ cls: "semlink-tool-call-label", text: t("searchToolRequest") });
 				callDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.args) });
 
-				callDetails.createDiv({ cls: "semlink-tool-call-label", text: t("searchToolResponse") });
-				callDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.result) });
+				// Response: nested <details>, collapsed by default — click
+				// "返回 ›" to expand the (often large) JSON result.
+				const responseDetails = callDetails.createEl("details", { cls: "semlink-tool-call-response" });
+				responseDetails.createEl("summary", {
+					cls: "semlink-tool-call-label semlink-tool-call-response-summary",
+					text: t("searchToolResponse"),
+				});
+				responseDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.result) });
 			}
 		}
 	}
