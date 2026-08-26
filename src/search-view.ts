@@ -14,10 +14,8 @@ import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
 import { inferAgentDepth, buildNoteContext } from "./chat-client";
 import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
 import { ChatHistoryStore } from "./chat-history";
-import { MapArchiveStore } from "./map-archive-store";
-import { SemanticMapController } from "./semantic-map";
 import { SaveNoteModal } from "./save-note-modal";
-import { t } from "./i18n";
+import { getLang, t } from "./i18n";
 import logoSvg from "./semlink-logo.svg";
 import llmIconSvg from "./network-icon.svg";
 import expandIconSvg from "./expand-icon.svg";
@@ -118,35 +116,13 @@ export class SemanticSearchView extends ItemView {
 	private lastBreakdown: ContextBreakdown | null = null;
 	private lastCacheHitRate: number | null = null;
 	private modelNameEl: HTMLElement | null = null;
+	private modelLabelEl: HTMLElement | null = null;
 	private modelTriggerEl: HTMLElement | null = null;
 	private modelPopupEl: HTMLElement | null = null;
 	/** Time-slot key of the currently shown welcome greeting. */
 	private currentWelcomeKey: string | null = null;
 	/** Home ("new session") button — hidden while the welcome screen is up. */
 	private newChatBtnEl: HTMLElement | null = null;
-	/** Auto-link "related notes" card state: debounce timer, last-seen path
-	 *  guard (skip redundant fetches), and an async token (stale guards). */
-	private relatedLastPath: string | null = null;
-	private relatedToken = 0;
-	private relatedDebounce = 0;
-	// Semantic map state: current view mode, the force-graph controller, the
-	// graph container, the brand title line, the archive store, save debounce,
-	// and a ResizeObserver to keep the canvas sized to its container.
-	private currentMode: "chat" | "map" | "related" = "chat";
-	private mapController: SemanticMapController | null = null;
-	private mapGraphEl!: HTMLElement;
-	private mapTitleEl!: HTMLElement;
-	private mapArchive: MapArchiveStore;
-	private mapSaveDebounce = 0;
-	private mapResizeObserver: ResizeObserver | null = null;
-	// Toolbar button refs (for is-active toggling) + related-notes view.
-	private relatedBtnEl!: HTMLButtonElement;
-	private mapBtnEl!: HTMLButtonElement;
-	private mapClearBtnEl!: HTMLButtonElement;
-	private relatedViewEl!: HTMLElement;
-	/** Last markdown file the user viewed — fallback when this sidebar panel
-	 *  is the focused (active) leaf, where getActiveFile() returns null. */
-	private lastActiveNotePath: string | null = null;
 
 	// Current conversation state
 	private currentSessionId: string | null = null;
@@ -175,7 +151,6 @@ export class SemanticSearchView extends ItemView {
 		this.vault = vault;
 		this.chatClient = chatClient;
 		this.history = new ChatHistoryStore(dataDir);
-		this.mapArchive = new MapArchiveStore(dataDir);
 	}
 
 	getViewType(): string {
@@ -264,9 +239,6 @@ export class SemanticSearchView extends ItemView {
 		// updateCompactHeader) so the conversation topic stays visible.
 		const firstQ = header.createDiv({ cls: "semlink-search-first-question" });
 		this.firstQuestionEl = firstQ;
-		// Second header row (the same slot as the chat subtitle): the current
-		// view name, shown only in map mode. Empty → collapsed via CSS :empty.
-		this.mapTitleEl = header.createDiv({ cls: "semlink-search-view-title" });
 
 		// ── Conversation area (middle, scrollable) ──
 		this.statusEl = contentEl.createDiv({ cls: "semlink-search-status" });
@@ -290,33 +262,8 @@ export class SemanticSearchView extends ItemView {
 			}, 60_000),
 		);
 
-		// When the user switches notes, refresh the "related notes" card on
-		// the welcome screen so it always reflects the currently open note.
-		this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
-			// Track the last markdown note so map mode can seed from it even
-			// when this sidebar panel is the focused (active) leaf.
-			if (leaf?.view instanceof MarkdownView && leaf.view.file) {
-				this.lastActiveNotePath = leaf.view.file.path;
-			}
-			this.maybeRefreshRelated();
-		}));
-
-		// ── Semantic map container (fills the middle area in map mode) ──
-		this.mapGraphEl = contentEl.createDiv({ cls: "semlink-search-graph" });
-		// ── Related-notes list container (fills the middle in related mode) ──
-		this.relatedViewEl = contentEl.createDiv({ cls: "semlink-search-related-view" });
-
 		// ── Input footer (bottom, fixed) ──
 		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
-
-		// Function-button toolbar (sits above the input), like a mobile app's
-		// action row. First button toggles the semantic map; "trash" clears it.
-		const toolbar = footer.createDiv({ cls: "semlink-search-toolbar" });
-		// Each tool = icon + label text. Selecting one switches the view mode.
-		this.relatedBtnEl = this.makeToolbarBtn(toolbar, "list", "relatedButtonTitle", () => this.setMode(this.currentMode === "related" ? "chat" : "related"));
-		this.mapBtnEl = this.makeToolbarBtn(toolbar, "workflow", "mapButtonTitle", () => this.toggleMapMode());
-		// Clear (map only) — pushed to the far right.
-		this.mapClearBtnEl = this.makeToolbarBtn(toolbar, "trash-2", "mapClear", () => this.clearMap(), "semlink-search-toolbar-btn-right");
 
 		const wrapper = footer.createDiv({ cls: "semlink-search-input-wrapper" });
 		// Drag & drop is handled on the WHOLE input wrapper. preventDefault +
@@ -522,9 +469,12 @@ export class SemanticSearchView extends ItemView {
 			this.tooltipEl = null;
 		}
 		const modelTrigger = modelEl.createSpan({ cls: "semlink-search-model-trigger" });
-		// LLM icon instead of the verbose "provider/model" text label.
+		// LLM icon with the active model name to its right (e.g.
+		// "DeepSeek/deepseek-v4-flash") — the trigger opens the model picker.
 		this.modelNameEl = modelTrigger.createSpan({ cls: "semlink-search-model-name" });
 		setSvgIcon(this.modelNameEl, llmIconSvg);
+		this.modelLabelEl = modelTrigger.createSpan({ cls: "semlink-search-model-label" });
+		this.updateModelLabel();
 		this.modelTriggerEl = modelTrigger;
 		modelTrigger.addEventListener("click", (e) => {
 			e.stopPropagation();
@@ -571,7 +521,6 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	protected async onClose(): Promise<void> {
-		this.disposeMap();
 		if (this.tooltipEl) {
 			this.tooltipEl.remove();
 			this.tooltipEl = null;
@@ -1545,307 +1494,6 @@ export class SemanticSearchView extends ItemView {
 		});
 	}
 
-	/** Build a toolbar button = icon + label text. Returns it so the caller can
-	 *  toggle is-active. */
-	private makeToolbarBtn(parent: HTMLElement, icon: string, labelKey: string, onClick: () => void, extraCls = ""): HTMLButtonElement {
-		const btn = parent.createEl("button", {
-			cls: `semlink-search-toolbar-btn ${extraCls}`,
-			attr: { "aria-label": t(labelKey), title: t(labelKey) },
-		});
-		const iconEl = btn.createSpan({ cls: "semlink-search-toolbar-btn-icon" });
-		setIcon(iconEl, icon);
-		btn.createSpan({ cls: "semlink-search-toolbar-btn-text", text: t(labelKey) });
-		btn.addEventListener("click", onClick);
-		return btn;
-	}
-
-	/** Populate the related-notes view: a scrollable card list of notes
-	 *  semantically similar to the current note. Token-guarded so a stale
-	 *  fetch (user switched note/mode) never overwrites a newer render. */
-	private async populateRelatedView(): Promise<void> {
-		const container = this.relatedViewEl;
-		container.empty();
-		const path = this.getActiveNotePath();
-		if (!path || !/\.(md|txt|markdown)$/i.test(path)) {
-			container.createDiv({ cls: "semlink-search-related-empty", text: t("mapNoActiveNote") });
-			return;
-		}
-		if (!this.hasApiKey()) {
-			container.createDiv({ cls: "semlink-search-related-empty", text: t("mapNoApiKey") });
-			return;
-		}
-		// Header: title + "based on <name>".
-		const head = container.createDiv({ cls: "semlink-search-related-head" });
-		head.createDiv({ cls: "semlink-search-related-title", text: t("searchRelatedTitle") });
-		head.createDiv({ cls: "semlink-search-related-sub", text: t("searchRelatedSub").replace("{name}", this.basename(path)) });
-		const list = container.createDiv({ cls: "semlink-search-related-list" });
-		list.createDiv({ cls: "semlink-search-related-loading", text: t("searchRelatedLoading") });
-
-		this.relatedToken++;
-		const token = this.relatedToken;
-		this.relatedLastPath = path;
-		const stale = () => token !== this.relatedToken || this.currentMode !== "related";
-		try {
-			const chunks = await this.store.getChunksByNotePath(path);
-			if (stale()) return;
-			if (chunks.length === 0) {
-				list.empty();
-				list.createDiv({ cls: "semlink-search-related-empty", text: t("searchRelatedNotIndexed") });
-				return;
-			}
-			const top = await this.getRelatedNotes(path, 10);
-			if (stale()) return;
-			list.empty();
-			if (top.length === 0) {
-				// Distinguish "no matches above threshold" from "vector index
-				// not ready" (e.g. still indexing, or cache not loaded).
-				let activeChunks = -1;
-				try {
-					activeChunks = (await this.store.getStats()).activeChunks;
-				} catch {
-					// stats are best-effort
-				}
-				if (stale()) return;
-				const msg = activeChunks >= 0 && activeChunks < 5 ? t("mapNoVectors") : t("searchRelatedEmpty");
-				list.createDiv({ cls: "semlink-search-related-empty", text: msg });
-				return;
-			}
-			for (const r of top) {
-				const item = list.createDiv({ cls: "semlink-search-related-item" });
-				item.createDiv({ cls: "semlink-search-related-item-title", text: this.basename(r.notePath) });
-				item.createDiv({ cls: "semlink-search-related-item-score", text: Math.round(r.score * 100) + "%" });
-				item.title = r.notePath; // hover for full path
-				item.addEventListener("click", () => { void this.openNote(r.notePath, r.preview); });
-			}
-		} catch {
-			if (stale()) return;
-			list.empty();
-			list.createDiv({ cls: "semlink-search-related-empty", text: t("searchRelatedEmpty") });
-		}
-	}
-
-	/** Refresh the related-notes view when the active note changes — but only
-	 *  while in related mode. Debounced + same-path guard avoid redundant
-	 *  embedding requests on rapid note switching. */
-	private maybeRefreshRelated(): void {
-		if (this.currentMode !== "related") return;
-		window.clearTimeout(this.relatedDebounce);
-		this.relatedDebounce = window.setTimeout(() => {
-			const path = this.getActiveNotePath();
-			if (path === this.relatedLastPath) return;
-			void this.populateRelatedView();
-		}, 300);
-	}
-
-	// ─────────────────────────────────────────────────────────────────
-	// Semantic Map mode
-	// ─────────────────────────────────────────────────────────────────
-
-	/** Toggle between chat and map modes. */
-	private toggleMapMode(): void {
-		this.setMode(this.currentMode === "map" ? "chat" : "map");
-	}
-
-	/** Switch the panel between "chat", "map", and "related" modes. */
-	private setMode(mode: "chat" | "map" | "related"): void {
-		if (this.currentMode === mode) return;
-		const prev = this.currentMode;
-		this.currentMode = mode;
-		// Root mode classes drive CSS show/hide of the three surfaces.
-		this.contentEl.toggleClass("is-map-mode", mode === "map");
-		this.contentEl.toggleClass("is-related-mode", mode === "related");
-		// Brand title line reflects the current mode.
-		this.mapTitleEl.setText(mode === "map" ? t("mapViewTitle") : mode === "related" ? t("relatedButtonTitle") : "");
-		// Toolbar active state + clear-button visibility (clear = map only).
-		this.relatedBtnEl.toggleClass("is-active", mode === "related");
-		this.mapBtnEl.toggleClass("is-active", mode === "map");
-		this.mapClearBtnEl.toggleClass("is-hidden", mode !== "map");
-		if (prev === "map") {
-			// Leaving map mode: stop observing. The archive was auto-saved.
-			this.mapResizeObserver?.disconnect();
-			this.mapResizeObserver = null;
-		}
-		if (mode === "map") {
-			this.enterMapMode();
-		} else if (mode === "related") {
-			void this.populateRelatedView();
-		}
-	}
-
-	/** Initialize (once) and populate the map, restoring the archive if any. */
-	private enterMapMode(): void {
-		if (!this.mapController) {
-			this.mapController = new SemanticMapController(
-				this.mapGraphEl,
-				(p) => this.handleMapNodeClick(p),
-				(p) => this.handleMapNodeDblClick(p),
-			);
-			try {
-				this.mapController.init();
-			} catch (e) {
-				console.error("[Semlink] Failed to init semantic map:", e);
-				this.showMapMessage("mapEmpty");
-				return;
-			}
-			// Keep the canvas matched to its container as the panel resizes.
-			this.mapResizeObserver = new ResizeObserver(() => this.mapController?.resize());
-			this.mapResizeObserver.observe(this.mapGraphEl);
-		}
-		// Defer population to the next frame so the container has settled into
-		// its map-mode layout (correct width/height) before force-graph draws.
-		requestAnimationFrame(() => this.populateMap());
-	}
-
-	/** Populate the map: restore the archive if any, else seed from the note. */
-	private populateMap(): void {
-		if (this.currentMode !== "map" || !this.mapController) return;
-		this.mapController.resize();
-
-		const path = this.getActiveNotePath();
-		const pathOk = !!path && /\.(md|txt|markdown)$/i.test(path);
-
-		const archive = this.mapArchive.load();
-		if (archive && archive.nodes.length > 0) {
-			// Resume the previous exploration (positions + expanded flags).
-			this.mapController.loadArchive(archive);
-			// The archive is a single global snapshot, so after switching notes
-			// it often doesn't contain the currently open note — the map would
-			// show stale nodes and look "empty" relative to the Related list.
-			// If the current note isn't in the restored graph, expand it so its
-			// neighbours appear too.
-			if (pathOk && this.hasApiKey() && !this.mapController.hasNode(path!)) {
-				void this.expandMapNode(path!, true);
-			}
-			return;
-		}
-
-		// No archive yet: seed the map from the currently open note.
-		if (!pathOk) {
-			this.showMapMessage("mapNoActiveNote");
-			return;
-		}
-		if (!this.hasApiKey()) {
-			this.showMapMessage("mapNoApiKey");
-			return;
-		}
-		// Seed: zoom-to-fit on the first expansion so the initial graph is framed.
-		// Subsequent clicks pass doZoomToFit=false to preserve the user's view.
-		void this.expandMapNode(path, true, true);
-	}
-
-	/** Resolve the "current note": prefer the truly active leaf, fall back to
-	 *  the last markdown note we saw (the panel is the active leaf on click). */
-	private getActiveNotePath(): string | null {
-		const direct = this.app.workspace.getActiveFile();
-		if (direct && /\.(md|txt|markdown)$/i.test(direct.path)) return direct.path;
-		return this.lastActiveNotePath;
-	}
-
-	/** Retrieval core shared by the welcome card and the map: embed the note's
-	 *  first chunk, search, dedup by note (highest score wins). Mirrors
-	 *  toolGetSimilarNotes. Returns up to `limit` related notes (empty if the
-	 *  note isn't indexed yet). */
-	private async getRelatedNotes(notePath: string, limit = 6): Promise<{ notePath: string; heading: string; preview: string; score: number }[]> {
-		const results = await this.store.searchRelatedNotes(notePath, Math.max(limit * 4, 20), 0.2, 6);
-		if (results.length === 0) {
-			console.warn("[Semlink] related-notes search returned 0 results for", notePath, "— is the vector index loaded?");
-		} else {
-			console.log("[Semlink] related recall:", results.length, "hits, top embedding score", results[0].score.toFixed(3));
-		}
-
-		return results.slice(0, limit).map((r) => ({
-			notePath: r.notePath,
-			heading: r.heading,
-			preview: r.contentPreview,
-			score: r.score,
-		}));
-	}
-
-	/** Grow the map around `path`: open the note and add its neighbours. Existing
-	 *  nodes/links are kept, so the map expands progressively. `isCenter` marks
-	 *  the seed node. A no-op refetch guard skips already-expanded nodes. */
-	private async expandMapNode(path: string, isCenter: boolean, doZoomToFit = false): Promise<void> {
-		if (!this.mapController) return;
-		const name = this.basename(path);
-		this.mapController.addNode(path, name, { isCenter });
-		if (isCenter) this.mapController.setCenter(path);
-
-		if (this.mapController.isExpanded(path)) {
-			// Already expanded: single click is a no-op (double click opens the
-			// note). Previously this called openNote, which made a single click
-			// on an already-expanded node open the document — unwanted now that
-			// click = expand, dblclick = open.
-			return;
-		}
-
-		try {
-			const related = await this.getRelatedNotes(path);
-			if (this.currentMode !== "map") return; // user left map mode mid-fetch
-			this.clearMapMessage();
-			// Ensure the seed node exists even if it had no neighbours.
-			this.mapController.addNode(path, name, { isCenter });
-			for (const r of related) {
-				this.mapController.addNode(r.notePath, this.basename(r.notePath));
-				this.mapController.addLink(path, r.notePath);
-			}
-			this.mapController.markExpanded(path);
-			this.mapController.render();
-			this.mapController.reheat();
-			if (doZoomToFit) this.mapController.zoomToFit();
-			this.scheduleMapSave();
-		} catch {
-			this.showMapMessage("mapEmpty");
-		}
-	}
-
-	/** Node click handler: open the note AND grow the map around it. */
-	private handleMapNodeClick(path: string): void {
-		// Single click opens the note and expands its related notes around it.
-		// (Ctrl/Cmd+click opens the note WITHOUT re-centering the map — see
-		// handleMapNodeDblClick.)
-		void this.openNote(path, "");
-		void this.expandMapNode(path, true);
-	}
-
-	private handleMapNodeDblClick(path: string): void {
-		// Double click: open the note.
-		void this.openNote(path, "");
-	}
-
-	/** Debounced auto-save of the current map (layout + structure). */
-	private scheduleMapSave(): void {
-		window.clearTimeout(this.mapSaveDebounce);
-		this.mapSaveDebounce = window.setTimeout(() => {
-			if (this.mapController) this.mapArchive.save(this.mapController.exportArchive());
-		}, 400);
-	}
-
-	/** Empty the map and persist an empty archive. */
-	private clearMap(): void {
-		this.mapController?.clear();
-		this.mapArchive.clear();
-		this.clearMapMessage();
-	}
-
-	/** Show a centered placeholder message in the graph container. */
-	private showMapMessage(key: string): void {
-		this.clearMapMessage();
-		this.mapGraphEl.createDiv({ cls: "semlink-search-graph-empty", text: t(key) });
-	}
-
-	private clearMapMessage(): void {
-		this.mapGraphEl.querySelector(".semlink-search-graph-empty")?.remove();
-	}
-
-	/** Tear down the map (called from onClose). */
-	private disposeMap(): void {
-		window.clearTimeout(this.mapSaveDebounce);
-		this.mapResizeObserver?.disconnect();
-		this.mapResizeObserver = null;
-		this.mapController?.dispose();
-		this.mapController = null;
-	}
-
 	/** Home icon is the "back to start" button — it only makes sense once a
 	 *  conversation exists, so hide it while the welcome screen is up. */
 	private updateHomeIconVisibility(): void {
@@ -2465,17 +2113,24 @@ export class SemanticSearchView extends ItemView {
 		return (Number.isInteger(w) ? String(w) : w.toFixed(1).replace(/\.0$/, "")) + "万";
 	}
 
-	/** 7528 → "2小时5分" / 65 → "1分5秒" / 30 → "30秒". */
+	/** 7528 → "2小时5分" / 65 → "1分5秒" / 30 → "30秒" (zh);
+	 *  7528 → "2h 5m" / 65 → "1m 5s" / 30 → "30s" (en). */
 	private formatDuration(totalSec: number): string {
 		const s = Math.max(0, Math.round(totalSec));
 		const h = Math.floor(s / 3600);
 		const m = Math.floor((s % 3600) / 60);
 		const sec = s % 60;
 		const parts: string[] = [];
-		if (h > 0) parts.push(`${h}小时`);
-		if (m > 0) parts.push(`${m}分`);
-		if (sec > 0 || parts.length === 0) parts.push(`${sec}秒`);
-		return parts.join("");
+		if (getLang() === "zh") {
+			if (h > 0) parts.push(`${h}小时`);
+			if (m > 0) parts.push(`${m}分`);
+			if (sec > 0 || parts.length === 0) parts.push(`${sec}秒`);
+		} else {
+			if (h > 0) parts.push(`${h}h`);
+			if (m > 0) parts.push(`${m}m`);
+			if (sec > 0 || parts.length === 0) parts.push(`${sec}s`);
+		}
+		return parts.join(" ");
 	}
 
 	/** 0.551 → "55.1" (one decimal, trailing .0 stripped). */
@@ -2555,10 +2210,14 @@ export class SemanticSearchView extends ItemView {
 
 	/** Refresh the model label and the context ring after switching. */
 	private updateModelLabel(): void {
-		// The indicator is a static LLM icon — nothing to relabel, but keep
-		// the icon in sync in case the element was rebuilt.
+		// The LLM icon on the left; the model id on its right — provider
+		// names are skipped to keep the row compact.
 		if (this.modelNameEl) {
 			setSvgIcon(this.modelNameEl, llmIconSvg);
+		}
+		if (this.modelLabelEl) {
+			const active = this.chatClient.getActiveModel();
+			this.modelLabelEl.setText(active ? active.model.id : "");
 		}
 		// The context window may differ across models — recompute the ring
 		// against the last turn's usage.

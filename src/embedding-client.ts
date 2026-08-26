@@ -39,7 +39,7 @@ export class EmbeddingClient {
 	/** Load the active embedding provider's endpoint + key + model. */
 	private apply(settings: SmartVaultSettings) {
 		const p = activeEmbeddingProvider(settings);
-		this.provider = p.kind;
+		this.provider = p.family ?? "siliconflow";
 		this.providerName = p.name;
 		this.apiKey = p.apiKey;
 		this.apiBase = p.apiBase;

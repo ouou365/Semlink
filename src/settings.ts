@@ -5,7 +5,7 @@
 import { App, ButtonComponent, Notice, PluginSettingTab, Setting } from "obsidian";
 import * as QRCode from "qrcode";
 import type SmartVaultPlugin from "../main";
-import type { EmbeddingProviderConfig, IndexProgress, SmartVaultSettings } from "./types";
+import type { IndexProgress, ModelProvider, SmartVaultSettings } from "./types";
 import { activeEmbeddingProvider } from "./types";
 import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
@@ -35,28 +35,35 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	/** The nearest scrollable ancestor of the settings content (Obsidian's
-	 *  settings pane scrolls a `.vertical-tab-content-container`). */
-	private findScrollContainer(): HTMLElement | null {
+	/** Re-render the current tab while keeping the scroll position — row
+	 *  expand/collapse, provider create/delete and model add/remove/reorder
+	 *  all re-render the whole page, which would otherwise jump back to the
+	 *  top. Every scrollable ancestor's offset is recorded and restored
+	 *  synchronously, on the next frame, and after a macrotask, so no layout
+	 *  pass in between can reset it. */
+	private refreshPreservingScroll(): void {
+		const scrollers: HTMLElement[] = [];
 		let el: HTMLElement | null = this.containerEl.parentElement;
 		while (el) {
 			const style = getComputedStyle(el);
-			if (style.overflowY === "auto" || style.overflowY === "scroll") return el;
+			if (style.overflowY === "auto" || style.overflowY === "scroll"
+				|| style.overflow === "auto" || style.overflow === "scroll") {
+				scrollers.push(el);
+			}
 			el = el.parentElement;
 		}
-		return null;
-	}
-
-	/** Re-render the current tab while keeping the scroll position — row
-	 *  expand/collapse and provider create/delete re-render the whole page,
-	 *  which would otherwise jump back to the top. */
-	private refreshPreservingScroll(): void {
-		const scroller = this.findScrollContainer();
-		const top = scroller?.scrollTop ?? 0;
+		const tops = scrollers.map((s) => s.scrollTop);
+		// Fallback for layouts that scroll the window itself (short settings
+		// panel inside a small window) rather than an inner container.
+		const winTop = window.scrollY;
 		this.display();
-		requestAnimationFrame(() => {
-			if (scroller) scroller.scrollTop = top;
-		});
+		const restore = () => {
+			scrollers.forEach((s, i) => { s.scrollTop = tops[i]; });
+			if (winTop > 0) window.scrollTo(0, winTop);
+		};
+		restore();
+		requestAnimationFrame(restore);
+		window.setTimeout(restore, 0);
 	}
 
 	display(): void {
@@ -136,71 +143,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// ── Section: Model configuration (embedding + chat) ──
-		new Setting(containerEl).setName(t("modelConfigSection")).setHeading();
-
-		// Embedding model — one dropdown entry per (service, model) combo,
-		// e.g. "SiliconFlow CN/BAAI/bge-m3"; picking one sets both the
-		// active embedding service and its model.
-		new Setting(containerEl)
-			.setName(t("embeddingModel"))
-			.addDropdown((dropdown) => {
-				const options = embeddingModelComboOptions(this.plugin.settings);
-				const active = activeEmbeddingProvider(this.plugin.settings);
-				const currentKey = `${active.id}::${active.model}`;
-				// Keep a custom (non-catalog) model selectable, but only while
-				// its provider has a key — unconfigured services must not be
-				// selectable here.
-				if (active.apiKey.trim() && !(currentKey in options)) {
-					options[currentKey] = `${active.name}/${active.model}`;
-				}
-				dropdown
-					.addOptions(options)
-					.setValue(currentKey)
-					.onChange(async (value) => {
-						const sep = value.indexOf("::");
-						const pid = value.slice(0, sep);
-						const model = value.slice(sep + 2);
-						const provider = this.plugin.settings.embeddingProviders.find((p) => p.id === pid);
-						if (!provider) return;
-						this.plugin.settings.embeddingProviderId = pid;
-						provider.model = model;
-						await this.plugin.saveSettings();
-					});
-			});
-
-		// Chat model — the model the conversational search answers with.
-		new Setting(containerEl)
-			.setName(t("chatModel"))
-			.addDropdown((dropdown) => {
-				const options = chatModelOptions(this.plugin);
-				const persisted = this.plugin.settings.activeChatModel;
-				const active = this.plugin.chatClient.getActiveModel();
-				// Only selectable options are keyed providers; a persisted or
-				// resolved model whose provider lost its key just shows blank.
-				let current = persisted && persisted in options
-					? persisted
-					: active ? `${active.provider.id}/${active.model.id}` : "";
-				if (!(current in options)) {
-					current = "";
-					if (Object.keys(options).length === 0) {
-						options[""] = t("chatModelEmpty");
-					}
-				}
-				dropdown
-					.addOptions(options)
-					.setValue(current)
-					.onChange((value) => {
-						const sep = value.indexOf("/");
-						const pid = value.slice(0, sep);
-						const mid = value.slice(sep + 1);
-						// setActiveModel persists via the plugin's change handler.
-						this.plugin.chatClient.setActiveModel(pid, mid);
-					});
-			});
-
-		// ── Provider management (former Models tab) directly under the model
-		// configuration: embedding + chat providers, add/edit/remove, fetch.
+		// ── Provider management: embedding + chat providers, add/edit/remove,
+		// fetch. The active chat model is picked in the sidebar's model
+		// switcher (persisted); the embedding model lives in Embedding params.
 		renderModelsTab(this.plugin, containerEl, this.modelsState, () => this.refreshPreservingScroll());
 
 		// ── Secondary: embedding parameters (click to expand) ──
@@ -287,6 +232,31 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const summary = details.createEl("summary", { cls: "semlink-collapsible-summary" });
 		summary.createSpan({ text: t("sectionEmbedding") });
 		const body = details.createDiv({ cls: "semlink-collapsible-body" });
+
+		// Embedding model — one dropdown entry per (provider, model) combo,
+		// e.g. "SiliconFlow/BAAI/bge-m3"; picking one sets the active
+		// embedding model key.
+		new Setting(body)
+			.setName(t("embeddingModel"))
+			.addDropdown((dropdown) => {
+				const options = embeddingModelComboOptions(this.plugin.settings);
+				const active = activeEmbeddingProvider(this.plugin.settings);
+				const currentKey = this.plugin.settings.embeddingModelKey
+					|| `${active.id}::${active.model}`;
+				// Keep a custom (non-catalog) model selectable, but only while
+				// its provider has a key — unconfigured services must not be
+				// selectable here.
+				if (active.apiKey.trim() && !(currentKey in options)) {
+					options[currentKey] = `${active.name}/${active.model}`;
+				}
+				dropdown
+					.addOptions(options)
+					.setValue(currentKey)
+					.onChange(async (value) => {
+						this.plugin.settings.embeddingModelKey = value;
+						await this.plugin.saveSettings();
+					});
+			});
 
 		new Setting(body)
 			.setName(t("chunkSize"))
@@ -399,7 +369,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// MCP Service status & control
 		new Setting(containerEl)
 			.setName(t("mcpService"))
-			.setDesc(this.plugin.mcpServer ? `${t("mcpRunning")} (端口 ${this.plugin.mcpServer.port})` : t("mcpStopped"))
+			.setDesc(this.plugin.mcpServer ? `${t("mcpRunning")} (${t("mcpPortLabel")} ${this.plugin.mcpServer.port})` : t("mcpStopped"))
 			.addButton((btn) =>
 				btn
 					.setButtonText(this.plugin.mcpServer ? t("restartService") : t("startService"))
@@ -609,16 +579,16 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	}
 }
 
-/** One combined option per (embedding service, model) pair, keyed
+/** One combined option per (embedding provider, model) pair, keyed
  *  `${providerId}::${modelId}` and labelled like
- *  `SiliconFlow CN/BAAI/bge-m3` (provider display name + model). The models
- *  come from what the user configured on the Models tab (the provider's
- *  kind-tagged model list, or the current embedding model) — NOT the built-in
- *  catalog. Only providers with a key are listed. */
+ *  `SiliconFlow/BAAI/bge-m3`. The models come from the unified provider
+ *  list, filtered to kind-tagged "embedding" entries. Only providers with a
+ *  key AND a base URL are listed. */
 function embeddingModelComboOptions(settings: SmartVaultSettings): Record<string, string> {
 	const options: Record<string, string> = {};
-	for (const p of settings.embeddingProviders) {
+	for (const p of settings.providers) {
 		if (!p.apiKey || !p.apiKey.trim()) continue;
+		if (!p.apiBase || !p.apiBase.trim()) continue;
 		const seen = new Set<string>();
 		for (const model of embeddingModelsOf(p)) {
 			if (seen.has(model)) continue;
@@ -629,39 +599,11 @@ function embeddingModelComboOptions(settings: SmartVaultSettings): Record<string
 	return options;
 }
 
-/** The embedding models configured for a provider: the kind-tagged "embedding"
- *  entries of its model list, falling back to the current embedding model,
- *  and finally to nothing (no built-in catalog). */
-function embeddingModelsOf(p: EmbeddingProviderConfig): string[] {
-	const configured = (p.models ?? [])
-		.filter((m) => (m.kind ?? "chat") === "embedding")
+/** The embedding models configured for a provider: its kind-tagged
+ *  "embedding" entries that are enabled. */
+function embeddingModelsOf(p: ModelProvider): string[] {
+	return (p.models ?? [])
+		.filter((m) => (m.kind ?? "chat") === "embedding" && m.enabled !== false)
 		.map((m) => m.id)
 		.filter((id) => id.length > 0);
-	if (configured.length > 0) return configured;
-	if (p.model && p.model.trim().length > 0) return [p.model];
-	return [];
-}
-
-/** One option per usable chat model, keyed `${providerId}/${modelId}`.
- *  Sources: chat providers with a key AND a base URL, plus the kind-tagged
- *  "chat" entries of embedding providers (SiliconFlow CN/Global, Hugging
- *  Face) that have a key — matching what ChatClient.getActiveModel resolves. */
-function chatModelOptions(plugin: SmartVaultPlugin): Record<string, string> {
-	const options: Record<string, string> = {};
-	for (const p of plugin.settings.chatProviders) {
-		if (!p.apiKey || !p.apiKey.trim()) continue;
-		if (!p.baseUrl || !p.baseUrl.trim()) continue;
-		for (const m of p.models) {
-			options[`${p.id}/${m.id}`] = `${p.name || p.id}/${m.id}`;
-		}
-	}
-	for (const p of plugin.settings.embeddingProviders) {
-		if (!p.apiKey || !p.apiKey.trim()) continue;
-		if (!p.apiBase || !p.apiBase.trim()) continue;
-		for (const m of p.models ?? []) {
-			if ((m.kind ?? "chat") !== "chat") continue;
-			options[`${p.id}/${m.id}`] = `${p.name}/${m.id}`;
-		}
-	}
-	return options;
 }

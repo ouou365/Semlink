@@ -219,6 +219,24 @@
     border-color: var(--interactive-accent);
 }
 
+/* Rows are draggable to reorder — grab cursor + drop feedback. */
+.smart-vault-settings .semlink-provider-row[draggable="true"] {
+    cursor: grab;
+}
+
+.smart-vault-settings .semlink-provider-row[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.smart-vault-settings .semlink-provider-row.is-dragging {
+    opacity: 0.5;
+}
+
+.smart-vault-settings .semlink-provider-row.is-drag-over {
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+
 .smart-vault-settings .semlink-provider-row-head {
     display: flex;
     align-items: center;
@@ -227,6 +245,24 @@
     padding: 8px 12px;
     cursor: pointer;
     user-select: none;
+}
+
+/* Provider rows are draggable to reorder — the grip icon shows the
+   affordance (also a drag source itself, like the model rows). Plain icon:
+   no button background/border, just the grab cursor. */
+.smart-vault-settings .semlink-provider-grip {
+    cursor: grab;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    margin-right: -4px;
+}
+
+.smart-vault-settings .semlink-provider-grip:active {
+    cursor: grabbing;
 }
 
 .smart-vault-settings .semlink-provider-row-head:hover {
@@ -250,6 +286,21 @@
     gap: 8px;
     min-width: 0;
     flex: 1;
+}
+
+.smart-vault-settings .semlink-provider-logo {
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-provider-logo svg {
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 
 .smart-vault-settings .semlink-provider-name {
@@ -442,6 +493,35 @@
     margin-bottom: 6px;
 }
 
+/* Model rows are draggable to reorder via the grip handle only. */
+.smart-vault-settings .semlink-model-grip {
+    cursor: grab;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-model-grip:active {
+    cursor: grabbing;
+}
+
+.smart-vault-settings .semlink-model-enabled {
+    flex-shrink: 0;
+    margin: 0;
+}
+
+.smart-vault-settings .semlink-model-row.is-disabled {
+    opacity: 0.55;
+}
+
+.smart-vault-settings .semlink-model-row.is-dragging {
+    opacity: 0.5;
+}
+
+.smart-vault-settings .semlink-model-row.is-drag-over {
+    outline: 1px solid var(--interactive-accent);
+    border-radius: 6px;
+}
+
 .smart-vault-settings .semlink-input {
     flex: 1;
     min-width: 0;
@@ -557,6 +637,61 @@
     color: var(--text-muted);
     font-size: 13px;
     margin-bottom: 12px;
+}
+
+.semlink-fetch-modal .semlink-fetch-search {
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 13px;
+}
+
+.semlink-fetch-modal .semlink-fetch-search:focus {
+    border-color: var(--interactive-accent);
+    outline: none;
+}
+
+.semlink-fetch-modal .semlink-fetch-empty {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-bottom: 8px;
+    font-style: italic;
+}
+
+.semlink-fetch-modal .semlink-fetch-refreshing {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.semlink-fetch-modal .semlink-fetch-progress {
+    height: 4px;
+    background: var(--background-modifier-border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 5px;
+}
+
+.semlink-fetch-modal .semlink-fetch-progress-fill {
+    height: 100%;
+    background: var(--interactive-accent);
+    transition: width 0.15s ease;
+}
+
+.semlink-fetch-modal .semlink-fetch-progress-label {
+    color: var(--text-muted);
+    font-size: 11px;
+    text-align: left;
+}
+
+.semlink-fetch-modal .semlink-fetch-error {
+    color: var(--text-error);
+    font-size: 12px;
+    margin-bottom: 8px;
 }
 
 .semlink-fetch-modal .semlink-fetch-list {
@@ -2355,6 +2490,16 @@
 .semlink-search-model-name svg {
     width: 16px;
     height: 16px;
+}
+
+/* Active model name to the right of the LLM icon in the input row. */
+.semlink-search-model-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 

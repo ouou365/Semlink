@@ -245,12 +245,11 @@ export default class SmartVaultPlugin extends Plugin {
 	async loadSettings() {
 		const data = await this.loadData();
 		this.settings = { ...DEFAULT_SETTINGS, ...data };
-		// Data written before the embedding-provider list existed carries the
-		// flat provider/apiBase/*ApiKey/embeddingModel fields — fold them into
-		// the list once so the new UI and clients see one source of truth.
+		// Data written before the unified provider list existed carries the
+		// old embeddingProviders/chatProviders split (and earlier still, flat
+		// provider/apiBase/*ApiKey fields) — fold them into `providers` once.
 		const raw = data as Partial<SmartVaultSettings> | null | undefined;
-		const hasProviders = Array.isArray(raw?.embeddingProviders)
-			&& (raw.embeddingProviders?.length ?? 0) > 0;
+		const hasProviders = Array.isArray(raw?.providers) && (raw.providers?.length ?? 0) > 0;
 		if (!hasProviders) migrateEmbeddingSettings(this.settings);
 	}
 

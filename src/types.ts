@@ -2,102 +2,151 @@
 // Semlink - Core Type Definitions
 // ========================================
 
-/** Embedding service provider family (determines endpoint shape + model catalog) */
+/** Embedding provider family (determines the embedding endpoint shape:
+ *  SiliconFlow-style OpenAI-compatible `/v1/embeddings`, or Hugging Face's
+ *  inference endpoint). Defaults to OpenAI-compatible when absent. */
 export type EmbeddingProvider = "siliconflow" | "huggingface";
 
-/** One embedding provider entry (SiliconFlow CN / Global, Hugging Face, …).
- *  SiliconFlow's two regions are separate providers so each keeps its own
- *  key and endpoint; the active one is selected in the General tab. */
-export interface EmbeddingProviderConfig {
-	/** Stable id: "siliconflow-cn" | "siliconflow-global" | "huggingface" */
+/** One provider — embedding and chat are NOT distinct provider kinds. Every
+ *  provider is a model provider: a single endpoint whose kind-tagged model
+ *  list holds embedding / chat / rerank / … models alike. */
+export interface ModelProvider {
+	/** Stable id (e.g. "siliconflow-cn", "deepseek"). */
 	id: string;
-	/** Display name shown in settings. */
+	/** Display name. */
 	name: string;
-	/** Provider family. */
-	kind: EmbeddingProvider;
-	/** API base URL (region endpoint for SiliconFlow). */
+	/** Embedding family (drives the embedding request shape). */
+	family?: EmbeddingProvider;
+	/** API base URL. */
 	apiBase: string;
-	/** API key for this provider. */
+	/** API key. */
 	apiKey: string;
-	/** Selected embedding model for this provider. */
-	model: string;
-	/** API wire format for model-list fetch (embedding requests are
-	 *  unaffected). Defaults to "openai". */
-	apiFormat?: ChatApiFormat;
-	/** Optional kind-tagged model list, managed like a chat provider's. The
-	 *  first "embedding" entry stays in sync with `model`. */
-	models?: ChatModel[];
+	/** Wire format for chat requests / model-list fetch. */
+	apiFormat: ChatApiFormat;
+	/** Kind-tagged model list (embedding / chat / …). */
+	models: ChatModel[];
 }
 
-/** Built-in embedding providers. Order matters: the first entry is the
- *  fallback when no active id resolves. */
-export const DEFAULT_EMBEDDING_PROVIDERS: EmbeddingProviderConfig[] = [
+/** Default providers. Order matters: the first entry is the fallback when no
+ *  active embedding selection resolves. */
+export const DEFAULT_PROVIDERS: ModelProvider[] = [
 	{
 		id: "siliconflow-cn",
-		name: "SiliconFlow CN",
-		kind: "siliconflow",
+		name: "SiliconFlow",
+		family: "siliconflow",
 		apiBase: "https://api.siliconflow.cn",
 		apiKey: "",
-		model: "BAAI/bge-m3",
 		apiFormat: "openai",
-		models: [],
-	},
-	{
-		id: "siliconflow-global",
-		name: "SiliconFlow",
-		kind: "siliconflow",
-		apiBase: "https://api.siliconflow.com",
-		apiKey: "",
-		model: "BAAI/bge-m3",
-		apiFormat: "openai",
-		models: [],
+		models: [
+			{ id: "BAAI/bge-m3", contextWindow: 8192, kind: "embedding" },
+			{ id: "deepseek-ai/DeepSeek-V3.2", contextWindow: 163840, kind: "chat" },
+		],
 	},
 	{
 		id: "huggingface",
 		name: "Hugging Face",
-		kind: "huggingface",
+		family: "huggingface",
 		apiBase: "https://api-inference.huggingface.co",
 		apiKey: "",
-		model: "BAAI/bge-m3",
 		apiFormat: "openai",
-		models: [],
+		models: [
+			{ id: "BAAI/bge-m3", contextWindow: 8192, kind: "embedding" },
+		],
+	},
+	{
+		id: "deepseek",
+		name: "DeepSeek",
+		apiBase: "https://api.deepseek.com",
+		apiKey: "",
+		apiFormat: "openai",
+		models: [
+			{ id: "deepseek-v4-flash", contextWindow: 1000000, kind: "chat" },
+			{ id: "deepseek-v4-pro", contextWindow: 1000000, kind: "chat" },
+		],
 	},
 ];
 
-/** Resolve the active embedding provider config from persisted settings. */
-export function activeEmbeddingProvider(s: SmartVaultSettings): EmbeddingProviderConfig {
-	return (
-		s.embeddingProviders.find((p) => p.id === s.embeddingProviderId) ??
-		s.embeddingProviders[0] ??
-		DEFAULT_EMBEDDING_PROVIDERS[0]
-	);
+/** Resolve the active embedding configuration: the provider + model named by
+ *  `embeddingModelKey` (`${providerId}::${modelId}`), with the first provider
+ *  / first embedding model as fallback. */
+export function activeEmbeddingProvider(s: SmartVaultSettings): ModelProvider & { model: string } {
+	const key = s.embeddingModelKey || "";
+	const sep = key.indexOf("::");
+	const pid = sep > 0 ? key.slice(0, sep) : key;
+	const mid = sep > 0 ? key.slice(sep + 2) : "";
+	const p = s.providers.find((x) => x.id === pid) ?? s.providers[0] ?? DEFAULT_PROVIDERS[0];
+	// A selected model that was disabled falls back to the first enabled
+	// embedding model (then any enabled model) of the provider.
+	let model = mid;
+	if (model) {
+		const target = p?.models.find((m) => m.id === mid);
+		if (!target || target.enabled === false) model = "";
+	}
+	if (!model) {
+		model = p?.models.find((m) => m.enabled !== false && (m.kind ?? "chat") === "embedding")?.id
+			?? p?.models.find((m) => m.enabled !== false)?.id
+			?? "";
+	}
+	return { ...p, model };
 }
 
-/** Migrate the legacy flat embedding fields (provider/apiBase/*ApiKey/
- *  embeddingModel) into the new provider list. Runs once on load for data
- *  written before the provider-list settings existed. Idempotent for data
- *  that already carries the list. */
+/** Migrate legacy settings (flat embedding fields + the old
+ *  embeddingProviders/chatProviders split) into the unified `providers` list.
+ *  Runs once on load; no-op when `providers` already exists. */
 export function migrateEmbeddingSettings(s: SmartVaultSettings): void {
-	const providers = s.embeddingProviders;
-	if (!Array.isArray(providers) || providers.length === 0) {
-		s.embeddingProviders = DEFAULT_EMBEDDING_PROVIDERS.map((p) => ({ ...p }));
+	if (Array.isArray(s.providers) && s.providers.length > 0) return;
+	const legacy = s as unknown as Record<string, unknown>;
+	const oldEmbedding = legacy.embeddingProviders as Array<{
+		id: string;
+		name: string;
+		kind: EmbeddingProvider;
+		apiBase: string;
+		apiKey: string;
+		apiFormat?: ChatApiFormat;
+		model: string;
+		models?: ChatModel[];
+	}> | undefined;
+	const oldChat = legacy.chatProviders as ChatProvider[] | undefined;
+	const out: ModelProvider[] = [];
+
+	for (const p of oldEmbedding ?? []) {
+		out.push({
+			id: p.id,
+			name: p.name,
+			family: p.kind,
+			apiBase: p.apiBase,
+			apiKey: p.apiKey,
+			apiFormat: p.apiFormat ?? "openai",
+			models: p.models && p.models.length > 0
+				? p.models.map((m) => ({ ...m }))
+				: [{ id: p.model || "BAAI/bge-m3", contextWindow: 8192, kind: "embedding" }],
+		});
 	}
-	const list = s.embeddingProviders;
-	const legacyId = s.provider === "huggingface"
-		? "huggingface"
-		: (s.apiBase || "").includes("siliconflow.com")
-			? "siliconflow-global"
-			: "siliconflow-cn";
-	const active = list.find((p) => p.id === legacyId) ?? list[0];
-	if (active) {
-		if (active.kind === "huggingface") {
-			if (!active.apiKey) active.apiKey = s.huggingFaceApiKey || "";
-		} else {
-			if (!active.apiKey) active.apiKey = s.siliconFlowApiKey || "";
-		}
-		if (!active.model) active.model = s.embeddingModel || active.model;
+	for (const p of oldChat ?? []) {
+		out.push({
+			id: p.id,
+			name: p.name,
+			apiBase: p.baseUrl,
+			apiKey: p.apiKey,
+			apiFormat: p.apiFormat,
+			models: p.models.map((m) => ({ ...m, kind: (m as { kind?: ChatModelKind }).kind ?? "chat" })),
+		});
 	}
-	s.embeddingProviderId = legacyId;
+	s.providers = out.length > 0 ? out : DEFAULT_PROVIDERS.map((p) => ({ ...p, models: p.models.map((m) => ({ ...m })) }));
+
+	// Embedding model selection: reuse the old embeddingProviderId key when it
+	// exists, else derive from the legacy flat provider/apiBase fields.
+	const oldKey = (legacy.embeddingProviderId as string | undefined) || "";
+	const legacyPid = oldKey.split("::")[0]
+		|| (legacy.provider === "huggingface" ? "huggingface"
+			: (legacy.apiBase as string || "").includes(".com") ? "siliconflow-global" : "siliconflow-cn");
+	const legacyMid = oldKey.includes("::") ? oldKey.split("::")[1] : "";
+	const legacyEmb = (oldEmbedding ?? []).find((p) => p.id === legacyPid);
+	const mid = legacyMid
+		|| legacyEmb?.model
+		|| (legacy.embeddingModel as string | undefined)
+		|| "";
+	s.embeddingModelKey = mid ? `${legacyPid}::${mid}` : "";
 }
 
 /** Chat completion API wire format */
@@ -108,13 +157,15 @@ export type ChatApiFormat = "openai" | "anthropic";
  *  SiliconFlow's, which also serves speech/image/video/translation models). */
 export type ChatModelKind = "embedding" | "chat" | "rerank" | "tts" | "asr" | "image" | "video" | "translate";
 
-/** A single chat model definition */
+/** A single model definition (embedding / chat / … share one shape). */
 export interface ChatModel {
 	id: string;
 	contextWindow: number;
-	/** Model category tag (defaults to "chat"). Informational only — the chat
-	 *  client still sends every listed model as a chat completion. */
+	/** Model category tag (defaults to "chat"). */
 	kind?: ChatModelKind;
+	/** Whether the model is usable. Disabled models are hidden from the
+	 *  pickers and the runtime (defaults to enabled). */
+	enabled?: boolean;
 }
 
 /** A chat model provider configuration */
@@ -145,37 +196,16 @@ export interface FeishuBotConfig {
 	lastError?: string;
 }
 
-/** Default DeepSeek chat providers (pre-configured for convenience) */
-export const DEFAULT_CHAT_PROVIDERS: ChatProvider[] = [
-	{
-		id: "deepseek-openai",
-		name: "DeepSeek",
-		baseUrl: "https://api.deepseek.com",
-		apiKey: "",
-		apiFormat: "openai",
-		models: [
-			{ id: "deepseek-v4-flash", contextWindow: 1000000 },
-			{ id: "deepseek-v4-pro", contextWindow: 1000000 },
-		],
-	},
-];
-
 /** Plugin settings persisted via Obsidian loadData/saveData */
 export interface SmartVaultSettings {
 	language: "auto" | "zh" | "en";
-	/** Legacy flat fields — deprecated since the embedding-provider list
-	 *  (migrated on load; kept so older data.json shapes stay readable). */
-	provider: EmbeddingProvider;
-	siliconFlowApiKey: string;
-	huggingFaceApiKey: string;
-	apiBase: string;
-	embeddingModel: string;
-	/** Active embedding provider id (index into embeddingProviders). */
-	embeddingProviderId: string;
-	/** Embedding provider list (SiliconFlow CN/Global, Hugging Face, …). */
-	embeddingProviders: EmbeddingProviderConfig[];
+	/** Unified model-provider list — embedding and chat are not distinct
+	 *  provider kinds; each provider's models carry a kind tag. */
+	providers: ModelProvider[];
+	/** Active embedding model, keyed `${providerId}::${modelId}`. */
+	embeddingModelKey: string;
 	/** Persisted active chat model, keyed `${providerId}/${modelId}` ("" = auto
-	 *  → first model of the first usable provider). */
+	 *  → first chat model of the first usable provider). */
 	activeChatModel: string;
 	/** Persisted model-kind cache (endpoint baseUrl → modelId → kind), so the
 	 *  probe-based classification survives Obsidian restarts. */
@@ -189,21 +219,14 @@ export interface SmartVaultSettings {
 	maxRetries: number;
 	batchSize: number;
 	requestDelayMs: number;
-	/** Chat model providers for the conversational search feature */
-	chatProviders: ChatProvider[];
 	/** Feishu bots bound to Semlink */
 	feishuBots: FeishuBotConfig[];
 }
 
 export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	language: "auto",
-	provider: "siliconflow",
-	siliconFlowApiKey: "",
-	huggingFaceApiKey: "",
-	apiBase: "https://api.siliconflow.cn",
-	embeddingModel: "BAAI/bge-m3",
-	embeddingProviderId: "siliconflow-cn",
-	embeddingProviders: DEFAULT_EMBEDDING_PROVIDERS.map((p) => ({ ...p })),
+	providers: DEFAULT_PROVIDERS.map((p) => ({ ...p, models: p.models.map((m) => ({ ...m })) })),
+	embeddingModelKey: "siliconflow-cn::BAAI/bge-m3",
 	activeChatModel: "",
 	mcpPort: 3001,
 	mcpApiKey: "",
@@ -214,7 +237,6 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	maxRetries: 3,
 	batchSize: 64,
 	requestDelayMs: 200,
-	chatProviders: DEFAULT_CHAT_PROVIDERS,
 	feishuBots: [],
 };
 

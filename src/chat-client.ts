@@ -136,25 +136,22 @@ export class ChatClient {
 	}
 
 	/**
-	 * Every source of chat models, unified: the user-managed chat providers,
-	 * plus the kind-tagged "chat" entries of embedding providers (SiliconFlow
-	 * CN/Global, Hugging Face) — those providers serve chat completions too,
-	 * so a model added as "对话" in their list is selectable and usable.
+	 * Every source of chat models: the unified provider list, filtered to the
+	 * models tagged "chat" (or untagged — old entries default to chat).
 	 * Bridged to the ChatProvider shape (no writes back to the settings).
 	 */
 	private allChatProviders(): ChatProvider[] {
-		const fromEmbedding: ChatProvider[] = (this.settings.embeddingProviders || [])
-			.filter((p) => p.apiKey && p.apiKey.trim() !== "" && p.apiBase && p.apiBase.trim() !== "")
+		return (this.settings.providers || [])
 			.map((p) => ({
 				id: p.id,
 				name: p.name || p.id,
 				baseUrl: p.apiBase,
 				apiKey: p.apiKey,
 				apiFormat: p.apiFormat ?? "openai",
-				models: (p.models ?? []).filter((m) => (m.kind ?? "chat") === "chat"),
+				models: p.models.filter((m) => (m.kind ?? "chat") === "chat" && m.enabled !== false),
 			}))
+			.filter((p) => p.apiKey && p.apiKey.trim() !== "" && p.baseUrl && p.baseUrl.trim() !== "")
 			.filter((p) => p.models.length > 0);
-		return [...(this.settings.chatProviders || []), ...fromEmbedding];
 	}
 
 	/**
