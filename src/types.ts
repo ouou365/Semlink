@@ -23,6 +23,11 @@ export interface ModelProvider {
 	apiKey: string;
 	/** Wire format for chat requests / model-list fetch. */
 	apiFormat: ChatApiFormat;
+	/** Explicit chat path appended to apiBase, for endpoints whose real path
+	 *  deviates from the default wire convention (openai → "/v1/chat/
+	 *  completions", anthropic → "/v1/messages"), e.g. GLM coding plans
+	 *  ("/chat/completions") or Gemini's OpenAI-compat base. Absent = default. */
+	wirePath?: string;
 	/** Kind-tagged model list (embedding / chat / …). */
 	models: ChatModel[];
 }
@@ -175,6 +180,9 @@ export interface ChatProvider {
 	baseUrl: string;
 	apiKey: string;
 	apiFormat: ChatApiFormat;
+	/** Explicit chat path suffix overriding the default wire convention
+	 *  (bridged from ModelProvider.wirePath). */
+	wirePath?: string;
 	models: ChatModel[];
 }
 

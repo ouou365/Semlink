@@ -6,6 +6,7 @@ import { App, Modal, Setting } from "obsidian";
 import type SmartVaultPlugin from "../main";
 import type { ChatProvider } from "./types";
 import { t } from "./i18n";
+import { parseContextWindow, formatContextWindow } from "./settings-models";
 
 export class ChatModelsModal extends Modal {
 	private plugin: SmartVaultPlugin;
@@ -55,10 +56,10 @@ export class ChatModelsModal extends Modal {
 				.addText((text) =>
 					text
 						.setPlaceholder("200000")
-						.setValue(String(model.contextWindow))
+						.setValue(model.contextWindow != null ? formatContextWindow(model.contextWindow) : "")
 						.onChange(async (value) => {
-							const n = parseInt(value, 10);
-							if (!isNaN(n) && n > 0) {
+							const n = parseContextWindow(value);
+							if (n !== null) {
 								model.contextWindow = n;
 								await this.plugin.saveSettings();
 							}

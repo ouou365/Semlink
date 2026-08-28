@@ -9,7 +9,7 @@
 
 import { App, Modal, Setting, requestUrl, setIcon } from "obsidian";
 import type SmartVaultPlugin from "../main";
-import type { ChatApiFormat, ChatModel, ChatModelKind, EmbeddingProvider, ModelProvider } from "./types";
+import type { ChatApiFormat, ChatModel, ChatModelKind, EmbeddingProvider, ModelProvider, SmartVaultSettings } from "./types";
 import { t } from "./i18n";
 
 // ──── Tab state (owned by SmartVaultSettingTab, survives re-renders) ────
@@ -19,6 +19,28 @@ import { t } from "./i18n";
 export interface ModelsTabState {}
 
 export const EMPTY_MODELS_TAB_STATE: ModelsTabState = {};
+
+/** Parse a context-window input like "32000", "32K", "1.5M" into token count. */
+export function parseContextWindow(raw: string): number | null {
+	const m = /^\s*(\d+(?:\.\d+)?)\s*([kKmM]?)\s*$/.exec(raw);
+	if (!m) return null;
+	const n = parseFloat(m[1]);
+	if (!(n > 0)) return null;
+	const unit = m[2].toLowerCase();
+	return Math.round(n * (unit === "k" ? 1_000 : unit === "m" ? 1_000_000 : 1));
+}
+
+/** Format a token count with a K/M suffix: 128000 → "128K", 1000000 → "1M". */
+export function formatContextWindow(n: number): string {
+	if (!(n > 0)) return String(n);
+	const fmt = (v: number, unit: string): string => {
+		const rounded = Math.round(v * 10) / 10;
+		return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}${unit}`;
+	};
+	if (n >= 1_000_000) return fmt(n / 1_000_000, "M");
+	if (n >= 1_000) return fmt(n / 1_000, "K");
+	return String(n);
+}
 
 /** Inline SVG provider logos (MIT — lobehub/lobe-icons). Key = normalized provider name (lowercase, no spaces). */
 const PROVIDER_LOGOS: Record<string, string> = {
@@ -32,7 +54,6 @@ const PROVIDER_LOGOS: Record<string, string> = {
 	"cloudflareworkersai": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M15.99 2.444h-2.135v4.69l2.134.006V2.444zM11.06 5.153l2.224 2.225L11.77 8.88 9.552 6.662l1.51-1.51zM6.845 9.455h4.696l-.007 2.133h-4.69V9.456zm2.71 4.928l2.222-2.224 1.505 1.514-2.218 2.217-1.51-1.509.001.002zm4.3 4.216v-4.696l2.134.007v4.69h-2.134zm4.928-2.706l-2.225-2.225 1.514-1.504 2.22 2.22-1.51 1.51h.001zM23 11.588h-4.696l.007-2.133H23v2.133zm-2.709-4.926l-2.223 2.223-1.504-1.513 2.22-2.22 1.507 1.51zM3.2 2.926V4.13H1.994v1.929H3.2v1.204h1.927V6.059h1.204V4.131H5.127V2.926H3.2zm0 18.835v-2.2H1v-1.927h2.2v-2.198h1.927v2.198h2.2v1.927h-2.2v2.2H3.2z"/></svg>`,
 	"deepseek": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z" fill="#4D6BFE"/></svg>`,
 	"fireworks": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path clipRule="evenodd" d="M14.8 5l-2.801 6.795L9.195 5H7.397l3.072 7.428a1.64 1.64 0 003.038.002L16.598 5H14.8zm1.196 10.352l5.124-5.244-.699-1.669-5.596 5.739a1.664 1.664 0 00-.343 1.807 1.642 1.642 0 001.516 1.012L16 17l8-.02-.699-1.669-7.303.041h-.002zM2.88 10.104l.699-1.669 5.596 5.739c.468.479.603 1.189.343 1.807a1.643 1.643 0 01-1.516 1.012l-8-.018-.002.002.699-1.669 7.303.042-5.122-5.246z" fill="#5019C5" fillRule="evenodd"/></svg>`,
-	"githubcopilot": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17.533 1.829A2.528 2.528 0 0015.11 0h-.737a2.531 2.531 0 00-2.484 2.087l-1.263 6.937.314-1.08a2.528 2.528 0 012.424-1.833h4.284l1.797.706 1.731-.706h-.505a2.528 2.528 0 01-2.423-1.829l-.715-2.453z" fill="url(#g0)" transform="translate(0 1)"/><path d="M6.726 20.16A2.528 2.528 0 009.152 22h1.566c1.37 0 2.49-1.1 2.525-2.48l.17-6.69-.357 1.228a2.528 2.528 0 01-2.423 1.83h-4.32l-1.54-.842-1.667.843h.497c1.124 0 2.113.75 2.426 1.84l.697 2.432z" fill="url(#g1)" transform="translate(0 1)"/><path d="M15 0H6.252c-2.5 0-4 3.331-5 6.662-1.184 3.947-2.734 9.225 1.75 9.225H6.78c1.13 0 2.12-.753 2.43-1.847.657-2.317 1.809-6.359 2.713-9.436.46-1.563.842-2.906 1.43-3.742A1.97 1.97 0 0115 0" fill="url(#g2)" transform="translate(0 1)"/><path d="M15 0H6.252c-2.5 0-4 3.331-5 6.662-1.184 3.947-2.734 9.225 1.75 9.225H6.78c1.13 0 2.12-.753 2.43-1.847.657-2.317 1.809-6.359 2.713-9.436.46-1.563.842-2.906 1.43-3.742A1.97 1.97 0 0115 0" fill="url(#g3)" transform="translate(0 1)"/><path d="M9 22h8.749c2.5 0 4-3.332 5-6.663 1.184-3.948 2.734-9.227-1.75-9.227H17.22c-1.129 0-2.12.754-2.43 1.848a1149.2 1149.2 0 01-2.713 9.437c-.46 1.564-.842 2.907-1.43 3.743A1.97 1.97 0 019 22" fill="url(#g4)" transform="translate(0 1)"/><path d="M9 22h8.749c2.5 0 4-3.332 5-6.663 1.184-3.948 2.734-9.227-1.75-9.227H17.22c-1.129 0-2.12.754-2.43 1.848a1149.2 1149.2 0 01-2.713 9.437c-.46 1.564-.842 2.907-1.43 3.743A1.97 1.97 0 019 22" fill="url(#g5)" transform="translate(0 1)"/><defs><radialGradient cx="85.44%" cy="100.653%" fx="85.44%" fy="100.653%" gradientTransform="scale(-.8553 -1) rotate(50.927 2.041 -1.946)" id="g0" r="105.116%"><stop offset="9.6%" stopColor="#00AEFF"/><stop offset="77.3%" stopColor="#2253CE"/><stop offset="100%" stopColor="#0736C4"/></radialGradient><radialGradient cx="18.143%" cy="32.928%" fx="18.143%" fy="32.928%" gradientTransform="scale(.8897 1) rotate(52.069 .193 .352)" id="g1" r="95.612%"><stop offset="0%" stopColor="#FFB657"/><stop offset="63.4%" stopColor="#FF5F3D"/><stop offset="92.3%" stopColor="#C02B3C"/></radialGradient><radialGradient cx="82.987%" cy="-9.792%" fx="82.987%" fy="-9.792%" gradientTransform="scale(-1 -.9441) rotate(-70.872 .142 1.17)" id="g4" r="140.622%"><stop offset="6.6%" stopColor="#8C48FF"/><stop offset="50%" stopColor="#F2598A"/><stop offset="89.6%" stopColor="#FFB152"/></radialGradient><linearGradient id="g2" x1="39.465%" x2="46.884%" y1="12.117%" y2="103.774%"><stop offset="15.6%" stopColor="#0D91E1"/><stop offset="48.7%" stopColor="#52B471"/><stop offset="65.2%" stopColor="#98BD42"/><stop offset="93.7%" stopColor="#FFC800"/></linearGradient><linearGradient id="g3" x1="45.949%" x2="50%" y1="0%" y2="100%"><stop offset="0%" stopColor="#3DCBFF"/><stop offset="24.7%" stopColor="#0588F7" stopOpacity="0"/></linearGradient><linearGradient id="g5" x1="83.507%" x2="83.453%" y1="-6.106%" y2="21.131%"><stop offset="5.8%" stopColor="#F8ADFA"/><stop offset="70.8%" stopColor="#A86EDD" stopOpacity="0"/></linearGradient></defs></svg>`,
 	"google": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M23 12.245c0-.905-.075-1.565-.236-2.25h-10.54v4.083h6.186c-.124 1.014-.797 2.542-2.294 3.569l-.021.136 3.332 2.53.23.022C21.779 18.417 23 15.593 23 12.245z" fill="#4285F4"/><path d="M12.225 23c3.03 0 5.574-.978 7.433-2.665l-3.542-2.688c-.948.648-2.22 1.1-3.891 1.1a6.745 6.745 0 01-6.386-4.572l-.132.011-3.465 2.628-.045.124C4.043 20.531 7.835 23 12.225 23z" fill="#34A853"/><path d="M5.84 14.175A6.65 6.65 0 015.463 12c0-.758.138-1.491.361-2.175l-.006-.147-3.508-2.67-.115.054A10.831 10.831 0 001 12c0 1.772.436 3.447 1.197 4.938l3.642-2.763z" fill="#FBBC05"/><path d="M12.225 5.253c2.108 0 3.529.892 4.34 1.638l3.167-3.031C17.787 2.088 15.255 1 12.225 1 7.834 1 4.043 3.469 2.197 7.062l3.63 2.763a6.77 6.77 0 016.398-4.572z" fill="#EB4335"/></svg>`,
 	"googlevertex": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11.995 20.216a1.892 1.892 0 100 3.785 1.892 1.892 0 000-3.785zm0 2.806a.927.927 0 11.927-.914.914.914 0 01-.927.914z" fill="#4285F4"/><path clipRule="evenodd" d="M21.687 14.144c.237.038.452.16.605.344a.978.978 0 01-.18 1.3l-8.24 6.082a1.892 1.892 0 00-1.147-1.508l8.28-6.08a.991.991 0 01.682-.138z" fill="#669DF6" fillRule="evenodd"/><path clipRule="evenodd" d="M10.122 21.842l-8.217-6.066a.952.952 0 01-.206-1.287.978.978 0 011.287-.206l8.28 6.08a1.893 1.893 0 00-1.144 1.479z" fill="#AECBFA" fillRule="evenodd"/><path d="M4.273 4.475a.978.978 0 01-.965-.965V1.09a.978.978 0 111.943 0v2.42a.978.978 0 01-.978.965zM4.247 13.034a.978.978 0 100-1.956.978.978 0 000 1.956zM4.247 10.19a.978.978 0 100-1.956.978.978 0 000 1.956zM4.247 7.332a.978.978 0 100-1.956.978.978 0 000 1.956z" fill="#AECBFA"/><path d="M19.718 7.307a.978.978 0 01-.965-.979v-2.42a.965.965 0 011.93 0v2.42a.964.964 0 01-.965.979zM19.743 13.047a.978.978 0 100-1.956.978.978 0 000 1.956zM19.743 10.151a.978.978 0 100-1.956.978.978 0 000 1.956zM19.743 2.068a.978.978 0 100-1.956.978.978 0 000 1.956z" fill="#4285F4"/><path d="M11.995 15.917a.978.978 0 01-.965-.965v-2.459a.978.978 0 011.943 0v2.433a.976.976 0 01-.978.991zM11.995 18.762a.978.978 0 100-1.956.978.978 0 000 1.956zM11.995 10.64a.978.978 0 100-1.956.978.978 0 000 1.956zM11.995 7.783a.978.978 0 100-1.956.978.978 0 000 1.956z" fill="#669DF6"/><path d="M15.856 10.177a.978.978 0 01-.965-.965v-2.42a.977.977 0 011.702-.763.979.979 0 01.241.763v2.42a.978.978 0 01-.978.965zM15.869 4.913a.978.978 0 100-1.956.978.978 0 000 1.956zM15.869 15.853a.978.978 0 100-1.956.978.978 0 000 1.956zM15.869 12.996a.978.978 0 100-1.956.978.978 0 000 1.956z" fill="#4285F4"/><path d="M8.121 15.853a.978.978 0 100-1.956.978.978 0 000 1.956zM8.121 7.783a.978.978 0 100-1.956.978.978 0 000 1.956zM8.121 4.913a.978.978 0 100-1.957.978.978 0 000 1.957zM8.134 12.996a.978.978 0 01-.978-.94V9.611a.965.965 0 011.93 0v2.445a.966.966 0 01-.952.94z" fill="#AECBFA"/></svg>`,
 	"groq": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12.036 2c-3.853-.035-7 3-7.036 6.781-.035 3.782 3.055 6.872 6.908 6.907h2.42v-2.566h-2.292c-2.407.028-4.38-1.866-4.408-4.23-.029-2.362 1.901-4.298 4.308-4.326h.1c2.407 0 4.358 1.915 4.365 4.278v6.305c0 2.342-1.944 4.25-4.323 4.279a4.375 4.375 0 01-3.033-1.252l-1.851 1.818A7 7 0 0012.029 22h.092c3.803-.056 6.858-3.083 6.879-6.816v-6.5C18.907 4.963 15.817 2 12.036 2z"/></svg>`,
@@ -90,6 +111,10 @@ interface CatalogEntry {
 	name: string;
 	baseUrl: string;
 	apiFormat: ChatApiFormat;
+	/** Explicit chat path appended to baseUrl when the provider's real path
+	 *  carries no bare "/v1" segment (defaults per apiFormat: openai →
+	 *  "/v1/chat/completions", anthropic → "/v1/messages"). */
+	wirePath?: string;
 	models: ChatModel[];
 }
 
@@ -99,13 +124,18 @@ interface CatalogEntry {
  * deepseek-harness ships). baseUrl follows Semlink's wire convention:
  * OpenAI-compatible endpoints hit `${baseUrl}/v1/chat/completions` and
  * Anthropic-compatible ones `${baseUrl}/v1/messages`, so trailing "/v1" on
- * the upstream base URL is dropped. Entries that need account-specific paths
- * carry "{placeholder}" segments the user fills in on creation.
+ * the upstream base URL is dropped. Entries whose upstream path deviates
+ * from that shape (no bare "/v1" before the operation) set `wirePath`
+ * instead. Entries that need account-specific paths carry "{placeholder}"
+ * segments the user fills in on creation.
  */
 const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "Amazon Bedrock",
-		baseUrl: "https://bedrock-runtime.{region}.amazonaws.com",
+		// OpenAI-compat surface lives under "/openai": the full chat URL is
+		// …/openai/v1/chat/completions. Auth needs SigV4 signing or a Bedrock
+		// API key — a plain OpenAI-style key will not work.
+		baseUrl: "https://bedrock-runtime.{region}.amazonaws.com/openai",
 		apiFormat: "openai",
 		models: [
 			{ id: "amazon.nova-pro-v1:0", contextWindow: 300000 },
@@ -215,18 +245,11 @@ const CHAT_CATALOG: CatalogEntry[] = [
 		],
 	},
 	{
-		name: "GitHub Copilot",
-		baseUrl: "https://api.individual.githubcopilot.com",
-		apiFormat: "openai",
-		models: [
-			{ id: "claude-opus-4-6", contextWindow: 1000000 },
-			{ id: "claude-sonnet-4-5", contextWindow: 200000 },
-			{ id: "gpt-4o", contextWindow: 128000 },
-		],
-	},
-	{
 		name: "Google",
-		baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+		// Gemini's OpenAI-compat surface: full chat URL is
+		// …/v1beta/openai/chat/completions — no "/v1" segment, hence wirePath.
+		baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+		wirePath: "/chat/completions",
 		apiFormat: "openai",
 		models: [
 			{ id: "gemini-2.5-pro", contextWindow: 1048576 },
@@ -236,7 +259,12 @@ const CHAT_CATALOG: CatalogEntry[] = [
 	},
 	{
 		name: "Google Vertex",
-		baseUrl: "https://{region}-aiplatform.googleapis.com/v1beta",
+		// OpenAI-compat surface is project-scoped and ends in /endpoints/openai
+		// (full chat URL …/endpoints/openai/chat/completions). Auth takes a
+		// short-lived OAuth access token (e.g. `gcloud auth print-access-token`)
+		// rather than a static API key.
+		baseUrl: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openai",
+		wirePath: "/chat/completions",
 		apiFormat: "openai",
 		models: [
 			{ id: "gemini-2.5-pro", contextWindow: 1048576 },
@@ -461,7 +489,11 @@ const CHAT_CATALOG: CatalogEntry[] = [
 	},
 	{
 		name: "Z.AI",
+		// GLM coding plan endpoint ends in a "v4" version segment — the full
+		// chat URL is …/coding/paas/v4/chat/completions, so wirePath replaces
+		// the default "/v1/chat/completions" suffix.
 		baseUrl: "https://api.z.ai/api/coding/paas/v4",
+		wirePath: "/chat/completions",
 		apiFormat: "openai",
 		models: [
 			{ id: "glm-5.2", contextWindow: 1000000 },
@@ -471,7 +503,9 @@ const CHAT_CATALOG: CatalogEntry[] = [
 	},
 	{
 		name: "Z.AI Coding CN",
+		// Same "v4"-suffixed coding endpoint as api.z.ai, on the mainland host.
 		baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+		wirePath: "/chat/completions",
 		apiFormat: "openai",
 		models: [
 			{ id: "glm-5.2", contextWindow: 1000000 },
@@ -482,6 +516,34 @@ const CHAT_CATALOG: CatalogEntry[] = [
 ];
 
 // ──── Fetch available models ────
+
+/** Catalog base URLs that shipped with a never-workable wire path in earlier
+ *  releases, mapped to the corrected shape. Saved providers still carrying
+ *  one of these exact strings are patched once on load — every string here
+ *  404s on every request (or is still an unfilled "{placeholder}" template),
+ *  so rewriting it cannot clobber a working customization. */
+const LEGACY_CATALOG_BASES: Record<string, { apiBase: string; wirePath?: string }> = {
+	"https://bedrock-runtime.{region}.amazonaws.com":
+		{ apiBase: "https://bedrock-runtime.{region}.amazonaws.com/openai" },
+	"https://generativelanguage.googleapis.com/v1beta":
+		{ apiBase: "https://generativelanguage.googleapis.com/v1beta/openai", wirePath: "/chat/completions" },
+	"https://{region}-aiplatform.googleapis.com/v1beta":
+		{ apiBase: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openai",
+			wirePath: "/chat/completions" },
+	// Z.AI / Z.AI Coding CN: same base as the fixed catalog, missing wirePath.
+	"https://api.z.ai/api/coding/paas/v4": { apiBase: "https://api.z.ai/api/coding/paas/v4", wirePath: "/chat/completions" },
+	"https://open.bigmodel.cn/api/coding/paas/v4": { apiBase: "https://open.bigmodel.cn/api/coding/paas/v4", wirePath: "/chat/completions" },
+};
+
+/** Apply the legacy catalog base fixes to the saved provider list. */
+export function migrateLegacyCatalogBases(settings: SmartVaultSettings): void {
+	for (const p of settings.providers ?? []) {
+		const fix = LEGACY_CATALOG_BASES[p.apiBase.trim().replace(/\/+$/, "")];
+		if (!fix) continue;
+		p.apiBase = fix.apiBase;
+		if (fix.wirePath) p.wirePath = fix.wirePath;
+	}
+}
 
 /** Model kinds. Cost-conscious classification: rerank (and known embedding
  *  ids) come from keywords with zero requests; everything else is probed
@@ -1173,14 +1235,12 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 					placeholder: (model.kind ?? "chat") === "embedding"
 						? t("embedMaxInput")
 						: t("chatContextWindow"),
-					type: "number",
-					min: "1",
 				},
 			});
-			ctxInput.value = String(model.contextWindow);
+			ctxInput.value = model.contextWindow != null ? formatContextWindow(model.contextWindow) : "";
 			ctxInput.addEventListener("input", () => {
-				const n = parseInt(ctxInput.value, 10);
-				if (!isNaN(n) && n > 0) {
+				const n = parseContextWindow(ctxInput.value);
+				if (n !== null) {
 					model.contextWindow = n;
 					opts.onChange(models);
 				}
@@ -1736,6 +1796,7 @@ function renderProviderCatalogGrid(
 				apiBase: entry.baseUrl,
 				apiKey: "",
 				apiFormat: entry.apiFormat,
+				...(entry.wirePath ? { wirePath: entry.wirePath } : {}),
 				models: entry.models.map((m) => ({ ...m })),
 			};
 			plugin.settings.providers.push(provider);

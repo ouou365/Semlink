@@ -24,6 +24,20 @@ const NUDGE_AFTER_ROUND = 3;
 const CHAT_RETRY_TOTAL = 10;
 const CHAT_RETRY_DELAYS_MS = [1000, 1500, 2000, 3000, 5000, 8000, 10000, 10000, 10000];
 
+/** Full chat endpoint for a provider base: an explicit wirePath override
+ *  wins (endpoints whose real path carries no bare "/v1" segment — GLM
+ *  coding plans "/chat/completions", Gemini's "…/v1beta/openai"), otherwise
+ *  the default wire convention is appended by format. */
+function chatEndpoint(
+	baseUrl: string,
+	wirePath: string | undefined,
+	defaultSuffix: "/v1/chat/completions" | "/v1/messages",
+): string {
+	const path = wirePath?.trim();
+	if (path) return `${baseUrl}${path.startsWith("/") ? "" : "/"}${path}`;
+	return `${baseUrl}${defaultSuffix}`;
+}
+
 /** A step in the model's thinking process, in chronological order. */
 export type ThinkingStep =
 	| { type: "thought"; text: string }
@@ -148,6 +162,7 @@ export class ChatClient {
 				baseUrl: p.apiBase,
 				apiKey: p.apiKey,
 				apiFormat: p.apiFormat ?? "openai",
+				wirePath: p.wirePath,
 				models: p.models.filter((m) => (m.kind ?? "chat") === "chat" && m.enabled !== false),
 			}))
 			.filter((p) => p.apiKey && p.apiKey.trim() !== "" && p.baseUrl && p.baseUrl.trim() !== "")
@@ -517,6 +532,7 @@ export class ChatClient {
 		signal?: AbortSignal,
 	): Promise<ChatResult> {
 		const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+		const openaiUrl = chatEndpoint(baseUrl, provider.wirePath, "/v1/chat/completions");
 		const tools = this.buildOpenAITools();
 
 		const messages: any[] = [
@@ -569,7 +585,7 @@ export class ChatClient {
 		let analysis: string | undefined;
 		try {
 			const analysisStream = await this.streamOpenAIChat(
-				`${baseUrl}/v1/chat/completions`,
+				openaiUrl,
 				provider,
 				{ model, messages, stream: true, stream_options: { include_usage: true } },
 				undefined,
@@ -630,7 +646,7 @@ export class ChatClient {
 			// via onStream, but ONLY once it's seen that the round has no tool
 			// calls (i.e. this is the final answer). Tool rounds stay buffered.
 			const stream = await this.streamOpenAIChat(
-				`${baseUrl}/v1/chat/completions`,
+				openaiUrl,
 				provider,
 				body,
 				onStream,
@@ -838,6 +854,7 @@ export class ChatClient {
 		signal?: AbortSignal,
 	): Promise<ChatResult> {
 		const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+		const anthropicUrl = chatEndpoint(baseUrl, provider.wirePath, "/v1/messages");
 		const tools = this.buildAnthropicTools();
 
 		const messages: any[] = [...conversation];
@@ -884,7 +901,7 @@ export class ChatClient {
 		});
 		let analysis: string | undefined;
 		try {
-			const analysisStream = await this.streamAnthropicChat(`${baseUrl}/v1/messages`, provider, {
+			const analysisStream = await this.streamAnthropicChat(anthropicUrl, provider, {
 				model,
 				max_tokens: 1024,
 				system: systemPrompt,
@@ -946,7 +963,7 @@ export class ChatClient {
 			if (tools.length > 0 && !forceAnswer && round < NUDGE_AFTER_ROUND) body.tools = tools;
 
 			const stream = await this.streamAnthropicChat(
-				`${baseUrl}/v1/messages`,
+				anthropicUrl,
 				provider,
 				body,
 				signal,

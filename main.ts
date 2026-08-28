@@ -5,6 +5,7 @@
 import { Notice, Plugin, TFile, FileSystemAdapter, WorkspaceSidedock, addIcon } from "obsidian";
 import { join } from "path";
 import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
+import { migrateLegacyCatalogBases } from "./src/settings-models";
 import { VectorStore } from "./src/vector-store";
 import { IndexQueue } from "./src/index-queue";
 import { EmbeddingClient } from "./src/embedding-client";
@@ -251,6 +252,10 @@ export default class SmartVaultPlugin extends Plugin {
 		const raw = data as Partial<SmartVaultSettings> | null | undefined;
 		const hasProviders = Array.isArray(raw?.providers) && (raw.providers?.length ?? 0) > 0;
 		if (!hasProviders) migrateEmbeddingSettings(this.settings);
+		// Providers added from an earlier catalog version may carry a base URL
+		// whose wire path was wrong from day one — patch those exact dead
+		// values (idempotent: a fixed base no longer matches).
+		migrateLegacyCatalogBases(this.settings);
 	}
 
 	async saveSettings() {
