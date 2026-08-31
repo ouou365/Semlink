@@ -1840,28 +1840,30 @@
 }
 
 .semlink-guide-indexstats.is-running .semlink-guide-index-stat-fill {
-    background: linear-gradient(180deg, rgb(196, 181, 253), rgb(124, 58, 237));
+    /* Dark end is deliberately lighter than the #7c3aed shell border, so the
+     * liquid edge never blends into the frame at high charge. */
+    background: linear-gradient(90deg, rgb(196, 181, 253), rgb(139, 92, 246));
 }
 
-/* Done state: the battery reads full and settles to green. */
+/* Done state: the battery reads full and stays purple. */
 .semlink-guide-indexstats.is-done .semlink-guide-index-stat {
-    border-color: var(--color-green);
+    border-color: #7c3aed;
 }
 
 .semlink-guide-indexstats.is-done .semlink-guide-index-hero::after {
-    background: var(--color-green);
+    background: #7c3aed;
 }
 
 .semlink-guide-indexstats.is-done .semlink-guide-index-stat-fill {
-    background: linear-gradient(180deg, rgba(74, 222, 128, 0.2), rgba(34, 197, 94, 0.32));
+    background: linear-gradient(90deg, rgba(196, 181, 253, 0.2), rgba(124, 58, 237, 0.32));
 }
 
 .semlink-guide-indexstats.is-done .semlink-guide-index-stat-fill::before {
-    background: var(--color-green);
+    background: #7c3aed;
 }
 
 .semlink-guide-indexstats.is-done .semlink-guide-index-dot {
-    background: var(--color-green);
+    background: #7c3aed;
 }
 
 @keyframes semlink-guide-pulse {
