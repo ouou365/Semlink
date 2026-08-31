@@ -30,6 +30,11 @@ export interface ModelProvider {
 	wirePath?: string;
 	/** Kind-tagged model list (embedding / chat / …). */
 	models: ChatModel[];
+	/** Set once the model list was edited in settings (editor confirmed /
+	 *  create card submitted). The onboarding guide then no longer auto-
+	 *  fetches the endpoint's full model list for this provider — refetching
+	 *  would silently resurrect models the user deliberately removed. */
+	curated?: boolean;
 }
 
 /** Default providers. Order matters: the first entry is the fallback when no
@@ -51,7 +56,10 @@ export const DEFAULT_PROVIDERS: ModelProvider[] = [
 		id: "huggingface",
 		name: "Hugging Face",
 		family: "huggingface",
-		apiBase: "https://api-inference.huggingface.co",
+		// Router domain: the legacy api-inference.huggingface.co host was
+		// sunset; the OpenAI-compatible embeddings endpoint lives at
+		// router.huggingface.co/v1/embeddings.
+		apiBase: "https://router.huggingface.co",
 		apiKey: "",
 		apiFormat: "openai",
 		models: [
@@ -229,6 +237,20 @@ export interface SmartVaultSettings {
 	requestDelayMs: number;
 	/** Feishu bots bound to Semlink */
 	feishuBots: FeishuBotConfig[];
+	/** First-run guide state. Steps: ① chat model ② embedding model ③ data
+	 *  index. `providerId`/`embedProviderId` record the chosen hosts,
+	 *  `chatReady`/`embedReady` mark "key validated + models fetched",
+	 *  `chatModelPicked`/`embedModelPicked` mark the model selection done
+	 *  (they drive the current step), `done` suppresses the guide. */
+	onboarding?: {
+		done?: boolean;
+		providerId?: string;
+		embedProviderId?: string;
+		chatReady?: boolean;
+		embedReady?: boolean;
+		chatModelPicked?: boolean;
+		embedModelPicked?: boolean;
+	};
 }
 
 export const DEFAULT_SETTINGS: SmartVaultSettings = {
@@ -246,6 +268,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	batchSize: 64,
 	requestDelayMs: 200,
 	feishuBots: [],
+	onboarding: {},
 };
 
 /** Chunk status in the lifecycle */

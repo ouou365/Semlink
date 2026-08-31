@@ -125,22 +125,17 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	}
 
 	// ══════════════════════════════════════
-	// Tab: General — language, embedding, index management & support
+	// Tab: General — sidebar, embedding, index management & support
 	// ══════════════════════════════════════
 	private renderGeneralTab(containerEl: HTMLElement): void {
-		// Language
+		// Open the semantic-search sidebar panel.
 		new Setting(containerEl)
-			.setName(t("language"))
-			.setDesc(t("languageDesc"))
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOptions({ auto: t("langAuto"), zh: "中文", en: "English" })
-					.setValue(this.plugin.settings.language)
-					.onChange(async (value) => {
-						this.plugin.settings.language = value as "auto" | "zh" | "en";
-						await this.plugin.saveSettings();
-						this.display();
-					})
+			.setName(t("openSidebar"))
+			.setDesc(t("openSidebarDesc"))
+			.addButton((btn) =>
+				btn.setButtonText(t("open")).onClick(() => {
+					void this.plugin.activateSearchView();
+				})
 			);
 
 		// ── Provider management: embedding + chat providers, add/edit/remove,

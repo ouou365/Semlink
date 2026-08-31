@@ -143,7 +143,7 @@ export default class SmartVaultPlugin extends Plugin {
 
 		// Semantic Search sidebar view
 		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SemanticSearchView(
-			leaf, this.store, this.client, this.app.vault, this.chatClient, dataDir,
+			leaf, this.store, this.client, this.app.vault, this.chatClient, dataDir, this,
 		));
 
 		// Register the custom Semlink logo as a named Obsidian icon so that both

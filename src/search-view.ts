@@ -7,13 +7,16 @@
 // retrieved notes), with a collapsible list of source note cards. If no chat
 // provider is configured, it falls back to showing the raw result list.
 
-import { ItemView, MarkdownRenderer, MarkdownView, WorkspaceLeaf, TFile, Vault, Notice, setIcon } from "obsidian";
+import { ItemView, MarkdownRenderer, MarkdownView, WorkspaceLeaf, TFile, Vault, Notice, Menu, setIcon } from "obsidian";
 import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
 import { inferAgentDepth, buildNoteContext } from "./chat-client";
 import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
 import { ChatHistoryStore } from "./chat-history";
+import { guideInProgress, onboardingActive, renderOnboarding } from "./onboarding";
+import type { IndexStatsView } from "./onboarding";
+import type SmartVaultPlugin from "../main";
 import { SaveNoteModal } from "./save-note-modal";
 import { getLang, t } from "./i18n";
 import logoSvg from "./semlink-logo.svg";
@@ -89,6 +92,8 @@ export class SemanticSearchView extends ItemView {
 	private chatClient: ChatClient;
 	private vault: Vault;
 	private history: ChatHistoryStore;
+	/** Owning plugin — settings + guide state live here. */
+	private plugin: SmartVaultPlugin;
 	// DOM references
 	private inputEl!: HTMLDivElement;
 	private messagesEl!: HTMLElement; // scrollable conversation area
@@ -97,6 +102,7 @@ export class SemanticSearchView extends ItemView {
 	private menuBtnEl: HTMLElement | null = null; // history drawer toggle
 	private headerRightIconsEl!: HTMLElement; // right icon group (ring + settings)
 	private settingsBtnEl!: HTMLElement;      // settings gear (ring sits left of it)
+	private helpBtnEl: HTMLElement | null = null; // setup-guide entry (header right)
 	private firstQuestionEl!: HTMLElement; // second row: first question in small text
 	private firstQuestion = "";       // first user question (header subtitle)
 	private headerCompact = false;    // whether the subtitle row is visible
@@ -121,6 +127,17 @@ export class SemanticSearchView extends ItemView {
 	private modelPopupEl: HTMLElement | null = null;
 	/** Time-slot key of the currently shown welcome greeting. */
 	private currentWelcomeKey: string | null = null;
+	/** Language the current welcome was rendered in (refreshLanguage gates
+	 *  its rebuild on this). */
+	private welcomeLang: string | null = null;
+	/** True while the user re-opened the guide via the header help icon —
+	 *  keeps the guide on screen even when first-run state says otherwise
+	 *  (cleared when the guide hands the screen back). */
+	private guideRequested = false;
+	/** Set when the user skips the guide. With no API key configured the
+	 *  guide is the default landing page on every fresh view open; skipping
+	 *  only dismisses it for the current view session, not forever. */
+	private guideDismissed = false;
 	/** Home ("new session") button — hidden while the welcome screen is up. */
 	private newChatBtnEl: HTMLElement | null = null;
 
@@ -144,6 +161,7 @@ export class SemanticSearchView extends ItemView {
 		vault: Vault,
 		chatClient: ChatClient,
 		dataDir: string,
+		plugin: SmartVaultPlugin,
 	) {
 		super(leaf);
 		this.store = store;
@@ -151,6 +169,7 @@ export class SemanticSearchView extends ItemView {
 		this.vault = vault;
 		this.chatClient = chatClient;
 		this.history = new ChatHistoryStore(dataDir);
+		this.plugin = plugin;
 	}
 
 	getViewType(): string {
@@ -221,9 +240,21 @@ export class SemanticSearchView extends ItemView {
 		const logoEl = brand.createDiv({ cls: "semlink-search-logo" });
 		setSvgIcon(logoEl, logoSvg);
 		brand.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
-		// Right icon group: context-usage ring + settings.
+		// Right icon group: setup guide + settings.
 		const rightIcons = header.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
 		this.headerRightIconsEl = rightIcons;
+		// Help icon: (re-)opens the setup guide on the welcome screen.
+		const helpBtn = rightIcons.createEl("button", {
+			cls: "semlink-search-icon-btn clickable-icon",
+			attr: { "aria-label": t("guideTitle"), title: t("guideTitle") },
+		});
+		this.helpBtnEl = helpBtn;
+		// Lucide renamed help-circle → circle-help; work with either set.
+		setIcon(helpBtn, "help-circle");
+		if (!helpBtn.firstChild) setIcon(helpBtn, "circle-help");
+		helpBtn.addEventListener("click", () => {
+			this.openGuide();
+		});
 		const settingsBtn = rightIcons.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
 			attr: { "aria-label": t("settingsTitle"), title: t("settingsTitle") },
@@ -250,14 +281,19 @@ export class SemanticSearchView extends ItemView {
 
 		// The greeting is time-based — refresh it automatically when the time
 		// slot changes (e.g. 11:59 → 12:00), no reload needed. Only re-renders
-		// while the welcome is still visible (before the first message).
+		// while the welcome is still visible (before the first message), and
+		// never while the setup guide owns the screen (it would wipe the
+		// user's in-progress form input).
 		this.registerInterval(
 			window.setInterval(() => {
 				const key = this.welcomeKeyForHour();
 				if (key === this.currentWelcomeKey) return;
+				// Same predicate renderWelcome uses: never wipe the guide (and
+				// its in-progress form input) while it owns the screen.
+				if (this.guideModeActive()) return;
 				const existing = this.messagesEl.querySelector(".semlink-search-welcome");
 				if (!existing) return;
-				existing.remove();
+				this.messagesEl.empty();
 				this.renderWelcome();
 			}, 60_000),
 		);
@@ -427,47 +463,6 @@ export class SemanticSearchView extends ItemView {
 		// Clicking the model name (with its "▾" arrow) opens the
 		// model-switcher popup (same pattern as the search-depth popup).
 		const modelEl = wrapper.createDiv({ cls: "semlink-search-model" });
-		const modelLabel = this.chatClient.getActiveModelLabel();
-		// Context-usage ring lives in the HEADER's right icon group (next to the
-		// settings gear), not in the input row — it stays visible while typing.
-		if (modelLabel && this.chatClient.getActiveContextWindow()) {
-			// Ring-only indicator (no percentage text), inserted BEFORE the
-			// settings button so it sits to its left. The tooltip only triggers
-			// when hovering the ring.
-			const usageEl = this.headerRightIconsEl.createDiv({ cls: "semlink-context-usage" });
-			const ringEl = usageEl.createDiv({ cls: "semlink-context-ring" });
-			const ringSvg = ringEl.createSvg("svg", { attr: { viewBox: "0 0 36 36" } });
-			ringSvg.createSvg("circle", { cls: "ring-bg", attr: { cx: 18, cy: 18, r: 15.9 } });
-			ringSvg.createSvg("circle", { cls: "ring-fg", attr: { cx: 18, cy: 18, r: 15.9 } });
-			this.contextRingEl = ringEl;
-			this.contextPctEl = null;
-			this.contextUsageEl = usageEl;
-			// Hidden until the first message is sent (no context usage to show
-			// on an empty conversation).
-			usageEl.addClass("semlink-hidden");
-			// Move the ring to the LEFT of the settings button.
-			if (this.settingsBtnEl) {
-				this.headerRightIconsEl.insertBefore(usageEl, this.settingsBtnEl);
-			}
-
-			// Tooltip with the context breakdown, shown on hover. Created
-			// lazily on document.body so `position: fixed` is never thrown off
-			// by transformed/clipping ancestors inside the Obsidian leaf.
-			this.tooltipEl = null;
-			usageEl.addEventListener("mouseenter", () => this.showContextTooltip());
-			usageEl.addEventListener("mouseleave", () => {
-				// Delayed hide: the tooltip floats a few px away, so moving the
-				// mouse across the gap must not dismiss it instantly. The tooltip's
-				// own mouseenter cancels the timer.
-				if (this.tooltipHideTimer) window.clearTimeout(this.tooltipHideTimer);
-				this.tooltipHideTimer = window.setTimeout(() => this.hideContextTooltip(), 200);
-			});
-		} else {
-			this.contextRingEl = null;
-			this.contextPctEl = null;
-			this.contextUsageEl = null;
-			this.tooltipEl = null;
-		}
 		const modelTrigger = modelEl.createSpan({ cls: "semlink-search-model-trigger" });
 		// LLM icon with the active model name to its right (e.g.
 		// "DeepSeek/deepseek-v4-flash") — the trigger opens the model picker.
@@ -496,6 +491,41 @@ export class SemanticSearchView extends ItemView {
 			this.applyInputExpanded();
 		});
 
+		// Context-usage ring lives in the model row, immediately LEFT of the
+		// expand/collapse toggle. Hidden until the first message is sent (no
+		// context usage to show on an empty conversation).
+		const modelLabel = this.chatClient.getActiveModelLabel();
+		if (modelLabel && this.chatClient.getActiveContextWindow()) {
+			const usageEl = modelEl.createDiv({ cls: "semlink-context-usage" });
+			const ringEl = usageEl.createDiv({ cls: "semlink-context-ring" });
+			const ringSvg = ringEl.createSvg("svg", { attr: { viewBox: "0 0 36 36" } });
+			ringSvg.createSvg("circle", { cls: "ring-bg", attr: { cx: 18, cy: 18, r: 15.9 } });
+			ringSvg.createSvg("circle", { cls: "ring-fg", attr: { cx: 18, cy: 18, r: 15.9 } });
+			this.contextRingEl = ringEl;
+			this.contextPctEl = null;
+			this.contextUsageEl = usageEl;
+			usageEl.addClass("semlink-hidden");
+			modelEl.insertBefore(usageEl, expandBtn);
+
+			// Tooltip with the context breakdown, shown on hover. Created
+			// lazily on document.body so `position: fixed` is never thrown off
+			// by transformed/clipping ancestors inside the Obsidian leaf.
+			this.tooltipEl = null;
+			usageEl.addEventListener("mouseenter", () => this.showContextTooltip());
+			usageEl.addEventListener("mouseleave", () => {
+				// Delayed hide: the tooltip floats a few px away, so moving the
+				// mouse across the gap must not dismiss it instantly. The tooltip's
+				// own mouseenter cancels the timer.
+				if (this.tooltipHideTimer) window.clearTimeout(this.tooltipHideTimer);
+				this.tooltipHideTimer = window.setTimeout(() => this.hideContextTooltip(), 200);
+			});
+		} else {
+			this.contextRingEl = null;
+			this.contextPctEl = null;
+			this.contextUsageEl = null;
+			this.tooltipEl = null;
+		}
+
 		// Send button lives on the model row (right side), not beside the input.
 		// State machine: send → loading(spin) → stop(click aborts the run) → send.
 		const searchBtn = modelEl.createEl("button", {
@@ -515,7 +545,9 @@ export class SemanticSearchView extends ItemView {
 			this.scrollToBottom();
 		});
 
-		if (!this.hasApiKey()) {
+		// The onboarding guide already tells unconfigured users what to do —
+		// only show the bare status hint when the guide is not up.
+		if (!this.hasApiKey() && !onboardingActive(this.plugin)) {
 			this.statusEl.textContent = t("searchNeedApiKey");
 		}
 	}
@@ -576,7 +608,9 @@ export class SemanticSearchView extends ItemView {
 		const query = this.extractInputText().trim();
 		if (!query) return;
 		if (!this.hasApiKey()) {
-			this.statusEl.textContent = t("searchNeedApiKey");
+			// No key → skip the hint entirely and bring the guide up right
+			// away (covers the skipped-guide state too).
+			this.openGuide();
 			return;
 		}
 
@@ -1419,14 +1453,136 @@ export class SemanticSearchView extends ItemView {
 		return protectHyphens(out);
 	}
 
+	/** Open the first-run guide (help icon, or asking without any API key).
+	 *  A fresh run always starts from step ① — previous guide progress is
+	 *  reset (configured providers are untouched). */
+	private openGuide(): void {
+		this.guideRequested = true;
+		this.guideDismissed = false;
+		this.plugin.settings.onboarding = { done: false };
+		void this.plugin.saveSettings();
+		this.startNewSession();
+		this.messagesEl.empty();
+		this.statusEl.textContent = "";
+		this.renderWelcome();
+		this.updateCompactHeader();
+	}
+
+	/** Whether the first-run guide currently owns the welcome screen. */
+	private guideModeActive(): boolean {
+		// No API key anywhere → the guide is the default landing page. A skip
+		// only suppresses it for this view session (guideDismissed); a fresh
+		// open without any key brings the guide back.
+		const noKey = !this.plugin.settings.providers.some((p) => p.apiKey.trim());
+		return this.guideRequested
+			|| guideInProgress(this.plugin)
+			|| onboardingActive(this.plugin)
+			|| (noKey && !this.guideDismissed);
+	}
+
 	/**
 	 * Render a time-aware welcome message in the center of the conversation
 	 * area when it's empty. Removed as soon as the user sends their first
 	 * message. Greeting adapts to morning/afternoon/evening/night.
+	 *
+	 * While the first-run guide is active it owns the whole screen: no
+	 * greeting trio, no prompt cards, no index stats, and the composer is
+	 * hidden (setGuideChrome).
 	 */
 	private renderWelcome(): void {
-		const key = this.welcomeKeyForHour();
-		this.currentWelcomeKey = key;
+		// Track the greeting slot + language in every mode so the 60s timer
+		// only reacts to real time-slot changes and refreshLanguage only
+		// rebuilds the welcome when the language actually changed.
+		this.currentWelcomeKey = this.welcomeKeyForHour();
+		this.welcomeLang = getLang();
+		// The guide shows for first-run users, on demand via the header help
+		// icon (guideRequested), or while a run is mid-flight (the first
+		// saved key would otherwise make onboardingActive() drop the guide).
+		const guideMode = this.guideModeActive();
+		this.setGuideChrome(guideMode);
+
+		if (guideMode) {
+			// Top strip mirroring the real header (which guide mode hides):
+			// skip icon left, purple brand center, language + settings right.
+			const corners = this.messagesEl.createDiv({ cls: "semlink-search-header semlink-guide-corners" });
+			const leftSide = corners.createDiv({ cls: "semlink-search-header-side" });
+			const skipBtn = leftSide.createEl("button", {
+				cls: "semlink-search-icon-btn clickable-icon",
+				attr: { "aria-label": t("guideSkip"), title: t("guideSkip") },
+			});
+			setIcon(skipBtn, "x");
+			skipBtn.addEventListener("click", () => {
+				// End a help-icon-triggered run too, or guideMode below would
+				// re-render the guide right after the skip.
+				this.guideRequested = false;
+				this.guideDismissed = true;
+				this.plugin.settings.onboarding = { ...(this.plugin.settings.onboarding ?? {}), done: true };
+				void this.plugin.saveSettings();
+				this.messagesEl.empty();
+				this.renderWelcome();
+			});
+			const brandGroup = corners.createDiv({ cls: "semlink-search-brand-group" });
+			const brand = brandGroup.createDiv({ cls: "semlink-search-logo" });
+			setIcon(brand, "semlink-logo");
+			brandGroup.createSpan({ cls: "semlink-search-brand", text: "Semlink" });
+			const rightSide = corners.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
+			const langBtn = rightSide.createEl("button", {
+				cls: "semlink-search-icon-btn clickable-icon",
+				attr: { "aria-label": "Language", title: "中文 / English" },
+			});
+			setIcon(langBtn, "languages");
+			// Persisting via saveSettings drives the whole chain: it calls
+			// setLang and refreshLanguage() on this view, which rebuilds the
+			// welcome in the new language. Calling setLang alone (as an
+			// earlier version did) changes nothing on screen.
+			const switchLang = (lang: "zh" | "en"): void => {
+				this.plugin.settings.language = lang;
+				void this.plugin.saveSettings();
+			};
+			langBtn.addEventListener("click", (evt) => {
+				const menu = new Menu()
+					.addItem((item) => item.setTitle("中文").onClick(() => switchLang("zh")))
+					.addItem((item) => item.setTitle("English").onClick(() => switchLang("en")));
+				menu.showAtMouseEvent(evt);
+			});
+			// Settings: same behavior as the header gear — opens Obsidian's
+			// settings on this plugin's tab.
+			const guideSettingsBtn = rightSide.createEl("button", {
+				cls: "semlink-search-icon-btn clickable-icon",
+				attr: { "aria-label": t("settingsTitle"), title: t("settingsTitle") },
+			});
+			setIcon(guideSettingsBtn, "settings");
+			guideSettingsBtn.addEventListener("click", () => {
+				(this.app as any).setting.open();
+				(this.app as any).setting.openTabById("semlink");
+			});
+
+			// Modifier class: the guide fills the block top-down so the
+			// stepper can pin to the top while step content scrolls.
+			const guide = this.messagesEl.createDiv({ cls: "semlink-search-welcome semlink-search-welcome-guide" });
+			renderOnboarding(guide, this.plugin, {
+				setGuideChrome: (active) => this.setGuideChrome(active),
+				getIndexEstimate: () => this.getIndexEstimate(),
+				isIndexing: () => this.isIndexing(),
+				isIndexPaused: () => this.isIndexPaused(),
+				startIndexing: (onProgress, onDone) => this.startIndexing(onProgress, onDone),
+				watchIndexing: (onProgress, onDone) => this.watchIndexing(onProgress, onDone),
+				pauseIndexing: () => this.plugin.scheduler?.pause(),
+				resumeIndexing: () => this.plugin.scheduler?.resume(),
+			}, () => {
+				// Guide skipped/dismissed: end any help-triggered run and
+				// swap it for the plain welcome. Empty the whole slot — the
+				// corners strip lives outside the guide block and would
+				// otherwise survive.
+				this.guideRequested = false;
+				this.messagesEl.empty();
+				this.renderWelcome();
+			});
+			this.updateHomeIconVisibility();
+			return;
+		}
+
+		const key = this.currentWelcomeKey;
 
 		// i18n string: "emoji line1\nline2" — the leading emoji becomes a
 		// floating badge, the rest the primary greeting, then the care note.
@@ -1455,6 +1611,84 @@ export class SemanticSearchView extends ItemView {
 		void this.renderWelcomeStats(welcome);
 
 		this.updateHomeIconVisibility();
+	}
+
+	/** Guide-mode chrome: while the first-run guide owns the welcome screen
+	 *  there is nothing to compose yet, so the input footer stays hidden.
+	 *  Handing the screen back also ends a help-icon-triggered guide run. */
+	private setGuideChrome(active: boolean): void {
+		this.contentEl.toggleClass("semlink-guide-active", active);
+		if (!active) this.guideRequested = false;
+	}
+
+	/** Rough full-index estimate for the guide's final step: markdown notes
+	 *  (minus excludes) × an average ~2.4k chars per note, chunked and
+	 *  batched with per-request latency + throttle delay. */
+	private getIndexEstimate(): { notes: number; seconds: number } {
+		const excludes = (this.plugin.settings.excludePaths || "")
+			.split("\n").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean);
+		const files = this.vault.getMarkdownFiles().filter((f) =>
+			!excludes.some((x) => x.length > 0 && f.path.startsWith(x)));
+		const notes = files.length;
+		const chunkSize = Math.max(100, this.plugin.settings.chunkSize || 800);
+		const batchSize = Math.max(1, this.plugin.settings.batchSize || 64);
+		const estChunks = notes * Math.ceil(2400 / chunkSize);
+		const requests = Math.ceil(estChunks / batchSize);
+		const seconds = Math.max(3, Math.round(requests * (0.5 + (this.plugin.settings.requestDelayMs || 200) / 1000)));
+		return { notes, seconds };
+	}
+
+	/** Whether an index run is currently in flight. */
+	private isIndexing(): boolean {
+		const p = this.plugin.progress?.current;
+		return !!p && p.phase !== "idle" && p.phase !== "completed";
+	}
+
+	/** Whether the in-flight run is paused by the user (guide's 暂停 state). */
+	private isIndexPaused(): boolean {
+		return !!this.plugin.progress?.current?.isPaused;
+	}
+
+	/** Start a full index and stream live stats to the guide. */
+	private startIndexing(onProgress: (stats: IndexStatsView) => void, onDone: () => void): void {
+		this.plugin.startFullIndex();
+		this.attachIndexProgress(onProgress, onDone);
+	}
+
+	/** Attach progress reporting to an already-running index. */
+	private watchIndexing(onProgress: (stats: IndexStatsView) => void, onDone: () => void): void {
+		this.attachIndexProgress(onProgress, onDone);
+	}
+
+	private attachIndexProgress(onProgress: (stats: IndexStatsView) => void, onDone: () => void): void {
+		const tracker = this.plugin.progress;
+		if (!tracker) return;
+		const map = (p: import("./types").IndexProgress): IndexStatsView => ({
+			processed: p.processedNotes,
+			total: p.totalNotes,
+			embeddedChunks: p.embeddedChunks,
+			failedChunks: p.failedChunks,
+			skippedChunks: p.skippedChunks,
+			totalChunks: p.totalChunks,
+			currentFile: p.currentFile,
+			avgResponseMs: p.avgResponseMs,
+			fileChunkProgress: p.fileChunkProgress,
+			estimatedRemainingSec: p.estimatedRemainingSec,
+		});
+		const un = tracker.onProgress((evt) => {
+			const p = (evt as { progress?: import("./types").IndexProgress }).progress ?? tracker.current;
+			onProgress(map(p));
+			if (p.phase === "completed") {
+				un();
+				onDone();
+			}
+		});
+		// Already completed before we attached — fire straight through.
+		if (tracker.current.phase === "completed") {
+			un();
+			onProgress(map(tracker.current));
+			onDone();
+		}
 	}
 
 	/** Fixed question cards: follow the active document when one is open,
@@ -1525,13 +1759,20 @@ export class SemanticSearchView extends ItemView {
 			this.settingsBtnEl.setAttr("aria-label", t("settingsTitle"));
 			this.settingsBtnEl.setAttr("title", t("settingsTitle"));
 		}
+		if (this.helpBtnEl) {
+			this.helpBtnEl.setAttr("aria-label", t("guideTitle"));
+			this.helpBtnEl.setAttr("title", t("guideTitle"));
+		}
 		// State-dependent tooltips (expand/collapse, send/stop).
 		this.applyInputExpanded();
 		this.setSendButtonState(this.isGenerating ? "stop" : "idle");
-		// Re-render the welcome screen (greeting, suggestions, stats) in the
-		// new language when it's currently shown.
-		if (this.messagesEl.querySelector(".semlink-search-welcome")) {
-			this.messagesEl.querySelector(".semlink-search-welcome")?.remove();
+		// Re-render the welcome screen (greeting, suggestions, stats) only
+		// when the LANGUAGE actually changed — refreshLanguage also runs on
+		// every settings save, and rebuilding mid-guide would wipe the
+		// user's in-progress form input.
+		const welcome = this.messagesEl.querySelector(".semlink-search-welcome");
+		if (welcome && getLang() !== this.welcomeLang) {
+			this.messagesEl.empty();
 			this.renderWelcome();
 		}
 	}
