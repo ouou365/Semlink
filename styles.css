@@ -1606,6 +1606,17 @@
     padding: 3px 0;
     scrollbar-width: none;
 }
+
+/* Fetch + custom-model action cards, side by side at the list's end. */
+.semlink-guide-model-actions {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+.semlink-guide-model-actions .semlink-guide-card {
+    flex: 1 1 0;
+}
 .semlink-guide-models-cards::-webkit-scrollbar {
     display: none;
 }
@@ -1620,6 +1631,7 @@
  * ticker. `is-running`/`is-done` (set from renderIndexStep) drive the
  * animations. */
 .semlink-guide-indexstats {
+    contain: content;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -1631,126 +1643,64 @@
     background: var(--background-primary);
 }
 
-/* Recipe line: [logo Provider] → [model]. */
-.semlink-guide-index-cfg {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    width: 100%;
-}
-
-.semlink-guide-index-chip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    max-width: 100%;
-    padding: 3px 10px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 999px;
-    background: var(--background-primary);
-    font-size: 12px;
-    color: var(--text-normal);
-}
-
-.semlink-guide-index-chiplogo {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-}
-
-.semlink-guide-index-chiplogo svg {
-    width: 14px;
-    height: 14px;
-}
-
-.semlink-guide-index-chipname {
+/* Recipe header at the top of the card: which provider + model. */
+.semlink-guide-index-recipe {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.semlink-guide-index-arrow {
-    flex-shrink: 0;
+.semlink-guide-index-recipe-accent {
+    color: #7c3aed;
+    font-weight: 600;
+}
+
+/* Coffee-break hero: cup centered, the readout centered beneath it. */
+.semlink-guide-index-hero {
+    /* Headroom for the pour tag + steam to stay inside the panel. */
+    padding-top: 26px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 96px;
+}
+
+/* The liquid is a canvas (waving surface, bubbles, splash droplets). */
+.semlink-guide-index-cupcanvas {
+    display: block;
+    margin: 0 auto;
+}
+
+/* Barista status line under the cup — reflects the brewing phase. */
+.semlink-guide-index-stamp {
+    margin-top: 4px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+    font-size: 10px;
+    font-style: italic;
+    letter-spacing: 0.4px;
     color: var(--text-faint);
 }
 
-/* Hero row for the battery card. position:relative anchors the terminal
- * nub (::after below) — the card clips its own overflow, so the nub must
- * be drawn by the container. */
-.semlink-guide-index-hero {
-    position: relative;
-    display: flex;
-    gap: 8px;
-    width: 100%;
-}
-
-/* Hero card = the battery compartment. Border = the shell, ::after = the
- * terminal nub, ::before = battery-cell separators; the liquid charge level
- * (.semlink-guide-index-stat-fill) rises behind the numerals. */
-.semlink-guide-index-stat {
-    position: relative;
-    isolation: isolate;
-    flex: 1 1 0;
+/* Percentage + count readout beside the cup. */
+.semlink-guide-index-readout {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    padding: 10px 8px;
-    border: 2px solid #7c3aed;
-    border-radius: 10px;
-    /* Clip the liquid to the rounded shell at every charge level. */
-    overflow: hidden;
+    width: 100%;
 }
 
-/* Terminal nub on the right edge — the hero's right edge is the battery's
- * right edge (the card spans it). */
-.semlink-guide-index-hero::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    right: -8px;
-    transform: translateY(-50%);
-    width: 6px;
-    height: 34%;
-    border-radius: 0 3px 3px 0;
-    background: #7c3aed;
-}
-
-/* The charge liquid. */
-.semlink-guide-index-stat-fill {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: 0%;
-    /* No radius of its own: the card's overflow:hidden clips the liquid to
-     * the shell's rounded corners at every width (a small-width pill with a
-     * large radius used to poke past the shell's corner curve). */
-    background: linear-gradient(180deg, rgba(167, 139, 250, 0.22), rgba(124, 58, 237, 0.3));
-    transition: width 0.4s ease;
-    pointer-events: none;
-}
-
-/* Bright surface line at the liquid edge. */
-.semlink-guide-index-stat-fill::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    width: 3px;
-    border-radius: 2px;
-    background: #7c3aed;
-}
-
-
-/* The numerals sit above the charge liquid (both are positioned; the
- * explicit z-index keeps the number on top once the liquid rises). */
+/* The numerals sit above the liquid (both are positioned; the explicit
+ * z-index keeps the number on top once the coffee rises). */
 .semlink-guide-index-statnum {
     position: relative;
     z-index: 2;
@@ -1758,8 +1708,6 @@
     font-weight: 700;
     line-height: 1.15;
     color: #7c3aed;
-    /* White outline painted behind the glyphs — purple digits stay readable
-     * on the purple battery shell. */
     -webkit-text-stroke: 3px rgba(255, 255, 255, 0.92);
     paint-order: stroke fill;
     font-variant-numeric: tabular-nums;
@@ -1771,14 +1719,6 @@
     z-index: 2;
     font-size: 11px;
     color: var(--text-muted);
-}
-
-/* Live zone (progress + counters + ticker). */
-.semlink-guide-index-live {
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-    width: 100%;
 }
 
 /* Timing row: estimated remaining time. */
@@ -1796,157 +1736,9 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* Current-file ticker: dot + monospace path + chunk/latency meta. */
-.semlink-guide-index-ticker {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    padding: 5px 8px;
-    border-radius: 6px;
-    background: var(--background-modifier-hover);
-    font-size: 11px;
-    color: var(--text-muted);
-}
 
-.semlink-guide-index-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--text-faint);
-    flex-shrink: 0;
-}
 
-.semlink-guide-index-file {
-    flex: 1 1 0;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: var(--font-monospace);
-}
 
-.semlink-guide-index-meta {
-    flex-shrink: 0;
-    font-variant-numeric: tabular-nums;
-}
-
-/* Running state = charging: the dot pulses and the liquid turns opaque
- * purple (width is the only motion — the level itself animates via the
- * fill's width transition). */
-.semlink-guide-indexstats.is-running .semlink-guide-index-dot {
-    background: #7c3aed;
-    animation: semlink-guide-pulse 1.1s ease-in-out infinite;
-}
-
-.semlink-guide-indexstats.is-running .semlink-guide-index-stat-fill {
-    /* Dark end is deliberately lighter than the #7c3aed shell border, so the
-     * liquid edge never blends into the frame at high charge. */
-    background: linear-gradient(90deg, rgb(196, 181, 253), rgb(139, 92, 246));
-}
-
-/* Done state: the battery reads full and stays purple. */
-.semlink-guide-indexstats.is-done .semlink-guide-index-stat {
-    border-color: #7c3aed;
-}
-
-.semlink-guide-indexstats.is-done .semlink-guide-index-hero::after {
-    background: #7c3aed;
-}
-
-.semlink-guide-indexstats.is-done .semlink-guide-index-stat-fill {
-    background: linear-gradient(90deg, rgba(196, 181, 253, 0.2), rgba(124, 58, 237, 0.32));
-}
-
-.semlink-guide-indexstats.is-done .semlink-guide-index-stat-fill::before {
-    background: #7c3aed;
-}
-
-.semlink-guide-indexstats.is-done .semlink-guide-index-dot {
-    background: #7c3aed;
-}
-
-@keyframes semlink-guide-pulse {
-    0%, 100% { opacity: 0.35; transform: scale(0.85); }
-    50% { opacity: 1; transform: scale(1.2); }
-}
-
-@keyframes semlink-guide-pulse {
-    0%, 100% { opacity: 0.35; transform: scale(0.85); }
-    50% { opacity: 1; transform: scale(1.2); }
-}
-
-/* Right-aligned context size on model cards (e.g. "163.8K"). */
-.semlink-guide-card-meta {
-    margin-left: auto;
-    flex-shrink: 0;
-    font-size: 11px;
-    color: var(--text-faint);
-    font-variant-numeric: tabular-nums;
-}
-
-/* Recommended (⭐) tag on embedding models — e.g. BGE-M3. */
-.semlink-guide-card-star {
-    margin-left: auto;
-    flex-shrink: 0;
-    font-size: 12px;
-    line-height: 1;
-}
-
-/* Picked state inside a model pick list (single select per section). */
-.semlink-guide-model-card.is-picked {
-    border-color: var(--interactive-accent);
-    color: var(--text-normal);
-    background: var(--background-modifier-hover);
-}
-
-/* Section labels of the step-3 pickers (chat / embedding). */
-.semlink-guide-sectionlabel {
-    font-size: 12px;
-    color: var(--text-muted);
-    text-align: left;
-    width: 100%;
-}
-
-/* Search box above the model picker list — same box metrics/look as the
- * sug cards (padding, border, radius, background). */
-.semlink-guide-search {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    height: 40px;
-    padding: 0 12px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 8px;
-    background: var(--background-primary);
-    transition: border-color 0.12s ease;
-}
-
-.semlink-guide-search:focus-within {
-    border-color: var(--interactive-accent);
-}
-
-.semlink-guide-search .semlink-guide-keyinput {
-    flex: 1 1 0;
-    min-width: 0;
-    height: 100%;
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    padding: 0;
-    font-size: 13px;
-    color: var(--text-normal);
-}
-
-.semlink-guide-search input.semlink-guide-keyinput,
-.semlink-guide-search input.semlink-guide-keyinput:hover,
-.semlink-guide-search input.semlink-guide-keyinput:focus,
-.semlink-guide-search input.semlink-guide-keyinput:focus-visible {
-    outline: none;
-    box-shadow: none;
-    background: transparent;
-    border: none;
-}
 
 /* Step-3 embedding/chat sections stack. */
 .semlink-guide-sections {

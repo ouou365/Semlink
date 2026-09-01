@@ -11,6 +11,7 @@
 // survives re-renders (time-slot refresh, language switch) and restarts.
 
 import { Modal } from "obsidian";
+import { mountCoffeeCanvas } from "./coffee-canvas";
 import { AddProviderModal, brandLogoOf, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, validateModelId } from "./settings-models";
 import type { FetchedModel } from "./settings-models";
 import { t } from "./i18n";
@@ -716,8 +717,21 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 					text: filter ? t("guideSearchNoMatch") : isChat ? t("guideNoChatModel") : t("guideNoEmbed"),
 				});
 			}
-			// Always last: manual model-ID entry.
-			card(cards, {
+			// Always last: fetch-from-server + manual model-ID entry, side by
+			// side. Fetch re-runs the same streaming sweep as the auto-fetch
+			// (also re-runnable for curated providers whose list was pruned).
+			const actions = cards.createDiv({ cls: "semlink-guide-model-actions" });
+			card(actions, {
+				icon: "⇣",
+				text: t("guideFetchModels"),
+				onClick: () => {
+					if (streaming) return;
+					streaming = true;
+					error.setText("");
+					void stream();
+				},
+			});
+			card(actions, {
 				icon: "＋",
 				text: t("customModel"),
 				onClick: () => {
@@ -817,45 +831,45 @@ function renderIndexStep(
 
 	const panel = root.createDiv({ cls: "semlink-guide-indexstats" });
 
-	// Recipe line: provider chip → model chip.
-	const cfg = panel.createDiv({ cls: "semlink-guide-index-cfg" });
-	const providerChip = cfg.createDiv({ cls: "semlink-guide-index-chip" });
-	const logoSvg = brandLogoOf(active.name).svg;
-	if (logoSvg) {
-		providerChip.createDiv({ cls: "semlink-guide-index-chiplogo" }).innerHTML = logoSvg;
-	}
-	providerChip.createSpan({ cls: "semlink-guide-index-chipname", text: active.name });
-	cfg.createSpan({ cls: "semlink-guide-index-arrow", text: "·" });
-	const modelChip = cfg.createDiv({ cls: "semlink-guide-index-chip" });
-	const modelLogo = modelBrand(active.model);
-	if (modelLogo) {
-		modelChip.createDiv({ cls: "semlink-guide-index-chiplogo" }).innerHTML = modelLogo;
-	}
-	modelChip.createSpan({ cls: "semlink-guide-index-chipname", text: active.model });
+	// Recipe header at the very top of the card: which provider + model this
+	// extraction uses. Provider/model names are accented spans.
+	const recipe = panel.createDiv({ cls: "semlink-guide-index-recipe" });
+	recipe.createSpan({ text: t("guideRecipePre") });
+	recipe.createSpan({ cls: "semlink-guide-index-recipe-accent", text: active.name });
+	recipe.createSpan({ text: t("guideRecipeMid") });
+	recipe.createSpan({ cls: "semlink-guide-index-recipe-accent", text: active.model });
+	recipe.createSpan({ text: t("guideRecipeModelSuffix") });
 
-	// Hero card = battery compartment: the charge level (a translucent
-	// liquid + ⚡ on its surface) rises with indexing progress; the numerals
-	// morph notes → live % → done on top of it.
+	// Coffee-break hero: the WHOLE coffee scene is one canvas — cup, liquid
+	// with waves/bubbles, the model's latte-art chip, the pour stream with
+	// the file-name tag, steam. The readout stays DOM.
+	let stampIdx = 0;
+	const STAMPS = ["guideStampPreparing", "guideStampExtract"];
 	const hero = panel.createDiv({ cls: "semlink-guide-index-hero" });
-	const heroCard = hero.createDiv({ cls: "semlink-guide-index-stat" });
-	const heroFill = heroCard.createDiv({ cls: "semlink-guide-index-stat-fill" });
-	const heroNum = heroCard.createDiv({ cls: "semlink-guide-index-statnum", text: String(est.notes) });
+	const coffee = hero.createDiv({ cls: "semlink-guide-index-coffee" });
+	const coffeeFx = mountCoffeeCanvas(coffee, {
+		modelLogoSvg: modelBrand(active.model),
+		modelName: active.model,
+		// "咖啡师准备中…" → "萃取精华中…" once the model logo has loaded.
+		onModelReady: () => {
+			stampIdx = 1;
+			stamp.setText(t(STAMPS[stampIdx]));
+		},
+	});
+	// Barista status line — reflects the brewing phase; self-clears once the
+	// element leaves the DOM.
+	const stamp = coffee.createDiv({ cls: "semlink-guide-index-stamp", text: t(STAMPS[0]) });
+	const readout = hero.createDiv({ cls: "semlink-guide-index-readout" });
+	const heroNum = readout.createDiv({ cls: "semlink-guide-index-statnum", text: String(est.notes) });
 	// Sub-label: what the number refers to — "笔记总数" while idle, "共 n 篇"
 	// once the run starts (kept in sync in applyStats).
-	const heroSub = heroCard.createDiv({ cls: "semlink-guide-index-statlabel", text: t("guideStatTotalNotes") });
+	const heroSub = readout.createDiv({ cls: "semlink-guide-index-statlabel", text: t("guideStatTotalNotes") });
 
-	// Live zone: counters + ticker (revealed on start).
-	const live = panel.createDiv({ cls: "semlink-guide-index-live" });
 
 	// Remaining-time line.
-	const timerow = live.createDiv({ cls: "semlink-guide-index-timerow semlink-hidden" });
+	const timerow = panel.createDiv({ cls: "semlink-guide-index-timerow semlink-hidden" });
 	const vEta = timerow.createSpan({ cls: "semlink-guide-index-timeitem" });
 
-	// Current-file ticker: pulsing dot + monospace path + chunk count.
-	const ticker = live.createDiv({ cls: "semlink-guide-index-ticker semlink-hidden" });
-	ticker.createDiv({ cls: "semlink-guide-index-dot" });
-	const vFile = ticker.createSpan({ cls: "semlink-guide-index-file", text: "—" });
-	const vMeta = ticker.createSpan({ cls: "semlink-guide-index-meta semlink-hidden" });
 
 	// Single action whose label/style tracks the run state: 开始 (primary,
 	// ▶) → 暂停 (secondary, ⏸) ⇄ 继续索引 (secondary) → 完成 (primary).
@@ -865,6 +879,7 @@ function renderIndexStep(
 	let running = host.isIndexing();
 	let paused = host.isIndexPaused();
 	let done = false;
+	let brewingFile = ""; // the note currently pouring into the cup
 
 	const applyButton = (): void => {
 		if (done) {
@@ -897,15 +912,16 @@ function renderIndexStep(
 		} else if (!paused) {
 			host.pauseIndexing();
 			paused = true;
+			coffeeFx.setBrewing(false);
 		} else {
 			host.resumeIndexing();
 			paused = false;
+			coffeeFx.setBrewing(true);
 		}
 		applyButton();
 	});
 
 	// Live progress handlers (referenced by the button handlers below).
-	let totalNotes = est.notes;
 	const durText = (sec: number): string => {
 		if (!sec || sec <= 0) return "";
 		if (sec < 60) return t("guideDurSec").replace("{s}", String(Math.round(sec)));
@@ -914,32 +930,76 @@ function renderIndexStep(
 		if (m < 60) return t("guideDurMinSec").replace("{m}", String(m)).replace("{s}", String(s));
 		return t("guideDurHourMin").replace("{h}", String(Math.floor(m / 60))).replace("{m}", String(m % 60));
 	};
-	const applyStats = (s: IndexStatsView): void => {
+	// DOM writes only when the text actually changed — progress events can
+	// fire far faster than the eye needs, and redundant writes force layout.
+	const setIfChanged = (el: HTMLElement, text: string): void => {
+		if (el.textContent !== text) el.setText(text);
+	};
+	const setHidden = (el: HTMLElement, hidden: boolean): void => {
+		el.toggleClass("semlink-hidden", hidden);
+	};
+
+	const applyStatsRaw = (s: IndexStatsView): void => {
 		panel.addClass("is-running");
 		timerow.removeClass("semlink-hidden");
-		ticker.removeClass("semlink-hidden");
 		const pct = s.total > 0 ? (s.processed / s.total) * 100 : 0;
-		// The hero card morphs into the live percentage…
-		heroNum.setText(`${pct.toFixed(1)}%`);
-		totalNotes = s.total;
-		heroSub.setText(t("guideNotesTotal").replace("{n}", String(s.total)));
-		heroFill.setAttr("style", `width:${pct.toFixed(1)}%`);
+		// The hero readout morphs into the live percentage…
+		setIfChanged(heroNum, `${pct.toFixed(1)}%`);
+		setIfChanged(heroSub, t("guideNotesTotal").replace("{n}", String(s.total)));
+		coffeeFx.setLevel(pct, true);
+		// A new note landed in the queue → pour it into the cup: the canvas
+		// plays the pour stream, the file-name tag and the latte wobble.
+		if (s.currentFile && s.currentFile !== brewingFile) {
+			brewingFile = s.currentFile;
+			coffeeFx.pour(brewingFile.split("/").pop() || brewingFile);
+		}
 		const eta = durText(s.estimatedRemainingSec);
-		vEta.setText(eta ? t("guideEta").replace("{dur}", eta) : "");
-		vEta.toggleClass("semlink-hidden", !eta);
-		vFile.setText(s.currentFile || t("guideModelLoading"));
-		// Ticker meta: the file's chunk progress ("3/12").
-		vMeta.setText(s.fileChunkProgress || "");
-		vMeta.toggleClass("semlink-hidden", !s.fileChunkProgress);
+		setIfChanged(vEta, eta ? t("guideEta").replace("{dur}", eta) : "");
+		setHidden(vEta, !eta);
+	};
+
+	// Throttle the view to ~5 fps: the scheduler can emit progress far more
+	// often; the eye (and the canvas) needs a fraction of that.
+	const APPLY_MIN_MS = 200;
+	let lastApply = 0;
+	let pendingStats: IndexStatsView | null = null;
+	let applyTimer = 0;
+	const applyStats = (s: IndexStatsView): void => {
+		pendingStats = s;
+		const now = Date.now();
+		const wait = APPLY_MIN_MS - (now - lastApply);
+		if (wait <= 0) {
+			lastApply = now;
+			if (applyTimer) {
+				window.clearTimeout(applyTimer);
+				applyTimer = 0;
+			}
+			applyStatsRaw(s);
+		} else if (!applyTimer) {
+			applyTimer = window.setTimeout(() => {
+				applyTimer = 0;
+				lastApply = Date.now();
+				if (pendingStats) applyStatsRaw(pendingStats);
+			}, wait);
+		}
 	};
 	const onDone = (): void => {
+		// Flush any throttled stats so the finals reflect the true end state.
+		if (applyTimer) {
+			window.clearTimeout(applyTimer);
+			applyTimer = 0;
+		}
+		if (pendingStats) applyStatsRaw(pendingStats);
+		// The brew is served — stop the barista chatter.
+		stamp.setText(t("guideStampServed"));
 		panel.removeClass("is-running");
 		panel.addClass("is-done");
-		heroFill.setAttr("style", "width:100%");
+		coffeeFx.setLevel(100, true);
+		coffeeFx.celebrate();
+		coffeeFx.setBrewing(false);
 		heroNum.setText("100%");
-		heroSub.setText(t("guideNotesTotal").replace("{n}", String(totalNotes)));
+		heroSub.setText(t("guideCoffeeReady"));
 		timerow.addClass("semlink-hidden");
-		ticker.addClass("semlink-hidden");
 		running = false;
 		paused = false;
 		done = true;
