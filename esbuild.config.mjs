@@ -50,10 +50,28 @@ const buildOptions = {
 	},
 };
 
+// Browser Web Worker build: same engine, but "fs"/"path"/"buffer" resolve
+// to OPFS-backed browser shims instead of Node builtins.
+const browserWorkerOptions = {
+	...buildOptions,
+	entryPoints: ["src/db-worker.browser.ts"],
+	platform: "browser",
+	format: "iife",
+	external: ["obsidian"],
+	alias: {
+		fs: "./src/browser-fs.ts",
+		path: "./src/browser-polyfills.ts",
+		buffer: "./src/browser-polyfills.ts",
+	},
+};
+
 if (prod) {
 	esbuild.build({ ...buildOptions, minify: true });
+	esbuild.build({ ...browserWorkerOptions, minify: true });
 } else {
 	const ctx = await esbuild.context(buildOptions);
 	await ctx.watch();
+	const ctxB = await esbuild.context(browserWorkerOptions);
+	await ctxB.watch();
 	console.log("Watching for changes...");
 }

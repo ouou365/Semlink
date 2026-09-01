@@ -40,6 +40,7 @@ export class VectorStore {
 	private reqId = 0;
 	private pending = new Map<number, PendingRequest>();
 	private fallback = false;
+	private browserWorker: Worker | null = null;
 
 	// Synchronous engine used only on the fallback path.
 	private engine: DbEngine | null = null;
@@ -50,7 +51,13 @@ export class VectorStore {
 		return !this.fallback && this.worker != null;
 	}
 
-	constructor(dataDir: string) {
+	/** Where the DB engine runs: node worker, browser worker, or main. */
+	get storageMode(): "worker" | "browser-worker" | "sync" {
+		if (this.fallback) return "sync";
+		return this.browserWorker ? "browser-worker" : this.worker ? "worker" : "sync";
+	}
+
+	constructor(dataDir: string, private browserWorkerUrl?: string) {
 		this.dataDir = dataDir;
 	}
 
@@ -60,14 +67,22 @@ export class VectorStore {
 				await this.initWorker();
 				return;
 			} catch (e) {
-				console.warn("[Semlink] Worker init failed, falling back to sync mode:", e);
+				console.info("[Semlink] node worker_threads unavailable in the renderer — using the browser worker instead");
+			}
+		}
+		if (this.browserWorkerUrl && typeof Worker !== "undefined") {
+			try {
+				await this.initBrowserWorker(this.browserWorkerUrl);
+				return;
+			} catch (e) {
+				console.error("[Semlink] browser worker init failed — using sync fallback. Reason:", e);
 			}
 		}
 		// Fallback: run the engine synchronously on the main thread.
 		this.fallback = true;
 		this.engine = new DbEngine(this.dataDir);
 		await this.engine.init();
-		console.log("[Semlink] VectorStore running in sync (fallback) mode");
+		console.warn("[Semlink] VectorStore running in sync (fallback) mode — animations may stutter during indexing");
 	}
 
 	private async initWorker(): Promise<void> {
@@ -95,6 +110,47 @@ export class VectorStore {
 		console.log("[Semlink] VectorStore running in worker mode");
 	}
 
+	/** Browser Web Worker channel (used when worker_threads is missing). */
+	private async initBrowserWorker(url: string): Promise<void> {
+		// Chromium refuses to construct a Worker from an app:// resource URL
+		// (SecurityError). Fetch the script and spawn the worker from a Blob
+		// URL instead — verified working in this environment by the spike.
+		const res = await fetch(url);
+		if (!res.ok) throw new Error(`fetch db-worker: HTTP ${res.status}`);
+		const blobUrl = URL.createObjectURL(new Blob([await res.text()], { type: "text/javascript" }));
+		const w = new Worker(blobUrl);
+		w.onmessage = (e: MessageEvent) => {
+			const { reqId, result, error } = (e as any).data ?? {};
+			const pending = this.pending.get(reqId);
+			if (!pending) return;
+			this.pending.delete(reqId);
+			if (error) pending.reject(new Error(error));
+			else pending.resolve(result);
+		};
+		w.onerror = (e: ErrorEvent) => {
+			const err = new Error("browser worker error: " + (e.message || "unknown"));
+			for (const [, p] of this.pending) p.reject(err);
+			this.pending.clear();
+		};
+		this.browserWorker = w;
+		// One-time seed: copy the legacy disk DB into the worker OPFS so the
+		// existing index survives the switch. The worker skips this if its
+		// own copy already exists (never overwrite a newer OPFS index).
+		try {
+			const fsMod = (window as any).require?.("fs");
+			const dbPath = join(this.dataDir, "vault.db");
+			if (fsMod?.existsSync(dbPath)) {
+				await this.call("seedDb", [new Uint8Array(fsMod.readFileSync(dbPath))]);
+			}
+		} catch (seedErr) {
+			console.warn("[Semlink] OPFS seed skipped:", seedErr);
+		}
+		// The browser entry ignores the passed dataDir and uses the OPFS
+		// namespace root as its virtual root.
+		await this.call("init", [""]);
+		console.log("[Semlink] VectorStore running in browser worker mode — DB engine is off the main thread");
+	}
+
 	/** Send one op to the worker and await its reply. */
 	private call(op: string, args: any[] = []): Promise<any> {
 		const t0 = performance.now();
@@ -106,11 +162,18 @@ export class VectorStore {
 				performance.measure("semlink:sync-engine", { start: t0 });
 			});
 		}
+		if (this.browserWorker) {
+			return new Promise((resolve, reject) => {
+				const reqId = ++this.reqId;
+				this.pending.set(reqId, { resolve, reject });
+				this.browserWorker!.postMessage({ reqId, op, args });
+			});
+		}
 		return new Promise((resolve, reject) => {
 			const reqId = ++this.reqId;
 			this.pending.set(reqId, { resolve, reject });
 			try {
-				this.worker.postMessage({ reqId, op, args });
+				this.worker!.postMessage({ reqId, op, args });
 			} catch (e) {
 				this.pending.delete(reqId);
 				reject(e);

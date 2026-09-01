@@ -98,6 +98,8 @@ const S: Strings = {
 	batchSizeDesc: { zh: "每次 API 调用包含的文本数量（1-128）", en: "Number of texts per API call (1-128)" },
 	requestDelay: { zh: "请求间隔 (ms)", en: "Request Delay (ms)" },
 	requestDelayDesc: { zh: "API 请求之间的延迟毫秒数（防止限流）", en: "Delay between API requests in ms (prevent rate limiting)" },
+	embedConcurrency:    { zh: "并发请求数",            en: "Concurrent requests" },
+	embedConcurrencyDesc: { zh: "同时嵌入的笔记数量，过大可能触发 429 限流", en: "Notes embedded in parallel — too high may trigger 429 rate limits" },
 	excludePaths: { zh: "排除路径", en: "Exclude Paths" },
 	excludePathsDesc: { zh: "每行一个路径前缀，匹配的文件不会被索引", en: "Path prefixes to exclude from indexing (one per line)" },
 	autoIndex: { zh: "自动索引", en: "Auto Index" },

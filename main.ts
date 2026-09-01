@@ -18,6 +18,7 @@ import { VaultWatcher } from "./src/watcher";
 import { SmartVaultSettingTab } from "./src/settings";
 import { ProgressModal } from "./src/progress-modal";
 import { SemanticSearchView, SEARCH_VIEW_TYPE } from "./src/search-view";
+import { runOpfsSpike } from "./src/opfs-spike";
 import { ActivityGate } from "./src/activity-gate";
 import { FeishuBot, type FeishuAskHandler } from "./src/feishu-bot";
 import { setLang, t } from "./src/i18n";
@@ -63,7 +64,15 @@ export default class SmartVaultPlugin extends Plugin {
 
 		// Initialize components
 		this.progress = new ProgressTracker();
-		this.store = new VectorStore(dataDir);
+		// Browser Web Worker fallback channel: loads the same DB engine from
+		// the plugin folder when worker_threads is unavailable in the host.
+		let browserWorkerUrl: string | undefined;
+		try {
+			browserWorkerUrl = this.app.vault.adapter.getResourcePath(
+				`${this.app.vault.configDir}/plugins/${this.manifest.id}/db-worker.browser.js`
+			);
+		} catch { /* leave undefined → sync fallback */ }
+		this.store = new VectorStore(dataDir, browserWorkerUrl);
 		await this.store.init();
 
 		this.queue = new IndexQueue(this.store);
@@ -137,6 +146,14 @@ export default class SmartVaultPlugin extends Plugin {
 
 		// Register settings tab
 		this.addSettingTab(new SmartVaultSettingTab(this.app, this));
+
+		// One-shot OPFS feasibility spike (browser Worker + OPFS in the real
+		// app:// renderer). Runs once; skips after a result file exists.
+		{
+			const resultPath = this.app.vault.configDir + "/plugins/" + this.manifest.id + "/opfs-spike-result.json";
+			const already = await this.app.vault.adapter.exists(resultPath).catch(() => false);
+			if (!already) void runOpfsSpike(this.app, this.manifest.id);
+		}
 
 		// Start any enabled Feishu bots.
 		await this.syncFeishuBots();

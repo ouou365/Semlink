@@ -1681,52 +1681,9 @@
     display: block;
 }
 
-/* Debug readout on the index step: frame pacing + scene state + jank
- * moments (temporary diagnostic aid). */
-.semlink-guide-index-debug {
-    position: relative;
-    margin-top: 2px;
-    padding: 4px 6px;
-    border: 1px dashed var(--background-modifier-border);
-    border-radius: 6px;
-    background: var(--background-secondary);
-    font-family: var(--font-monospace);
-    font-size: 10px;
-    line-height: 1.5;
-    color: var(--text-faint);
-    text-align: left;
-}
-
-.semlink-guide-index-debug-text {
-    display: block;
-    white-space: pre;
-    overflow: hidden;
-}
-
-.semlink-guide-debug-copy {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    padding: 0 6px;
-    font-size: 10px;
-    line-height: 1.6;
-    border-radius: 4px;
-    color: var(--text-muted);
-    background: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
-    cursor: pointer;
-}
-
-.semlink-guide-debug-copy:hover {
-    color: var(--text-normal);
-    background: var(--background-modifier-hover);
-}
-
 /* Coffee-break hero: cup centered, the readout centered beneath it. */
 .semlink-guide-index-hero {
-    /* Headroom for the pour tag + steam to stay inside the panel. */
-    padding-top: 26px;
-    display: flex;
+        display: flex;
     flex-direction: column;
     align-items: center;
     gap: 10px;

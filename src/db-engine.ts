@@ -239,11 +239,12 @@ export class DbEngine {
 	 *  lookups returned nothing → everything treated as new). */
 	save(): void {
 		if (!this.db) return;
+		// export() already returns a fresh Uint8Array — passing it straight
+		// to writeFileSync skips a full-DB Buffer copy (hundreds of MB).
 		const data = this.db.export();
-		const buf = Buffer.from(data);
 		const finalPath = join(this.dataDir, DB_FILE);
 		const tmpPath = join(this.dataDir, `${DB_FILE}.tmp`);
-		writeFileSync(tmpPath, buf);
+		writeFileSync(tmpPath, data);
 		// fsync isn't available on every platform via this import; rename alone
 		// still protects against torn writes from a killed process.
 		renameSync(tmpPath, finalPath);
@@ -295,16 +296,32 @@ export class DbEngine {
 
 	// ──── Chunk CRUD ────
 
+	// Nested-safe transactions: concurrent note processing interleaves
+	// begin/commit, so the outermost begin issues BEGIN, nested ones issue
+	// SAVEPOINTs — each note commits/rolls back independently.
+	private txDepth = 0;
+
 	beginTransaction(): void {
-		this.db!.run("BEGIN TRANSACTION");
+		if (this.txDepth === 0) this.db!.run("BEGIN TRANSACTION");
+		else this.db!.run(`SAVEPOINT tx_${this.txDepth}`);
+		this.txDepth++;
 	}
 
 	commitTransaction(): void {
-		this.db!.run("COMMIT");
+		if (this.txDepth === 0) return;
+		this.txDepth--;
+		if (this.txDepth === 0) this.db!.run("COMMIT");
+		else this.db!.run(`RELEASE SAVEPOINT tx_${this.txDepth}`);
 	}
 
 	rollbackTransaction(): void {
-		this.db!.run("ROLLBACK");
+		if (this.txDepth === 0) return;
+		this.txDepth--;
+		if (this.txDepth === 0) this.db!.run("ROLLBACK");
+		else {
+			this.db!.run(`ROLLBACK TO SAVEPOINT tx_${this.txDepth}`);
+			this.db!.run(`RELEASE SAVEPOINT tx_${this.txDepth}`);
+		}
 	}
 
 	insertChunk(chunk: NoteChunk): void {

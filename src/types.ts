@@ -235,6 +235,8 @@ export interface SmartVaultSettings {
 	maxRetries: number;
 	batchSize: number;
 	requestDelayMs: number;
+	/** Notes embedded in parallel (1 = serial). */
+	embedConcurrency: number;
 	/** Feishu bots bound to Semlink */
 	feishuBots: FeishuBotConfig[];
 	/** First-run guide state. Steps: ① chat model ② embedding model ③ data
@@ -267,6 +269,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	maxRetries: 3,
 	batchSize: 64,
 	requestDelayMs: 200,
+	embedConcurrency: 2,
 	feishuBots: [],
 	onboarding: {},
 };

@@ -27,8 +27,13 @@ export class Scheduler {
 
 	private running = false;
 	private aborted = false;
-	private concurrency = 5; // 并发 embedding 请求数
-	private saveInterval = 10; // 每处理 N 个笔记存盘一次
+	/** 并发嵌入请求数 — 设置页"嵌入参数"可调（默认 2）。串行(1) 对免费档
+	 *  API 最稳；并发过高会触发 429 限流。 */
+	private get concurrency(): number {
+		return Math.max(1, this.settings.embedConcurrency ?? 2);
+	}
+	private saveInterval = 40; // 每处理 N 个笔记存盘一次（sync 模式下 save 是全量导出，代价很高）
+	private lastSaveAt = 0; // 上次存盘时刻 — sync 模式下两次全量导出之间至少隔 20s
 	private processedSinceSave = 0;
 	/** Guards backfillDocVectors against concurrent runs (onload + manual index). */
 	private backfilling = false;
@@ -530,9 +535,13 @@ export class Scheduler {
 	/** Periodic save with yield: yields before the sync save to let the browser breathe */
 	private async maybeSaveAsync(): Promise<void> {
 		this.processedSinceSave++;
+		// A full-DB export blocks the main thread for seconds in sync mode —
+		// space saves out in time as well as note count.
+		if (Date.now() - this.lastSaveAt < 20000) return;
 		if (this.processedSinceSave >= this.saveInterval) {
 			await this.yieldControl();
 			await this.store.save();
+			this.lastSaveAt = Date.now();
 			const stats = await this.store.getStats();
 			this.progress.setDbSizeMb(stats.dbSizeMb);
 			this.processedSinceSave = 0;

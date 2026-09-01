@@ -330,6 +330,20 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					})
 			);
 
+		new Setting(body)
+			.setName(t("embedConcurrency"))
+			.setDesc(t("embedConcurrencyDesc"))
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 5, 1)
+					.setValue(this.plugin.settings.embedConcurrency ?? 2)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.embedConcurrency = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// ── Re-embed (force full rebuild) ──
 		new Setting(body)
 			.setName(t("rebuildIndex"))
