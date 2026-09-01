@@ -128,6 +128,27 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	// Tab: General — sidebar, embedding, index management & support
 	// ══════════════════════════════════════
 	private renderGeneralTab(containerEl: HTMLElement): void {
+		// Language switcher: saveSettings re-runs setLang and refreshes the
+		// language-dependent views; display() re-renders this panel so the
+		// settings UI itself follows the new language right away.
+		new Setting(containerEl)
+			.setName(t("language"))
+			.setDesc(t("languageDesc"))
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						auto: t("langAuto"),
+						zh: t("langZh"),
+						en: t("langEn"),
+					})
+					.setValue(this.plugin.settings.language)
+					.onChange(async (value) => {
+						this.plugin.settings.language = value as SmartVaultSettings["language"];
+						await this.plugin.saveSettings();
+						this.display();
+					})
+			);
+
 		// Open the semantic-search sidebar panel.
 		new Setting(containerEl)
 			.setName(t("openSidebar"))
@@ -143,11 +164,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// switcher (persisted); the embedding model lives in Embedding params.
 		renderModelsTab(this.plugin, containerEl, this.modelsState, () => this.refreshPreservingScroll());
 
-		// ── Secondary: embedding parameters (click to expand) ──
-		this.renderEmbeddingParamsSection(containerEl);
-
 		// ── Index Management (collapsible, like the embedding parameters) ──
 		this.renderIndexManagementSection(containerEl);
+
+		// ── Secondary: embedding parameters (click to expand) ──
+		this.renderEmbeddingParamsSection(containerEl);
 
 		// Report Bug
 		new Setting(containerEl)

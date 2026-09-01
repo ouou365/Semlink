@@ -219,7 +219,12 @@ export class EmbeddingClient {
 			throw err;
 		}
 
-		return resp.json as EmbeddingResponse;
+		// `.json` parses the full batch on the main thread — measure it so a
+		// pathological provider payload shows up in the debug readout.
+		const t0 = performance.now();
+		const json = resp.json as EmbeddingResponse;
+		performance.measure("semlink:embed-parse", { start: t0 });
+		return json;
 	}
 
 	private async callHuggingFaceApi(input: string[]): Promise<EmbeddingResponse> {

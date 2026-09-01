@@ -1643,19 +1643,83 @@
     background: var(--background-primary);
 }
 
-/* Recipe header at the top of the card: which provider + model. */
+/* Recipe footer at the bottom of the card: which provider + model, as
+ * icon pills (icons come from providerLogo/modelBrand SVGs). */
 .semlink-guide-index-recipe {
-    text-align: center;
-    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    font-size: 10px;
     color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.semlink-guide-index-recipe-accent {
-    color: #7c3aed;
-    font-weight: 600;
+.semlink-guide-index-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 100%;
+    padding: 1px 7px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 999px;
+    background: #fff;
+    color: #1f1f1f;
+    font-size: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.semlink-guide-index-pill-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.semlink-guide-index-pill-icon svg {
+    width: 11px;
+    height: 11px;
+    display: block;
+}
+
+/* Debug readout on the index step: frame pacing + scene state + jank
+ * moments (temporary diagnostic aid). */
+.semlink-guide-index-debug {
+    position: relative;
+    margin-top: 2px;
+    padding: 4px 6px;
+    border: 1px dashed var(--background-modifier-border);
+    border-radius: 6px;
+    background: var(--background-secondary);
+    font-family: var(--font-monospace);
+    font-size: 10px;
+    line-height: 1.5;
+    color: var(--text-faint);
+    text-align: left;
+}
+
+.semlink-guide-index-debug-text {
+    display: block;
+    white-space: pre;
+    overflow: hidden;
+}
+
+.semlink-guide-debug-copy {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    padding: 0 6px;
+    font-size: 10px;
+    line-height: 1.6;
+    border-radius: 4px;
+    color: var(--text-muted);
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    cursor: pointer;
+}
+
+.semlink-guide-debug-copy:hover {
+    color: var(--text-normal);
+    background: var(--background-modifier-hover);
 }
 
 /* Coffee-break hero: cup centered, the readout centered beneath it. */

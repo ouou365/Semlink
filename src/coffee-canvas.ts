@@ -6,15 +6,53 @@
 // the surface, the pour stream + splash droplets per note, the file-name tag
 // fading above the rim, and steam once the brew is done.
 //
-// Layout (logical px): canvas spans the panel width; the cup is centered.
-//   y 0..26   steam + pour-tag zone
-//   y 30..96  cup body (54x66, centered)
-//   y 100..108 saucer
+// Layout (logical px): canvas spans up to 200px, centered by CSS; the cup is
+// centered in that width.
+//   y 0..30   steam + pour-tag zone
+//   y 48..122 cup body (62x74, centered)
+//   y 130..137 saucer
 //
 // Lifecycle: the rAF loop starts lazily on the first setLevel()/celebrate()
 // and stops by itself when the canvas leaves the DOM (guide re-render / view
 // close) or when the brew has settled (not brewing, calm surface, 3s idle).
 // The loop is exception-proof: the next frame is scheduled BEFORE drawing.
+
+/** One recorded jank moment: when it happened and what the scene looked
+ *  like. kind "block" = the rAF callback itself arrived late (the main
+ *  thread was busy doing something else); kind "slow" = two drawn frames
+ *  more than 50ms apart (perceptible stutter). */
+export interface CoffeeJankEvent {
+	t: number;
+	kind: "block" | "slow";
+	gap: number;
+	draw: number;
+	level: number;
+	bubbles: number;
+	droplets: number;
+	pourT: number;
+}
+
+/** Snapshot for the on-screen debug readout. */
+export interface CoffeeStats {
+	mountSec: number;
+	fps: number;
+	drawAvgMs: number;
+	drawMaxMs: number;
+	gapMaxMs: number;
+	skipped: number;
+	drawn: number;
+	w: number;
+	h: number;
+	dpr: number;
+	level: number;
+	agitation: number;
+	brewing: boolean;
+	running: boolean;
+	bubbles: number;
+	droplets: number;
+	pourT: number;
+	jank: CoffeeJankEvent[];
+}
 
 /** Interactive coffee scene for the guide's index step. */
 export interface CoffeeCanvas {
@@ -30,6 +68,8 @@ export interface CoffeeCanvas {
 	celebrate(): void;
 	/** Stop the loop immediately and release the canvas. */
 	destroy(): void;
+	/** Diagnostic snapshot for the debug readout (null if canvas unavailable). */
+	getStats(): CoffeeStats | null;
 }
 
 interface Bubble {
@@ -49,11 +89,6 @@ interface Droplet {
 	life: number;
 }
 
-interface SteamWisp {
-	x: number;
-	phase: number;
-}
-
 /** Truncate text to fit `maxWidth` (cheap canvas ellipsis). */
 const fitText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string => {
 	if (ctx.measureText(text).width <= maxWidth) return text;
@@ -67,26 +102,70 @@ export function mountCoffeeCanvas(
 	container: HTMLElement,
 	opts: { modelLogoSvg?: string; modelName: string; onModelReady?: () => void },
 ): CoffeeCanvas {
-	const dpr = Math.max(1, window.devicePixelRatio || 1);
+	const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
 	const canvas = container.createEl("canvas", { cls: "semlink-guide-index-cupcanvas" });
-	const w = container.clientWidth || 296;
-	const h = 126;
+	// The scene is narrow (cup + saucer + a tag overhead) — cap the canvas at
+	// 200 logical px and let CSS center it. Filling the full panel width
+	// (×dpr) cost 3-4× the pixels for empty margin on both sides.
+	const w = Math.min(container.clientWidth || 200, 200);
+	const h = 142;
 	canvas.width = Math.round(w * dpr);
 	canvas.height = Math.round(h * dpr);
 	canvas.style.width = `${w}px`;
 	canvas.style.height = `${h}px`;
 	const ctx = canvas.getContext("2d");
 	if (!ctx) {
-		return { setLevel() {}, setBrewing() {}, pour() {}, celebrate() {}, destroy() {} };
+		return { setLevel() {}, setBrewing() {}, pour() {}, celebrate() {}, destroy() {}, getStats: () => null };
 	}
 	ctx.scale(dpr, dpr);
 
+	// --- jank diagnostics ---
+	const mountedAt = performance.now();
+	let drawn = 0;
+	let skipped = 0;
+	let drawAvg = 0;
+	let drawMax = 0;
+	let drawLast = 0;
+	let gapMax = 0;
+	let lastRaf = 0;
+	let lastJankAt = 0;
+	const recentGaps: number[] = [];
+	const jank: CoffeeJankEvent[] = [];
+	/** Record a jank moment (deduped to one entry per 150ms so a single stall
+	 *  doesn't flood the list). */
+	const recordJank = (
+		kind: "block" | "slow",
+		now: number,
+		gap: number,
+		draw: number,
+	): void => {
+		if (now - lastJankAt < 150) return;
+		lastJankAt = now;
+		jank.push({
+			t: (now - mountedAt) / 1000,
+			kind,
+			gap,
+			draw,
+			level,
+			bubbles: bubbles.length,
+			droplets: droplets.length,
+			pourT,
+		});
+		if (jank.length > 6) jank.shift();
+	};
+
 	// --- scene geometry ---
-	const cupW = 54;
-	const cupH = 66;
+	const cupW = 62;
+	const cupH = 74;
 	const cupX = (w - cupW) / 2;
-	const cupY = 38;
+	const cupY = 48;
 	const cupCX = cupX + cupW / 2;
+
+	// Static gradients — created once, reused every frame (per-frame gradient
+	// construction showed up as measurable frame cost).
+	const glossGrad = ctx.createLinearGradient(cupX, 0, cupX + cupW * 0.4, 0);
+	glossGrad.addColorStop(0, "rgba(255, 255, 255, 0.2)");
+	glossGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
 
 	// --- model logo raster (SVG string → image) ---
 	const modelImg = new Image();
@@ -120,11 +199,28 @@ export function mountCoffeeCanvas(
 	let latteWobble = 0; // 0-1 — latte chip reaction to a fresh pour
 	const bubbles: Bubble[] = [];
 	const droplets: Droplet[] = [];
-	const steam: SteamWisp[] = [
-		{ x: cupX + 13, phase: 0 },
-		{ x: cupX + 27, phase: 1.3 },
-		{ x: cupX + 41, phase: 2.6 },
+
+	// Saucer gradient — static, hoisted out of the frame loop.
+	const saucerGrad = ctx.createLinearGradient(0, cupY + cupH + 8, 0, cupY + cupH + 15);
+	saucerGrad.addColorStop(0, "#8b5cf6");
+	saucerGrad.addColorStop(1, "#7c3aed");
+
+	// Steam: two tapered plumes — the café-illustration look. The gradient
+	// dissolves each ribbon toward its tip; steamLevel eases the whole
+	// effect in when the brew is served and back out otherwise.
+	const steamGrad = ctx.createLinearGradient(0, cupY - 4, 0, cupY - 44);
+	steamGrad.addColorStop(0, "rgba(214, 210, 226, 0.42)");
+	steamGrad.addColorStop(0.7, "rgba(214, 210, 226, 0.13)");
+	steamGrad.addColorStop(1, "rgba(214, 210, 226, 0)");
+	// Four plumes a quarter-cycle apart; all follow the SAME centerline, so
+	// their life stages chain bottom-to-top into one continuous stream.
+	const STEAM_PLUMES = [
+		{ dx: -3, width: 6.5, speed: 1, phase: 0 },
+		{ dx: 2, width: 6, speed: 1, phase: 0.25 },
+		{ dx: -2, width: 6.5, speed: 1, phase: 0.5 },
+		{ dx: 3, width: 6, speed: 1, phase: 0.75 },
 	];
+	let steamLevel = 0;
 
 	const surfaceY = (): number => cupY + cupH * (1 - level) - cupH * 0.04 * (1 - level);
 
@@ -152,11 +248,25 @@ export function mountCoffeeCanvas(
 				cancelAnimationFrame(raf);
 				return;
 			}
+			// A late rAF callback means the MAIN THREAD was busy elsewhere
+			// (indexing work, DOM, serialization) — record it separately from
+			// slow draws so the two causes are distinguishable.
+			const rafGap = lastRaf ? now - lastRaf : 0;
+			lastRaf = now;
+			if (rafGap > 40) recordJank("block", now, rafGap, drawLast);
 			// ~30fps cap: half the rAF frames are skips — the liquid is slow
 			// motion, and this halves the canvas cost during long index runs.
-			if (now - last < 28) return;
-			const dt = Math.min(0.05, (now - last) / 1000 || 0.016);
+			if (now - last < 28) {
+				skipped++;
+				return;
+			}
+			const rawDtMs = now - last;
+			const dt = Math.min(0.05, rawDtMs / 1000 || 0.016);
 			last = now;
+			drawn++;
+			recentGaps.push(rawDtMs);
+			if (recentGaps.length > 30) recentGaps.shift();
+			gapMax = Math.max(gapMax, rawDtMs);
 			if (!Number.isFinite(level)) level = 0;
 			if (!Number.isFinite(target)) target = 0;
 			const surf = surfaceY();
@@ -203,6 +313,7 @@ export function mountCoffeeCanvas(
 			}
 
 			// --- draw ---
+			const drawStart = performance.now();
 			ctx.clearRect(0, 0, w, h);
 			const amp = 0.9 + agitation * 3.4;
 			const bob = Math.sin(now * 0.0021) * 0.8;
@@ -243,10 +354,7 @@ export function mountCoffeeCanvas(
 			ctx.fill();
 
 			// Left-side gloss strip (glass reflection).
-			const gloss = ctx.createLinearGradient(cupX, 0, cupX + cupW * 0.4, 0);
-			gloss.addColorStop(0, "rgba(255, 255, 255, 0.2)");
-			gloss.addColorStop(1, "rgba(255, 255, 255, 0)");
-			ctx.fillStyle = gloss;
+			ctx.fillStyle = glossGrad;
 			ctx.fillRect(cupX, cupY, cupW * 0.4, cupH);
 
 			// Bubbles: translucent body + a tiny top-left highlight.
@@ -312,70 +420,111 @@ export function mountCoffeeCanvas(
 			ctx.lineWidth = 3;
 			ctx.stroke();
 
-			// Saucer.
-			ctx.save();
-			ctx.shadowColor = "rgba(124, 58, 237, 0.35)";
-			ctx.shadowBlur = 5;
-			ctx.shadowOffsetY = 2;
+			// Saucer: a plain translucent ellipse stands in for the shadow —
+			// shadowBlur here was the single priciest call per frame.
+			ctx.fillStyle = "rgba(124, 58, 237, 0.18)";
 			ctx.beginPath();
-			ctx.roundRect(cupCX - 36, cupY + cupH + 8, 72, 7, 4);
-			const sg = ctx.createLinearGradient(0, cupY + cupH + 8, 0, cupY + cupH + 15);
-			sg.addColorStop(0, "#8b5cf6");
-			sg.addColorStop(1, "#7c3aed");
-			ctx.fillStyle = sg;
+			ctx.ellipse(cupCX, cupY + cupH + 16, cupW * 0.62, 3, 0, 0, Math.PI * 2);
 			ctx.fill();
-			ctx.restore();
+			ctx.beginPath();
+			ctx.roundRect(cupCX - cupW * 0.68, cupY + cupH + 8, cupW * 1.36, 7, 4);
+			ctx.fillStyle = saucerGrad;
+			ctx.fill();
 
 			// Latte-art chip: the model's logo PERCHED ON TOP of the cup rim
 			// (drawn after the wall so nothing covers it), bobbing gently and
-			// wobbling when a note pours in.
-			const wob = latteWobble;
-			const latteY = cupY - 12 + Math.sin(now * 0.003) * 1.2;
-			ctx.save();
-			ctx.translate(cupCX, latteY);
-			ctx.rotate(wob * Math.sin(now * 0.02) * 0.35);
-			ctx.scale(1 + wob * 0.3, 1 + wob * 0.3);
-			ctx.beginPath();
-			ctx.arc(0, 0, 9, 0, Math.PI * 2);
-			ctx.fillStyle = "#ffffff";
-			ctx.fill();
-			ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-			ctx.lineWidth = 1.5;
-			ctx.stroke();
-			if (modelImgReady) {
-				ctx.drawImage(modelImg, -5.5, -5.5, 11, 11);
-			} else {
-				ctx.fillStyle = "#7c3aed";
-				ctx.font = "9px sans-serif";
-				ctx.textAlign = "center";
-				ctx.textBaseline = "middle";
-				ctx.fillText("✦", 0, 0.5);
+			// wobbling when a note pours in. Once the brew is served the chip
+			// is cleared away — the rim stays empty under the steam.
+			if (!done) {
+				const wob = latteWobble;
+				const latteY = cupY - 18 + Math.sin(now * 0.003) * 1.2;
+				ctx.save();
+				ctx.translate(cupCX, latteY);
+				ctx.rotate(wob * Math.sin(now * 0.02) * 0.35);
+				ctx.scale(1 + wob * 0.3, 1 + wob * 0.3);
+				ctx.beginPath();
+				ctx.arc(0, 0, 12, 0, Math.PI * 2);
+				ctx.fillStyle = "#ffffff";
+				ctx.fill();
+				ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+				ctx.lineWidth = 1.5;
+				ctx.stroke();
+				if (modelImgReady) {
+					ctx.drawImage(modelImg, -7.5, -7.5, 15, 15);
+				} else {
+					ctx.fillStyle = "#7c3aed";
+					ctx.font = "12px sans-serif";
+					ctx.textAlign = "center";
+					ctx.textBaseline = "middle";
+					ctx.fillText("✦", 0, 0.5);
+				}
+				ctx.restore();
 			}
-			ctx.restore();
 
 			// Pour tag: the file name fading above the chip.
 			if (pourLabelT > 0 && pourLabel) {
 				const a = Math.min(1, (POUR_DUR + 0.6 - pourLabelT) / 0.3, pourLabelT / 0.4);
 				ctx.fillStyle = `rgba(120, 120, 128, ${0.9 * Math.max(0, Math.min(1, a))})`;
-				ctx.font = "italic 9px 'Segoe UI', sans-serif";
+				ctx.font = "11px 'Segoe UI', sans-serif";
 				ctx.textAlign = "center";
 				ctx.textBaseline = "alphabetic";
-				ctx.fillText(fitText(ctx, pourLabel, 220), cupCX, cupY - 26);
+				ctx.fillText(fitText(ctx, pourLabel, w - 12), cupCX, cupY - 36);
 			}
 
-			// Steam: only once the brew is served.
-			if (done) {
-				for (const wsp of steam) {
-					const t = (now * 0.0009 + wsp.phase) % 1;
-					const sy2 = cupY - 6 - t * 20;
-					const sx2 = wsp.x + Math.sin(t * Math.PI * 2 + wsp.phase) * 3;
-					const a = Math.sin(t * Math.PI) * 0.5;
-					ctx.beginPath();
-					ctx.arc(sx2, sy2, 2.2 - t, 0, Math.PI * 2);
-					ctx.fillStyle = `rgba(160, 150, 170, ${a})`;
-					ctx.fill();
+			// Steam: once the brew is served, a CONTINUOUS stream of smoke
+			// flows up from the rim and dissolves as it climbs. Four plumes
+			// run a quarter-cycle apart through the same ~4s life (born at
+			// the cup, widening + fading as they rise); because they share
+			// one centerline — sway keyed to ABSOLUTE height — their stages
+			// join seamlessly into a single unbroken column that slowly
+			// wanders sideways.
+			steamLevel += ((done ? 1 : 0) - steamLevel) * Math.min(1, dt * 1.5);
+			if (steamLevel > 0.02) {
+				const breathe = 0.62 + 0.2 * Math.sin(now * 0.0011);
+				const wander = Math.sin(now * 0.0004) * 4;
+				for (const plume of STEAM_PLUMES) {
+					const t = (now * 0.00025 * plume.speed + plume.phase) % 1;
+					const env = Math.min(1, t * 8) * Math.pow(1 - t, 1.05);
+					if (env <= 0.01) continue;
+					const baseY = cupY - 4 - t * 26;
+					const height = 40 * (1 - t * 0.5);
+					const disp = 1 + t * 1.3;
+					const edge = (h: number): { x: number; y: number; w: number } => {
+						const y = baseY - h * height;
+						const amp = (2 + (cupY - y) * 0.16) * disp;
+						const x = cupCX + plume.dx + wander
+							+ Math.sin(y * 0.05 + now * 0.0016 + plume.dx * 0.35) * amp;
+						const w = plume.width * (1 - h * 0.85) * (1 + t * 1.2);
+						return { x, y, w };
+					};
+					for (const pass of [{ spread: 2.1, mul: 0.35 }, { spread: 1, mul: 1 }]) {
+						ctx.globalAlpha = steamLevel * breathe * pass.mul * env;
+						ctx.beginPath();
+						const STEPS = 16;
+						for (let i = 0; i <= STEPS; i++) {
+							const e = edge(i / STEPS);
+							if (i === 0) ctx.moveTo(e.x - e.w * pass.spread, e.y);
+							else ctx.lineTo(e.x - e.w * pass.spread, e.y);
+						}
+						for (let i = STEPS; i >= 0; i--) {
+							const e = edge(i / STEPS);
+							ctx.lineTo(e.x + e.w * pass.spread, e.y);
+						}
+						ctx.closePath();
+						ctx.fillStyle = steamGrad;
+						ctx.fill();
+					}
 				}
+				ctx.globalAlpha = 1;
 			}
+
+			// Frame accounting: draw cost EMA + a jank event when two drawn
+			// frames land more than 50ms apart (below ~20fps — perceptible).
+			const drawMs = performance.now() - drawStart;
+			drawAvg = drawAvg * 0.9 + drawMs * 0.1;
+			drawLast = drawMs;
+			if (drawMs > drawMax) drawMax = drawMs;
+			if (rawDtMs > 50) recordJank("slow", now, rawDtMs, drawMs);
 
 			// Settle: stop the loop once the brew is over and everything is calm.
 			if (!brewing && !done && agitation < 0.01 && droplets.length === 0 && bubbles.length === 0 && pourT <= 0 && pourLabelT <= 0) {
@@ -454,6 +603,32 @@ export function mountCoffeeCanvas(
 			cancelAnimationFrame(raf);
 			running = false;
 			canvas.remove();
+		},
+		getStats() {
+			if (!canvas.isConnected) return null;
+			const avgGap = recentGaps.length
+				? recentGaps.reduce((a, b) => a + b, 0) / recentGaps.length
+				: 0;
+			return {
+				mountSec: (performance.now() - mountedAt) / 1000,
+				fps: avgGap ? 1000 / avgGap : 0,
+				drawAvgMs: drawAvg,
+				drawMaxMs: drawMax,
+				gapMaxMs: gapMax,
+				skipped,
+				drawn,
+				w,
+				h,
+				dpr,
+				level,
+				agitation,
+				brewing,
+				running,
+				bubbles: bubbles.length,
+				droplets: droplets.length,
+				pourT,
+				jank: jank.slice(),
+			};
 		},
 	};
 }

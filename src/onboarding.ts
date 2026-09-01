@@ -10,9 +10,9 @@
 // model picker shows. All state lives in `settings.onboarding`, so the guide
 // survives re-renders (time-slot refresh, language switch) and restarts.
 
-import { Modal } from "obsidian";
+import { Modal, Notice } from "obsidian";
 import { mountCoffeeCanvas } from "./coffee-canvas";
-import { AddProviderModal, brandLogoOf, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, validateModelId } from "./settings-models";
+import { AddProviderModal, brandLogoOf, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, providerLogo, validateModelId } from "./settings-models";
 import type { FetchedModel } from "./settings-models";
 import { t } from "./i18n";
 import type SmartVaultPlugin from "../main";
@@ -824,41 +824,25 @@ function renderIndexStep(
 	onBack: () => void,
 	onRestart: () => void,
 ): void {
-	// Panel: provider→model recipe line, hero estimate card, progress bar +
-	// live counters, all inside one bordered card.
+	// Panel: hero estimate card, progress bar + live counters, then the
+	// provider→model recipe pills at the bottom — all inside one bordered card.
 	const active = activeEmbeddingProvider(plugin.settings);
 	const est = host.getIndexEstimate();
 
 	const panel = root.createDiv({ cls: "semlink-guide-indexstats" });
 
-	// Recipe header at the very top of the card: which provider + model this
-	// extraction uses. Provider/model names are accented spans.
-	const recipe = panel.createDiv({ cls: "semlink-guide-index-recipe" });
-	recipe.createSpan({ text: t("guideRecipePre") });
-	recipe.createSpan({ cls: "semlink-guide-index-recipe-accent", text: active.name });
-	recipe.createSpan({ text: t("guideRecipeMid") });
-	recipe.createSpan({ cls: "semlink-guide-index-recipe-accent", text: active.model });
-	recipe.createSpan({ text: t("guideRecipeModelSuffix") });
-
 	// Coffee-break hero: the WHOLE coffee scene is one canvas — cup, liquid
 	// with waves/bubbles, the model's latte-art chip, the pour stream with
 	// the file-name tag, steam. The readout stays DOM.
-	let stampIdx = 0;
-	const STAMPS = ["guideStampPreparing", "guideStampExtract"];
 	const hero = panel.createDiv({ cls: "semlink-guide-index-hero" });
 	const coffee = hero.createDiv({ cls: "semlink-guide-index-coffee" });
 	const coffeeFx = mountCoffeeCanvas(coffee, {
 		modelLogoSvg: modelBrand(active.model),
 		modelName: active.model,
-		// "咖啡师准备中…" → "萃取精华中…" once the model logo has loaded.
-		onModelReady: () => {
-			stampIdx = 1;
-			stamp.setText(t(STAMPS[stampIdx]));
-		},
 	});
-	// Barista status line — reflects the brewing phase; self-clears once the
-	// element leaves the DOM.
-	const stamp = coffee.createDiv({ cls: "semlink-guide-index-stamp", text: t(STAMPS[0]) });
+	// Barista status line — driven by applyButton: idle/paused/stopped =
+	// preparing, running = extracting, done = served.
+	const stamp = coffee.createDiv({ cls: "semlink-guide-index-stamp", text: t("guideStampPreparing") });
 	const readout = hero.createDiv({ cls: "semlink-guide-index-readout" });
 	const heroNum = readout.createDiv({ cls: "semlink-guide-index-statnum", text: String(est.notes) });
 	// Sub-label: what the number refers to — "笔记总数" while idle, "共 n 篇"
@@ -870,6 +854,139 @@ function renderIndexStep(
 	const timerow = panel.createDiv({ cls: "semlink-guide-index-timerow semlink-hidden" });
 	const vEta = timerow.createSpan({ cls: "semlink-guide-index-timeitem" });
 
+	// Recipe footer at the bottom of the card: which provider + model this
+	// extraction uses, as a single icon pill (provider logo only — the model
+	// logo joins once indexing starts).
+	const recipe = panel.createDiv({ cls: "semlink-guide-index-recipe" });
+	const pill = recipe.createSpan({ cls: "semlink-guide-index-pill" });
+	const providerSvg = providerLogo(active.name);
+	if (providerSvg) {
+		pill.createSpan({ cls: "semlink-guide-index-pill-icon" }).innerHTML = providerSvg;
+	}
+	pill.createSpan({ text: `${active.name}/${active.model}` });
+
+	// Debug readout: live frame pacing + scene state + recorded jank moments,
+	// to diagnose animation stutter while indexing. Polls the canvas
+	// diagnostics at 4 Hz; self-cleans when the step leaves the DOM. The
+	// "主线程阻塞" kind means the rAF callback arrived late (something else
+	// held the main thread), while "慢帧" means drawn frames landed >50ms
+	// apart — the two point at different culprits.
+	const debugEl = panel.createDiv({ cls: "semlink-guide-index-debug" });
+	// One-click copy of the current readout (for pasting into a bug report).
+	const debugCopyBtn = debugEl.createEl("button", { cls: "semlink-guide-debug-copy", text: "复制" });
+	const debugTextEl = debugEl.createDiv({ cls: "semlink-guide-index-debug-text" });
+	debugCopyBtn.addEventListener("click", () => {
+		void navigator.clipboard.writeText(debugTextEl.textContent ?? "").then(
+			() => new Notice(t("searchCopied")),
+			() => new Notice(t("guideFetchFailed").replace("{err}", "clipboard")),
+		);
+	});
+	let longTasks = 0;
+	let longTaskMaxMs = 0;
+	let longTaskObs: PerformanceObserver | null = null;
+	try {
+		longTaskObs = new PerformanceObserver((list) => {
+			for (const entry of list.getEntries()) {
+				longTasks++;
+				longTaskMaxMs = Math.max(longTaskMaxMs, entry.duration);
+			}
+		});
+		longTaskObs.observe({ type: "longtask" } as PerformanceObserverInit);
+	} catch {
+		// longtask observer unavailable — the counters just stay at zero.
+	}
+	// LoAF attribution: names the scripts that actually held the main thread
+	// during long frames — the difference between "our plugin", "another
+	// plugin" and "Obsidian itself".
+	let loafCount = 0;
+	let loafMaxMs = 0;
+	const loafScripts = new Map<string, { ms: number; count: number }>();
+	let loafObs: PerformanceObserver | null = null;
+	try {
+		loafObs = new PerformanceObserver((list) => {
+			for (const entry of list.getEntries() as unknown as Array<{
+				duration: number;
+				scripts?: Array<{ duration: number; sourceURL?: string; invoker?: string; sourceFunctionName?: string }>;
+			}>) {
+				loafCount++;
+				loafMaxMs = Math.max(loafMaxMs, entry.duration);
+				for (const s of entry.scripts ?? []) {
+					const origin = s.sourceURL || s.invoker || "?";
+					const file = origin.split("/").slice(-2).join("/");
+					const key = `${file}${s.sourceFunctionName ? " · " + s.sourceFunctionName : ""}`;
+					const rec = loafScripts.get(key) ?? { ms: 0, count: 0 };
+					rec.ms += s.duration;
+					rec.count++;
+					loafScripts.set(key, rec);
+				}
+			}
+		});
+		loafObs.observe({ type: "long-animation-frame" } as PerformanceObserverInit);
+	} catch {
+		// LoAF unsupported on this Electron — attribution lines stay hidden.
+	}
+	// Semlink's own timing marks (embedding parse / engine calls): aggregate
+	// and clear so the buffer never grows unbounded.
+	const semlinkMeasures = new Map<string, { ms: number; count: number; max: number }>();
+	let measureObs: PerformanceObserver | null = null;
+	try {
+		measureObs = new PerformanceObserver((list) => {
+			for (const entry of list.getEntries()) {
+				if (!entry.name.startsWith("semlink:")) continue;
+				const rec = semlinkMeasures.get(entry.name) ?? { ms: 0, count: 0, max: 0 };
+				rec.ms += entry.duration;
+				rec.count++;
+				rec.max = Math.max(rec.max, entry.duration);
+				semlinkMeasures.set(entry.name, rec);
+				performance.clearMeasures(entry.name);
+			}
+		});
+		measureObs.observe({ type: "measure" } as PerformanceObserverInit);
+	} catch {
+		// measure observer unavailable — attribution lines stay hidden.
+	}
+	const debugTimer = window.setInterval(() => {
+		if (!debugEl.isConnected) {
+			window.clearInterval(debugTimer);
+			longTaskObs?.disconnect();
+			loafObs?.disconnect();
+			measureObs?.disconnect();
+			return;
+		}
+		const s = coffeeFx.getStats();
+		if (!s) return;
+		const lines = [
+			`FPS ${s.fps.toFixed(0)} · 绘制 avg ${s.drawAvgMs.toFixed(1)} / max ${s.drawMaxMs.toFixed(1)} ms · 帧距 max ${s.gapMaxMs.toFixed(0)} ms · 画布 ${s.w}×${s.h}@${s.dpr}x · 跳帧 ${s.skipped}`,
+			`液面 ${(s.level * 100).toFixed(0)}% · 搅动 ${s.agitation.toFixed(2)} · 气泡 ${s.bubbles} · 水珠 ${s.droplets} · 倒水剩余 ${s.pourT.toFixed(1)}s · rAF ${s.running ? "运行" : "停止"}`,
+			`存储模式: ${plugin.store?.runningInWorker ? "worker 线程" : "sync · 主线程(回退)"}`,
+			`主线程长任务(>50ms): ${longTasks} 次, 最长 ${longTaskMaxMs.toFixed(0)} ms · 长帧归因: ${loafCount} 次, 最长 ${loafMaxMs.toFixed(0)} ms`,
+		];
+		const topScripts = [...loafScripts.entries()].sort((a, b) => b[1].ms - a[1].ms).slice(0, 3);
+		for (const [name, rec] of topScripts) {
+			lines.push(`  ↳ 阻塞源: ${name} · ${rec.ms.toFixed(0)} ms × ${rec.count} 次`);
+		}
+		// Our own timed segments — if these don't line up with the stalls,
+		// the blocking work is not Semlink's.
+		const measureLabels: Array<[string, string]> = [
+			["semlink:sync-engine", "同步引擎(主线程)"],
+			["semlink:embed-parse", "嵌入解析"],
+			["semlink:worker-call", "Worker往返"],
+		];
+		for (const [name, label] of measureLabels) {
+			const rec = semlinkMeasures.get(name);
+			if (rec) lines.push(`  ↳ ${label}: 累计 ${rec.ms.toFixed(0)} ms × ${rec.count} (max ${rec.max.toFixed(0)} ms)`);
+		}
+		for (const j of s.jank) {
+			lines.push(
+				`t=${j.t.toFixed(1)}s ${j.kind === "block" ? "主线程阻塞" : "慢帧"} gap=${j.gap.toFixed(0)}ms draw=${j.draw.toFixed(1)}ms 液面${(j.level * 100).toFixed(0)}% 倒水${j.pourT.toFixed(1)}s`,
+			);
+		}
+		debugTextEl.setText(lines.join("\n"));
+	}, 250);
+	const modelIcon = pill.createSpan({ cls: "semlink-guide-index-pill-icon semlink-hidden" });
+	const modelSvg = modelBrand(active.model);
+	if (modelSvg) modelIcon.innerHTML = modelSvg;
+
 
 	// Single action whose label/style tracks the run state: 开始 (primary,
 	// ▶) → 暂停 (secondary, ⏸) ⇄ 继续索引 (secondary) → 完成 (primary).
@@ -880,6 +997,12 @@ function renderIndexStep(
 	let paused = host.isIndexPaused();
 	let done = false;
 	let brewingFile = ""; // the note currently pouring into the cup
+	let lastTotal = 0; // last seen total note count (kept on the label when done)
+
+	const applyStamp = (): void => {
+		if (done) stamp.setText(t("guideCoffeeReady"));
+		else stamp.setText(t(running && !paused ? "guideStampExtract" : "guideStampPreparing"));
+	};
 
 	const applyButton = (): void => {
 		if (done) {
@@ -895,6 +1018,7 @@ function renderIndexStep(
 			startBtn.setText(`▶️ ${t("guideStartIndex")}`);
 			startBtn.addClass("semlink-guide-primary");
 		}
+		applyStamp();
 	};
 
 	startBtn.addEventListener("click", () => {
@@ -941,11 +1065,14 @@ function renderIndexStep(
 
 	const applyStatsRaw = (s: IndexStatsView): void => {
 		panel.addClass("is-running");
+		// Indexing is underway → the model logo joins the recipe pill.
+		modelIcon.removeClass("semlink-hidden");
 		timerow.removeClass("semlink-hidden");
 		const pct = s.total > 0 ? (s.processed / s.total) * 100 : 0;
 		// The hero readout morphs into the live percentage…
 		setIfChanged(heroNum, `${pct.toFixed(1)}%`);
 		setIfChanged(heroSub, t("guideNotesTotal").replace("{n}", String(s.total)));
+		lastTotal = s.total;
 		coffeeFx.setLevel(pct, true);
 		// A new note landed in the queue → pour it into the cup: the canvas
 		// plays the pour stream, the file-name tag and the latte wobble.
@@ -990,15 +1117,16 @@ function renderIndexStep(
 			applyTimer = 0;
 		}
 		if (pendingStats) applyStatsRaw(pendingStats);
-		// The brew is served — stop the barista chatter.
-		stamp.setText(t("guideStampServed"));
+		// The brew is served — stop the barista chatter (applyStamp sets it).
 		panel.removeClass("is-running");
 		panel.addClass("is-done");
 		coffeeFx.setLevel(100, true);
 		coffeeFx.celebrate();
 		coffeeFx.setBrewing(false);
 		heroNum.setText("100%");
-		heroSub.setText(t("guideCoffeeReady"));
+		// The sub-label keeps the note count (not a slogan) — the stamp is
+		// where "你的知识特调已备好" lives once the run is done.
+		heroSub.setText(t("guideNotesTotal").replace("{n}", String(lastTotal || est.notes)));
 		timerow.addClass("semlink-hidden");
 		running = false;
 		paused = false;
@@ -1009,6 +1137,7 @@ function renderIndexStep(
 	// Already indexing (autoIndex kicked in) → attach live, show the pause state.
 	if (running) {
 		host.watchIndexing(applyStats, onDone);
+		modelIcon.removeClass("semlink-hidden");
 	}
 	applyButton();
 }

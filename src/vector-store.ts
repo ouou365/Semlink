@@ -97,9 +97,14 @@ export class VectorStore {
 
 	/** Send one op to the worker and await its reply. */
 	private call(op: string, args: any[] = []): Promise<any> {
+		const t0 = performance.now();
 		if (this.fallback) {
-			// Synchronous fallback — wrap the engine call directly.
-			return Promise.resolve(this.callEngineSync(op, args));
+			// Synchronous fallback — wrap the engine call directly. The
+			// measure makes the main-thread cost of every engine op visible
+			// in the guide's debug readout.
+			return Promise.resolve(this.callEngineSync(op, args)).finally(() => {
+				performance.measure("semlink:sync-engine", { start: t0 });
+			});
 		}
 		return new Promise((resolve, reject) => {
 			const reqId = ++this.reqId;
@@ -110,7 +115,14 @@ export class VectorStore {
 				this.pending.delete(reqId);
 				reject(e);
 			}
+		}).finally(() => {
+			performance.measure("semlink:worker-call", { start: t0 });
 		});
+	}
+
+	/** Whether heavy engine work is off the main thread (worker mode). */
+	get runningInWorker(): boolean {
+		return !this.fallback && this.worker != null;
 	}
 
 	/** Invoke the same op against the synchronous engine (fallback path). */
