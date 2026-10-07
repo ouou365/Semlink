@@ -794,7 +794,15 @@ export class SemanticSearchView extends ItemView {
 				const context = hasAttachments
 					? attachCtx
 					: this.buildContext(results.slice(0, ANSWER_CONTEXT_SIZE)) + attachCtx;
-					const fullContext = context;
+				// Current-note awareness: tell the model which note the user is
+				// viewing AND how to use it — phrased as an explicit instruction,
+				// because a bare name line reads like more retrieved content and
+				// the model ends up feeding the question verbatim to search_notes.
+				const activeFile = this.app.workspace.getActiveFile();
+				const currentNoteLine = activeFile
+					? `\n\n用户当前正在浏览的笔记：《${activeFile.basename}》（路径：${activeFile.path}）。当问题涉及"当前笔记""这篇笔记""正在看的笔记"等指代时，直接调用 get_note 读取上述路径来回答，不要把问题原文当作检索词去 search_notes。`
+					: "";
+				const fullContext = context + currentNoteLine;
 					try {
 					// Prior turns go as a native message array (ZCode-style —
 					// chat-client expands them into the messages list and
@@ -1468,6 +1476,21 @@ export class SemanticSearchView extends ItemView {
 		this.updateCompactHeader();
 	}
 
+	/** 设置页"重新嵌入"入口：打开引导并直接落到数据索引环节（步骤③）。
+	 *  jumpToIndex 让步骤推导跳过 ①②，索引引擎已由调用方启动。 */
+	public openIndexGuide(): void {
+		this.guideRequested = true;
+		this.guideDismissed = false;
+		const ob = this.plugin.settings.onboarding ?? {};
+		this.plugin.settings.onboarding = { ...ob, done: false, jumpToIndex: true };
+		void this.plugin.saveSettings();
+		this.startNewSession();
+		this.messagesEl.empty();
+		this.statusEl.textContent = "";
+		this.renderWelcome();
+		this.updateCompactHeader();
+	}
+
 	/** Whether the first-run guide currently owns the welcome screen. */
 	private guideModeActive(): boolean {
 		// No API key anywhere → the guide is the default landing page. A skip
@@ -1671,6 +1694,7 @@ export class SemanticSearchView extends ItemView {
 			skippedChunks: p.skippedChunks,
 			totalChunks: p.totalChunks,
 			currentFile: p.currentFile,
+			activeFiles: p.activeFiles,
 			avgResponseMs: p.avgResponseMs,
 			fileChunkProgress: p.fileChunkProgress,
 			estimatedRemainingSec: p.estimatedRemainingSec,

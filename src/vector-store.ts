@@ -229,6 +229,7 @@ export class VectorStore {
 			case "getCounts": return e.getCounts();
 			case "cleanup": return e.cleanup(args[0]);
 			case "cleanupQueue": return e.cleanupQueue();
+			case "reviveProcessing": return e.reviveProcessing();
 			case "purgeGhostQueue": return e.purgeGhostQueue(args[0]);
 			case "clearQueue": return e.clearQueue();
 			case "getPendingPaths": return e.getPendingPaths();
@@ -303,6 +304,10 @@ export class VectorStore {
 	/** Delete completed/failed queue rows from previous runs. */
 	async cleanupQueue(): Promise<number> {
 		return await this.call("cleanupQueue");
+	}
+	/** Reset rows stuck at 'processing' (interrupted runs) back to 'pending'. */
+	async reviveProcessing(): Promise<number> {
+		return await this.call("reviveProcessing");
 	}
 	/** Delete queue rows whose note_path no longer exists in the vault. */
 	async purgeGhostQueue(existingPaths: Set<string>): Promise<number> {

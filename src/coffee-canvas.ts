@@ -62,9 +62,9 @@ export interface CoffeeCanvas {
 	/** Pause: bubbles stop spawning and the surface settles. */
 	setBrewing(brewing: boolean): void;
 	/** A new note starts brewing: pour it into the cup from above. The
-	 *  file name fades in above the rim; the latte chip wobbles. */
+	 *  latte chip wobbles. */
 	pour(fileName: string): void;
-	/** Finish the brew: big splash + bubble burst + steam before settling. */
+		/** Finish the brew: big splash + bubble burst + steam before settling. */
 	celebrate(): void;
 	/** Stop the loop immediately and release the canvas. */
 	destroy(): void;
@@ -97,6 +97,21 @@ const fitText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number):
 	return t + "…";
 };
 
+/** Middle truncation: keep head + tail — note names carry meaning at both
+ *  ends (dates, versions, markers), so chopping only the tail loses more
+ *  than it has to. Falls back to a bare head when even that overflows. */
+const middleFit = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string => {
+	if (ctx.measureText(text).width <= maxWidth) return text;
+	let len = text.length;
+	while (len > 6) {
+		const keep = Math.floor(len / 2) - 1;
+		const cand = text.slice(0, keep) + "…" + text.slice(text.length - keep);
+		if (ctx.measureText(cand).width <= maxWidth) return cand;
+		len = keep + 1;
+	}
+	return text.slice(0, 2) + "…";
+};
+
 /** Mount the full coffee scene into `container` (full panel width). */
 export function mountCoffeeCanvas(
 	container: HTMLElement,
@@ -108,7 +123,9 @@ export function mountCoffeeCanvas(
 	// 200 logical px and let CSS center it. Filling the full panel width
 	// (×dpr) cost 3-4× the pixels for empty margin on both sides.
 	const w = Math.min(container.clientWidth || 200, 200);
-	const h = 142;
+	// Tall sky: the document cards need room above AND below without
+	// crowding the latte chip or the rim.
+	const h = 150;
 	canvas.width = Math.round(w * dpr);
 	canvas.height = Math.round(h * dpr);
 	canvas.style.width = `${w}px`;
@@ -158,7 +175,7 @@ export function mountCoffeeCanvas(
 	const cupW = 62;
 	const cupH = 74;
 	const cupX = (w - cupW) / 2;
-	const cupY = 48;
+	const cupY = 56;
 	const cupCX = cupX + cupW / 2;
 
 	// Static gradients — created once, reused every frame (per-frame gradient
@@ -194,8 +211,6 @@ export function mountCoffeeCanvas(
 	let idleSince = 0;
 	let pourT = 0; // seconds left in the current pour
 	const POUR_DUR = 1.9;
-	let pourLabel = "";
-	let pourLabelT = 0; // seconds left for the file-name tag
 	let latteWobble = 0; // 0-1 — latte chip reaction to a fresh pour
 	const bubbles: Bubble[] = [];
 	const droplets: Droplet[] = [];
@@ -205,20 +220,10 @@ export function mountCoffeeCanvas(
 	saucerGrad.addColorStop(0, "#8b5cf6");
 	saucerGrad.addColorStop(1, "#7c3aed");
 
-	// Steam: two tapered plumes — the café-illustration look. The gradient
-	// dissolves each ribbon toward its tip; steamLevel eases the whole
-	// effect in when the brew is served and back out otherwise.
-	const steamGrad = ctx.createLinearGradient(0, cupY - 4, 0, cupY - 44);
-	steamGrad.addColorStop(0, "rgba(214, 210, 226, 0.42)");
-	steamGrad.addColorStop(0.7, "rgba(214, 210, 226, 0.13)");
-	steamGrad.addColorStop(1, "rgba(214, 210, 226, 0)");
-	// Four plumes a quarter-cycle apart; all follow the SAME centerline, so
-	// their life stages chain bottom-to-top into one continuous stream.
+	// A single wisp at a time: one plume, born at the cup, rising and
+	// fading as it climbs — then the next puff starts.
 	const STEAM_PLUMES = [
-		{ dx: -3, width: 6.5, speed: 1, phase: 0 },
-		{ dx: 2, width: 6, speed: 1, phase: 0.25 },
-		{ dx: -2, width: 6.5, speed: 1, phase: 0.5 },
-		{ dx: 3, width: 6, speed: 1, phase: 0.75 },
+		{ dx: 0, width: 8, speed: 1, phase: 0 },
 	];
 	let steamLevel = 0;
 
@@ -279,7 +284,6 @@ export function mountCoffeeCanvas(
 				agitation = Math.min(1, agitation + dt * 0.55);
 				if (Math.random() < dt * 9) spawnDroplets(1, cupCX);
 			}
-			if (pourLabelT > 0) pourLabelT = Math.max(0, pourLabelT - dt);
 			latteWobble = Math.max(0, latteWobble - dt * 1.4);
 
 			// Bubbles spawn only while actively brewing and there is liquid.
@@ -461,63 +465,49 @@ export function mountCoffeeCanvas(
 				ctx.restore();
 			}
 
-			// Pour tag: the file name fading above the chip.
-			if (pourLabelT > 0 && pourLabel) {
-				const a = Math.min(1, (POUR_DUR + 0.6 - pourLabelT) / 0.3, pourLabelT / 0.4);
-				ctx.fillStyle = `rgba(120, 120, 128, ${0.9 * Math.max(0, Math.min(1, a))})`;
-				ctx.font = "11px 'Segoe UI', sans-serif";
-				ctx.textAlign = "center";
-				ctx.textBaseline = "alphabetic";
-				ctx.fillText(fitText(ctx, pourLabel, w - 12), cupCX, cupY - 36);
-			}
-
-			// Steam: once the brew is served, a CONTINUOUS stream of smoke
-			// flows up from the rim and dissolves as it climbs. Four plumes
-			// run a quarter-cycle apart through the same ~4s life (born at
-			// the cup, widening + fading as they rise); because they share
-			// one centerline — sway keyed to ABSOLUTE height — their stages
-			// join seamlessly into a single unbroken column that slowly
-			// wanders sideways.
+			// Steam: smoke rises ALONG the serpentine path — the column is
+			// anchored to the rim and both the undulation and the alpha
+			// travel upward with the phase; nothing translates straight up.
 			steamLevel += ((done ? 1 : 0) - steamLevel) * Math.min(1, dt * 1.5);
 			if (steamLevel > 0.02) {
+				const rimY = cupY - 1;
+				const total = 44;
 				const breathe = 0.62 + 0.2 * Math.sin(now * 0.0011);
 				const wander = Math.sin(now * 0.0004) * 4;
-				for (const plume of STEAM_PLUMES) {
-					const t = (now * 0.00025 * plume.speed + plume.phase) % 1;
-					const env = Math.min(1, t * 8) * Math.pow(1 - t, 1.05);
-					if (env <= 0.01) continue;
-					const baseY = cupY - 4 - t * 26;
-					const height = 40 * (1 - t * 0.5);
-					const disp = 1 + t * 1.3;
-					const edge = (h: number): { x: number; y: number; w: number } => {
-						const y = baseY - h * height;
-						const amp = (2 + (cupY - y) * 0.16) * disp;
-						const x = cupCX + plume.dx + wander
-							+ Math.sin(y * 0.05 + now * 0.0016 + plume.dx * 0.35) * amp;
-						const w = plume.width * (1 - h * 0.85) * (1 + t * 1.2);
-						return { x, y, w };
-					};
-					for (const pass of [{ spread: 2.1, mul: 0.35 }, { spread: 1, mul: 1 }]) {
-						ctx.globalAlpha = steamLevel * breathe * pass.mul * env;
-						ctx.beginPath();
-						const STEPS = 16;
-						for (let i = 0; i <= STEPS; i++) {
-							const e = edge(i / STEPS);
-							if (i === 0) ctx.moveTo(e.x - e.w * pass.spread, e.y);
-							else ctx.lineTo(e.x - e.w * pass.spread, e.y);
-						}
-						for (let i = STEPS; i >= 0; i--) {
-							const e = edge(i / STEPS);
-							ctx.lineTo(e.x + e.w * pass.spread, e.y);
-						}
-						ctx.closePath();
-						ctx.fillStyle = steamGrad;
-						ctx.fill();
+				const flow = now * 0.0016; // phase travel along the path
+				const STEPS = 22;
+				const plume = STEAM_PLUMES[0];
+				const edgeAt = (h: number): { x: number; y: number; w: number } => {
+					const y = rimY - h * total;
+					const amp = (1.2 + h * 4.2) * (1 + Math.sin(now * 0.0011) * 0.15);
+					const x = cupCX + plume.dx + wander * h
+						+ Math.sin(h * Math.PI * 2.2 - flow * 3 + plume.dx * 0.35) * amp;
+					const w = plume.width * (1 - h * 0.7) * (1 + h * 0.5);
+					return { x, y, w };
+				};
+				for (const pass of [{ spread: 2.1, mul: 0.4 }, { spread: 1, mul: 1 }]) {
+					ctx.beginPath();
+					for (let i = 0; i <= STEPS; i++) {
+						const p = edgeAt(i / STEPS);
+						if (i === 0) ctx.moveTo(p.x - p.w * pass.spread, p.y);
+						else ctx.lineTo(p.x - p.w * pass.spread, p.y);
 					}
+					for (let i = STEPS; i >= 0; i--) {
+						const p = edgeAt(i / STEPS);
+						ctx.lineTo(p.x + p.w * pass.spread, p.y);
+					}
+					ctx.closePath();
+					// Alpha: strongest at the rim, dissolving toward the top,
+					// with a shimmer traveling upward.
+					const g = ctx.createLinearGradient(0, rimY, 0, rimY - total);
+					const base = 0.55 * steamLevel * breathe * pass.mul;
+					g.addColorStop(0, `rgba(216, 212, 230, ${base})`);
+					g.addColorStop(0.7, `rgba(216, 212, 230, ${base * 0.36})`);
+					g.addColorStop(1, "rgba(216, 212, 230, 0)");
+					ctx.fillStyle = g;
+					ctx.fill();
 				}
-				ctx.globalAlpha = 1;
 			}
-
 			// Frame accounting: draw cost EMA + a jank event when two drawn
 			// frames land more than 50ms apart (below ~20fps — perceptible).
 			const drawMs = performance.now() - drawStart;
@@ -527,7 +517,7 @@ export function mountCoffeeCanvas(
 			if (rawDtMs > 50) recordJank("slow", now, rawDtMs, drawMs);
 
 			// Settle: stop the loop once the brew is over and everything is calm.
-			if (!brewing && !done && agitation < 0.01 && droplets.length === 0 && bubbles.length === 0 && pourT <= 0 && pourLabelT <= 0) {
+			if (!brewing && !done && agitation < 0.01 && droplets.length === 0 && bubbles.length === 0 && pourT <= 0) {
 				if (!idleSince) idleSince = now;
 				if (now - idleSince > 3000) {
 					running = false;
@@ -577,8 +567,6 @@ export function mountCoffeeCanvas(
 			// file would hold the surface at max turbulence forever.
 			if (pourT > POUR_DUR * 0.3) return;
 			pourT = POUR_DUR;
-			pourLabel = fileName;
-			pourLabelT = POUR_DUR + 0.6;
 			latteWobble = 1;
 			ensureLoop();
 		},
@@ -629,6 +617,93 @@ export function mountCoffeeCanvas(
 				pourT,
 				jank: jank.slice(),
 			};
+		},
+	};
+}
+
+
+/** Mount the order-ticket deck: the stack of receipt cards (one per
+ *  concurrently indexing note) hanging under the printer capsule.
+ *  Rendered statically — tickets only repaint when the roster changes. */
+/** Mount the order-ticket deck: ONE receipt card under the printer capsule,
+ *  listing every concurrently indexing note (name left, chunk progress
+ *  right — like line items on a barista's order). Static render: the
+ *  ticket only repaints when the roster changes. */
+/** Mount the order-ticket deck: ONE receipt card under the printer capsule,
+ *  listing every concurrently indexing note (name left, chunk progress
+ *  right — like line items on a barista's order). Static render: the
+ *  ticket only repaints when the roster changes. */
+export function mountTicketDeck(
+	container: HTMLElement,
+	width?: number,
+): { setFiles(files: Array<{ name: string; progress: string }>): void } {
+	const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+	const canvas = container.createEl("canvas", { cls: "semlink-guide-index-deckcanvas" });
+	const w = width ?? Math.max(120, Math.min(container.clientWidth || 200, 200));
+	const h = 50;
+	canvas.width = Math.round(w * dpr);
+	canvas.height = Math.round(h * dpr);
+	canvas.style.width = `${w}px`;
+	canvas.style.height = `${h}px`;
+	const ctx = canvas.getContext("2d");
+	if (!ctx) return { setFiles() {} };
+	ctx.scale(dpr, dpr);
+	let fileTags: Array<{ name: string; progress: string }> = [];
+	const draw = (): void => {
+		ctx.clearRect(0, 0, w, h);
+		if (fileTags.length === 0) return;
+		ctx.textBaseline = "middle";
+		const cardW = Math.max(60, w - 16);
+		const cardH = fileTags.length * 13 + 11;
+		const x0 = (w - cardW) / 2, x1 = x0 + cardW;
+		const y0 = 0, y1 = y0 + cardH;
+		const step = 9, depth = 2.5;
+		const ticketPath = (): void => {
+			ctx.beginPath();
+			ctx.moveTo(x0, y0);
+			ctx.lineTo(x1, y0);
+			ctx.lineTo(x1, y1 - depth);
+			let px = x1;
+			while (px - step / 2 > x0 + 1) {
+				px -= step / 2;
+				ctx.lineTo(px, y1);
+				px -= step / 2;
+				ctx.lineTo(px, y1 - depth);
+			}
+			ctx.lineTo(x0, y0);
+			ctx.closePath();
+		};
+		ctx.fillStyle = "rgba(60, 50, 90, 0.10)";
+		ctx.save();
+		ctx.translate(1, 1.5);
+		ticketPath();
+		ctx.fill();
+		ctx.restore();
+		ctx.fillStyle = "#fffef7";
+		ticketPath();
+		ctx.fill();
+		// line items: note name left, chunk progress right
+		ctx.font = "10px 'Segoe UI', sans-serif";
+		ctx.textAlign = "left";
+		fileTags.forEach((f, li) => {
+			const base = y0 + 10 + li * 13;
+			const prog = f.progress ? `(${f.progress})` : "";
+			const progW = prog ? ctx.measureText(prog).width : 0;
+			const name = fitText(ctx, f.name, cardW - 14 - progW);
+			ctx.fillStyle = "rgba(85, 80, 74, 0.95)";
+			ctx.fillText(name, x0 + 7, base);
+			if (prog) {
+				ctx.fillStyle = "rgba(120, 120, 128, 0.85)";
+				ctx.textAlign = "right";
+				ctx.fillText(prog, x1 - 7, base);
+				ctx.textAlign = "left";
+			}
+		});
+	};
+	return {
+		setFiles(files) {
+			fileTags = files.slice(0, 3);
+			draw();
 		},
 	};
 }

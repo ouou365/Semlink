@@ -27,13 +27,16 @@ const CHAT_RETRY_DELAYS_MS = [1000, 1500, 2000, 3000, 5000, 8000, 10000, 10000, 
 /** Full chat endpoint for a provider base: an explicit wirePath override
  *  wins (endpoints whose real path carries no bare "/v1" segment — GLM
  *  coding plans "/chat/completions", Gemini's "…/v1beta/openai"), otherwise
- *  the default wire convention is appended by format. */
+ *  the default wire convention is appended by format. The "/" sentinel
+ *  means the base IS the full endpoint — POSTs land on the bare URL with
+ *  no suffix at all (Z.AI Coding CN's …/api/anthropic gateway). */
 function chatEndpoint(
 	baseUrl: string,
 	wirePath: string | undefined,
 	defaultSuffix: "/v1/chat/completions" | "/v1/messages",
 ): string {
 	const path = wirePath?.trim();
+	if (path === "/") return baseUrl.replace(/\/+$/, "");
 	if (path) return `${baseUrl}${path.startsWith("/") ? "" : "/"}${path}`;
 	return `${baseUrl}${defaultSuffix}`;
 }
@@ -772,6 +775,15 @@ export class ChatClient {
 			try { parsed = JSON.parse(text); } catch { /* not JSON */ }
 			throw this.extractError(resp.status, parsed);
 		}
+		// A 200 that isn't an SSE stream (gateway error envelopes, wrong
+		// endpoint path) would otherwise parse as zero events and end as a
+		// silent empty answer — fail loudly with the body's message instead.
+		if (!/text\/event-stream/i.test(String(resp.headers?.get?.("content-type") || ""))) {
+			const text = await resp.text();
+			let parsed: any = {};
+			try { parsed = JSON.parse(text); } catch { /* not JSON */ }
+			throw this.extractError(resp.status, parsed);
+		}
 
 		let content = "";
 		let usageTokens = 0;
@@ -1101,6 +1113,15 @@ export class ChatClient {
 			try { parsed = JSON.parse(text); } catch { /* not JSON */ }
 			throw this.extractError(resp.status, parsed);
 		}
+		// A 200 that isn't an SSE stream (gateway error envelopes, wrong
+		// endpoint path) would otherwise parse as zero events and end as a
+		// silent empty answer — fail loudly with the body's message instead.
+		if (!/text\/event-stream/i.test(String(resp.headers?.get?.("content-type") || ""))) {
+			const text = await resp.text();
+			let parsed: any = {};
+			try { parsed = JSON.parse(text); } catch { /* not JSON */ }
+			throw this.extractError(resp.status, parsed);
+		}
 
 		let usageTokens = 0;
 		let stopReason = "";
@@ -1349,7 +1370,7 @@ export class ChatClient {
 	private extractError(status: number, body: any): Error {
 		let msg = "";
 		if (typeof body === "object" && body) {
-			msg = body?.error?.message || body?.message || body?.error || "";
+			msg = body?.error?.message || body?.message || body?.msg || body?.error || "";
 		}
 		const err: any = new Error(msg || `HTTP ${status}`);
 		err.status = status;

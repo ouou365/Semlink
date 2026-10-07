@@ -467,6 +467,23 @@ export class DbEngine {
 	}
 
 	/**
+	 * Revive queue rows stuck at 'processing' — left behind when a run was
+	 * interrupted by a reload/crash mid-index. They are unreachable in the
+	 * normal flow: dequeue only takes 'pending' and enqueue dedupes against
+	 * 'processing', so the affected notes would be re-scanned forever but
+	 * never re-processed (progress frozen at e.g. 788/865). Returns the
+	 * number of rows reset to 'pending'.
+	 */
+	reviveProcessing(): number {
+		const r = this.db!.exec("SELECT COUNT(*) FROM queue WHERE status = 'processing'");
+		const stuck = r.length > 0 ? (r[0].values[0][0] as number) : 0;
+		if (stuck > 0) {
+			this.db!.run("UPDATE queue SET status = 'pending' WHERE status = 'processing'");
+		}
+		return stuck;
+	}
+
+	/**
 	 * Remove queue rows whose note_path no longer exists in the vault
 	 * (files moved/renamed/deleted outside the watcher's view). These ghost
 	 * entries otherwise keep re-enqueueing forever.

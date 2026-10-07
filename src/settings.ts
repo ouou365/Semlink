@@ -336,7 +336,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			.addSlider((slider) =>
 				slider
 					.setLimits(1, 5, 1)
-					.setValue(this.plugin.settings.embedConcurrency ?? 2)
+					.setValue(this.plugin.settings.embedConcurrency ?? 3)
 					.setDynamicTooltip()
 					.onChange(async (value) => {
 						this.plugin.settings.embedConcurrency = value;
@@ -354,7 +354,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					.setWarning()
 					.onClick(async () => {
 						if (!window.confirm(t("rebuildConfirm"))) return;
-						await this.plugin.rebuildAll();
+						// 重建索引并直接在引导页数据索引环节可视化进度
+						await this.plugin.rebuildIndexWithGuide();
 					})
 			);
 	}

@@ -290,6 +290,7 @@ const S: Strings = {
 	chatApiFormat:       { zh: "API 格式",              en: "API Format" },
 	chatFormatOpenAI:    { zh: "OpenAI Completions (/v1/chat/completions)", en: "OpenAI Completions (/v1/chat/completions)" },
 	chatFormatAnthropic: { zh: "Anthropic Messages (/v1/messages)",       en: "Anthropic Messages (/v1/messages)" },
+	chatFormatBare:       { zh: "完整地址（不自动拼接路径）", en: "Full URL (no path appended)" },
 	chatModels:          { zh: "模型列表",              en: "Models" },
 	chatModelsDesc:      { zh: "共 {count} 个模型，点击管理可配置或新增", en: "{count} models. Click to manage or add" },
 	chatManageModels:    { zh: "管理",                  en: "Manage" },
@@ -370,9 +371,9 @@ const S: Strings = {
 
 	// ──── First-run onboarding guide (search welcome screen) ────
 	guideTitle:         { zh: "开始使用",                en: "Get started" },
-	guideStep1:         { zh: "对话模型",                en: "Chat model" },
-	guideStep2:         { zh: "嵌入模型",                en: "Embedding" },
-	guideStep3:         { zh: "数据索引",                en: "Index data" },
+	guideStep1:         { zh: "嵌入模型",             en: "Embedding" },
+	guideStep2:         { zh: "数据索引",             en: "Index data" },
+	guideStep3:         { zh: "对话模型",             en: "Chat model" },
 	guideIntroTitle:    { zh: "👋 欢迎使用",            en: "👋 Welcome" },
 	guideIntroSub:      { zh: "三步完成配置，即可开始问答", en: "Three quick steps to chat" },
 	guideKeyPlaceholder:{ zh: "粘贴 API Key（sk-…）",    en: "Paste API key (sk-…)" },

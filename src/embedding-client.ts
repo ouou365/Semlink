@@ -12,6 +12,9 @@ export interface EmbedResult {
 	responseMs: number;
 }
 
+/** Hard ceiling per embed request — requestUrl has no timeout of its own. */
+const EMBED_TIMEOUT_MS = 60_000;
+
 export class EmbeddingClient {
 	private provider: EmbeddingProvider;
 	private providerName: string;
@@ -168,6 +171,12 @@ export class EmbeddingClient {
 		const allEmbeddings: number[][][] = [];
 		let totalTokens = 0;
 
+		// Announce the batch count up front so the UI shows (1/N) while the
+		// first batch is still in flight — single-batch docs read (1/1).
+		if (batches.length > 0) {
+			onBatchComplete?.(0, batches.length, 0);
+		}
+
 		for (let i = 0; i < batches.length; i++) {
 			// Check auto-pause between batches
 			if (this.isAutoPaused && Date.now() < this.backoffUntil) {
@@ -193,7 +202,7 @@ export class EmbeddingClient {
 		return this.callSiliconFlowApi(input);
 	}
 
-	private async callSiliconFlowApi(input: string[]): Promise<EmbeddingResponse> {
+private async callSiliconFlowApi(input: string[]): Promise<EmbeddingResponse> {
 		const params: RequestUrlParam = {
 			url: `${this.apiBase}/v1/embeddings`,
 			method: "POST",
@@ -209,7 +218,22 @@ export class EmbeddingClient {
 			throw: false,
 		};
 
-		const resp = await requestUrl(params);
+		// requestUrl cannot time out — a hung connection would stall the
+		// whole indexing loop on one note forever. Race a watchdog that
+		// abandons the request; the error carries no status, so the retry
+		// loop treats it as a network error and the note fails cleanly.
+		let watchdog: number | undefined;
+		const resp = await Promise.race([
+			requestUrl(params),
+			new Promise<never>((_, reject) => {
+				watchdog = window.setTimeout(
+					() => reject(new Error("EMBED_TIMEOUT:嵌入请求超过 60s 无响应")),
+					EMBED_TIMEOUT_MS,
+				);
+			}),
+		]).finally(() => {
+			if (watchdog !== undefined) window.clearTimeout(watchdog);
+		});
 
 		if (resp.status !== 200) {
 			const errBody = typeof resp.json === "object" ? resp.json : {};
@@ -241,7 +265,22 @@ export class EmbeddingClient {
 			throw: false,
 		};
 
-		const resp = await requestUrl(params);
+		// requestUrl cannot time out — a hung connection would stall the
+		// whole indexing loop on one note forever. Race a watchdog that
+		// abandons the request; the error carries no status, so the retry
+		// loop treats it as a network error and the note fails cleanly.
+		let watchdog: number | undefined;
+		const resp = await Promise.race([
+			requestUrl(params),
+			new Promise<never>((_, reject) => {
+				watchdog = window.setTimeout(
+					() => reject(new Error("EMBED_TIMEOUT:嵌入请求超过 60s 无响应")),
+					EMBED_TIMEOUT_MS,
+				);
+			}),
+		]).finally(() => {
+			if (watchdog !== undefined) window.clearTimeout(watchdog);
+		});
 
 		if (resp.status !== 200) {
 			const errBody = typeof resp.json === "object" ? resp.json : {};

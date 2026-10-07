@@ -549,8 +549,13 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	},
 	{
 		name: "Z.AI Coding CN",
-		// GLM Coding Plan endpoint on the mainland host (智谱): full chat URL
-		// is …/api/coding/paas/v4/chat/completions. Coding Plan keys only.
+		// GLM Coding Plan endpoint on the mainland host (智谱), OpenAI wire
+		// format: full chat URL is …/api/coding/paas/v4/chat/completions.
+		// Coding Plan keys only. Deliberately NOT the /api/anthropic host
+		// from the Claude Code docs — that route skips CORS preflight
+		// headers, so the renderer's fetch can never call it from inside
+		// Obsidian (curl works, the app doesn't). Coding Plan keys also
+		// authorize here (verified live).
 		baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
 		wirePath: "/chat/completions",
 		apiFormat: "openai",
@@ -569,7 +574,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
  *  one of these exact strings are patched once on load — every string here
  *  404s on every request (or is still an unfilled "{placeholder}" template),
  *  so rewriting it cannot clobber a working customization. */
-const LEGACY_CATALOG_BASES: Record<string, { apiBase: string; wirePath?: string }> = {
+const LEGACY_CATALOG_BASES: Record<string, { apiBase: string; wirePath?: string; apiFormat?: "openai" | "anthropic" }> = {
 	"https://bedrock-runtime.{region}.amazonaws.com":
 		{ apiBase: "https://bedrock-runtime.{region}.amazonaws.com/openai" },
 	"https://generativelanguage.googleapis.com/v1beta":
@@ -577,8 +582,13 @@ const LEGACY_CATALOG_BASES: Record<string, { apiBase: string; wirePath?: string 
 	"https://{region}-aiplatform.googleapis.com/v1beta":
 		{ apiBase: "https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openai",
 			wirePath: "/chat/completions" },
-	// Z.AI / Z.AI Coding CN: same base as the fixed catalog, missing wirePath.
+	// Z.AI Coding CN: the Anthropic-wire host from the Claude Code docs
+	// (…/api/anthropic) never answers CORS preflight, so it only works from
+	// non-browser clients — in-app it must use the OpenAI-wire coding route
+	// (preflight verified live). Saved providers on the anthropic base
+	// migrate across; old coding-base entries get the wire path filled in.
 	"https://api.z.ai/api/coding/paas/v4": { apiBase: "https://api.z.ai/api/coding/paas/v4", wirePath: "/chat/completions" },
+	"https://open.bigmodel.cn/api/anthropic": { apiBase: "https://open.bigmodel.cn/api/coding/paas/v4", wirePath: "/chat/completions", apiFormat: "openai" },
 	"https://open.bigmodel.cn/api/coding/paas/v4": { apiBase: "https://open.bigmodel.cn/api/coding/paas/v4", wirePath: "/chat/completions" },
 	// Cloudflare AI Gateway: the unified compat route carries no "/v1" segment
 	// after the gateway slug — saved catalog providers 404 without wirePath.
@@ -592,7 +602,14 @@ export function migrateLegacyCatalogBases(settings: SmartVaultSettings): void {
 		const fix = LEGACY_CATALOG_BASES[p.apiBase.trim().replace(/\/+$/, "")];
 		if (!fix) continue;
 		p.apiBase = fix.apiBase;
-		if (fix.wirePath) p.wirePath = fix.wirePath;
+		if (fix.wirePath !== undefined) {
+			p.wirePath = fix.wirePath;
+		} else if (fix.apiFormat) {
+			// Format switch (e.g. OpenAI → Anthropic wire): the old wire-path
+			// override points at the dead route and cannot survive the move.
+			p.wirePath = undefined;
+		}
+		if (fix.apiFormat) p.apiFormat = fix.apiFormat;
 	}
 }
 

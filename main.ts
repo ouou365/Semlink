@@ -455,6 +455,16 @@ export default class SmartVaultPlugin extends Plugin {
 
 	// ──── UI ────
 
+	/** 设置页"重新嵌入"：清空并重建索引，同时关闭设置、打开侧栏，
+	 *  直接在引导页的数据索引环节可视化进度（索引自动处于运行状态）。 */
+	async rebuildIndexWithGuide(): Promise<void> {
+		await this.rebuildAll();
+		(this.app as any).setting.close();
+		await this.activateSearchView();
+		const leaf = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
+		(leaf.view as SemanticSearchView).openIndexGuide();
+	}
+
 	async showProgressModal() {
 		// Sync store stats to progress tracker before opening
 		// Both "idle" and "completed" phases need DB stats — the in-memory

@@ -30,7 +30,7 @@ export class Scheduler {
 	/** 并发嵌入请求数 — 设置页"嵌入参数"可调（默认 2）。串行(1) 对免费档
 	 *  API 最稳；并发过高会触发 429 限流。 */
 	private get concurrency(): number {
-		return Math.max(1, this.settings.embedConcurrency ?? 2);
+		return Math.max(1, this.settings.embedConcurrency ?? 3);
 	}
 	private saveInterval = 40; // 每处理 N 个笔记存盘一次（sync 模式下 save 是全量导出，代价很高）
 	private lastSaveAt = 0; // 上次存盘时刻 — sync 模式下两次全量导出之间至少隔 20s
@@ -154,6 +154,20 @@ export class Scheduler {
 		this.running = true;
 		this.aborted = false;
 		this.authErrorShown = false;
+
+		// Revive rows stuck at 'processing' by an interrupted earlier run
+		// (reload/crash mid-index): dequeue only takes 'pending' and enqueue
+		// dedupes against 'processing', so without this the affected notes
+		// would be re-scanned forever but never re-processed, freezing
+		// progress at e.g. 788/865 with no errors logged.
+		try {
+			const revived = await this.store.reviveProcessing();
+			if (revived > 0) {
+				console.log(`[Semlink] Revived ${revived} stuck 'processing' queue rows for re-processing`);
+			}
+		} catch (e) {
+			console.warn("[Semlink] reviveProcessing failed:", e);
+		}
 
 		// In incremental mode (watcher-triggered), processedNotes carries the
 		// stale total from the last full run. Processing a single "update"
@@ -282,7 +296,7 @@ export class Scheduler {
 
 		const texts = embeddableChunks.map((c) => c.content);
 		const embedResult = await this.client.embedAll(texts, (batchIdx, totalBatches) => {
-			this.progress.setFileChunkProgress(`${batchIdx + 1}/${totalBatches}`);
+			this.progress.setFileChunkProgress(`${batchIdx + 1}/${totalBatches}`, notePath);
 		});
 		// Flatten batched embeddings into a single array matching chunks order
 		const allEmbeddings: number[][] = [];
@@ -515,6 +529,9 @@ export class Scheduler {
 			) {
 				this.handleAuthError();
 			}
+		} finally {
+			// Done (indexed or failed) — drop it from the concurrent set.
+			this.progress.removeActiveFile(notePath);
 		}
 	}
 

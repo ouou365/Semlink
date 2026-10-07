@@ -98,8 +98,15 @@ export class ProgressTracker {
 		this.emitProgress();
 	}
 
+	// Concurrent indexing: every in-flight note with its own chunk progress.
+	private activeFiles: Array<{ path: string; progress: string }> = [];
+
 	setCurrentFile(file: string) {
 		this.progress.currentFile = file;
+		if (file && !this.activeFiles.some((f) => f.path === file)) {
+			this.activeFiles.push({ path: file, progress: "" });
+		}
+		this.syncActiveFiles();
 		this.emitProgress();
 	}
 
@@ -144,9 +151,27 @@ export class ProgressTracker {
 		this.emitProgress();
 	}
 
-	setFileChunkProgress(progress: string) {
+	setFileChunkProgress(progress: string, notePath?: string) {
 		this.progress.fileChunkProgress = progress;
+		// Attribute the batch progress to its own note (concurrent notes
+		// interleave batches — "last started" is not necessarily the caller).
+		const target = (notePath && this.activeFiles.find((f) => f.path === notePath))
+			|| this.activeFiles[this.activeFiles.length - 1];
+		if (target) target.progress = progress;
+		this.syncActiveFiles();
 		this.emitProgress();
+	}
+
+	/** A note finished (indexed or failed) — drop it from the active set. */
+	removeActiveFile(notePath: string) {
+		if (this.activeFiles.length === 0) return;
+		this.activeFiles = this.activeFiles.filter((f) => f.path !== notePath);
+		this.syncActiveFiles();
+		this.emitProgress();
+	}
+
+	private syncActiveFiles() {
+		this.progress.activeFiles = this.activeFiles.map((f) => ({ ...f }));
 	}
 
 	// ──── Pause/Resume ────
@@ -186,6 +211,8 @@ export class ProgressTracker {
 	complete() {
 		this.progress.phase = "completed";
 		this.progress.currentFile = "";
+		this.activeFiles = [];
+		this.progress.activeFiles = [];
 		// Sync totalNotes to match processedNotes — files may have been enqueued
 		// by the watcher after scanVault set totalNotes, causing a mismatch.
 		this.progress.totalNotes = this.progress.processedNotes;

@@ -252,6 +252,8 @@ export interface SmartVaultSettings {
 		embedReady?: boolean;
 		chatModelPicked?: boolean;
 		embedModelPicked?: boolean;
+		/** 设置页"重新嵌入"直接跳到数据索引环节 */
+		jumpToIndex?: boolean;
 	};
 }
 
@@ -269,7 +271,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	maxRetries: 3,
 	batchSize: 64,
 	requestDelayMs: 200,
-	embedConcurrency: 2,
+	embedConcurrency: 3,
 	feishuBots: [],
 	onboarding: {},
 };
@@ -339,6 +341,8 @@ export interface IndexProgress {
 	dbSizeMb: number;
 	lastError: string;
 	fileChunkProgress: string;
+	/** Concurrently indexing notes, each with its own chunk progress. */
+	activeFiles: Array<{ path: string; progress: string }>;
 }
 
 export const EMPTY_PROGRESS: IndexProgress = {
@@ -362,6 +366,7 @@ export const EMPTY_PROGRESS: IndexProgress = {
 	dbSizeMb: 0,
 	lastError: "",
 	fileChunkProgress: "",
+	activeFiles: [],
 };
 
 /** SiliconFlow Embedding API types */
