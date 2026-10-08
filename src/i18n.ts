@@ -407,6 +407,7 @@ const S: Strings = {
 	guideStampPreparing: { zh: "咖啡师准备中…",        en: "The barista is preparing…" },
 	guideStampExtract: { zh: "萃取精华中…",             en: "Extracting the essence…" },
 	guideFetchFailed:   { zh: "获取失败：{err}",         en: "Fetch failed: {err}" },
+	guideFetchManualHint: { zh: "可点击下方「+ 自定义模型」手动输入模型 ID，或稍后重试拉取。", en: "Use “+ Custom model” below to enter a model ID, or retry the fetch later." },
 	guideSkip:          { zh: "跳过",                   en: "Skip" },
 	guideKeyRequired:   { zh: "请先粘贴 API Key",        en: "Paste an API key first" },
 };

@@ -310,6 +310,10 @@ export function renderOnboarding(
 			// the background (the scheduler is independent of this view).
 			renderIndexStep(root, plugin, host,
 				() => { // 下一步 → ③ 对话模型
+					// 清掉 jumpToIndex：它的优先级高于 stepOverride，
+					// 不清除会把推导永久锁在②（点下一步无效）。
+					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), jumpToIndex: false };
+					void plugin.saveSettings();
 					stepOverride = 3;
 					rerender();
 				},
@@ -506,6 +510,8 @@ interface ModelStepOptions {
 }
 
 function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: ModelStepOptions): void {
+	// Carried from the key form to the model step when the list fetch fails.
+	let fetchHint = "";
 	const isChat = opts.kind === "chat";
 	const provider = opts.providerId
 		? plugin.settings.providers.find((p) => p.id === opts.providerId)
@@ -680,15 +686,14 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 				provider.apiKey = key;
 				try {
 					const ids = await fetchModelIds(apiBase, key, provider.apiFormat);
-					if (ids.length === 0) {
-						error.setText(t("guideNoChatModel"));
-						return;
-					}
-					// Single persist — onValidated saves (chatReady) and the
-					// model picker streams the classification step by step.
+					// 200 但空列表也放行：模型步骤里可手动补、可重试。
 					opts.onValidated();
 				} catch (e) {
-					error.setText(t("guideFetchFailed").replace("{err}", e instanceof Error ? e.message : String(e)));
+					// 部分网关（如智谱 coding 路由）不提供 /models 列表，
+					// 404 不代表配置错误 — 放行到模型步骤手动补。
+					fetchHint = t("guideFetchFailed").replace("{err}", e instanceof Error ? e.message : String(e))
+						+ " · " + t("guideFetchManualHint");
+					opts.onValidated();
 				} finally {
 					nextBtn.disabled = false;
 					nextBtn.setText(t("guideNext"));
@@ -734,6 +739,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			renderList();
 		});
 		const error = modelsHost.createDiv({ cls: "semlink-guide-error" });
+		if (fetchHint) error.setText(fetchHint);
 		const cards = modelsHost.createDiv({ cls: "semlink-guide-models-cards" });
 		// Fixed action row BELOW the scrollable list — always visible,
 		// created once (renderList only rebuilds the model cards above).
