@@ -3484,3 +3484,7 @@
     display: block;
     margin: 0 auto;
 }
+
+/* Guide modal full-width controls + stacked spacing (checker-safe). */
+.semlink-guide-fullwidth { width: 100%; }
+.semlink-guide-gap-top { margin-top: 8px; }

@@ -957,11 +957,11 @@ class FetchModelsModal extends Modal {
 			this.renderList();
 		});
 		this.refreshingEl = contentEl.createDiv({ cls: "semlink-fetch-refreshing" });
-		this.refreshingEl.style.display = "none";
+		this.refreshingEl.addClass("semlink-hidden");
 		this.errorEl = contentEl.createDiv({ cls: "semlink-fetch-error" });
-		this.errorEl.style.display = "none";
+		this.errorEl.addClass("semlink-hidden");
 		this.emptyEl = contentEl.createDiv({ cls: "semlink-fetch-empty" });
-		this.emptyEl.style.display = "none";
+		this.emptyEl.addClass("semlink-hidden");
 		this.listEl = contentEl.createDiv({ cls: "semlink-fetch-list" });
 		this.renderList();
 		new Setting(contentEl)
@@ -992,7 +992,7 @@ class FetchModelsModal extends Modal {
 	 *  small done/total label underneath (167/422 etc.). */
 	setRefreshing(on: boolean, done?: number, total?: number): void {
 		if (!this.refreshingEl) return;
-		this.refreshingEl.style.display = on ? "block" : "none";
+		this.refreshingEl.toggleClass("semlink-hidden", !on);
 		if (!on) return;
 		this.refreshingEl.empty();
 		if (done !== undefined && total !== undefined && total > 0) {
@@ -1016,7 +1016,7 @@ class FetchModelsModal extends Modal {
 		if (!this.errorEl) return;
 		this.setRefreshing(false);
 		this.errorEl.setText(message);
-		this.errorEl.style.display = "block";
+		this.errorEl.removeClass("semlink-hidden");
 	}
 
 	/** Replace the candidate list with freshly fetched results, keeping the
@@ -1025,7 +1025,7 @@ class FetchModelsModal extends Modal {
 		if (!this.alive) return;
 		this.models = models;
 		this.renderList();
-		if (this.errorEl) this.errorEl.style.display = "none";
+		if (this.errorEl) this.errorEl.addClass("semlink-hidden");
 		this.setRefreshing(false);
 	}
 
@@ -1115,7 +1115,7 @@ class FetchModelsModal extends Modal {
 		// refresh progress label.
 		if (this.emptyEl) {
 			const showNoMatch = this.rows.size === 0 && this.filter.length > 0;
-			this.emptyEl.style.display = showNoMatch ? "block" : "none";
+			this.emptyEl.toggleClass("semlink-hidden", !showNoMatch);
 			if (showNoMatch) this.emptyEl.setText(t("fetchNoMatch"));
 		}
 	}
@@ -1264,7 +1264,7 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 	const fetchBtn = headEl.createEl("button", { cls: "semlink-link-btn", text: t("fetchModels") });
 	const rowsEl = section.createDiv({ cls: "semlink-model-rows" });
 	const errorEl = section.createDiv({ cls: "semlink-model-error" });
-	errorEl.style.display = "none";
+	errorEl.addClass("semlink-hidden");
 	const addBtn = section.createEl("button", { cls: "semlink-add-model-btn", text: `＋ ${t("chatAddModel")}` });
 
 	let fetching = false;
@@ -1412,7 +1412,7 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 		const base = baseUrl.trim().replace(/\/+$/, "");
 		fetching = true;
 		updateProbeState();
-		errorEl.style.display = "none";
+		errorEl.addClass("semlink-hidden");
 
 		const current = opts.getModels();
 		const known = new Set(current.map((m) => m.id).filter((id) => id.length > 0));
@@ -1526,11 +1526,19 @@ export function brandLogoOf(name: string): BrandLogo {
 	return { svg: providerLogo(key) };
 }
 
+/** Safely mount a brand-logo SVG string into an element (checker-safe,
+ *  no innerHTML assignment). */
+export function setSvgIcon(el: HTMLElement, svg: string): void {
+	el.empty();
+	const root = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
+	if (root && root.tagName !== "parsererror") el.appendChild(root);
+}
+
 function appendProviderLogo(target: HTMLElement, name: string, logoCls: string): void {
 	const logo = brandLogoOf(name).svg;
 	if (logo) {
 		const logoEl = target.createDiv({ cls: logoCls });
-		logoEl.innerHTML = logo;
+		setSvgIcon(logoEl, logo);
 		return;
 	}
 	const initial = (name || "").trim().charAt(0).toUpperCase() || "?";
@@ -1770,7 +1778,7 @@ function renderDraftEditor(
 	opts: DraftEditorOptions,
 ): void {
 	const errorEl = slot.createDiv({ cls: "semlink-draft-error" });
-	errorEl.style.display = "none";
+	errorEl.addClass("semlink-hidden");
 	let busy = false;
 	// The model list is rendered last (after protocol + key); the probe-state
 	// refresh above needs a handle, so it is assigned lazily.
@@ -1845,15 +1853,15 @@ function renderDraftEditor(
 		.addButton((btn) => {
 			btn.setButtonText(opts.submitLabel).setClass("mod-cta").onClick(async () => {
 				if (busy) return;
-			errorEl.style.display = "none";
+			errorEl.addClass("semlink-hidden");
 			if (!draft.baseUrl.trim()) {
 					errorEl.setText(t("customNeedsBaseUrl"));
-					errorEl.style.display = "block";
+					errorEl.removeClass("semlink-hidden");
 					return;
 				}
 				if (draft.models.length === 0 || draft.models.some((m) => !m.id.trim())) {
 					errorEl.setText(t("customNeedsModels"));
-					errorEl.style.display = "block";
+					errorEl.removeClass("semlink-hidden");
 					return;
 				}
 				busy = true;
@@ -1904,7 +1912,7 @@ function renderProviderCatalogGrid(
 		const logo = brandLogoOf(entry.name).svg;
 		if (logo) {
 			const logoEl = card.createDiv({ cls: "semlink-add-provider-card-logo" });
-			logoEl.innerHTML = logo;
+			setSvgIcon(logoEl, logo);
 		} else {
 			card.createDiv({ cls: "semlink-add-provider-card-fallback", text: entry.name.charAt(0).toUpperCase() });
 		}

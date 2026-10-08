@@ -1,7 +1,7 @@
 {
 	"id": "semlink",
 	"name": "Semlink",
-	"version": "0.9.0",
+	"version": "0.9.1",
 	"minAppVersion": "1.6.0",
 	"description": "AI assistant for your vault: chat with your notes, semantic search, similar-note suggestions, and an MCP server for Claude, Cursor and other AI clients.",
 	"author": "Ouzhongyuan",

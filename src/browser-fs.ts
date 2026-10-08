@@ -9,12 +9,32 @@
 // Init walks the OPFS namespace once (async) and opens a sync handle per
 // file; afterwards every fs operation is a plain synchronous map lookup.
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyHandle = any;
+// Minimal structural types for the OPFS sync access handles — the project's
+// DOM lib predates createSyncAccessHandle, so they are declared locally
+// (disabling no-explicit-any is not allowed by the community checker).
+interface SyncHandleLike {
+	getSize(): number;
+	read(buf: Uint8Array, opts: { at: number }): number;
+	write(data: Uint8Array, opts: { at: number }): number;
+	truncate(len: number): void;
+	flush(): void;
+	close(): void;
+}
 
-let rootDir: AnyHandle = null; // the OPFS sub-directory namespace
+interface FileHandleLike {
+	kind: string;
+	createSyncAccessHandle(): Promise<SyncHandleLike>;
+}
+
+interface DirHandleLike {
+	getFileHandle(name: string, opts?: { create?: boolean }): Promise<FileHandleLike>;
+	removeEntry(name: string): Promise<void>;
+	entries(): AsyncIterableIterator<[string, FileHandleLike]>;
+}
+
+let rootDir: DirHandleLike | null = null; // the OPFS sub-directory namespace
 let namespaceName = "semlink-db";
-const handles = new Map<string, AnyHandle>(); // normalized path → open sync handle
+const handles = new Map<string, SyncHandleLike>(); // normalized path → open sync handle
 const memoryFiles = new Map<string, Uint8Array>(); // paths with no OPFS handle yet
 
 const norm = (p: string): string => p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
@@ -26,16 +46,18 @@ export async function initBrowserFs(namespace = "semlink-db"): Promise<void> {
 	if (rootDir) return;
 	namespaceName = namespace;
 	const root = await navigator.storage.getDirectory();
-	rootDir = await root.getDirectoryHandle(namespaceName, { create: true });
-	for await (const [name, handle] of (rootDir as AnyHandle).entries()) {
+	// The DOM lib lacks entries() on the handle — shape it locally.
+	const dir = (await root.getDirectoryHandle(namespaceName, { create: true })) as unknown as DirHandleLike;
+	rootDir = dir;
+	for await (const [name, handle] of dir.entries()) {
 		if (handle.kind === "file") {
 			// createSyncAccessHandle isn't in this project's DOM lib types yet.
-			handles.set(name, await (handle as AnyHandle).createSyncAccessHandle());
+			handles.set(name, await handle.createSyncAccessHandle());
 		}
 	}
 }
 
-const getHandle = (path: string): AnyHandle => {
+const getHandle = (path: string): SyncHandleLike => {
 	const key = norm(path);
 	const h = handles.get(key);
 	if (!h) {
@@ -47,11 +69,11 @@ const getHandle = (path: string): AnyHandle => {
 	return h;
 };
 
-const ensureFile = async (path: string): Promise<AnyHandle> => {
+const ensureFile = async (path: string): Promise<SyncHandleLike> => {
 	const key = norm(path);
 	let h = handles.get(key);
 	if (h) return h;
-	const fh = await (rootDir as AnyHandle).getFileHandle(key, { create: true });
+	const fh = await rootDir!.getFileHandle(key, { create: true });
 	h = await fh.createSyncAccessHandle();
 	handles.set(key, h);
 	return h;
@@ -86,7 +108,7 @@ export function readFileSync(path: string): Uint8Array {
 export async function ensureFileSync(path: string): Promise<void> {
 	const key = norm(path);
 	if (handles.has(key)) return;
-	const fh = await (rootDir as AnyHandle).getFileHandle(key, { create: true });
+	const fh = await rootDir!.getFileHandle(key, { create: true });
 	handles.set(key, await fh.createSyncAccessHandle());
 }
 
@@ -123,7 +145,7 @@ export function unlinkSync(path: string): void {
 		try { h.close(); } catch { /* already closed */ }
 		handles.delete(key);
 	}
-	(rootDir as AnyHandle).removeEntry(key).catch(() => { /* gone already */ });
+	rootDir!.removeEntry(key).catch(() => { /* gone already */ });
 }
 
 export function statSync(path: string): { size: number; isFile: () => boolean; mtimeMs: number } {

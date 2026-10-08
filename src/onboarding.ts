@@ -12,7 +12,7 @@
 
 import { Modal } from "obsidian";
 import { mountCoffeeCanvas, mountTicketDeck } from "./coffee-canvas";
-import { AddProviderModal, brandLogoOf, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, providerLogo, validateModelId } from "./settings-models";
+import { AddProviderModal, brandLogoOf, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, providerLogo, validateModelId, setSvgIcon } from "./settings-models";
 import type { FetchedModel } from "./settings-models";
 import { t } from "./i18n";
 import type SmartVaultPlugin from "../main";
@@ -408,7 +408,7 @@ function card(parent: HTMLElement, opts: { logo?: string; icon?: string; text: s
 	const el = parent.createDiv({ cls: "semlink-search-welcome-sug semlink-guide-card" });
 	if (opts.logo) {
 		const logoEl = el.createSpan({ cls: "semlink-guide-card-logo" });
-		logoEl.innerHTML = opts.logo;
+		setSvgIcon(logoEl, opts.logo);
 	} else {
 		el.createSpan({ cls: "semlink-search-welcome-sug-icon", text: opts.icon ?? "›" });
 	}
@@ -905,13 +905,15 @@ function renderIndexStep(
 	const recipe = hero.createDiv({ cls: "semlink-guide-index-recipe" });
 	const providerSvg = providerLogo(active.name);
 	if (providerSvg) {
-		recipe.createSpan({ cls: "semlink-guide-index-recipe-icon" }).innerHTML = providerSvg;
+		const providerIconEl = recipe.createSpan({ cls: "semlink-guide-index-recipe-icon" });
+		setSvgIcon(providerIconEl, providerSvg);
 	}
 	recipe.createSpan({ cls: "semlink-guide-index-recipe-name", text: active.name });
 	recipe.createSpan({ cls: "semlink-guide-index-recipe-sep", text: "·" });
 	const modelSvg = modelBrand(active.model);
 	if (modelSvg) {
-		recipe.createSpan({ cls: "semlink-guide-index-recipe-icon" }).innerHTML = modelSvg;
+		const modelIconEl = recipe.createSpan({ cls: "semlink-guide-index-recipe-icon" });
+		setSvgIcon(modelIconEl, modelSvg);
 	}
 	recipe.createSpan({ cls: "semlink-guide-index-recipe-model", text: active.model });
 
@@ -1109,18 +1111,15 @@ class AddModelModal extends Modal {
 		const { contentEl } = this;
 		contentEl.createEl("h3", { text: t("addModelTitle") });
 		const input = contentEl.createEl("input", {
-			cls: "semlink-guide-keyinput",
+			cls: "semlink-guide-keyinput semlink-guide-fullwidth",
 			type: "text",
 			placeholder: t("addModelPlaceholder"),
 		});
-		input.style.width = "100%";
 		const error = contentEl.createDiv({ cls: "semlink-guide-error" });
 		const confirmBtn = contentEl.createEl("button", {
-			cls: "semlink-guide-save semlink-guide-primary",
+			cls: "semlink-guide-save semlink-guide-primary semlink-guide-fullwidth semlink-guide-gap-top",
 			text: t("confirm"),
 		});
-		confirmBtn.style.width = "100%";
-		confirmBtn.style.marginTop = "8px";
 
 		const confirm = async (): Promise<void> => {
 			const id = input.value.trim();
