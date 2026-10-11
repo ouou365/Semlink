@@ -2,17 +2,17 @@
 // Semlink - Internationalization
 // ========================================
 
+import { getLanguage } from "obsidian";
+
 export type Lang = "zh" | "en";
 export type LangSetting = "auto" | Lang;
 
 let currentLang: Lang = "zh";
 
-/** Obsidian stores its UI language in localStorage under "language"
- *  (e.g. "zh-CN", "en-US", "de"). Any zh-* prefix maps to zh, everything
- *  else falls back to English. */
+/** Obsidian's UI language (getLanguage(): "en", "zh", "zh-TW", …). Any zh-*
+ *  prefix maps to zh, everything else falls back to English. */
 function detectObsidianLang(): Lang {
-	const appLang = (window.localStorage.getItem("language") || "").toLowerCase();
-	return appLang.startsWith("zh") ? "zh" : "en";
+	return (getLanguage() || "").toLowerCase().startsWith("zh") ? "zh" : "en";
 }
 
 export function setLang(lang: LangSetting) {

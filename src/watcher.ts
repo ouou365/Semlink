@@ -137,6 +137,7 @@ export class VaultWatcher {
 			.split("\n")
 			.map((p) => p.trim())
 			.filter((p) => p.length > 0);
+		patterns.push(this.vault.configDir);
 		for (const pattern of patterns) {
 			if (path.startsWith(pattern) || path.includes(pattern)) {
 				return true;

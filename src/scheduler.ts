@@ -79,6 +79,10 @@ export class Scheduler {
 			.split("\n")
 			.map((p) => p.trim())
 			.filter((p) => p.length > 0);
+		// The Obsidian config folder is always skipped, even when renamed
+		// away from the default ".obsidian" (the setting covers only the
+		// default name).
+		excludePatterns.push(this.vault.configDir);
 
 		const filteredFiles = files.filter((f) => !this.isExcluded(f.path, excludePatterns));
 

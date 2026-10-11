@@ -73,7 +73,8 @@ export default class SmartVaultPlugin extends Plugin {
 		const vaultBasePath = adapter instanceof FileSystemAdapter
 			? adapter.getBasePath()
 			: (adapter as any).basePath as string;
-		this.pluginDir = join(vaultBasePath, this.manifest.dir || ".obsidian/plugins/semlink");
+		this.pluginDir = join(vaultBasePath, this.manifest.dir
+			|| join(this.app.vault.configDir, "plugins", this.manifest.id));
 
 		const dataDir = join(this.pluginDir, "data");
 
