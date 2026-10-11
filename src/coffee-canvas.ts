@@ -97,21 +97,6 @@ const fitText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number):
 	return t + "…";
 };
 
-/** Middle truncation: keep head + tail — note names carry meaning at both
- *  ends (dates, versions, markers), so chopping only the tail loses more
- *  than it has to. Falls back to a bare head when even that overflows. */
-const middleFit = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string => {
-	if (ctx.measureText(text).width <= maxWidth) return text;
-	let len = text.length;
-	while (len > 6) {
-		const keep = Math.floor(len / 2) - 1;
-		const cand = text.slice(0, keep) + "…" + text.slice(text.length - keep);
-		if (ctx.measureText(cand).width <= maxWidth) return cand;
-		len = keep + 1;
-	}
-	return text.slice(0, 2) + "…";
-};
-
 /** Mount the full coffee scene into `container` (full panel width). */
 export function mountCoffeeCanvas(
 	container: HTMLElement,

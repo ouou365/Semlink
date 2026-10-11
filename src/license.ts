@@ -192,7 +192,6 @@ export class LicenseManager {
 	private static readonly REQUEST_TIMEOUT_MS = 12_000;
 	private static readonly ATTEMPTS_PER_ENDPOINT = 2;
 	private async call(method: "GET" | "POST", path: string, body?: unknown): Promise<any> {
-		let networkFailures = 0;
 		for (let attempt = 0; attempt < LicenseManager.ATTEMPTS_PER_ENDPOINT; attempt++) {
 			for (const base of LICENSE_API_BASES) {
 				let res: any;
@@ -209,11 +208,10 @@ export class LicenseManager {
 							setTimeout(() => reject(new Error("license request timeout")), LicenseManager.REQUEST_TIMEOUT_MS)),
 					]);
 				} catch {
-					networkFailures++;
 					continue;
 				}
 				if (res.status >= 200 && res.status < 300) {
-					try { return res.json; } catch { networkFailures++; continue; }
+					try { return res.json; } catch { continue; }
 				}
 				// Map the meaningful failures: 403 = activation limit, 410 = revoked.
 				if (res.status === 403) throw "limit" as LicenseError;

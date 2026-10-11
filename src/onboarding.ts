@@ -224,11 +224,6 @@ export function renderOnboarding(
 	const byId = (id?: string): ModelProvider | undefined =>
 		id ? plugin.settings.providers.find((p) => p.id === id) : undefined;
 
-	const setLanguage = async (lang: "zh" | "en"): Promise<void> => {
-		plugin.settings.language = lang;
-		await plugin.saveSettings();
-	};
-
 	const onRestart = (): void => {
 		stepOverride = null;
 		plugin.settings.onboarding = { done: false };
@@ -436,17 +431,6 @@ function card(parent: HTMLElement, opts: { logo?: string; icon?: string; text: s
 	return el;
 }
 
-/** Quiet text link row (reselect / skip / manual-setup escapes). */
-function linkRow(root: HTMLElement, entries: Array<{ text: string; onClick: () => void }>): void {
-	const row = root.createDiv({ cls: "semlink-guide-links" });
-	for (const e of entries) {
-		row.createEl("a", { text: e.text }).addEventListener("click", (evt) => {
-			evt.preventDefault();
-			e.onClick();
-		});
-	}
-}
-
 /** Step hero above the stepper — same visual language as the plain welcome:
  *  floating emoji badge, bold greeting, muted sub line (reuses the
  *  semlink-search-welcome-* classes). */
@@ -482,14 +466,6 @@ function ensureCatalogProvider(plugin: SmartVaultPlugin, name: string): ModelPro
 	};
 	plugin.settings.providers.push(provider);
 	return provider;
-}
-
-/** Single-select highlight within one pick list. */
-function markPicked(list: HTMLElement, el: HTMLElement): void {
-	for (const child of Array.from(list.children)) {
-		(child as HTMLElement).removeClass("is-picked");
-	}
-	el.addClass("is-picked");
 }
 
 // ──── Steps 1 & 2: provider → validate key → pick a model ────
@@ -685,7 +661,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 				}
 				provider.apiKey = key;
 				try {
-					const ids = await fetchModelIds(apiBase, key, provider.apiFormat);
+					await fetchModelIds(apiBase, key, provider.apiFormat);
 					// 200 但空列表也放行：模型步骤里可手动补、可重试。
 					opts.onValidated();
 				} catch (e) {
@@ -839,7 +815,6 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			try {
 				await fetchAvailableModels(plugin, provider.apiBase, provider.apiKey, provider.apiFormat,
 					(done, total, model) => {
-						const countersChanged = fetchDone !== done || fetchTotal !== total;
 						fetchDone = done;
 						fetchTotal = total;
 						if (model && upsert(model)) renderList();

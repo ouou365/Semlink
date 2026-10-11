@@ -2,7 +2,7 @@
 // Semlink - Plugin Entry Point
 // ========================================
 
-import { Notice, Plugin, TFile, FileSystemAdapter, WorkspaceSidedock, addIcon } from "obsidian";
+import { Notice, Plugin, FileSystemAdapter, WorkspaceSidedock, addIcon } from "obsidian";
 import { join } from "path";
 import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
 import { UsageStore } from "./src/usage-store";
@@ -193,7 +193,7 @@ export default class SmartVaultPlugin extends Plugin {
 		const logoInner = logoSvg.replace(/^[\s\S]*?<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
 		addIcon("semlink-logo", `<g transform="scale(0.09765625)">${logoInner}</g>`);
 
-		const ribbonBtn = this.addRibbonIcon("semlink-logo", t("searchViewTitle"), () => {
+		this.addRibbonIcon("semlink-logo", t("searchViewTitle"), () => {
 			void this.activateSearchView();
 		});
 

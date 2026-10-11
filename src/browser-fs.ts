@@ -69,16 +69,6 @@ const getHandle = (path: string): SyncHandleLike => {
 	return h;
 };
 
-const ensureFile = async (path: string): Promise<SyncHandleLike> => {
-	const key = norm(path);
-	let h = handles.get(key);
-	if (h) return h;
-	const fh = await rootDir!.getFileHandle(key, { create: true });
-	h = await fh.createSyncAccessHandle();
-	handles.set(key, h);
-	return h;
-};
-
 export function existsSync(path: string): boolean {
 	const key = norm(path);
 	return handles.has(key) || memoryFiles.has(key);

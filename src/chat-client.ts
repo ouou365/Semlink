@@ -10,7 +10,7 @@
 
 import type { SmartVaultSettings, ChatProvider, ChatModel, ContextBreakdown, HistoryMessage } from "./types";
 import type { SemlinkTools } from "./chat-tools";
-import { getLang, t } from "./i18n";
+import { t } from "./i18n";
 
 /** Maximum tool-calling rounds before giving up on a final answer. */
 const MAX_TOOL_ITERATIONS = 5;
@@ -814,18 +814,11 @@ export class ChatClient {
 		const cacheHits: CacheSample[] = [];
 		// Tool calls accumulate by their stream index.
 		const toolCalls: Record<number, any> = {};
-		// Track finish_reason to know if this round is the final answer
-		// (finish_reason="stop") or a tool round (finish_reason="tool_calls").
-		let finishReason = "";
-
 		await this.readSSE(resp, (json) => {
 			const delta = json?.choices?.[0]?.delta;
 			if (typeof delta?.content === "string" && delta.content) {
 				content += delta.content;
 			}
-			// Check finish_reason — appears in the last chunk of each round.
-			const fr = json?.choices?.[0]?.finish_reason;
-			if (fr) finishReason = fr;
 			for (const tc of delta?.tool_calls || []) {
 				const idx = tc.index ?? 0;
 				toolCalls[idx] ??= { id: tc.id || "", type: "function", function: { name: "", arguments: "" } };

@@ -443,7 +443,7 @@ export class SemanticSearchView extends ItemView {
 			},
 		});
 		this.inputEl.addEventListener("keydown", (e) => {
-			if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
+			if (e.key !== "Enter" || e.isComposing) return;
 			if (e.ctrlKey || e.metaKey) {
 				// Ctrl+Enter: insert a newline via the Range API — browsers'
 				// execCommand("insertLineBreak") is unreliable in some hosts,
@@ -2006,7 +2006,7 @@ export class SemanticSearchView extends ItemView {
 
 	/** Slide in a left-side drawer listing saved chat sessions. */
 	private async showHistoryDrawer(): Promise<void> {
-		const sessions = await this.history.load();
+		await this.history.load();
 		const backdrop = this.contentEl.createDiv({ cls: "semlink-history-backdrop" });
 		const drawer = this.contentEl.createDiv({ cls: "semlink-history-drawer" });
 		const header = drawer.createDiv({ cls: "semlink-history-header" });
@@ -3073,20 +3073,15 @@ export class SemanticSearchView extends ItemView {
 		}
 	}
 
-	/** Copy the answer markdown to the clipboard (with a legacy fallback). */
+	/** Copy the answer markdown to the clipboard. Obsidian's Electron host
+	 *  is a secure context, so the async Clipboard API is always available. */
 	private async copyAnswer(text: string): Promise<void> {
 		try {
 			await navigator.clipboard.writeText(text);
+			new Notice(t("searchCopied"));
 		} catch {
-			const ta = document.createElement("textarea");
-			ta.value = text;
-			ta.className = "semlink-copy-layer";
-			document.body.appendChild(ta);
-			ta.select();
-			document.execCommand("copy");
-			ta.remove();
+			new Notice(t("searchCopyFailed"));
 		}
-		new Notice(t("searchCopied"));
 	}
 
 	private async openNote(notePath: string, preview: string): Promise<void> {

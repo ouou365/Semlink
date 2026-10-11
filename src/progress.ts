@@ -26,7 +26,7 @@ export class ProgressTracker {
 
 	private emit(event: ProgressEvent) {
 		for (const cb of this.listeners) {
-			try { cb(event); } catch (e) { /* ignore */ }
+			try { cb(event); } catch { /* ignore */ }
 		}
 	}
 
@@ -42,7 +42,6 @@ export class ProgressTracker {
 	// ──── Phase management ────
 
 	setPhase(phase: IndexPhase) {
-		const prev = this.progress.phase;
 		this.progress.phase = phase;
 		if (phase !== "idle" && phase !== "completed" && this.progress.startedAt === 0) {
 			this.progress.startedAt = Date.now();

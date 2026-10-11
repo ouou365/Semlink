@@ -66,7 +66,7 @@ export class VectorStore {
 			try {
 				await this.initWorker();
 				return;
-			} catch (e) {
+			} catch {
 				console.info("[Semlink] node worker_threads unavailable in the renderer — using the browser worker instead");
 			}
 		}
