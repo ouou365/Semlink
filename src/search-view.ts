@@ -7,13 +7,15 @@
 // retrieved notes), with a collapsible list of source note cards. If no chat
 // provider is configured, it falls back to showing the raw result list.
 
-import { ItemView, MarkdownRenderer, MarkdownView, WorkspaceLeaf, TFile, Vault, Notice, Menu, setIcon } from "obsidian";
+import { App, ItemView, MarkdownRenderer, MarkdownView, WorkspaceLeaf, TFile, Vault, Notice, Menu, Modal, setIcon } from "obsidian";
 import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
 import { inferAgentDepth, buildNoteContext } from "./chat-client";
 import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
 import { ChatHistoryStore } from "./chat-history";
+import { LicenseModal } from "./license-modal";
+import { UsageModal } from "./usage-modal";
 import { guideInProgress, onboardingActive, renderOnboarding } from "./onboarding";
 import type { IndexStatsView } from "./onboarding";
 import type SmartVaultPlugin from "../main";
@@ -100,6 +102,8 @@ export class SemanticSearchView extends ItemView {
 	private statusEl!: HTMLElement;   // transient status (no-api-key hint)
 	private headerEl!: HTMLElement;   // top header (brand + icon sides)
 	private menuBtnEl: HTMLElement | null = null; // history drawer toggle
+	/** Upgrade ✨ entry in the header — visible only on the free tier. */
+	private upgradeBtnEl: HTMLElement | null = null;
 	private headerRightIconsEl!: HTMLElement; // right icon group (ring + settings)
 	private settingsBtnEl!: HTMLElement;      // settings gear (ring sits left of it)
 	private helpBtnEl: HTMLElement | null = null; // setup-guide entry (header right)
@@ -196,14 +200,26 @@ export class SemanticSearchView extends ItemView {
 		const leftIcons = header.createDiv({ cls: "semlink-search-header-side" });
 		const menuBtn = leftIcons.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
-			attr: { "aria-label": t("historyTitle"), title: t("historyTitle") },
+			attr: { "aria-label": t("historyTitle") },
 		});
 		this.menuBtnEl = menuBtn;
 		setIcon(menuBtn, "menu");
 		menuBtn.addEventListener("click", () => this.showHistoryDrawer());
+		// Usage & cost dashboard (Pro view; recording itself runs for all).
+		// Usage & Cost dashboard — entry hidden for now (feature stays wired:
+		// flip this flag to bring the header button back).
+		const usageDashboardEnabled = false;
+		if (usageDashboardEnabled) {
+			const usageBtn = leftIcons.createEl("button", {
+				cls: "semlink-search-icon-btn clickable-icon",
+				attr: { "aria-label": t("usageTitle") },
+			});
+			setIcon(usageBtn, "gauge");
+			usageBtn.addEventListener("click", () => new UsageModal(this.app, this.plugin).open());
+		}
 		const newChatBtn = leftIcons.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
-			attr: { "aria-label": t("searchNewChat"), title: t("searchNewChat") },
+			attr: { "aria-label": t("searchNewChat") },
 		});
 		this.newChatBtnEl = newChatBtn;
 		// Home icon: Obsidian's icon set has no house icon, so inline the
@@ -235,18 +251,10 @@ export class SemanticSearchView extends ItemView {
 			this.updateCompactHeader();
 			this.inputEl.focus();
 		});
-		// Centered brand (logo + "Semlink" — always stays).
-		const brand = header.createDiv({ cls: "semlink-search-brand-group" });
-		const logoEl = brand.createDiv({ cls: "semlink-search-logo" });
-		setSvgIcon(logoEl, logoSvg);
-		brand.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
-		// Right icon group: setup guide + settings.
-		const rightIcons = header.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
-		this.headerRightIconsEl = rightIcons;
 		// Help icon: (re-)opens the setup guide on the welcome screen.
-		const helpBtn = rightIcons.createEl("button", {
+		const helpBtn = leftIcons.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
-			attr: { "aria-label": t("guideTitle"), title: t("guideTitle") },
+			attr: { "aria-label": t("guideTitle") },
 		});
 		this.helpBtnEl = helpBtn;
 		// Lucide renamed help-circle → circle-help; work with either set.
@@ -255,9 +263,30 @@ export class SemanticSearchView extends ItemView {
 		helpBtn.addEventListener("click", () => {
 			this.openGuide();
 		});
+		// Centered brand (logo + "Semlink" — always stays).
+		const brand = header.createDiv({ cls: "semlink-search-brand-group" });
+		const logoEl = brand.createDiv({ cls: "semlink-search-logo" });
+		setSvgIcon(logoEl, logoSvg);
+		brand.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
+		// Right icon group: setup guide + settings.
+		const rightIcons = header.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
+		this.headerRightIconsEl = rightIcons;
+		// Upgrade entry (✨): one of the three standing Pro entry points
+		// (header, settings, locked items). Hidden the moment a license
+		// activates — refreshLicenseUI() runs on every settings save.
+		const upgradeBtn = rightIcons.createEl("button", {
+			cls: "semlink-search-icon-btn clickable-icon semlink-upgrade-btn",
+			attr: { "aria-label": t("upgradeProBtn") },
+		});
+		this.upgradeBtnEl = upgradeBtn;
+		setIcon(upgradeBtn, "sparkles");
+		upgradeBtn.addEventListener("click", () => {
+			new LicenseModal(this.app, this.plugin).open();
+		});
+		this.refreshLicenseUI();
 		const settingsBtn = rightIcons.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
-			attr: { "aria-label": t("settingsTitle"), title: t("settingsTitle") },
+			attr: { "aria-label": t("settingsTitle") },
 		});
 		this.settingsBtnEl = settingsBtn;
 		setIcon(settingsBtn, "settings");
@@ -349,18 +378,22 @@ export class SemanticSearchView extends ItemView {
 		this.dragOverlayEl.createSpan({ text: t("dragOverlayHint") });
 
 		let panelDragDepth = 0;
+		const isSessionDrag = (e: DragEvent): boolean => !!e.dataTransfer?.types.includes("text/semlink-session");
 		contentEl.addEventListener("dragover", (e) => {
+			if (isSessionDrag(e)) return;
 			e.preventDefault();
 			e.stopPropagation();
 			if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
 		});
 		contentEl.addEventListener("dragenter", (e) => {
+			if (isSessionDrag(e)) return;
 			e.preventDefault();
 			e.stopPropagation();
 			panelDragDepth++;
 			this.dragOverlayEl.removeClass("semlink-hidden");
 		});
 		contentEl.addEventListener("dragleave", (e) => {
+			if (isSessionDrag(e)) return;
 			e.preventDefault();
 			e.stopPropagation();
 			panelDragDepth = Math.max(0, panelDragDepth - 1);
@@ -376,6 +409,10 @@ export class SemanticSearchView extends ItemView {
 			(e) => {
 				const target = e.target;
 				if (!(target instanceof Element) || !target.closest(".semlink-search-view")) return;
+				// Internal history-session drags (folder filing in the drawer)
+				// are handled by their own row-level drop targets — let them
+				// pass through instead of treating them as file drops.
+				if (e.dataTransfer?.types.includes("text/semlink-session")) return;
 				e.preventDefault();
 				e.stopPropagation();
 				panelDragDepth = 0;
@@ -482,7 +519,7 @@ export class SemanticSearchView extends ItemView {
 		// every send). Custom icons (outward/inward corner arrows).
 		const expandBtn = modelEl.createEl("button", {
 			cls: "semlink-search-icon-btn semlink-search-expand-btn",
-			attr: { "aria-label": t("searchExpandInput"), title: t("searchExpandInput") },
+			attr: { "aria-label": t("searchExpandInput") },
 		});
 		this.expandBtnEl = expandBtn;
 		setSvgIcon(expandBtn, expandIconSvg);
@@ -495,7 +532,10 @@ export class SemanticSearchView extends ItemView {
 		// expand/collapse toggle. Hidden until the first message is sent (no
 		// context usage to show on an empty conversation).
 		const modelLabel = this.chatClient.getActiveModelLabel();
-		if (modelLabel && this.chatClient.getActiveContextWindow()) {
+		// Context-usage ring entry hidden for now (rendering stays wired —
+		// delete this flag condition to bring it back).
+		const contextUsageEnabled = false;
+		if (contextUsageEnabled && modelLabel && this.chatClient.getActiveContextWindow()) {
 			const usageEl = modelEl.createDiv({ cls: "semlink-context-usage" });
 			const ringEl = usageEl.createDiv({ cls: "semlink-context-ring" });
 			const ringSvg = ringEl.createSvg("svg", { attr: { viewBox: "0 0 36 36" } });
@@ -530,7 +570,7 @@ export class SemanticSearchView extends ItemView {
 		// State machine: send → loading(spin) → stop(click aborts the run) → send.
 		const searchBtn = modelEl.createEl("button", {
 			cls: "semlink-search-btn",
-			attr: { "aria-label": t("searchSend"), title: t("searchSend") },
+			attr: { "aria-label": t("searchSend") },
 		});
 		this.searchBtnEl = searchBtn;
 		setIcon(searchBtn, "arrow-up");
@@ -1026,13 +1066,13 @@ export class SemanticSearchView extends ItemView {
 		const actionsEl = turn.createDiv({ cls: "semlink-msg-actions" });
 		const copyBtn = actionsEl.createEl("button", {
 			cls: "semlink-msg-action",
-			attr: { "aria-label": t("searchCopy"), title: t("searchCopy") },
+			attr: { "aria-label": t("searchCopy") },
 		});
 		setIcon(copyBtn, "copy");
 		copyBtn.addEventListener("click", () => void this.copyAnswer(content));
 		const saveBtn = actionsEl.createEl("button", {
 			cls: "semlink-msg-action",
-			attr: { "aria-label": t("searchSave"), title: t("searchSave") },
+			attr: { "aria-label": t("searchSave") },
 		});
 		setIcon(saveBtn, "save");
 		saveBtn.addEventListener("click", () => {
@@ -1531,7 +1571,7 @@ export class SemanticSearchView extends ItemView {
 			const leftSide = corners.createDiv({ cls: "semlink-search-header-side" });
 			const skipBtn = leftSide.createEl("button", {
 				cls: "semlink-search-icon-btn clickable-icon",
-				attr: { "aria-label": t("guideSkip"), title: t("guideSkip") },
+				attr: { "aria-label": t("guideSkip") },
 			});
 			setIcon(skipBtn, "x");
 			skipBtn.addEventListener("click", () => {
@@ -1572,7 +1612,7 @@ export class SemanticSearchView extends ItemView {
 			// settings on this plugin's tab.
 			const guideSettingsBtn = rightSide.createEl("button", {
 				cls: "semlink-search-icon-btn clickable-icon",
-				attr: { "aria-label": t("settingsTitle"), title: t("settingsTitle") },
+				attr: { "aria-label": t("settingsTitle") },
 			});
 			setIcon(guideSettingsBtn, "settings");
 			guideSettingsBtn.addEventListener("click", () => {
@@ -1787,6 +1827,10 @@ export class SemanticSearchView extends ItemView {
 			this.helpBtnEl.setAttr("aria-label", t("guideTitle"));
 			this.helpBtnEl.setAttr("title", t("guideTitle"));
 		}
+		if (this.upgradeBtnEl) {
+			this.upgradeBtnEl.setAttr("aria-label", t("upgradeProBtn"));
+			this.upgradeBtnEl.setAttr("title", t("upgradeProBtn"));
+		}
 		// State-dependent tooltips (expand/collapse, send/stop).
 		this.applyInputExpanded();
 		this.setSendButtonState(this.isGenerating ? "stop" : "idle");
@@ -1799,6 +1843,12 @@ export class SemanticSearchView extends ItemView {
 			this.messagesEl.empty();
 			this.renderWelcome();
 		}
+	}
+
+	/** Show/hide the header upgrade button with the license state. Called on
+	 *  every settings save (activation/deactivation persist through it). */
+	refreshLicenseUI(): void {
+		this.upgradeBtnEl?.toggleClass("semlink-hidden", this.plugin.licenseManager.isPro());
 	}
 
 	/** Time-slot key of the greeting for the current hour. */
@@ -1957,87 +2007,614 @@ export class SemanticSearchView extends ItemView {
 	/** Slide in a left-side drawer listing saved chat sessions. */
 	private async showHistoryDrawer(): Promise<void> {
 		const sessions = await this.history.load();
-		// Attach to the view's contentEl (not document.body) so the drawer is
-		// positioned relative to the search panel, not the whole Obsidian window.
-		// The view root's CSS already sets position: relative (anchors the
-		// full-panel drag overlay), nothing needed here.
-		// Backdrop
 		const backdrop = this.contentEl.createDiv({ cls: "semlink-history-backdrop" });
-		// Drawer panel
 		const drawer = this.contentEl.createDiv({ cls: "semlink-history-drawer" });
 		const header = drawer.createDiv({ cls: "semlink-history-header" });
-		header.createDiv({ cls: "semlink-history-title", text: t("historyTitle") });
+		const titleEl = header.createDiv({ cls: "semlink-history-title", text: t("historyTitle") });
+		// Far right: archive entry → dedicated view of archived chats
+		// (free tier: everything past the 5-active window; deletable there).
+		const archiveBtn = header.createEl("button", {
+			cls: "semlink-history-archive-btn clickable-icon",
+			attr: { "aria-label": t("historyArchiveBtn") },
+		});
+		setIcon(archiveBtn, "archive");
 		const closeBtn = header.createEl("button", { cls: "semlink-search-icon-btn clickable-icon" });
 		setIcon(closeBtn, "x");
-		const list = drawer.createDiv({ cls: "semlink-history-list" });
 
-		// Paged, time-grouped list: by default only the last month of sessions
-		// is shown; "展示更多" reveals another PAGE at a time.
-		const all = this.history.list(); // newest first
+		const pro = this.plugin.licenseManager.isPro();
+		const freeLimit = this.plugin.licenseManager.freeHistoryLimit();
+		let view: "main" | "archive" = "main";
+		let tab: "time" | "folder" = "time";
+
+		// Tabs (Pro): 时间 | 文件夹. Free users get the plain time list.
+		const tabsEl = drawer.createDiv({ cls: "semlink-history-tabs" });
+		const tabBtn = (key: "time" | "folder", label: string) => {
+			const b = tabsEl.createSpan({
+				cls: "semlink-history-tab" + (tab === key && view === "main" ? " is-active" : ""),
+				text: label,
+			});
+			b.addEventListener("click", () => {
+				view = "main";
+				tab = key;
+				render();
+			});
+		};
+
+		// The search input is created ONCE and only shown/hidden by render() —
+		// re-creating it on each keystroke breaks CJK IME composition (the
+		// element the IME is typing into gets replaced mid-composition).
+		const tools = drawer.createDiv({ cls: "semlink-history-tools" });
+		let query = "";
+		let composing = false;
+		const searchInput = tools.createEl("input", {
+			cls: "semlink-history-search",
+			attr: { type: "text", placeholder: t("historySearch"), "aria-label": t("historySearch") },
+		});
+		const applySearch = (): void => {
+			query = searchInput.value.trim().toLowerCase();
+			if (view !== "main") view = "main";
+			render();
+		};
+		searchInput.addEventListener("compositionstart", () => { composing = true; });
+		searchInput.addEventListener("compositionend", () => { composing = false; applySearch(); });
+		searchInput.addEventListener("input", () => { if (!composing) applySearch(); });
+		if (!this.plugin.licenseManager.isPro()) {
+			// Freemium friction: the search box is VISIBLE for free users but
+			// locked — clicking it opens the activation modal instead.
+			searchInput.setAttribute("readonly", "");
+			searchInput.addClass("semlink-history-search-locked");
+			searchInput.addEventListener("click", () => {
+				this.closeHistoryDrawer(backdrop, drawer);
+				new LicenseModal(this.app, this.plugin, () => this.showHistoryDrawer()).open();
+			});
+		}
+
+		const list = drawer.createDiv({ cls: "semlink-history-list" });
+		const collapsed = new Set<string>();
+		// Folder path currently being renamed inline (null = none).
+		let editingPath: string | null = null;
+
+		const allSessions = this.history.list();
+		// Paging counters live OUTSIDE render() so "Show more" survives
+		// re-renders (they were per-render locals once — the button reset
+		// itself on every click).
+		let showMorePages = 0;
+		let lockedPages = 0;
+		const LOCKED_PAGE = 30;
 		const now = Date.now();
 		const MONTH_MS = 30 * 24 * 3600 * 1000;
 		const PAGE = 100;
-		let visibleCount = all.filter((s) => s.updatedAt >= now - MONTH_MS).length;
-		// No sessions in the month window but older ones exist → show one page
-		// so the list isn't empty (the "show more" button remains).
-		if (all.length > 0 && visibleCount === 0) visibleCount = Math.min(PAGE, all.length);
 
-		const renderList = (): void => {
+		const render = (): void => {
+			// Recompute the active/archived split on EVERY render — the
+			// archive action mutates sessions in place and the list must
+			// reflect it immediately (a snapshot taken at drawer-open would
+			// keep showing just-archived chats).
+			const all = allSessions.filter((x) => !x.archived); // active, newest first
+			const manuallyArchived = allSessions.filter((x) => x.archived);
 			list.empty();
-			if (all.length === 0) {
-				list.createDiv({ cls: "semlink-history-empty", text: t("historyEmpty") });
+			tabsEl.empty();
+			// NOTE: tools (the search input) is never emptied — it is created
+			// once and only shown/hidden, or CJK IME composition breaks.
+			// Header chrome per view.
+			if (view === "archive") {
+				titleEl.setText(t("historyArchiveTitle"));
+				tabsEl.hide();
+				tools.hide();
+			} else {
+				titleEl.setText(t("historyTitle"));
+				// Tabs are visible to everyone; for free users the Folders tab
+				// itself is the friction point (click → activation modal).
+				tabsEl.show();
+				tabBtn("time", t("historyTabTime"));
+				if (pro) {
+					tabBtn("folder", t("historyTabFolder"));
+				} else {
+					// Free users CAN enter the Folders tab — the content is a
+					// masked preview whose "Unlock with Pro" overlay is the
+					// activation trigger (not the tab itself).
+					const locked = tabsEl.createSpan({
+						cls: "semlink-history-tab" + (tab === "folder" ? " is-active" : "") + " semlink-history-tab-locked",
+						text: t("historyTabFolder"),
+					});
+					locked.addEventListener("click", () => {
+						tab = "folder";
+						render();
+					});
+				}
+				// The persistent search input (never re-created — see above);
+				// visible for free users too (readonly, click → activate).
+				tools.show();
+			}
+
+			// ── Archive view: every locked/archived chat, deletable. ──
+			if (view === "archive") {
+				const back = list.createDiv({ cls: "semlink-history-more", text: `← ${t("historyBack")}` });
+				back.addEventListener("click", () => { view = "main"; render(); });
+				// Manually archived chats (any tier): restore or delete.
+				if (manuallyArchived.length > 0) {
+					const head = list.createDiv({ cls: "semlink-history-archive-head" });
+					head.createSpan({
+						cls: "semlink-history-archive-title",
+						text: t("historyArchivedManualHead").replace("{n}", String(manuallyArchived.length)),
+					});
+					const items = list.createDiv({ cls: "semlink-history-group-items semlink-history-archive-items" });
+					for (const session of manuallyArchived) renderArchivedItem(items, session, true);
+				}
+				if (manuallyArchived.length === 0) {
+					list.createDiv({ cls: "semlink-history-empty", text: t("historyArchiveEmptyPro") });
+				}
 				return;
 			}
-			// Group the visible window by recency bucket (today → earlier).
-			// Each group gets ONE container holding the items, so the left
-			// rule is a single continuous line per group (like tool-call).
-			let lastKey = "";
-			let groupEl: HTMLElement | null = null;
-			for (const session of all.slice(0, visibleCount)) {
-				const key = historyBucket(session.updatedAt, now);
-				if (key !== lastKey) {
-					list.createDiv({ cls: "semlink-history-group", text: t(HISTORY_GROUP_KEYS[key]) });
-					groupEl = list.createDiv({ cls: "semlink-history-group-items" });
-					lastKey = key;
-				}
-				const item = groupEl!.createDiv({ cls: "semlink-history-item" });
-				const info = item.createDiv({ cls: "semlink-history-item-info" });
-				info.createDiv({ cls: "semlink-history-item-title", text: session.title });
-				const date = new Date(session.updatedAt);
-				const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-				info.createDiv({ cls: "semlink-history-item-meta", text: `${timeStr} · ${session.messages.length} ${t("historyMessages")}` });
-				// Delete button
-				const delBtn = item.createEl("button", { cls: "semlink-history-item-del clickable-icon" });
-				setIcon(delBtn, "trash");
-				delBtn.addEventListener("click", (e) => {
-					e.stopPropagation();
-					this.history.deleteSession(session.id);
-					void this.history.save();
-					item.remove();
-				});
-				item.addEventListener("click", () => {
-					this.closeHistoryDrawer(backdrop, drawer);
-					void this.loadSession(session);
-				});
+
+			// ── Main view ──
+			let pool = all;
+			if (pro && query) {
+				pool = pool.filter((s) =>
+					s.title.toLowerCase().includes(query) ||
+					s.messages.some((m) => (m.content || "").toLowerCase().includes(query))
+				);
 			}
-			// "展示更多" — another PAGE of older sessions.
-			if (visibleCount < all.length) {
-				const more = list.createDiv({ cls: "semlink-history-more", text: t("historyShowMore") });
-				more.addEventListener("click", () => {
-					visibleCount += PAGE;
-					renderList();
+			if (pool.length === 0) {
+				list.createDiv({ cls: "semlink-history-empty", text: query ? t("historyNoMatch") : t("historyEmpty") });
+				return;
+			}
+			let visibleCount = freeLimit !== null
+				? Math.min(freeLimit, pool.length)
+				: pool.filter((s) => s.updatedAt >= now - MONTH_MS).length;
+			if (freeLimit === null && pool.length > 0 && visibleCount === 0) {
+				visibleCount = Math.min(PAGE, pool.length);
+			}
+			if (freeLimit === null) visibleCount = Math.min(pool.length, visibleCount + showMorePages * PAGE);
+
+			const rest = pool;
+
+			if (pro && tab === "folder" && !query) {
+				// Folder tree (nested via "/" in folder names). Empty folders
+				// come from the store's registry so they survive without any
+				// session inside.
+				interface FNode { name: string; path: string; children: Map<string, FNode>; sessions: ChatSession[]; }
+				const root: FNode = { name: "", path: "", children: new Map(), sessions: [] };
+				const addPath = (folder: string): void => {
+					const parts = folder.split("/").map((x) => x.trim()).filter(Boolean);
+					let node = root;
+					let path = "";
+					for (const part of parts) {
+						path = path ? `${path}/${part}` : part;
+						if (!node.children.has(part)) node.children.set(part, { name: part, path, children: new Map(), sessions: [] });
+						node = node.children.get(part)!;
+					}
+				};
+				for (const f of this.history.folders()) addPath(f);
+				for (const session of rest) {
+					if (!session.folder) continue;
+					const parts = session.folder.split("/").map((x) => x.trim()).filter(Boolean);
+					let node = root;
+					for (const part of parts) node = node.children.get(part)!;
+					node.sessions.push(session);
+				}
+				const countOf = (n: FNode): number =>
+					n.sessions.length + [...n.children.values()].reduce((a, c) => a + countOf(c), 0);
+				const renderNode = (n: FNode, depth: number, container: HTMLElement): void => {
+					const isCollapsed = collapsed.has(n.path);
+					// Direct children of the "Folders" root render with a folder
+					// icon instead of a chevron, at the root's indent level.
+					const childOfRoot = depth === 1;
+					const visualDepth = childOfRoot ? 0 : depth;
+					if (editingPath === n.path) {
+						// Inline rename: [icon][input][✓][✕] — name, count and
+						// the action buttons are all hidden while editing.
+						const editRow = container.createDiv({ cls: "semlink-history-folder semlink-history-folder-edit" });
+						editRow.style.paddingLeft = `${0.35 + visualDepth * 0.85}rem`;
+						if (n.path !== "__folders_root__") {
+							const icon = editRow.createSpan({ cls: "semlink-history-folder-chev" });
+							setIcon(icon, isCollapsed ? "chevron-right" : "chevron-down");
+							const folderIco = editRow.createSpan({ cls: "semlink-history-folder-chev" });
+							setIcon(folderIco, "folder");
+						}
+						const input = editRow.createEl("input", {
+							cls: "semlink-folder-input",
+							attr: { type: "text", value: n.name },
+						});
+						const finish = (apply: boolean): void => {
+							const name = input.value.trim().slice(0, 24);
+							if (apply && name && name !== n.name) {
+								const parentPrefix = n.path.includes("/") ? n.path.slice(0, n.path.lastIndexOf("/")) : "";
+								this.history.renameFolder(n.path, parentPrefix ? `${parentPrefix}/${name}` : name);
+								void this.history.save();
+							}
+							editingPath = null;
+							render();
+						};
+						input.addEventListener("keydown", (e) => {
+							if (e.key === "Enter") { e.preventDefault(); finish(true); }
+							else if (e.key === "Escape") { e.preventDefault(); finish(false); }
+							e.stopPropagation();
+						});
+						input.addEventListener("click", (e) => e.stopPropagation());
+						const ok = editRow.createSpan({
+							cls: "semlink-history-folder-act",
+							attr: { "aria-label": t("historyFolderOk") },
+						});
+						setIcon(ok, "check");
+						ok.addEventListener("click", (e) => { e.stopPropagation(); finish(true); });
+						const cancel = editRow.createSpan({
+							cls: "semlink-history-folder-act",
+							attr: { "aria-label": t("historyCancel") },
+						});
+						setIcon(cancel, "x");
+						cancel.addEventListener("click", (e) => { e.stopPropagation(); finish(false); });
+						window.setTimeout(() => { input.focus(); input.select(); }, 0);
+						// Keep the expanded subtree visible while renaming — only
+						// the row itself switches to edit mode.
+						if (!isCollapsed) {
+							const body = container.createDiv({ cls: "semlink-history-folder-body" });
+							for (const child of [...n.children.values()].sort((a, b) => a.name.localeCompare(b.name))) renderNode(child, depth + 1, body);
+							for (const session of n.sessions) renderItem(body, session);
+						}
+						return;
+					}
+					const row = container.createDiv({
+						cls: "semlink-history-folder" + (isCollapsed ? " is-collapsed" : "") + (n.path === "__folders_root__" ? " semlink-history-folder-root" : ""),
+					});
+					row.style.paddingLeft = `${0.35 + visualDepth * 0.85}rem`;
+					if (n.path !== "__folders_root__") {
+						// Root has no icon (bold name only); real folders carry a
+						// state chevron + folder identity icon.
+						const chev = row.createSpan({ cls: "semlink-history-folder-chev" });
+						setIcon(chev, isCollapsed ? "chevron-right" : "chevron-down");
+						const folderIco = row.createSpan({ cls: "semlink-history-folder-chev" });
+						setIcon(folderIco, "folder");
+					}
+					row.createSpan({ cls: "semlink-history-folder-name", text: n.name });
+					if (n.path !== "__folders_root__") {
+						row.createSpan({ cls: "semlink-history-folder-count", text: String(countOf(n)) });
+					}
+					if (n.path === "__folders_root__") {
+						// The Folders root carries the "new sub-folder" action.
+						const add = row.createSpan({
+							cls: "semlink-history-folder-add",
+							attr: { "aria-label": t("historyNewFolder") },
+						});
+						setIcon(add, "folder-plus");
+						add.addEventListener("click", (e) => {
+							e.stopPropagation();
+							new FolderNameModal(this.app, "", (name) => {
+								this.history.createFolder(name);
+								void this.history.save();
+								render();
+							}).open();
+						});
+					}
+					if (n.path !== "__folders_root__") {
+						// Hover actions on real folders: rename + delete.
+						const acts = row.createSpan({ cls: "semlink-history-folder-acts" });
+						const ren = acts.createSpan({
+							cls: "semlink-history-folder-act",
+							attr: { "aria-label": t("historyRenameFolder") },
+						});
+						setIcon(ren, "pencil");
+						ren.addEventListener("click", (e) => {
+							e.stopPropagation();
+							editingPath = n.path;
+							render();
+						});
+						const del = acts.createSpan({
+							cls: "semlink-history-folder-act",
+							attr: { "aria-label": t("historyDeleteFolder") },
+						});
+						setIcon(del, "trash-2");
+						del.addEventListener("click", (e) => {
+							e.stopPropagation();
+							const n2 = countOf(n);
+							if (n2 > 0 && !confirm(t("historyDeleteFolderConfirm").replace("{n}", String(n2)))) return;
+							this.history.deleteFolder(n.path);
+							void this.history.save();
+							render();
+						});
+					}
+					row.addEventListener("click", () => {
+						if (collapsed.has(n.path)) collapsed.delete(n.path);
+						else collapsed.add(n.path);
+						render();
+					});
+					if (n.path !== "__folders_root__") {
+						row.addEventListener("dragover", (e) => {
+							const dt = (e as DragEvent).dataTransfer;
+							if (dt?.types.includes("text/semlink-session")) {
+								e.preventDefault();
+								e.stopPropagation();
+								// Must match the dragstart effectAllowed("move"),
+								// or Chromium silently cancels the drop.
+								dt.dropEffect = "move";
+								row.addClass("is-drop");
+							}
+						});
+						row.addEventListener("dragleave", () => row.removeClass("is-drop"));
+						row.addEventListener("drop", (e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							row.removeClass("is-drop");
+							const id = (e as DragEvent).dataTransfer?.getData("text/semlink-session");
+							if (!id) return;
+							this.history.updateSession(id, { folder: n.path });
+							void this.history.save();
+							render();
+						});
+					}
+					if (!isCollapsed) {
+						const body = container.createDiv({ cls: "semlink-history-folder-body" });
+						for (const child of [...n.children.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+							renderNode(child, depth + 1, body);
+						}
+						for (const session of n.sessions) renderItem(body, session);
+					}
+				};
+				const folderRoots = [...root.children.values()].sort((a, b) => a.name.localeCompare(b.name));
+				if (folderRoots.length > 0) {
+					// A single "Folders" root holds every created folder as its
+					// child (one consistent root instead of loose top-levels).
+					const foldersRoot: FNode = {
+						name: t("historyTabFolder"),
+						path: "__folders_root__",
+						children: new Map(folderRoots.map((f) => [f.name, f])),
+						sessions: [],
+					};
+					renderNode(foldersRoot, 0, list);
+				}
+				// Folder tab groups by folder name only — no time buckets even
+				// for un-filed sessions (they form one flat "unfiled" group).
+				const unfiled = rest.filter((s) => !s.folder);
+				if (unfiled.length > 0 && folderRoots.length > 0) {
+					list.createDiv({ cls: 'semlink-history-unfiled-gap' });
+				}
+				if (unfiled.length > 0) {
+					// No wrapper here: un-filed chats render flush (no left
+					// border / indent) alongside the folder tree; no pin slot
+					// either (pinning lives on the Time tab).
+					for (const session of unfiled.slice(0, visibleCount)) renderItem(list, session, false, false);
+				}
+				if (visibleCount < unfiled.length) {
+					const more = list.createDiv({ cls: "semlink-history-more", text: t("historyShowMore") });
+					more.addEventListener("click", () => { showMorePages++; render(); });
+				}
+			} else if (!pro && tab === "folder") {
+				// Free tier on the Folders tab: ghost tree under a veil;
+				// clicking the veil's call-to-action opens the activation.
+				const wrap = list.createDiv({ cls: "semlink-history-folder-veil" });
+				const ghost = wrap.createDiv({ cls: "semlink-history-folder-ghost" });
+				for (let i = 0; i < 7; i++) {
+					ghost.createDiv({
+						cls: "semlink-history-folder-ghost-line" + (i % 3 === 2 ? " is-child" : ""),
+						attr: { style: `width:${46 + ((i * 37) % 42)}%` },
+					});
+				}
+				const mask = wrap.createDiv({ cls: "semlink-history-folder-mask" });
+				mask.createDiv({ cls: "semlink-history-folder-mask-title", text: `✨ ${t("historyTabFolder")}` });
+				const cta = mask.createDiv({ cls: "semlink-history-folder-mask-cta", text: t("unlockPro") });
+				cta.addEventListener("click", () => {
+					this.closeHistoryDrawer(backdrop, drawer);
+					new LicenseModal(this.app, this.plugin, () => this.showHistoryDrawer()).open();
 				});
+			} else {
+				// Time tab (and Pro search): pinned group first, then flat
+				// time buckets. (While searching, everything flattens.)
+				if (pro && tab === "time") {
+					const pinned = pool.filter((x) => x.pinned);
+					if (pinned.length > 0) {
+						list.createDiv({ cls: "semlink-history-group", text: t("historyPinnedGroup") });
+						const pinnedItems = list.createDiv({ cls: "semlink-history-group-items" });
+						// compact: title-only rows in the pinned group
+						for (const session of pinned) renderItem(pinnedItems, session, true);
+					}
+				}
+				let lastKey = "";
+				let groupEl: HTMLElement | null = null;
+				const timePool = (pro && tab === "time") ? rest.filter((x) => !x.pinned) : rest;
+				for (const session of timePool.slice(0, visibleCount)) {
+					const key = historyBucket(session.updatedAt, now);
+					if (key !== lastKey) {
+						list.createDiv({ cls: "semlink-history-group", text: t(HISTORY_GROUP_KEYS[key]) });
+						groupEl = list.createDiv({ cls: "semlink-history-group-items" });
+						lastKey = key;
+					}
+					renderItem(groupEl!, session);
+				}
+				if (freeLimit === null && visibleCount < rest.length) {
+					const more = list.createDiv({ cls: "semlink-history-more", text: t("historyShowMore") });
+					more.addEventListener("click", () => { showMorePages++; render(); });
+				}
+				if (freeLimit !== null) {
+					// Free tier: locked earlier chats live HERE (bottom of the
+					// Time tab, where the user wanted to read them) — NOT in
+					// the archive view; manual archiving is a different thing.
+					const locked = all.slice(Math.min(freeLimit, all.length));
+					const lockedVisible = Math.min(locked.length, LOCKED_PAGE + lockedPages * LOCKED_PAGE);
+					if (locked.length > 0) {
+						const head = list.createDiv({ cls: "semlink-history-archive-head" });
+						head.createSpan({
+							cls: "semlink-history-archive-title",
+							text: t("historyArchivedHead").replace("{n}", String(locked.length)),
+						});
+						const unlock = head.createSpan({ cls: "semlink-history-archive-upgrade", text: t("unlockPro") });
+						unlock.addEventListener("click", (e) => {
+							e.stopPropagation();
+							this.closeHistoryDrawer(backdrop, drawer);
+							new LicenseModal(this.app, this.plugin, () => this.showHistoryDrawer()).open();
+						});
+						const lockedItems = list.createDiv({ cls: "semlink-history-group-items semlink-history-archive-items" });
+						for (const session of locked.slice(0, lockedVisible)) renderArchivedItem(lockedItems, session, false);
+						if (lockedVisible < locked.length) {
+							const more = lockedItems.createDiv({ cls: "semlink-history-more", text: t("historyShowMore") });
+							more.addEventListener("click", () => { lockedPages++; render(); });
+						}
+					}
+				}
 			}
 		};
-		renderList();
 
-		// Animate in
+		const renderArchivedItem = (container: HTMLElement, session: ChatSession, manual: boolean): void => {
+			const item = container.createDiv({ cls: "semlink-history-item semlink-history-item-archived" });
+			const info = item.createDiv({ cls: "semlink-history-item-info" });
+			info.createDiv({ cls: "semlink-history-item-title", text: session.title });
+			const date = new Date(session.updatedAt);
+			const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+			info.createDiv({ cls: "semlink-history-item-meta", text: timeStr });
+			if (manual) {
+				const restoreBtn = item.createEl("button", {
+					cls: "semlink-history-item-del clickable-icon",
+					attr: { "aria-label": t("historyUnarchive") },
+				});
+				setIcon(restoreBtn, "archive-restore");
+				restoreBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					this.history.updateSession(session.id, { archived: false });
+					void this.history.save();
+					render();
+				});
+			} else {
+				const lock = item.createEl("button", { cls: "semlink-history-item-lock clickable-icon", attr: { "aria-label": t("historyLockedHint") } });
+				setIcon(lock, "lock");
+			}
+			const delBtn = item.createEl("button", { cls: "semlink-history-item-del clickable-icon" });
+			setIcon(delBtn, "trash");
+			delBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.history.deleteSession(session.id);
+				void this.history.save();
+				render();
+			});
+			item.addEventListener("click", () => {
+				if (!manual) new Notice(t("historyLockedHint"));
+			});
+		};
+
+		const renderItem = (container: HTMLElement, session: ChatSession, compact = false, showPin = true): HTMLElement => {
+			const item = container.createDiv({ cls: "semlink-history-item" });
+			// Drag a conversation onto a folder row (Folders tab) to file it.
+			item.draggable = true;
+			item.addEventListener("dragstart", (e) => {
+				(e as DragEvent).dataTransfer?.setData("text/semlink-session", session.id);
+				(e as DragEvent).dataTransfer!.effectAllowed = "move";
+			});
+			if (!showPin) {
+				// e.g. Folders-tab un-filed rows: pinning belongs to the Time tab.
+				const spacer = item.createDiv({ cls: "semlink-history-item-pin" });
+				spacer.style.visibility = "hidden";
+			} else {
+			const pinBtn = item.createEl("button", {
+				cls: "semlink-history-item-pin clickable-icon" + (session.pinned ? " is-pinned" : ""),
+				attr: { "aria-label": t("historyPin") },
+			});
+			setIcon(pinBtn, session.pinned ? "pin-off" : "pin");
+			if (pro) {
+				pinBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					this.history.updateSession(session.id, { pinned: !session.pinned });
+					void this.history.save();
+					render();
+				});
+			} else {
+				pinBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					this.closeHistoryDrawer(backdrop, drawer);
+					new LicenseModal(this.app, this.plugin, () => this.showHistoryDrawer()).open();
+				});
+			}
+			}
+			const info = item.createDiv({ cls: "semlink-history-item-info" });
+			info.createDiv({ cls: "semlink-history-item-title", text: session.title });
+			const date = new Date(session.updatedAt);
+			const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+			if (!compact) {
+				info.createDiv({ cls: "semlink-history-item-meta", text: timeStr });
+			}
+			// Pin icon: visible to everyone on hover; for free users clicking
+			// it is a friction point (activation modal), like Folders/search.
+			if (pro) {
+				const folderBtn = item.createEl("button", {
+					cls: "semlink-history-item-folder clickable-icon",
+					attr: { "aria-label": t("historyFolder") },
+				});
+				setIcon(folderBtn, "folder-input");
+				folderBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					this.showFolderMenu(e, session, () => render());
+				});
+			}
+			const archBtn = item.createEl("button", {
+				cls: "semlink-history-item-del clickable-icon",
+				attr: { "aria-label": t("historyArchiveAction") },
+			});
+			setIcon(archBtn, "archive");
+			archBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.history.updateSession(session.id, { archived: true });
+				void this.history.save();
+				render();
+			});
+			if (compact) {
+				// Pinned rows only: the time is the LAST flow child, pushed to
+				// the right edge (aligned with where 📦 appears); hover swaps
+				// it out for the button group. Row height stays constant (the
+				// always-in-flow pin button anchors it).
+				item.createEl("span", { cls: "semlink-history-item-time", text: timeStr });
+			}
+			item.addEventListener("click", () => {
+				this.closeHistoryDrawer(backdrop, drawer);
+				void this.loadSession(session);
+			});
+			return item;
+		};
+
+		archiveBtn.addEventListener("click", () => {
+			view = view === "archive" ? "main" : "archive";
+			render();
+		});
+		render();
+
 		requestAnimationFrame(() => {
 			drawer.addClass("semlink-history-drawer-open");
 			backdrop.addClass("semlink-history-backdrop-open");
 		});
 		closeBtn.addEventListener("click", () => this.closeHistoryDrawer(backdrop, drawer));
 		backdrop.addEventListener("click", () => this.closeHistoryDrawer(backdrop, drawer));
+	}
+
+	/** Folder picker menu for a history session (Pro). */
+	private showFolderMenu(evt: MouseEvent, session: ChatSession, onChange: () => void): void {
+		const menu = new Menu();
+		for (const f of this.history.folders()) {
+			menu.addItem((item) => {
+				item.setTitle(f)
+					.setIcon(session.folder === f ? "check" : "folder")
+					.onClick(() => {
+						this.history.updateSession(session.id, { folder: f });
+						void this.history.save();
+						onChange();
+					});
+			});
+		}
+		if (session.folder) {
+			menu.addItem((item) => {
+				item.setTitle(t("historyRemoveFolder")).setIcon("folder-minus").onClick(() => {
+					this.history.updateSession(session.id, { folder: "" });
+					void this.history.save();
+					onChange();
+				});
+			});
+		}
+		menu.addSeparator();
+		menu.addItem((item) => {
+			item.setTitle(t("historyNewFolder")).setIcon("folder-plus").onClick(() => {
+				new FolderNameModal(this.app, session.folder || "", (name) => {
+					this.history.updateSession(session.id, { folder: name });
+					void this.history.save();
+					onChange();
+				}).open();
+			});
+		});
+		menu.showAtMouseEvent(evt);
 	}
 
 	private closeHistoryDrawer(backdrop: HTMLElement, drawer: HTMLElement): void {
@@ -2583,5 +3160,49 @@ export class SemanticSearchView extends ItemView {
 		const name = slash >= 0 ? path.slice(slash + 1) : path;
 		const dot = name.lastIndexOf(".");
 		return dot > 0 ? name.slice(0, dot) : name;
+	}
+}
+
+
+/** Tiny input modal used by the Pro history-management folder picker. */
+class FolderNameModal extends Modal {
+	private initial: string;
+	private onDone: (name: string) => void;
+
+	constructor(app: App, initial: string, onDone: (name: string) => void) {
+		super(app);
+		this.initial = initial;
+		this.onDone = onDone;
+		this.modalEl.addClass("semlink-folder-name-modal");
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.createEl("h2", { text: t("historyNewFolder") });
+		const input = contentEl.createEl("input", {
+			cls: "semlink-folder-input",
+			attr: { type: "text", placeholder: t("historyFolderPlaceholder"), value: this.initial },
+		});
+		input.focus();
+		const submit = () => {
+			const name = input.value.trim().slice(0, 24);
+			if (name) {
+				this.onDone(name);
+				this.close();
+			}
+		};
+		input.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") submit();
+		});
+		const row = contentEl.createDiv({ cls: "semlink-folder-input-row" });
+		const ok = row.createEl("button", { cls: "mod-cta", text: t("historyFolderOk") });
+		ok.addEventListener("click", submit);
+		const cancel = row.createEl("button", { text: t("chatDone") });
+		cancel.addEventListener("click", () => this.close());
+	}
+
+	onClose() {
+		this.contentEl.empty();
 	}
 }

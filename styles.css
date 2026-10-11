@@ -1154,8 +1154,7 @@
 .semlink-history-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
+    padding: 6px 4px;
     border-radius: 6px;
     cursor: pointer;
 }
@@ -1206,7 +1205,6 @@
 }
 
 .semlink-history-item-del:hover {
-    color: var(--text-error);
     background: var(--background-modifier-hover);
 }
 
@@ -3488,3 +3486,236 @@
 /* Guide modal full-width controls + stacked spacing (checker-safe). */
 .semlink-guide-fullwidth { width: 100%; }
 .semlink-guide-gap-top { margin-top: 8px; }
+
+/* ──── Pro / freemium UI (docs/freemium-design.md v3) ──── */
+
+/* Header upgrade ✨ entry — accent-tinted so it reads as an action, not a tool. */
+.semlink-upgrade-btn {
+    color: var(--text-accent);
+}
+
+.semlink-upgrade-btn:hover {
+    color: var(--text-accent);
+}
+
+/* History archive section (free tier): locked but readable titles. */
+.semlink-history-archive-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 14px 0 6px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--background-secondary);
+}
+
+.semlink-history-archive-title {
+    font-size: var(--font-ui-smaller);
+    color: var(--text-muted);
+}
+
+.semlink-history-archive-upgrade {
+    font-size: var(--font-ui-smaller);
+    color: var(--text-accent);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.semlink-history-archive-upgrade:hover {
+    text-decoration: underline;
+}
+
+.semlink-history-item-archived {
+    opacity: 0.65;
+}
+
+.semlink-history-item-lock {
+    color: var(--text-faint);
+    pointer-events: none;
+}
+
+/* License / upgrade modal. */
+.semlink-license-subhead {
+    margin: 16px 0 6px;
+    font-weight: var(--font-bold);
+}
+
+.semlink-license-benefits {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.semlink-license-benefit-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: var(--font-ui-smaller);
+    color: var(--text-normal);
+}
+
+.semlink-license-check::before {
+    content: "✓";
+    color: var(--text-success, var(--text-accent));
+    font-weight: var(--font-bold);
+}
+
+.semlink-license-free-row .semlink-license-check::before {
+    color: var(--text-success, var(--text-accent));
+}
+
+.semlink-license-buy {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.semlink-license-anchor {
+    font-size: var(--font-ui-smaller);
+    color: var(--text-faint);
+}
+
+.semlink-license-note {
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--background-secondary);
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+}
+
+.semlink-license-trust {
+    margin-top: 16px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--background-secondary);
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+    line-height: 1.5;
+}
+
+/* Settings: Feishu bot Pro gate row. */
+.semlink-pro-gate {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    margin: 8px 0 4px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.semlink-pro-badge {
+    color: var(--text-accent);
+    font-weight: var(--font-bold);
+    white-space: nowrap;
+}
+
+.semlink-pro-gate-text {
+    flex: 1;
+    font-size: var(--font-ui-smaller);
+    color: var(--text-muted);
+}
+
+/* ── Pro history management: search / chips / pin / folder ── */
+.semlink-history-tools{padding:.4rem .8rem .0rem}
+.semlink-history-search{width:100%;border:1px solid var(--background-modifier-border);border-radius:6px;background:var(--background-primary);color:var(--text-normal);padding:.4rem .6rem;font-size:.85rem;font-family:inherit}
+.semlink-history-search:focus{outline:none;border-color:var(--interactive-accent)}
+
+/* Drawer tabs + archive entry */
+.semlink-history-tabs{display:flex;gap:.2rem;padding:.15rem .8rem;border-bottom:1px solid var(--background-modifier-border)}
+.semlink-history-tab{padding:.3rem .75rem;font-size:.83rem;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.semlink-history-tab:hover{color:var(--text-normal)}
+.semlink-history-tab.is-active{color:var(--interactive-accent);border-bottom-color:var(--interactive-accent);font-weight:600}
+.semlink-history-search-locked{cursor:pointer}
+
+/* Free-tier Folders tab: veiled preview */
+.semlink-history-folder-veil{position:relative;margin:.6rem .8rem;min-height:11rem}
+.semlink-history-folder-ghost{filter:blur(3px);opacity:.45;pointer-events:none;user-select:none;padding:.2rem 0}
+.semlink-history-folder-ghost-line{height:1.55rem;border-radius:6px;background:var(--background-modifier-border);margin-bottom:.45rem}
+.semlink-history-folder-ghost-line.is-child{margin-left:1.1rem}
+.semlink-history-folder-mask{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.55rem}
+.semlink-history-folder-mask-title{font-size:.85rem;font-weight:700;color:var(--text-normal)}
+.semlink-history-folder-mask-cta{border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);border-radius:999px;padding:.35rem 1.1rem;font-size:.85rem;font-weight:700;cursor:pointer}
+.semlink-history-folder-mask-cta:hover{filter:brightness(1.08)}
+.semlink-history-archive-btn{margin-left:auto}
+.semlink-history-newfolder{margin:.5rem .8rem .1rem;padding:.4rem .6rem;border:1px dashed var(--background-modifier-border);border-radius:8px;cursor:pointer;font-size:.8rem;color:var(--text-muted)}
+.semlink-history-newfolder:hover{color:var(--text-normal);border-color:var(--interactive-accent)}
+.semlink-history-folder:hover 
+/* Pro history folder tree */
+.semlink-history-item{position:relative}
+.semlink-history-item .clickable-icon{height:26px;display:flex;align-items:center}
+.semlink-history-item-time{height:26px;display:flex;align-items:center}
+.semlink-history-item-pin{flex:none;display:flex;opacity:0;transition:opacity .12s}
+.semlink-history-item:hover .semlink-history-item-pin{opacity:1}
+.semlink-history-item-pin.is-pinned{opacity:1;color:var(--interactive-accent)}
+.semlink-history-item-pin.clickable-icon{background:transparent;box-shadow:none}
+.semlink-history-item-pin.clickable-icon:hover{background:transparent;box-shadow:none}
+.semlink-history-item-pin.clickable-icon:hover{color:var(--text-accent)}
+.semlink-history-item-time{margin-left:auto;flex:none;font-size:.72rem;color:var(--text-faint);white-space:nowrap;padding-right:.25rem}
+.semlink-history-item:hover .semlink-history-item-time{display:none}
+.semlink-history-item:not(.semlink-history-item-archived) .semlink-history-item-del{display:none}
+.semlink-history-item:not(.semlink-history-item-archived):hover .semlink-history-item-del{display:flex}
+.semlink-history-item:not(.semlink-history-item-archived) .semlink-history-item-folder{display:none}
+.semlink-history-item:not(.semlink-history-item-archived):hover .semlink-history-item-folder{display:flex}
+.semlink-history-item-info{margin-left:0}
+.semlink-history-folder{display:flex;align-items:center;gap:.3rem;padding:.3rem .45rem;min-height:34px;border-radius:6px;cursor:pointer;color:var(--text-normal);font-weight:500}
+.semlink-history-folder:hover{background:var(--background-modifier-hover)}
+.semlink-history-folder-root .semlink-history-folder-name{font-weight:700}
+.semlink-history-folder-root{position:sticky;top:0;z-index:3;background:var(--background-secondary);border-bottom:1px solid var(--background-modifier-border);padding-top:.25rem;padding-bottom:.25rem}
+.semlink-history-folder-chev{display:inline-flex;color:var(--text-muted)}
+.semlink-history-folder-name{font-size:.88rem}
+.semlink-history-folder-count{margin-left:.4rem;font-size:.68rem;color:var(--text-muted);background:var(--background-modifier-border);border-radius:999px;padding:.02rem .42rem;line-height:1.25}
+.semlink-history-folder-add{margin-left:auto;display:inline-flex;color:var(--text-muted);cursor:pointer}
+.semlink-history-folder-acts{margin-left:auto;display:inline-flex;gap:.35rem;opacity:0;transition:opacity .12s}
+.semlink-history-folder:hover .semlink-history-folder-acts{opacity:1}
+.semlink-history-folder-act{display:inline-flex;color:var(--text-muted);cursor:pointer}
+.semlink-history-folder-act:hover{color:var(--text-normal)}
+.semlink-history-folder-edit{gap:.3rem}
+.semlink-history-folder-edit .semlink-folder-input{flex:1;min-width:0}
+.semlink-history-folder-edit .semlink-folder-input{height:24px;padding:.1rem .45rem}
+.semlink-history-folder-edit .semlink-history-folder-act{opacity:1}
+.semlink-history-unfiled-gap{height:.8rem}
+.semlink-history-folder-body > .semlink-history-item {
+    border-left: 1px solid var(--background-modifier-border);
+    margin-left: .8rem;
+    padding-left: 1.4rem;
+    border-radius: 0 6px 6px 0;
+}
+.semlink-history-folder.is-drop{background:var(--background-modifier-hover);outline:2px dashed var(--interactive-accent);outline-offset:-2px}
+.semlink-history-folder-body .semlink-history-item-pin{display:none}
+.semlink-history-item:hover .semlink-folder-input{width:100%;border:1px solid var(--background-modifier-border);border-radius:6px;background:var(--background-primary);color:var(--text-normal);padding:.45rem .6rem;font-family:inherit}
+.semlink-folder-name-modal{width:min(22rem,80vw)}
+.semlink-folder-name-modal .modal-content{padding:.9rem 1rem 1rem}
+.semlink-folder-name-modal h2{margin:.1rem 0 .7rem;font-size:1rem}
+.semlink-folder-name-modal .semlink-folder-input-row{margin-top:.8rem}
+.semlink-folder-input-row{display:flex;gap:.5rem;justify-content:flex-end;margin-top:.8rem}
+
+/* ── Pro usage & cost dashboard ── */
+.semlink-usage-modal .modal-content{padding:1.1rem 1.2rem}
+.semlink-usage-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.6rem;margin-bottom:1rem}
+.semlink-usage-card{border:1px solid var(--background-modifier-border);border-radius:10px;padding:.7rem .8rem}
+.semlink-usage-card-value{font-size:1.15rem;font-weight:700;color:var(--text-normal)}
+.semlink-usage-card-label{font-size:.72rem;color:var(--text-muted);margin-top:.15rem}
+.semlink-usage-body{position:relative}
+.semlink-usage-body.semlink-usage-locked > .semlink-usage-section{filter:blur(6px);pointer-events:none;user-select:none}
+.semlink-usage-gate{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;text-align:center}
+.semlink-usage-gate-title{font-weight:700;color:var(--text-normal)}
+.semlink-usage-gate-desc{font-size:.8rem;color:var(--text-muted);max-width:22rem}
+.semlink-usage-section{margin-bottom:1rem}
+.semlink-usage-section-title{font-size:.8rem;font-weight:700;color:var(--text-muted);margin-bottom:.45rem}
+.semlink-usage-chart{display:flex;align-items:flex-end;gap:2px;height:72px}
+.semlink-usage-bar{flex:1;background:var(--interactive-accent);opacity:.75;border-radius:2px 2px 0 0;min-height:2px}
+.semlink-usage-bar:hover{opacity:1}
+.semlink-usage-table{width:100%;border-collapse:collapse;font-size:.83rem}
+.semlink-usage-table th{text-align:left;color:var(--text-muted);font-size:.72rem;padding:.3rem .4rem;border-bottom:1px solid var(--background-modifier-border)}
+.semlink-usage-table td{padding:.32rem .4rem;border-bottom:1px solid var(--background-modifier-border)}
+.semlink-usage-table td:first-child{font-family:var(--font-monospace);font-size:.78rem}
+.semlink-usage-cost{font-weight:700}
+.semlink-usage-empty{color:var(--text-muted);font-size:.85rem;padding:.6rem 0}
+.semlink-usage-hint{font-size:.75rem;color:var(--text-muted);margin-top:.5rem}
+.semlink-model-price-row .setting-item-control input{width:6.5rem}
+.semlink-model-price-row .setting-item-name{font-size:.8rem;color:var(--text-muted)}
+.semlink-model-price-row .setting-item-description{font-size:.72rem}

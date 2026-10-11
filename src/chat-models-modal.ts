@@ -74,7 +74,33 @@ export class ChatModelsModal extends Modal {
 							this.onChange?.();
 							this.render();
 						});
-				});
+			});
+			// Optional pricing (USD per 1M tokens) for the Pro usage
+			// dashboard's cost figures. Left empty → tokens only, no cost.
+			new Setting(contentEl)
+				.setClass("semlink-model-price-row")
+				.setName(t("chatModelPrice"))
+				.setDesc(t("chatModelPriceDesc"))
+				.addText((text) =>
+					text.setPlaceholder(t("chatModelPriceIn"))
+						.setValue(model.priceIn != null ? String(model.priceIn) : "")
+						.onChange(async (value) => {
+							const n = parseFloat(value);
+							if (!isNaN(n) && n >= 0) model.priceIn = n;
+							else if (!value.trim()) delete model.priceIn;
+							await this.plugin.saveSettings();
+						})
+				)
+				.addText((text) =>
+					text.setPlaceholder(t("chatModelPriceOut"))
+						.setValue(model.priceOut != null ? String(model.priceOut) : "")
+						.onChange(async (value) => {
+							const n = parseFloat(value);
+							if (!isNaN(n) && n >= 0) model.priceOut = n;
+							else if (!value.trim()) delete model.priceOut;
+							await this.plugin.saveSettings();
+						})
+				);
 		});
 
 		// Footer: add model + done

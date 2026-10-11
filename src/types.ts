@@ -174,6 +174,10 @@ export type ChatModelKind = "embedding" | "chat" | "rerank" | "tts" | "asr" | "i
 export interface ChatModel {
 	id: string;
 	contextWindow: number;
+	/** Optional pricing for the Pro usage dashboard: USD per 1M tokens.
+	 *  Missing/null → the dashboard shows tokens without a cost figure. */
+	priceIn?: number;
+	priceOut?: number;
 	/** Model category tag (defaults to "chat"). */
 	kind?: ChatModelKind;
 	/** Whether the model is usable. Disabled models are hidden from the
@@ -255,6 +259,29 @@ export interface SmartVaultSettings {
 		/** 设置页"重新嵌入"直接跳到数据索引环节 */
 		jumpToIndex?: boolean;
 	};
+	/** Pro license state (docs/freemium-design.md). The token is an
+	 *  Ed25519-signed activation receipt from the license backend; cleared
+	 *  entirely on deactivation/revocation. */
+	license?: LicenseState;
+}
+
+/** Client-side license state persisted in data.json. */
+export interface LicenseState {
+	/** The Creem license key (plaintext — data.json is local and private). */
+	key?: string;
+	/** Creem activation instance id bound to this device. */
+	instanceId?: string;
+	/** Ed25519-signed activation token (see src/license.ts). */
+	token?: string;
+	/** Token expiry (ms epoch), mirrors the token payload. */
+	tokenExp?: number;
+	/** Activations used / allowed on this key (from the last validation). */
+	activation?: number;
+	activationLimit?: number | null;
+	lastValidatedAt?: number;
+	/** Local override of the free-tier history limit (reserved; defaults to
+	 *  the value from license-config.ts). */
+	freeLimit?: number;
 }
 
 export const DEFAULT_SETTINGS: SmartVaultSettings = {
@@ -463,4 +490,12 @@ export interface ChatSession {
 	messages: HistoryMessage[];
 	createdAt: number;
 	updatedAt: number;
+	/** Pro history management: folder path, "/"-nested ("工作/复盘"). */
+	folder?: string;
+	/** Manually archived from the drawer — hidden from the main tabs,
+	 *  manageable (restore/delete) in the archive view. */
+	archived?: boolean;
+	/** Pro: pinned chats float above "Today" in the Time tab and are never
+	 *  evicted by the MAX_SESSIONS cap. */
+	pinned?: boolean;
 }

@@ -41,6 +41,14 @@ function chatEndpoint(
 	return `${baseUrl}${defaultSuffix}`;
 }
 
+/** One user-facing request's token usage (summed across all rounds —
+ *  pre-analysis, tool rounds, final answer) for the Pro usage dashboard. */
+export interface UsageSample {
+	model: string;
+	promptTokens: number;
+	completionTokens: number;
+}
+
 /** A step in the model's thinking process, in chronological order. */
 export type ThinkingStep =
 	| { type: "thought"; text: string }
@@ -115,6 +123,9 @@ export class ChatClient {
 	private activeModelKey: string | null = null;
 	/** Called after the active model changes, so the caller can persist it. */
 	private onModelChange: (() => void) | null = null;
+	/** Fired once per successfully completed chat request with the summed
+	 *  token usage (Pro usage dashboard). Wired by main.ts to UsageStore. */
+	onUsage: ((u: UsageSample) => void) | null = null;
 
 	constructor(settings: SmartVaultSettings, tools: SemlinkTools | null = null) {
 		this.settings = settings;
@@ -251,22 +262,24 @@ export class ChatClient {
 	 *    signals, actively read related notes before answering (default). */
 	private buildSystemPrompt(agentMode: AgentMode, depthHint: string, context: string): string {
 		const shared =
-			"对于「列出/找到所有提到某关键词的笔记」这类问题，grep_notes 一次调用即可完成：totalFiles 是匹配总数，paths 字段就是完整文件清单（completeList 为 true 时），直接列出即可，不要再次调用工具、不要用更大 limit 或不同措辞重复检索。" +
-			"初始检索片段仅供参考，可能无法覆盖所有情况。当问题明显属于以下类型时，请直接调用对应工具，不要依赖初始检索片段：涉及「最近/最新/何时记录/最近修改」等时间判断的问题用 list_indexed_detailed（已按修改时间倒序，取前几条即可）；需要全库概览或列举笔记用 list_indexed；精确关键词、编号、日期、代码片段用 grep_notes。" +
+			t("promptGrepGuide") +
+			t("promptToolGuide") +
 			depthHint +
-			"请勿编造笔记中不存在的信息。回答使用与问题相同的语言。" +
-			"\n\n以下是初始检索到的相关笔记内容：\n" + context;
+			t("promptNoFabricate") +
+			"\n\n" + t("promptContextHead") + "\n" + context +
+			"\n\n" + t("promptLangRule");
+		
 		if (agentMode === "classic") {
 			return (
-				"你是 Semlink 的笔记问答助手。回答步骤：① 先思考用户的问题，用简短文字写出你的分析并形成初步结论（这段分析会展示给用户，请写清楚但不要太长）；② 只有发现信息不足时才调用工具补充（search_notes / get_note / get_section / grep_notes 等），不要一上来就盲目调用工具；③ 信息足够后立即给出最终回答，不要反复调用工具。" +
-				"注意：初始检索提供的是笔记片段（截断预览），可能不完整。对于穷举性、准确性要求高的问题（如「包含哪些部分」「有哪些功能」），请调用 get_note 读取相关笔记的完整内容验证后再给出最终回答。" +
+				t("promptRoleClassic") +
+				t("promptRoleClassicNote") +
 				shared
 			);
 		}
 		return (
-			"你是 Semlink 的笔记问答助手。回答步骤：① 先思考用户的问题，用简短文字写出你的分析并形成初步结论（这段分析会展示给用户，请写清楚但不要太长）；② 在分析中明确判断：初始片段是否足以完整回答？是否需要读取关联笔记验证？③ 若片段不足、或问题需要完整信息（分析/总结/设计需求/协议细节/对比类问题，或片段中提到了相关文档），请主动调用工具读取验证（search_notes / get_note / get_section / grep_notes 等），不要只凭截断片段下结论；④ 信息齐全后给出完整、有条理的最终回答，不要反复调用工具。" +
-			"注意：初始检索提供的是笔记片段（截断预览），可能不完整。当片段中提到相关文档（如某协议文档、设计文档、资料名）时，应视为需要读取的信号：先 get_note 读取最相关的一篇，再根据内容决定是否继续读取（一次最多读 3-5 篇，避免铺开）。" +
-			"介绍/概述类问题（「XX 是什么」「介绍下 XX」「XX 的功能有哪些」）有一个固定套路：先确认初始片段里有没有该主题的定义、定位、全称这类宏观信息——若没有，第一步就用 search_notes 检索「XX 介绍 / XX 是什么」，或 grep_notes 检索「XX（全称|即|是|定义）」定位定义类笔记并读取，不要先扎进细节文档；读完定义后再读细节文档补全。回答时先讲「是什么」（定义/定位/背景），再展开细节。" +
+			t("promptRoleProactive") +
+			t("promptRoleProactiveNote") +
+			t("promptIntroPattern") +
 			shared
 		);
 	}
@@ -312,9 +325,7 @@ export class ChatClient {
 		if (!active) throw new Error("No chat provider configured");
 		const { provider, model } = active;
 		const contextWindow = model.contextWindow || 0;
-		const depthHint = depth === "enhanced"
-			? "读取笔记时可以适当使用 get_note 读取整篇笔记以获得完整信息，注意控制读取的笔记数量。"
-			: "读取笔记时请优先使用 get_section 只读取相关章节，避免用 get_note 读取整篇长笔记，以控制上下文占用。";
+		const depthHint = depth === "enhanced" ? t("promptDepthEnhanced") : t("promptDepthStandard");
 		const systemPrompt = this.buildSystemPrompt(agentMode, depthHint, context);
 
 		// Per-depth cap on a single tool result (enhanced reads full notes).
@@ -555,10 +566,17 @@ export class ChatClient {
 		let forceAnswer = false;
 		// Context tokens reported by the API for the latest request.
 		let usageTokens = 0;
+		// Token usage summed across ALL rounds (usage dashboard). usageTokens
+		// above is a MAX for the context ring; these are true sums.
+		let usageIn = 0;
+		let usageOut = 0;
 		// Per-request cache hit ratios (e.g. DeepSeek prompt caching).
 		const cacheHits: CacheSample[] = [];
 
 		const finalize = (answer: string): ChatResult => {
+			if (usageIn > 0 || usageOut > 0) {
+				try { this.onUsage?.({ model, promptTokens: usageIn, completionTokens: usageOut }); } catch { /* never break chat */ }
+			}
 			const cacheHitRate = cacheHits.length
 				? cacheHits.reduce((a, s) => a + s.hit, 0) / cacheHits.reduce((a, s) => a + s.total, 0)
 				: null;
@@ -583,7 +601,7 @@ export class ChatClient {
 		// kept in the conversation so later tool decisions build on it.
 		messages.push({
 			role: "user",
-			content: "（分析阶段）请先不要调用任何工具，也不要给出最终回答。用自然的 3-4 句话简短写出你的分析：基于当前片段你能初步回答什么？片段是截断预览，是否可能不完整、遗漏关键内容？如果需要，准备调用哪个工具、读取哪篇笔记来验证？注意：这只是预分析，最终回答会在下一步由你单独完整输出——这里不要写总结、不要使用 Markdown 标题或列表，也不要用\"如需...告诉我\"这类收尾语。",
+			content: t("promptAnalysis"),
 		});
 		let analysis: string | undefined;
 		try {
@@ -596,12 +614,14 @@ export class ChatClient {
 			);
 			onRoundSuccess?.();
 			if (analysisStream.usageTokens) usageTokens = Math.max(usageTokens, analysisStream.usageTokens);
+			usageIn += analysisStream.roundIn || 0;
+			usageOut += analysisStream.roundOut || 0;
 			cacheHits.push(...analysisStream.cacheHits);
 			analysis = analysisStream.content?.trim();
 			// Strip any echoed instruction labels (e.g. "（分析阶段）初步结论：").
 			if (analysis) {
 				analysis = analysis
-					.replace(/^（分析阶段）\s*/i, "")
+					.replace(/^(（分析阶段）|\(Analysis phase\))\s*/i, "")
 					.replace(/^初步结论[:：]\s*/i, "");
 			}
 		} catch (e) {
@@ -622,7 +642,7 @@ export class ChatClient {
 		if (analysis) {
 			messages.push({
 				role: "user",
-				content: "（回答阶段）现在开始正式回答：若你上面的分析提到信息不足、或需要读取笔记验证（如片段中提到的关联文档、协议细节），请先调用工具读取；之后输出完整、有条理的最终回答。最终回答不要重复分析内容，直接给出完整答案。",
+				content: t("promptAnswerPhase"),
 			});
 		}
 
@@ -657,6 +677,8 @@ export class ChatClient {
 			);
 			onRoundSuccess?.();
 			if (stream.usageTokens) usageTokens = Math.max(usageTokens, stream.usageTokens);
+			usageIn += stream.roundIn || 0;
+			usageOut += stream.roundOut || 0;
 			cacheHits.push(...stream.cacheHits);
 			if (stream.content) lastText = stream.content;
 
@@ -694,7 +716,7 @@ export class ChatClient {
 					messages.push({
 						role: "tool",
 						tool_call_id: tc.id || `call_${round}_${stream.toolCalls.indexOf(tc)}`,
-						content: "（已检测到重复调用，跳过执行。请基于已有信息直接给出最终回答。）",
+						content: t("promptRepeatSkip"),
 					});
 					continue;
 				}
@@ -748,7 +770,7 @@ export class ChatClient {
 		body: any,
 		onStream?: (text: string) => void,
 		signal?: AbortSignal,
-	): Promise<{ content: string; toolCalls: any[]; usageTokens: number; cacheHits: CacheSample[] }> {
+	): Promise<{ content: string; toolCalls: any[]; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
 		let resp: Response;
 		try {
 			resp = await fetch(url, {
@@ -787,6 +809,8 @@ export class ChatClient {
 
 		let content = "";
 		let usageTokens = 0;
+		let roundIn = 0;
+		let roundOut = 0;
 		const cacheHits: CacheSample[] = [];
 		// Tool calls accumulate by their stream index.
 		const toolCalls: Record<number, any> = {};
@@ -812,6 +836,8 @@ export class ChatClient {
 			// Usage arrives in the final chunk when stream_options.include_usage.
 			const u = json?.usage;
 			if (typeof u?.prompt_tokens === "number") usageTokens = u.prompt_tokens;
+				if (typeof u?.prompt_tokens === "number") roundIn = u.prompt_tokens;
+				if (typeof u?.completion_tokens === "number") roundOut = u.completion_tokens;
 				if (typeof u?.prompt_cache_hit_tokens === "number" && typeof u?.prompt_cache_miss_tokens === "number") {
 					const hit = u.prompt_cache_hit_tokens || 0;
 					const miss = u.prompt_cache_miss_tokens || 0;
@@ -845,7 +871,7 @@ export class ChatClient {
 			onStream(content);
 		}
 
-		return { content, toolCalls: calls, usageTokens, cacheHits };
+		return { content, toolCalls: calls, usageTokens, cacheHits, roundIn, roundOut };
 	}
 
 	// ──── Anthropic format (streaming) ────
@@ -882,10 +908,16 @@ export class ChatClient {
 		let forceAnswer = false;
 		// Context tokens reported by the API for the latest request.
 		let usageTokens = 0;
+		// Token usage summed across ALL rounds (usage dashboard).
+		let usageIn = 0;
+		let usageOut = 0;
 		// Per-request cache hit ratios (Anthropic prompt caching).
 		const cacheHits: CacheSample[] = [];
 
 		const finalize = (answer: string): ChatResult => {
+			if (usageIn > 0 || usageOut > 0) {
+				try { this.onUsage?.({ model, promptTokens: usageIn, completionTokens: usageOut }); } catch { /* never break chat */ }
+			}
 			const cacheHitRate = cacheHits.length
 				? cacheHits.reduce((a, s) => a + s.hit, 0) / cacheHits.reduce((a, s) => a + s.total, 0)
 				: null;
@@ -909,7 +941,7 @@ export class ChatClient {
 		// decisions build on it.
 		messages.push({
 			role: "user",
-			content: "（分析阶段）请先不要调用任何工具，也不要给出最终回答。用自然的 3-4 句话简短写出你的分析：基于当前片段你能初步回答什么？片段是截断预览，是否可能不完整、遗漏关键内容？如果需要，准备调用哪个工具、读取哪篇笔记来验证？注意：这只是预分析，最终回答会在下一步由你单独完整输出——这里不要写总结、不要使用 Markdown 标题或列表，也不要用\"如需...告诉我\"这类收尾语。",
+			content: t("promptAnalysis"),
 		});
 		let analysis: string | undefined;
 		try {
@@ -922,6 +954,8 @@ export class ChatClient {
 			}, signal);
 			onRoundSuccess?.();
 			if (analysisStream.usageTokens) usageTokens = Math.max(usageTokens, analysisStream.usageTokens);
+			usageIn += analysisStream.roundIn || 0;
+			usageOut += analysisStream.roundOut || 0;
 			cacheHits.push(...analysisStream.cacheHits);
 			analysis = (analysisStream.contentBlocks || [])
 				.filter((b: any) => b?.type === "text")
@@ -931,7 +965,7 @@ export class ChatClient {
 			// Strip any echoed instruction labels (e.g. "（分析阶段）初步结论：").
 			if (analysis) {
 				analysis = analysis
-					.replace(/^（分析阶段）\s*/i, "")
+					.replace(/^(（分析阶段）|\(Analysis phase\))\s*/i, "")
 					.replace(/^初步结论[:：]\s*/i, "");
 			}
 		} catch (e) {
@@ -952,7 +986,7 @@ export class ChatClient {
 		if (analysis) {
 			messages.push({
 				role: "user",
-				content: "（回答阶段）现在开始正式回答：若你上面的分析提到信息不足、或需要读取笔记验证（如片段中提到的关联文档、协议细节），请先调用工具读取；之后输出完整、有条理的最终回答。最终回答不要重复分析内容，直接给出完整答案。",
+				content: t("promptAnswerPhase"),
 			});
 		}
 
@@ -982,6 +1016,8 @@ export class ChatClient {
 			);
 			onRoundSuccess?.();
 			if (stream.usageTokens) usageTokens = Math.max(usageTokens, stream.usageTokens);
+			usageIn += stream.roundIn || 0;
+			usageOut += stream.roundOut || 0;
 			cacheHits.push(...stream.cacheHits);
 
 			if (stream.stopReason !== "tool_use") {
@@ -1086,7 +1122,11 @@ export class ChatClient {
 		stopReason: string;
 		usageTokens: number;
 		cacheHits: CacheSample[];
+		roundIn: number;
+		roundOut: number;
 	}> {
+		let roundIn = 0;
+		let roundOut = 0;
 		let resp: Response;
 		try {
 			resp = await fetch(url, {
@@ -1133,6 +1173,10 @@ export class ChatClient {
 		await this.readSSE(resp, (json) => {
 			const type = json?.type;
 			if (type === "message_start") {
+				const su = json?.message?.usage ?? json?.usage;
+				if (typeof su?.input_tokens === "number") {
+					roundIn = su.input_tokens + (su.cache_read_input_tokens || 0) + (su.cache_creation_input_tokens || 0);
+				}
 				const u = json?.message?.usage;
 				if (typeof u?.input_tokens === "number") {
 					// Anthropic's input_tokens EXCLUDES cached tokens — add
@@ -1168,6 +1212,8 @@ export class ChatClient {
 				}
 			} else if (type === "message_delta") {
 				stopReason = json?.delta?.stop_reason || stopReason;
+				const du = json?.usage;
+				if (typeof du?.output_tokens === "number") roundOut = du.output_tokens;
 			}
 		}, signal);
 
@@ -1204,7 +1250,7 @@ export class ChatClient {
 			}
 		}
 
-		return { contentBlocks, toolUses, stopReason, usageTokens, cacheHits };
+		return { contentBlocks, toolUses, stopReason, usageTokens, cacheHits, roundIn, roundOut };
 	}
 
 	/**

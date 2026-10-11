@@ -5,6 +5,7 @@
 import { Notice, Plugin, TFile, FileSystemAdapter, WorkspaceSidedock, addIcon } from "obsidian";
 import { join } from "path";
 import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
+import { UsageStore } from "./src/usage-store";
 import { migrateLegacyCatalogBases } from "./src/settings-models";
 import { VectorStore } from "./src/vector-store";
 import { IndexQueue } from "./src/index-queue";
@@ -21,6 +22,7 @@ import { SemanticSearchView, SEARCH_VIEW_TYPE } from "./src/search-view";
 import { runOpfsSpike } from "./src/opfs-spike";
 import { ActivityGate } from "./src/activity-gate";
 import { FeishuBot, type FeishuAskHandler } from "./src/feishu-bot";
+import { LicenseManager } from "./src/license";
 import { setLang, t } from "./src/i18n";
 import logoSvg from "./src/semlink-logo.svg";
 
@@ -31,6 +33,7 @@ export default class SmartVaultPlugin extends Plugin {
 	queue!: IndexQueue;
 	client!: EmbeddingClient;
 	chatClient!: ChatClient;
+	usageStore!: UsageStore;
 	chatTools!: SemlinkTools;
 	scheduler!: Scheduler;
 	progress!: ProgressTracker;
@@ -40,6 +43,9 @@ export default class SmartVaultPlugin extends Plugin {
 
 	/** Watches for user activity so indexing yields while they're working. */
 	activityGate!: ActivityGate;
+
+	/** Pro license checks + activation (docs/freemium-design.md). */
+	licenseManager!: LicenseManager;
 
 	/** Running Feishu bot instances, keyed by bot id. */
 	private feishuBots: Map<string, FeishuBot> = new Map();
@@ -52,6 +58,15 @@ export default class SmartVaultPlugin extends Plugin {
 
 		// Initialize i18n
 		setLang(this.settings.language);
+
+		// License: create the manager right after settings load so every
+		// feature gate (history limit, Feishu) can ask isPro() from here on.
+		this.licenseManager = new LicenseManager(this);
+		this.licenseManager.isPro();
+		// Re-validate on every startup so a refund/revocation takes effect at
+		// the next Obsidian launch instead of waiting for the 24h refresh.
+		// Network failure is silent — the local token's 7-day grace covers it.
+		void this.licenseManager.validate().catch(() => { /* offline grace */ });
 
 		// Resolve plugin directory (manifest.dir is relative to vault root)
 		const adapter = this.app.vault.adapter;
@@ -84,6 +99,12 @@ export default class SmartVaultPlugin extends Plugin {
 		this.chatClient.setModelChangeHandler(() => {
 			void this.saveSettings();
 		});
+		// Pro usage dashboard: every completed chat request reports its summed
+		// token usage. Recording runs for everyone (local data); viewing is
+		// Pro-gated in the modal.
+		this.usageStore = new UsageStore(dataDir);
+		this.chatClient.onUsage = (u) => this.usageStore.record(u);
+		void this.usageStore.load();
 		// Indexing pauses while the user is actively working (clicks, typing,
 		// scrolling) so heavy scans never make the frontend feel laggy.
 		this.activityGate = new ActivityGate();
@@ -239,6 +260,7 @@ export default class SmartVaultPlugin extends Plugin {
 	}
 
 	onunload() {
+		void this.usageStore?.save();
 		// All synchronous — Obsidian does NOT await async onunload.
 		try { this.scheduler?.abort(); } catch {}
 		try { this.watcher?.stop(); } catch {}
@@ -282,6 +304,9 @@ export default class SmartVaultPlugin extends Plugin {
 		// input placeholder, icon tooltips) right away.
 		for (const leaf of this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)) {
 			(leaf.view as SemanticSearchView).refreshLanguage?.();
+			// License changes persist through saveSettings too — flip the
+			// header upgrade button / archive visibility right away.
+			(leaf.view as SemanticSearchView).refreshLicenseUI?.();
 		}
 		this.client?.updateSettings(this.settings);
 		this.chatClient?.updateSettings(this.settings);
@@ -339,13 +364,16 @@ export default class SmartVaultPlugin extends Plugin {
 
 	// ──── Feishu Bots ────
 
-	/** Reconcile running bot instances with the configured bot list. */
+	/** Reconcile running bot instances with the configured bot list. The
+	 *  Feishu bot is a Pro feature (docs/freemium-design.md §3D): without a
+	 *  valid license, configured bots are kept on disk but never started. */
 	private async syncFeishuBots(): Promise<void> {
+		const proGate = this.licenseManager?.isPro() ?? false;
 		const configured = new Set<string>();
 		for (const bot of this.settings.feishuBots) {
 			configured.add(bot.id);
 			const running = this.feishuBots.get(bot.id);
-			if (!bot.enabled) {
+			if (!bot.enabled || !proGate) {
 				if (running) {
 					await running.stop();
 					this.feishuBots.delete(bot.id);

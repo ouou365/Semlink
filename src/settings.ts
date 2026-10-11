@@ -10,6 +10,7 @@ import { activeEmbeddingProvider } from "./types";
 import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
+import { LicenseModal } from "./license-modal";
 import { t } from "./i18n";
 
 type SettingsTab = "general" | "mcp" | "bot";
@@ -128,6 +129,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	// Tab: General — sidebar, embedding, index management & support
 	// ══════════════════════════════════════
 	private renderGeneralTab(containerEl: HTMLElement): void {
+		// ── Pro license status + entry (top of General) ──
+		this.renderLicenseSection(containerEl);
+
 		// Language switcher: saveSettings re-runs setLang and refreshes the
 		// language-dependent views; display() re-renders this panel so the
 		// settings UI itself follows the new language right away.
@@ -178,8 +182,22 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				btn
 					.setButtonText(t("reportBugButton"))
 					.onClick(() => {
-						window.location.href = "mailto:ozy2013xm@gmail.com?subject=Semlink Bug Report";
+						window.location.href = "mailto:support@getsemlink.com?subject=Semlink Bug Report";
 					})
+			);
+	}
+
+	/** Pro license status row + upgrade entry at the top of the General tab. */
+	private renderLicenseSection(containerEl: HTMLElement): void {
+		const lm = this.plugin.licenseManager;
+		const pro = lm.isPro();
+		new Setting(containerEl)
+			.setName(pro ? t("licenseStatusPro") : t("licenseStatusFree"))
+			.setDesc(pro ? lm.statusLine() : t("licenseFreeDesc"))
+			.addButton((btn) =>
+				btn.setButtonText(pro ? t("licenseManage") : t("upgradeProBtn")).onClick(() => {
+					new LicenseModal(this.app, this.plugin).open();
+				})
 			);
 	}
 
@@ -461,6 +479,21 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	// ══════════════════════════════════════
 	private renderBotTab(containerEl: HTMLElement): void {
 		new Setting(containerEl).setName(t("botSection")).setHeading();
+
+		// Pro gate (docs/freemium-design.md §3D): the bot surface stays
+		// visible-but-locked on the free tier — one badge row + upgrade entry,
+		// no bots are started at runtime (syncFeishuBots checks isPro).
+		if (!this.plugin.licenseManager.isPro()) {
+			const gate = containerEl.createDiv({ cls: "semlink-pro-gate" });
+			gate.createSpan({ cls: "semlink-pro-badge", text: "✨ Pro" });
+			gate.createSpan({ cls: "semlink-pro-gate-text", text: t("botProDesc") });
+			const btn = gate.createEl("button", { cls: "mod-cta", text: t("unlockPro") });
+			btn.addEventListener("click", () => {
+				new LicenseModal(this.app, this.plugin).open();
+			});
+			return;
+		}
+
 		containerEl.createDiv({ cls: "feishu-prereq", text: t("botPrereq") });
 
 		const bots = this.plugin.settings.feishuBots;
