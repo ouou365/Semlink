@@ -24,7 +24,7 @@ interface WorkerScope {
 const selfAsAny = self as unknown as WorkerScope;
 
 selfAsAny.onmessage = async (e: MessageEvent) => {
-	const { reqId, op, args } = (e.data ?? {}) as { reqId?: number; op: string; args?: any[] };
+	const { reqId, op, args } = (e.data ?? {}) as { reqId?: number; op: string; args?: unknown[] };
 
 	// One-time seed: store the legacy disk DB in OPFS before the engine
 	// initializes. Skipped when an OPFS copy already exists — never

@@ -656,7 +656,7 @@ export class DbEngine {
 		const results = this.db!.exec("SELECT note_path FROM note_doc_vectors");
 		const out = new Set<string>();
 		if (results.length > 0) {
-			for (const row of results[0].values as any[]) out.add(row[0] as string);
+			for (const row of results[0].values) out.add(row[0] as string);
 		}
 		return out;
 	}
@@ -895,7 +895,7 @@ export class DbEngine {
 			[notePath],
 		) as unknown as QueryResult[];
 		if (rows.length === 0 || rows[0].values.length === 0) return [];
-		const ids: string[] = rows[0].values.map((r: any[]) => r[0] as string);
+		const ids: string[] = rows[0].values.map((r: unknown[]) => r[0] as string);
 
 		// Probe chunks spread across the whole document (midpoint sampling so
 		// head, middle and tail are all represented).
@@ -960,7 +960,7 @@ export class DbEngine {
 	textSearch(pattern: string, limit = 200, pathFilter?: string): Array<{ path: string; matchCount: number; preview: string }> {
 		const like = `%${pattern}%`;
 		let sql = "SELECT note_path, COUNT(*) as cnt, MAX(content_preview) as prev FROM chunks WHERE content LIKE ?";
-		const params: any[] = [like];
+		const params: unknown[] = [like];
 		if (pathFilter) {
 			sql += " AND note_path LIKE ?";
 			params.push(`%${pathFilter}%`);
@@ -971,7 +971,7 @@ export class DbEngine {
 		const rows = this.db!.exec(sql, params);
 		if (rows.length === 0 || rows[0].values.length === 0) return [];
 
-		return (rows[0].values as unknown[][]).map((row) => ({
+		return rows[0].values.map((row) => ({
 			path: row[0] as string,
 			matchCount: row[1] as number,
 			preview: (row[2] as string) || "",
@@ -1063,7 +1063,7 @@ export class DbEngine {
 			for (const row of results[0].values) {
 				const status = row[0] as string;
 				const count = row[1] as number;
-				if (status in counts) (counts as any)[status] = count;
+				if (status in counts) (counts as Record<string, number>)[status] = count;
 			}
 		}
 		return counts;
@@ -1088,16 +1088,16 @@ export class DbEngine {
 			"SELECT note_path FROM queue WHERE status IN ('pending', 'processing', 'failed') ORDER BY priority ASC, created_at ASC"
 		);
 		if (results.length === 0) return [];
-		return (results[0].values as unknown[][]).map((r) => r[0] as string);
+		return results[0].values.map((r) => r[0] as string);
 	}
 
 	// ──── Helpers ────
 
-	private mapChunks(results: any[]): NoteChunk[] {
+	private mapChunks(results: QueryResult[]): NoteChunk[] {
 		if (results.length === 0) return [];
-		const cols = (results[0] as QueryResult).columns ?? [];
-		return (results[0].values as unknown[][]).map((row) => {
-			const obj: Record<string, any> = {};
+		const cols = results[0].columns ?? [];
+		return results[0].values.map((row) => {
+			const obj: Record<string, unknown> = {};
 			cols.forEach((c: string, i: number) => (obj[c] = row[i]));
 			return {
 				id: obj.id,
@@ -1113,11 +1113,11 @@ export class DbEngine {
 		});
 	}
 
-	private mapItems(results: any[]): QueueItem[] {
+	private mapItems(results: QueryResult[]): QueueItem[] {
 		if (results.length === 0) return [];
-		const cols = (results[0] as QueryResult).columns ?? [];
-		return (results[0].values as unknown[][]).map((row) => {
-			const obj: Record<string, any> = {};
+		const cols = results[0].columns ?? [];
+		return results[0].values.map((row) => {
+			const obj: Record<string, unknown> = {};
 			cols.forEach((c: string, i: number) => (obj[c] = row[i]));
 			return {
 				id: obj.id,

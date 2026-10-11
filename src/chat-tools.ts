@@ -5,7 +5,7 @@
 // while answering (function calling). Reuses the same store/client/vault logic
 // as the MCP server, minus write/admin tools (reindex, index_status).
 
-import type { Vault } from "obsidian";
+import type { Vault, TFile } from "obsidian";
 import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import { extractSection, extractHeadings } from "./section-utils";
@@ -14,7 +14,7 @@ import { extractSection, extractHeadings } from "./section-utils";
 export interface ChatTool {
 	name: string;
 	description: string;
-	parameters: Record<string, any>;
+	parameters: Record<string, unknown>;
 }
 
 export class SemlinkTools {
@@ -147,23 +147,23 @@ export class SemlinkTools {
 	}
 
 	/** Execute a tool by name; always returns a text result (errors included). */
-	async execute(name: string, args: Record<string, any>): Promise<string> {
+	async execute(name: string, args: Record<string, unknown>): Promise<string> {
 		try {
 			switch (name) {
 				case "search_notes":
-					return await this.toolSearchNotes(args.query, args.limit, args.threshold);
+					return await this.toolSearchNotes(args.query as string, args.limit as number | undefined, args.threshold as number | undefined);
 				case "get_note":
-					return await this.toolGetNote(args.path);
+					return await this.toolGetNote(args.path as string);
 				case "get_section":
-					return await this.toolGetSection(args.path, args.heading, args.maxDepth);
+					return await this.toolGetSection(args.path as string, args.heading as string, args.maxDepth as number | undefined);
 				case "get_similar_notes":
-					return await this.toolGetSimilarNotes(args.path, args.limit, args.threshold);
+					return await this.toolGetSimilarNotes(args.path as string, args.limit as number | undefined, args.threshold as number | undefined);
 				case "list_indexed":
-					return await this.toolListIndexed(args.prefix, args.limit, args.offset);
+					return await this.toolListIndexed(args.prefix as string | undefined, args.limit as number | undefined, args.offset as number | undefined);
 				case "list_indexed_detailed":
-					return await this.toolListIndexedDetailed(args.prefix, args.limit, args.offset);
+					return await this.toolListIndexedDetailed(args.prefix as string | undefined, args.limit as number | undefined, args.offset as number | undefined);
 				case "grep_notes":
-					return await this.toolGrepNotes(args.pattern, args.regex, args.pathFilter, args.caseSensitive, args.limit, args.contextLines);
+					return await this.toolGrepNotes(args.pattern as string, args.regex as boolean | undefined, args.pathFilter as string | undefined, args.caseSensitive as boolean | undefined, args.limit as number | undefined, args.contextLines as number | undefined);
 				case "get_active_note":
 					return await this.toolGetActiveNote();
 				default:
@@ -287,7 +287,7 @@ export class SemlinkTools {
 
 		const notes = filtered.map((p) => {
 			const file = this.vault.getAbstractFileByPath(p);
-			const stat = (file as any)?.stat;
+			const stat = (file as TFile | null)?.stat;
 			return {
 				path: p,
 				created: stat ? new Date(stat.ctime).toISOString() : null,

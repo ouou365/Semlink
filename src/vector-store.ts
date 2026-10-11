@@ -21,7 +21,7 @@ import { chunkMarkdown, ChunkResult } from "./chunker";
 
 // Lazy require so that environments without worker_threads don't crash at
 // import time — we detect availability at runtime instead.
-let WorkerCtor: any = null;
+let WorkerCtor: (new (path: string) => NodeWorker) | null = null;
 let workerAvailable = false;
 try {
 	// worker_threads is a Node built-in; Obsidian runs on Electron with full
@@ -33,9 +33,16 @@ try {
 	workerAvailable = false;
 }
 
+/** Worker → main reply: { reqId, result } on success, { reqId, error } on failure. */
+interface WorkerResponse {
+	reqId: number;
+	result?: unknown;
+	error?: string;
+}
+
 interface PendingRequest {
-	resolve: (value: any) => void;
-	reject: (err: any) => void;
+	resolve: (value: unknown) => void;
+	reject: (err: unknown) => void;
 }
 
 export class VectorStore {
@@ -94,7 +101,7 @@ export class VectorStore {
 		this.worker = new (WorkerCtor as new (path: string) => NodeWorker)(workerPath);
 
 		// Wire up the response channel once.
-		this.worker.on("message", (msg: any) => {
+		this.worker.on("message", (msg: WorkerResponse) => {
 			const { reqId, result, error } = msg;
 			const pending = this.pending.get(reqId);
 			if (!pending) return;
@@ -102,7 +109,7 @@ export class VectorStore {
 			if (error) pending.reject(new Error(error));
 			else pending.resolve(result);
 		});
-		this.worker.on("error", (err: any) => {
+		this.worker.on("error", (err: Error) => {
 			console.error("[Semlink] DB worker error:", err);
 			// Reject every pending request — the worker is likely dead.
 			for (const [, p] of this.pending) p.reject(err);
@@ -124,7 +131,7 @@ export class VectorStore {
 		const blobUrl = URL.createObjectURL(new Blob([res.text], { type: "text/javascript" }));
 		const w = new Worker(blobUrl);
 		w.onmessage = (e: MessageEvent) => {
-			const { reqId, result, error } = (e as any).data ?? {};
+			const { reqId, result, error } = (e.data ?? {}) as WorkerResponse;
 			const pending = this.pending.get(reqId);
 			if (!pending) return;
 			this.pending.delete(reqId);
@@ -156,13 +163,13 @@ export class VectorStore {
 	}
 
 	/** Send one op to the worker and await its reply. */
-	private call<T = any>(op: string, args: any[] = []): Promise<T> {
+	private call<T = unknown>(op: string, args: unknown[] = []): Promise<T> {
 		const t0 = performance.now();
 		if (this.fallback) {
 			// Synchronous fallback — wrap the engine call directly. The
 			// measure makes the main-thread cost of every engine op visible
 			// in the guide's debug readout.
-			return Promise.resolve(this.callEngineSync(op, args)).finally(() => {
+			return Promise.resolve(this.callEngineSync(op, args) as T).finally(() => {
 				performance.measure("semlink:sync-engine", { start: t0 });
 			});
 		}
@@ -193,48 +200,48 @@ export class VectorStore {
 	}
 
 	/** Invoke the same op against the synchronous engine (fallback path). */
-	private callEngineSync(op: string, args: any[]): any {
+	private callEngineSync(op: string, args: unknown[]): unknown {
 		const e = this.engine!;
 		switch (op) {
-			case "chunk": return chunkMarkdown(args[0], args[1], args[2], args[3]);
+			case "chunk": return chunkMarkdown(args[0] as string, args[1] as string, args[2] as number, args[3] as number);
 			case "save": return e.save();
 			case "clearAll": return e.clearAll();
 			case "compact": return e.compact();
 			case "beginTransaction": return e.beginTransaction();
 			case "commitTransaction": return e.commitTransaction();
 			case "rollbackTransaction": return e.rollbackTransaction();
-			case "insertChunk": return e.insertChunk(args[0]);
-			case "getChunksByNotePath": return e.getChunksByNotePath(args[0]);
+			case "insertChunk": return e.insertChunk(args[0] as NoteChunk);
+			case "getChunksByNotePath": return e.getChunksByNotePath(args[0] as string);
 			case "getActiveChunks": return e.getActiveChunks();
-			case "getChunkById": return e.getChunkById(args[0]);
-			case "markChunksStale": return e.markChunksStale(args[0]);
-			case "deleteChunksByNotePath": return e.deleteChunksByNotePath(args[0]);
-			case "deleteStaleChunks": return e.deleteStaleChunks(args[0]);
-			case "renameNotePath": return e.renameNotePath(args[0], args[1]);
-			case "getNoteMtime": return e.getNoteMtime(args[0]);
+			case "getChunkById": return e.getChunkById(args[0] as string);
+			case "markChunksStale": return e.markChunksStale(args[0] as string);
+			case "deleteChunksByNotePath": return e.deleteChunksByNotePath(args[0] as string);
+			case "deleteStaleChunks": return e.deleteStaleChunks(args[0] as string);
+			case "renameNotePath": return e.renameNotePath(args[0] as string, args[1] as string);
+			case "getNoteMtime": return e.getNoteMtime(args[0] as string);
 			case "getAllIndexedPaths": return e.getAllIndexedPaths();
-			case "pruneOrphanedPaths": return e.pruneOrphanedPaths(args[0]);
+			case "pruneOrphanedPaths": return e.pruneOrphanedPaths(args[0] as Set<string>);
 			case "getStats": return e.getStats();
-			case "saveEmbeddings": return e.saveEmbeddings(args[0], args[1]);
-			case "saveDocEmbedding": return e.saveDocEmbedding(args[0], args[1], args[2], args[3]);
+			case "saveEmbeddings": return e.saveEmbeddings(args[0] as string[], args[1] as number[][]);
+			case "saveDocEmbedding": return e.saveDocEmbedding(args[0] as string, args[1] as number[], args[2] as number, args[3] as string);
 			case "getDocVectorNotePaths": return e.getDocVectorNotePaths();
-			case "prepareDocVectorBackfill": return e.prepareDocVectorBackfill(args[0]);
+			case "prepareDocVectorBackfill": return e.prepareDocVectorBackfill(args[0] as number);
 			case "loadVectorCache": return e.loadVectorCache();
-			case "search": return e.search(args[0], args[1], args[2]);
-			case "searchRelatedNotes": return e.searchRelatedNotes(args[0], args[1], args[2], args[3]);
-			case "textSearch": return e.textSearch(args[0], args[1], args[2]);
-			case "enqueue": return e.enqueue(args[0], args[1], args[2]);
-			case "enqueueMany": return e.enqueueMany(args[0]);
-			case "dequeue": return e.dequeue(args[0]);
-			case "complete": return e.complete(args[0]);
-			case "fail": return e.fail(args[0], args[1]);
+			case "search": return e.search(args[0] as number[] | Float32Array, args[1] as number, args[2] as number);
+			case "searchRelatedNotes": return e.searchRelatedNotes(args[0] as string, args[1] as number, args[2] as number, args[3] as number);
+			case "textSearch": return e.textSearch(args[0] as string, args[1] as number, args[2] as string | undefined);
+			case "enqueue": return e.enqueue(args[0] as string, args[1] as QueueAction, args[2] as number);
+			case "enqueueMany": return e.enqueueMany(args[0] as Array<{ notePath: string; action: QueueAction; priority?: number }>);
+			case "dequeue": return e.dequeue(args[0] as number);
+			case "complete": return e.complete(args[0] as number);
+			case "fail": return e.fail(args[0] as number, args[1] as string);
 			case "retryFailed": return e.retryFailed();
 			case "getPendingCount": return e.getPendingCount();
 			case "getCounts": return e.getCounts();
-			case "cleanup": return e.cleanup(args[0]);
+			case "cleanup": return e.cleanup(args[0] as number);
 			case "cleanupQueue": return e.cleanupQueue();
 			case "reviveProcessing": return e.reviveProcessing();
-			case "purgeGhostQueue": return e.purgeGhostQueue(args[0]);
+			case "purgeGhostQueue": return e.purgeGhostQueue(args[0] as Set<string>);
 			case "clearQueue": return e.clearQueue();
 			case "getPendingPaths": return e.getPendingPaths();
 			default: throw new Error(`Unknown op: ${op}`);
@@ -278,47 +285,47 @@ export class VectorStore {
 
 	async insertChunk(chunk: NoteChunk): Promise<void> { await this.call("insertChunk", [chunk]); }
 	async getChunksByNotePath(notePath: string): Promise<NoteChunk[]> {
-		return await this.call("getChunksByNotePath", [notePath]);
+		return await this.call<NoteChunk[]>("getChunksByNotePath", [notePath]);
 	}
-	async getActiveChunks(): Promise<NoteChunk[]> { return await this.call("getActiveChunks"); }
+	async getActiveChunks(): Promise<NoteChunk[]> { return await this.call<NoteChunk[]>("getActiveChunks"); }
 	async getChunkById(id: string): Promise<NoteChunk | null> {
-		return await this.call("getChunkById", [id]);
+		return await this.call<NoteChunk | null>("getChunkById", [id]);
 	}
 	async markChunksStale(notePath: string): Promise<number> {
-		return await this.call("markChunksStale", [notePath]);
+		return await this.call<number>("markChunksStale", [notePath]);
 	}
 	async deleteChunksByNotePath(notePath: string): Promise<number> {
-		return await this.call("deleteChunksByNotePath", [notePath]);
+		return await this.call<number>("deleteChunksByNotePath", [notePath]);
 	}
 	async deleteStaleChunks(notePath: string): Promise<number> {
-		return await this.call("deleteStaleChunks", [notePath]);
+		return await this.call<number>("deleteStaleChunks", [notePath]);
 	}
 	async renameNotePath(oldPath: string, newPath: string): Promise<number> {
-		return await this.call("renameNotePath", [oldPath, newPath]);
+		return await this.call<number>("renameNotePath", [oldPath, newPath]);
 	}
 	async getNoteMtime(notePath: string): Promise<number | null> {
-		return await this.call("getNoteMtime", [notePath]);
+		return await this.call<number | null>("getNoteMtime", [notePath]);
 	}
 	async getAllIndexedPaths(): Promise<Set<string>> {
-		return await this.call("getAllIndexedPaths");
+		return await this.call<Set<string>>("getAllIndexedPaths");
 	}
 	async pruneOrphanedPaths(existingPaths: Set<string>): Promise<number> {
-		return await this.call("pruneOrphanedPaths", [existingPaths]);
+		return await this.call<number>("pruneOrphanedPaths", [existingPaths]);
 	}
 	/** Delete completed/failed queue rows from previous runs. */
 	async cleanupQueue(): Promise<number> {
-		return await this.call("cleanupQueue");
+		return await this.call<number>("cleanupQueue");
 	}
 	/** Reset rows stuck at 'processing' (interrupted runs) back to 'pending'. */
 	async reviveProcessing(): Promise<number> {
-		return await this.call("reviveProcessing");
+		return await this.call<number>("reviveProcessing");
 	}
 	/** Delete queue rows whose note_path no longer exists in the vault. */
 	async purgeGhostQueue(existingPaths: Set<string>): Promise<number> {
-		return await this.call("purgeGhostQueue", [existingPaths]);
+		return await this.call<number>("purgeGhostQueue", [existingPaths]);
 	}
 	async getStats(): Promise<{ totalChunks: number; activeChunks: number; indexedNotes: number; dbSizeMb: number }> {
-		return await this.call("getStats");
+		return await this.call<{ totalChunks: number; activeChunks: number; indexedNotes: number; dbSizeMb: number }>("getStats");
 	}
 
 	async saveEmbeddings(chunkIds: string[], embeddings: number[][]): Promise<void> {
@@ -330,11 +337,11 @@ export class VectorStore {
 	}
 	/** Note paths that already have a document vector (for backfill skip). */
 	async getDocVectorNotePaths(): Promise<Set<string>> {
-		return await this.call("getDocVectorNotePaths");
+		return await this.call<Set<string>>("getDocVectorNotePaths");
 	}
 	/** Clear stale doc vectors when the algorithm version changes (migration). */
 	async prepareDocVectorBackfill(version: number): Promise<boolean> {
-		return await this.call("prepareDocVectorBackfill", [version]);
+		return await this.call<boolean>("prepareDocVectorBackfill", [version]);
 	}
 	async loadVectorCache(): Promise<void> { await this.call("loadVectorCache"); }
 
@@ -344,14 +351,14 @@ export class VectorStore {
 			// elapsed counter / dots) keeps breathing between slices.
 			return await this.searchSyncSliced(queryEmbedding, limit, threshold);
 		}
-		return await this.call("search", [queryEmbedding, limit, threshold]);
+		return await this.call<SearchResult[]>("search", [queryEmbedding, limit, threshold]);
 	}
 
 	/** Note→note "related notes" via max-pooling over the source note's chunks
 	 *  (see DbEngine.searchRelatedNotes). Runs in the worker; in sync-fallback
 	 *  mode it runs synchronously without time-slicing (rare, degraded path). */
 	async searchRelatedNotes(notePath: string, limit = 10, threshold = 0.2, maxProbes = 6): Promise<SearchResult[]> {
-		return await this.call("searchRelatedNotes", [notePath, limit, threshold, maxProbes]);
+		return await this.call<SearchResult[]>("searchRelatedNotes", [notePath, limit, threshold, maxProbes]);
 	}
 
 	/** Sync-fallback search: scan in slices, yielding between them. */
@@ -392,13 +399,13 @@ export class VectorStore {
 
 	/** Fast substring search over indexed chunk content (for grep_notes). */
 	async textSearch(pattern: string, limit = 200, pathFilter?: string): Promise<Array<{ path: string; matchCount: number; preview: string }>> {
-		return await this.call("textSearch", [pattern, limit, pathFilter]);
+		return await this.call<Array<{ path: string; matchCount: number; preview: string }>>("textSearch", [pattern, limit, pathFilter]);
 	}
 
 	/** Chunk a markdown document. Runs in the worker thread so large-file
 	 *  string processing doesn't block the UI while typing. */
 	async chunk(content: string, notePath: string, chunkSize: number, chunkOverlap: number): Promise<ChunkResult[]> {
-		return await this.call("chunk", [content, notePath, chunkSize, chunkOverlap]);
+		return await this.call<ChunkResult[]>("chunk", [content, notePath, chunkSize, chunkOverlap]);
 	}
 
 	// ──── Queue operations (proxy to worker; IndexQueue delegates here) ────
@@ -410,16 +417,16 @@ export class VectorStore {
 		await this.call("enqueueMany", [items]);
 	}
 	async dequeue(limit = 64): Promise<QueueItem[]> {
-		return await this.call("dequeue", [limit]);
+		return await this.call<QueueItem[]>("dequeue", [limit]);
 	}
 	async complete(id: number): Promise<void> { await this.call("complete", [id]); }
 	async fail(id: number, error: string): Promise<void> { await this.call("fail", [id, error]); }
-	async retryFailed(): Promise<number> { return await this.call("retryFailed"); }
-	async getPendingCount(): Promise<number> { return await this.call("getPendingCount"); }
+	async retryFailed(): Promise<number> { return await this.call<number>("retryFailed"); }
+	async getPendingCount(): Promise<number> { return await this.call<number>("getPendingCount"); }
 	async getCounts(): Promise<{ pending: number; processing: number; failed: number; completed: number }> {
-		return await this.call("getCounts");
+		return await this.call<{ pending: number; processing: number; failed: number; completed: number }>("getCounts");
 	}
 	async cleanup(cutoffMs: number): Promise<void> { await this.call("cleanup", [cutoffMs]); }
 	async clearQueue(): Promise<void> { await this.call("clearQueue"); }
-	async getPendingPaths(): Promise<string[]> { return await this.call("getPendingPaths"); }
+	async getPendingPaths(): Promise<string[]> { return await this.call<string[]>("getPendingPaths"); }
 }

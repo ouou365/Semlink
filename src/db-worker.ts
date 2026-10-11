@@ -19,7 +19,14 @@ import { createDispatcher } from "./db-worker-core";
 
 const dispatch = createDispatcher();
 
-parentPort?.on("message", (msg: any) => void (async () => {
+/** Main → worker request: one op plus its positional arguments. */
+interface WorkerRequest {
+	reqId?: number;
+	op: string;
+	args?: unknown[];
+}
+
+parentPort?.on("message", (msg: WorkerRequest) => void (async () => {
 	const { reqId, op, args } = msg;
 
 	// "close" is special: synchronous flush then exit, used by onunload.

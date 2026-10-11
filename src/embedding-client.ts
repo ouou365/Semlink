@@ -12,6 +12,13 @@ export interface EmbedResult {
 	responseMs: number;
 }
 
+/** Error augmented with the HTTP status of the failed response — the retry
+ *  loop reads it (via extractStatus) to tell rate-limit / server / client
+ *  failures apart. */
+interface StatusError extends Error {
+	status?: number;
+}
+
 /** Hard ceiling per embed request — requestUrl has no timeout of its own. */
 const EMBED_TIMEOUT_MS = 60_000;
 
@@ -127,7 +134,7 @@ export class EmbeddingClient {
 				};
 			} catch (error) {
 				lastError = error instanceof Error ? error : new Error(String(error));
-				const status = this.extractStatus(error);
+				const status = this.extractStatus(error as StatusError);
 
 				if (status === 429) {
 					// Rate limited → longer backoff
@@ -238,7 +245,7 @@ private async callSiliconFlowApi(input: string[]): Promise<EmbeddingResponse> {
 		if (resp.status !== 200) {
 			const errBody = typeof resp.json === "object" ? resp.json : {};
 			const errMsg = errBody?.error?.message || errBody?.message || `HTTP ${resp.status}`;
-			const err: any = new Error(errMsg);
+			const err = new Error(errMsg) as StatusError;
 			err.status = resp.status;
 			throw err;
 		}
@@ -285,7 +292,7 @@ private async callSiliconFlowApi(input: string[]): Promise<EmbeddingResponse> {
 		if (resp.status !== 200) {
 			const errBody = typeof resp.json === "object" ? resp.json : {};
 			const errMsg = errBody?.error || errBody?.error?.message || errBody?.message || `HTTP ${resp.status}`;
-			const err: any = new Error(errMsg);
+			const err = new Error(errMsg) as StatusError;
 			err.status = resp.status;
 			throw err;
 		}
@@ -345,7 +352,7 @@ private async callSiliconFlowApi(input: string[]): Promise<EmbeddingResponse> {
 		return batches;
 	}
 
-	private extractStatus(error: any): number | null {
+	private extractStatus(error: StatusError | null | undefined): number | null {
 		if (error?.status) return Number(error.status);
 		return null;
 	}

@@ -127,7 +127,7 @@ export class UsageModal extends Modal {
 			.addButton((btn) =>
 				btn.setButtonText(t("usageClearBtn")).onClick(async () => {
 					await this.plugin.usageStore.clear();
-					this.render();
+					void this.render();
 				})
 			);
 	}
