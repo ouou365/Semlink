@@ -372,7 +372,7 @@ export class ChatClient {
 				const msg = String(e?.message || e || "");
 				console.warn(`[Semlink] transient error (attempt ${attempt}), retrying in ${retryDelayMs}ms:`, msg);
 				onRetry?.(attempt + 1, CHAT_RETRY_TOTAL);
-				await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+				await new Promise((resolve) => window.setTimeout(resolve, retryDelayMs));
 				if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 				attempt++;
 			}
@@ -773,7 +773,8 @@ export class ChatClient {
 	): Promise<{ content: string; toolCalls: any[]; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
 		let resp: Response;
 		try {
-			resp = await fetch(url, {
+			// eslint-disable-next-line no-restricted-globals -- SSE streaming: requestUrl buffers the whole body and cannot deliver incremental chunks
+		resp = await fetch(url, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -952,7 +953,7 @@ export class ChatClient {
 			cacheHits.push(...analysisStream.cacheHits);
 			analysis = (analysisStream.contentBlocks || [])
 				.filter((b: any) => b?.type === "text")
-				.map((b: any) => b.text)
+				.map((b: any) => String(b.text))
 				.join("\n")
 				.trim();
 			// Strip any echoed instruction labels (e.g. "（分析阶段）初步结论：").
@@ -1016,7 +1017,7 @@ export class ChatClient {
 			if (stream.stopReason !== "tool_use") {
 				const answer = stream.contentBlocks
 					.filter((b: any) => b?.type === "text")
-					.map((b: any) => b.text)
+					.map((b: any) => String(b.text))
 					.join("\n")
 					.trim();
 				if (answer) lastText = answer;
@@ -1122,7 +1123,8 @@ export class ChatClient {
 		let roundOut = 0;
 		let resp: Response;
 		try {
-			resp = await fetch(url, {
+			// eslint-disable-next-line no-restricted-globals -- SSE streaming: requestUrl buffers the whole body and cannot deliver incremental chunks
+		resp = await fetch(url, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -1213,7 +1215,7 @@ export class ChatClient {
 		// Reassemble blocks in order for the assistant echo.
 		const contentBlocks = Object.entries(blocks)
 			.sort(([a], [b]) => Number(a) - Number(b))
-			.map(([, b]) => b);
+			.map(([, b]) => b as unknown);
 
 		const toolUses = contentBlocks
 			.filter((b: any) => b?.type === "tool_use")
@@ -1394,7 +1396,7 @@ export class ChatClient {
 				if (Array.isArray(parsed?.results)) {
 					paths = parsed.results
 						.filter((r: any) => typeof r?.path === "string")
-						.map((r: any) => r.path);
+						.map((r: any) => String(r.path));
 				}
 			} catch {
 				// Unparseable result — ignore.
@@ -1411,8 +1413,7 @@ export class ChatClient {
 		if (typeof body === "object" && body) {
 			msg = body?.error?.message || body?.message || body?.msg || body?.error || "";
 		}
-		const err: any = new Error(msg || `HTTP ${status}`);
-		err.status = status;
+		const err = Object.assign(new Error(msg || `HTTP ${status}`), { status });
 		return err;
 	}
 }

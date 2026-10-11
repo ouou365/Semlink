@@ -46,6 +46,7 @@ export const resolve = join;
 export const sep = "/";
 
 // Also expose as globals — the engine references the global Buffer directly.
+// eslint-disable-next-line obsidianmd/no-global-this -- runs inside a Web Worker (db-worker.browser.js): there is no `window`; globalThis is the only portable global
 const g = globalThis as unknown as { Buffer?: unknown; path?: unknown };
 if (!g.Buffer) g.Buffer = Buffer;
 if (!g.path) g.path = { join, resolve, sep };

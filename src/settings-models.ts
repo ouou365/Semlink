@@ -721,7 +721,7 @@ const PROBE_TIMEOUT_MS = 10_000;
 function raceTimeout<T>(p: Promise<T>): Promise<T | null> {
 	return Promise.race([
 		p,
-		new Promise<null>((resolve) => setTimeout(() => resolve(null), PROBE_TIMEOUT_MS)),
+		new Promise<null>((resolve) => window.setTimeout(() => resolve(null), PROBE_TIMEOUT_MS)),
 	]);
 }
 

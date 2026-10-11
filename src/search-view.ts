@@ -2627,7 +2627,7 @@ export class SemanticSearchView extends ItemView {
 	private closeHistoryDrawer(backdrop: HTMLElement, drawer: HTMLElement): void {
 		drawer.removeClass("semlink-history-drawer-open");
 		backdrop.removeClass("semlink-history-backdrop-open");
-		setTimeout(() => { backdrop.remove(); drawer.remove(); }, 300);
+		window.setTimeout(() => { backdrop.remove(); drawer.remove(); }, 300);
 	}
 
 	/**

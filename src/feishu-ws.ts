@@ -10,7 +10,7 @@
 // unaffected. Falls back to a small wrapper shim if Node builtins are missing.
 
 export function installFeishuWebSocket(): void {
-	const g = globalThis as any;
+	const g = window as any;
 	if (g.__semlinkWsInstalled) return;
 	g.__semlinkWsInstalled = true;
 
@@ -68,7 +68,7 @@ export function installFeishuWebSocket(): void {
 		}
 
 		get readyState(): number {
-			return this.native.readyState;
+			return Number(this.native.readyState);
 		}
 
 		// Node-style API.

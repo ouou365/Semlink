@@ -346,7 +346,7 @@ private async callSiliconFlowApi(input: string[]): Promise<EmbeddingResponse> {
 	}
 
 	private extractStatus(error: any): number | null {
-		if (error?.status) return error.status;
+		if (error?.status) return Number(error.status);
 		return null;
 	}
 

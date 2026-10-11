@@ -141,7 +141,7 @@ export function makeFeishuHttp(): any {
 			throw err;
 		}
 
-		return data;
+		return data as unknown;
 	};
 
 	return {

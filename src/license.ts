@@ -188,7 +188,7 @@ export class LicenseManager {
 	async openCheckout(): Promise<string> {
 		const res = await this.call("POST", "/checkout", {});
 		if (!res?.url) throw new LicenseError("network");
-		return res.url;
+		return String(res.url);
 	}
 
 	/** requestUrl-based JSON call against the license endpoints. Endpoints
@@ -214,7 +214,7 @@ export class LicenseManager {
 							throw: false,
 						}),
 						new Promise((_, reject) =>
-							setTimeout(() => reject(new Error("license request timeout")), LicenseManager.REQUEST_TIMEOUT_MS)),
+							window.setTimeout(() => reject(new Error("license request timeout")), LicenseManager.REQUEST_TIMEOUT_MS)),
 					]);
 				} catch {
 					continue;

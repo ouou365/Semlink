@@ -12,6 +12,7 @@
 // (the original behavior). So the plugin is never worse off than before.
 
 import { join } from "path";
+import { requestUrl } from "obsidian";
 import type { NoteChunk, SearchResult, QueueAction, QueueItem } from "./types";
 import { DbEngine } from "./db-engine";
 import { chunkMarkdown, ChunkResult } from "./chunker";
@@ -116,9 +117,9 @@ export class VectorStore {
 		// Chromium refuses to construct a Worker from an app:// resource URL
 		// (SecurityError). Fetch the script and spawn the worker from a Blob
 		// URL instead — verified working in this environment by the spike.
-		const res = await fetch(url);
-		if (!res.ok) throw new Error(`fetch db-worker: HTTP ${res.status}`);
-		const blobUrl = URL.createObjectURL(new Blob([await res.text()], { type: "text/javascript" }));
+		// requestUrl rejects on non-2xx itself, replacing the old !res.ok check.
+		const res = await requestUrl({ url });
+		const blobUrl = URL.createObjectURL(new Blob([res.text], { type: "text/javascript" }));
 		const w = new Worker(blobUrl);
 		w.onmessage = (e: MessageEvent) => {
 			const { reqId, result, error } = (e as any).data ?? {};
@@ -153,7 +154,7 @@ export class VectorStore {
 	}
 
 	/** Send one op to the worker and await its reply. */
-	private call(op: string, args: any[] = []): Promise<any> {
+	private call<T = any>(op: string, args: any[] = []): Promise<T> {
 		const t0 = performance.now();
 		if (this.fallback) {
 			// Synchronous fallback — wrap the engine call directly. The
@@ -365,7 +366,7 @@ export class VectorStore {
 		for (let start = 0; start < count; start += SLICE) {
 			hits.push(...engine.searchSlice(queryEmbedding, start, Math.min(start + SLICE, count), threshold));
 			// Yield to the main thread so timers/render stay responsive.
-			await new Promise((r) => setTimeout(r, 0));
+			await new Promise((r) => window.setTimeout(r, 0));
 		}
 
 		hits.sort((a, b) => b.score - a.score);

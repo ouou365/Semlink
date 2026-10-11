@@ -966,7 +966,7 @@ export class DbEngine {
 		const rows = this.db!.exec(sql, params);
 		if (rows.length === 0 || rows[0].values.length === 0) return [];
 
-		return rows[0].values.map((row) => ({
+		return (rows[0].values as unknown[][]).map((row) => ({
 			path: row[0] as string,
 			matchCount: row[1] as number,
 			preview: (row[2] as string) || "",
@@ -1083,7 +1083,7 @@ export class DbEngine {
 			"SELECT note_path FROM queue WHERE status IN ('pending', 'processing', 'failed') ORDER BY priority ASC, created_at ASC"
 		);
 		if (results.length === 0) return [];
-		return results[0].values.map((r: any[]) => r[0] as string);
+		return (results[0].values as unknown[][]).map((r) => r[0] as string);
 	}
 
 	// ──── Helpers ────
@@ -1091,7 +1091,7 @@ export class DbEngine {
 	private mapChunks(results: any[]): NoteChunk[] {
 		if (results.length === 0) return [];
 		const cols = results[0].columns;
-		return results[0].values.map((row: any[]) => {
+		return (results[0].values as unknown[][]).map((row) => {
 			const obj: Record<string, any> = {};
 			cols.forEach((c: string, i: number) => (obj[c] = row[i]));
 			return {
@@ -1111,7 +1111,7 @@ export class DbEngine {
 	private mapItems(results: any[]): QueueItem[] {
 		if (results.length === 0) return [];
 		const cols = results[0].columns;
-		return results[0].values.map((row: any[]) => {
+		return (results[0].values as unknown[][]).map((row) => {
 			const obj: Record<string, any> = {};
 			cols.forEach((c: string, i: number) => (obj[c] = row[i]));
 			return {
