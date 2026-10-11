@@ -36,7 +36,7 @@ interface PendingRequest {
 
 export class VectorStore {
 	private dataDir: string;
-	private worker: any | null = null;
+	private worker: any = null;
 	private reqId = 0;
 	private pending = new Map<number, PendingRequest>();
 	private fallback = false;

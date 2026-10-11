@@ -55,12 +55,12 @@ export class UsageStore {
 		if (this.records.length > MAX_RECORDS) {
 			this.records = this.records.slice(-MAX_RECORDS);
 		}
-		if (this.saveTimer) clearTimeout(this.saveTimer);
-		this.saveTimer = setTimeout(() => void this.save(), 2000);
+		if (this.saveTimer) window.clearTimeout(this.saveTimer);
+		this.saveTimer = window.setTimeout(() => void this.save(), 2000);
 	}
 
 	async save(): Promise<void> {
-		if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+		if (this.saveTimer) { window.clearTimeout(this.saveTimer); this.saveTimer = null; }
 		try {
 			const dir = join(this.filePath, "..");
 			if (!existsSync(dir)) mkdirSync(dir, { recursive: true });

@@ -12,6 +12,7 @@ import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
 import { LicenseModal } from "./license-modal";
 import { t } from "./i18n";
+import { ConfirmModal } from "./confirm-modal";
 
 type SettingsTab = "general" | "mcp" | "bot";
 
@@ -370,10 +371,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				btn
 					.setButtonText(t("rebuildIndex"))
 					.setWarning()
-					.onClick(async () => {
-						if (!window.confirm(t("rebuildConfirm"))) return;
-						// 重建索引并直接在引导页数据索引环节可视化进度
-						await this.plugin.rebuildIndexWithGuide();
+					.onClick(() => {
+						new ConfirmModal(this.app, t("rebuildIndex"), t("rebuildConfirm"), () => {
+							// 重建索引并直接在引导页数据索引环节可视化进度
+							void this.plugin.rebuildIndexWithGuide();
+						}).open();
 					})
 			);
 	}

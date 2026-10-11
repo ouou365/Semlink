@@ -293,7 +293,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	mcpApiKey: "",
 	chunkSize: 800,
 	chunkOverlap: 100,
-	excludePaths: "templates/\n.git/\n.obsidian/\nnode_modules/",
+	excludePaths: "templates/\n.git/\nnode_modules/",
 	autoIndex: true,
 	maxRetries: 3,
 	batchSize: 64,

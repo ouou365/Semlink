@@ -799,7 +799,7 @@ export class McpServer {
 	        };
 	    } catch (e) {
 	        return {
-	            content: [{ type: "text", text: "Error reading section: " + e }],
+	            content: [{ type: "text", text: "Error reading section: " + String(e) }],
 	            isError: true,
 	        };
 	    }

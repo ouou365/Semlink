@@ -16,7 +16,7 @@ import { t } from "./i18n";
 
 /** Provider-list state. Editing happens in a modal, so there is no expanded
  *  row state to keep across re-renders. */
-export interface ModelsTabState {}
+export type ModelsTabState = object;
 
 export const EMPTY_MODELS_TAB_STATE: ModelsTabState = {};
 
@@ -1059,7 +1059,7 @@ class FetchModelsModal extends Modal {
 
 	/** Render one candidate row (checkbox + id + kind tag + ctx + ✓). */
 	private renderItem(model: FetchedModel): HTMLElement {
-		const label = document.createElement("label");
+		const label = createEl("label");
 		label.className = "semlink-fetch-item";
 		const cb = label.createEl("input", { attr: { type: "checkbox" } });
 		// Nothing is pre-checked — the user picks exactly what to add.

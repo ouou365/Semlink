@@ -478,6 +478,8 @@ const S: Strings = {
 	historyArchiveBtn:    { zh: "已归档",                      en: "Archived" },
 	historyArchiveTitle:  { zh: "已归档",                      en: "Archived" },
 	historyBack:          { zh: "返回",                        en: "Back" },
+	confirmOk:            { zh: "确定",                        en: "OK" },
+	confirmCancel:        { zh: "取消",                        en: "Cancel" },
 	historyArchiveEmptyPro: { zh: "没有已归档的对话",            en: "No archived chats" },
 	historyPinnedGroup:   { zh: "已置顶",                      en: "Pinned" },
 	historyPin:           { zh: "置顶 / 取消置顶",             en: "Pin / unpin" },

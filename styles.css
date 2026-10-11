@@ -3692,6 +3692,7 @@ body .semlink-msg-user::selection {
 .semlink-history-folder-body .semlink-history-item-pin{display:none}
 .semlink-history-item:hover .semlink-folder-input{width:100%;border:1px solid var(--background-modifier-border);border-radius:6px;background:var(--background-primary);color:var(--text-normal);padding:.45rem .6rem;font-family:inherit}
 .semlink-folder-name-modal{width:min(22rem,80vw)}
+.semlink-confirm-row{display:flex;justify-content:flex-end;gap:.5rem;margin-top:.8rem}
 .semlink-folder-name-modal .modal-content{padding:.9rem 1rem 1rem}
 .semlink-folder-name-modal h2{margin:.1rem 0 .7rem;font-size:1rem}
 .semlink-folder-name-modal .semlink-folder-input-row{margin-top:.8rem}

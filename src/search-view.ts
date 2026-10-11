@@ -20,6 +20,7 @@ import { guideInProgress, onboardingActive, renderOnboarding } from "./onboardin
 import type { IndexStatsView } from "./onboarding";
 import type SmartVaultPlugin from "../main";
 import { SaveNoteModal } from "./save-note-modal";
+import { ConfirmModal } from "./confirm-modal";
 import { getLang, t } from "./i18n";
 import logoSvg from "./semlink-logo.svg";
 import llmIconSvg from "./network-icon.svg";
@@ -59,7 +60,7 @@ const HOME_SUGGESTION_POOL: Array<{ key: string; icon: string }> = [
  *  wrap at "/" instead. Visually identical; safe for markdown syntax
  *  (list dashes and "---" rules don't match the surrounding-word rule). */
 function protectHyphens(text: string): string {
-	return text.replace(/(?<=[\w\u4e00-\u9fff])\-(?=[\w\u4e00-\u9fff])/g, "\u2011");
+	return text.replace(/(?<=[\w\u4e00-\u9fff])-(?=[\w\u4e00-\u9fff])/g, "\u2011");
 }
 
 /** Recency bucket for a session timestamp: today / yesterday / 3天前 /
@@ -1282,7 +1283,7 @@ export class SemanticSearchView extends ItemView {
 				}
 			} else {
 				part.split(/\r?\n/).forEach((line, i) => {
-					if (i > 0) insert(document.createElement("br"));
+					if (i > 0) insert(createEl("br"));
 					insert(document.createTextNode(line));
 				});
 			}
@@ -1394,7 +1395,7 @@ export class SemanticSearchView extends ItemView {
 		// Only act when the caret is inside our input.
 		if (!this.inputEl.contains(range.commonAncestorContainer)) return;
 		range.deleteContents();
-		const br = document.createElement("br");
+		const br = createEl("br");
 		range.insertNode(br);
 		// Move the caret after the new break.
 		range.setStartAfter(br);
@@ -2306,11 +2307,18 @@ export class SemanticSearchView extends ItemView {
 						setIcon(del, "trash-2");
 						del.addEventListener("click", (e) => {
 							e.stopPropagation();
+							const doDelete = () => {
+								this.history.deleteFolder(n.path);
+								void this.history.save();
+								render();
+							};
 							const n2 = countOf(n);
-							if (n2 > 0 && !confirm(t("historyDeleteFolderConfirm").replace("{n}", String(n2)))) return;
-							this.history.deleteFolder(n.path);
-							void this.history.save();
-							render();
+							if (n2 > 0) {
+								new ConfirmModal(this.app, t("historyDeleteFolder"),
+									t("historyDeleteFolderConfirm").replace("{n}", String(n2)), doDelete).open();
+								return;
+							}
+							doDelete();
 						});
 					}
 					row.addEventListener("click", () => {
