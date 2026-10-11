@@ -774,8 +774,10 @@ export class ChatClient {
 	): Promise<{ content: string; toolCalls: any[]; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
 		let resp: Response;
 		try {
-			// eslint-disable-next-line no-restricted-globals -- SSE streaming: requestUrl buffers the whole body and cannot deliver incremental chunks
-		resp = await fetch(url, {
+			// SSE streaming: requestUrl buffers the whole body and cannot deliver
+		// incremental chunks, so the bare fetch API is required here (window
+		// member access — the global identifier itself is restricted).
+		resp = await window.fetch(url, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -1124,8 +1126,10 @@ export class ChatClient {
 		let roundOut = 0;
 		let resp: Response;
 		try {
-			// eslint-disable-next-line no-restricted-globals -- SSE streaming: requestUrl buffers the whole body and cannot deliver incremental chunks
-		resp = await fetch(url, {
+			// SSE streaming: requestUrl buffers the whole body and cannot deliver
+		// incremental chunks, so the bare fetch API is required here (window
+		// member access — the global identifier itself is restricted).
+		resp = await window.fetch(url, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",

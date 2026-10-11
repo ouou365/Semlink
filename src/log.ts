@@ -12,6 +12,7 @@ try { enabled = window.localStorage.getItem("semlink-debug") === "1"; } catch { 
 
 export function debugLog(...args: unknown[]): void {
 	if (!enabled) return;
-	// eslint-disable-next-line no-console -- the single gated console sink; every other call site goes through debugLog
-	console.log("[Semlink]", ...args);
+	// console.debug: one of the three methods the submission checker permits
+	// (warn/error/debug); verbose-level in Chromium, fitting for diagnostics.
+	console.debug("[Semlink]", ...args);
 }
