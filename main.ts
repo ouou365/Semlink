@@ -3,6 +3,7 @@
 // ========================================
 
 import { Notice, Plugin, FileSystemAdapter, WorkspaceSidedock, addIcon } from "obsidian";
+import { debugLog } from "./src/log";
 import { join } from "path";
 import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
 import { UsageStore } from "./src/usage-store";
@@ -242,13 +243,13 @@ export default class SmartVaultPlugin extends Plugin {
 
 		// Event listeners for progress modal
 		this.registerEvent(
-			(this.app.workspace as any).on("smart-vault:pause" as any, () => {
+			(this.app.workspace as unknown as { on(name: string, cb: () => void): void }).on("smart-vault:pause", () => {
 				this.scheduler.pause();
 				new Notice(`Semlink: ${t("noticeIndexPaused")}`);
 			})
 		);
 		this.registerEvent(
-			(this.app.workspace as any).on("smart-vault:resume" as any, () => {
+			(this.app.workspace as unknown as { on(name: string, cb: () => void): void }).on("smart-vault:resume", () => {
 				this.scheduler.resume();
 				new Notice(`Semlink: ${t("noticeIndexResumed")}`);
 			})
@@ -257,18 +258,18 @@ export default class SmartVaultPlugin extends Plugin {
 		// Update initial status bar
 		await this.updateInitialStatusBar();
 
-		console.log("[Semlink] Plugin loaded");
+		debugLog("[Semlink] Plugin loaded");
 	}
 
 	onunload() {
 		void this.usageStore?.save();
 		// All synchronous — Obsidian does NOT await async onunload.
-		try { this.scheduler?.abort(); } catch {}
-		try { this.watcher?.stop(); } catch {}
-		try { this.mcpServer?.stop(); } catch {}
-		try { this.activityGate?.dispose(); } catch {}
+		try { this.scheduler?.abort(); } catch { /* best-effort */ }
+		try { this.watcher?.stop(); } catch { /* best-effort */ }
+		try { this.mcpServer?.stop(); } catch { /* best-effort */ }
+		try { this.activityGate?.dispose(); } catch { /* best-effort */ }
 		for (const bot of this.feishuBots.values()) {
-			try { void bot.stop(); } catch {}
+			try { void bot.stop(); } catch { /* best-effort */ }
 		}
 		this.feishuBots.clear();
 		// Persist & close the store. store.close() is async, but:
@@ -279,8 +280,8 @@ export default class SmartVaultPlugin extends Plugin {
 		//  - In fallback mode close() runs synchronously.
 		// Either way we don't block on the promise here (we can't — onunload
 		// is sync); the worker handles flushing on its end.
-		try { void this.store?.close(); } catch {}
-		console.log("[Semlink] Plugin unloaded");
+		try { void this.store?.close(); } catch { /* best-effort */ }
+		debugLog("[Semlink] Plugin unloaded");
 	}
 
 	async loadSettings() {
@@ -488,7 +489,7 @@ export default class SmartVaultPlugin extends Plugin {
 	 *  直接在引导页的数据索引环节可视化进度（索引自动处于运行状态）。 */
 	async rebuildIndexWithGuide(): Promise<void> {
 		await this.rebuildAll();
-		(this.app as any).setting.close();
+		(this.app as unknown as { setting: { close(): void } }).setting.close();
 		await this.activateSearchView();
 		const leaf = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
 		(leaf.view as SemanticSearchView).openIndexGuide();
