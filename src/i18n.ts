@@ -2,17 +2,22 @@
 // Semlink - Internationalization
 // ========================================
 
-import { getLanguage } from "obsidian";
+import { getLanguage, moment, requireApiVersion } from "obsidian";
 
 export type Lang = "zh" | "en";
 export type LangSetting = "auto" | Lang;
 
 let currentLang: Lang = "zh";
 
-/** Obsidian's UI language (getLanguage(): "en", "zh", "zh-TW", …). Any zh-*
- *  prefix maps to zh, everything else falls back to English. */
+/** Obsidian's UI language, e.g. "en", "zh", "zh-TW". getLanguage() needs
+ *  Obsidian 1.8.7+ (minAppVersion is older); pre-1.8.7 hosts fall back to
+ *  the bundled moment locale. Any zh-* prefix maps to zh, everything else
+ *  falls back to English. */
 function detectObsidianLang(): Lang {
-	return (getLanguage() || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+	const raw = requireApiVersion("1.8.7")
+		? getLanguage()
+		: moment.locale();
+	return raw.toLowerCase().startsWith("zh") ? "zh" : "en";
 }
 
 export function setLang(lang: LangSetting) {
