@@ -113,7 +113,7 @@ export function makeFeishuHttp(): any {
 		}
 		let finalUrl = url;
 		if (opts.params) {
-			const qs = new URLSearchParams(opts.params as any).toString();
+			const qs = new URLSearchParams(opts.params).toString();
 			finalUrl += (finalUrl.includes("?") ? "&" : "?") + qs;
 		}
 

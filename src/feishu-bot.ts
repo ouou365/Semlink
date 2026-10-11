@@ -190,7 +190,7 @@ export class FeishuBot {
 		if (this.livenessTimer !== null) {
 			window.clearTimeout(this.livenessTimer);
 		}
-		this.livenessTimer = window.setTimeout(() => this.onLivenessTimeout(), LIVENESS_TIMEOUT_MS);
+		this.livenessTimer = window.setTimeout(() => void this.onLivenessTimeout(), LIVENESS_TIMEOUT_MS);
 	}
 
 	private async onLivenessTimeout(): Promise<void> {
@@ -487,10 +487,10 @@ export class FeishuBot {
 		const client = this.client;
 		if (!client) return "";
 		try {
-			const res: any = await client.im.messageReaction.create({
+			const res = await client.im.messageReaction.create({
 				path: { message_id: messageId },
 				data: { reaction_type: { emoji_type: emojiType } },
-			} as any);
+			});
 			return res?.data?.reaction_id || "";
 		} catch (e) {
 			console.warn("[Semlink] add reaction failed:", this.describeError(e));

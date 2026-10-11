@@ -364,12 +364,12 @@ export class ChatClient {
 				return await dispatch();
 			} catch (e) {
 				// User aborted — never retry, propagate the AbortError as-is.
-				if (signal?.aborted || (e as any)?.name === "AbortError") throw e;
+				if (signal?.aborted || e?.name === "AbortError") throw e;
 				const retryDelayMs = CHAT_RETRY_DELAYS_MS[attempt - 1];
 				if (retryDelayMs === undefined || totalAttempts > CHAT_RETRY_TOTAL + 5 || !this.isTransientChatError(e)) {
 					throw e;
 				}
-				const msg = String((e as any)?.message || e || "");
+				const msg = String(e?.message || e || "");
 				console.warn(`[Semlink] transient error (attempt ${attempt}), retrying in ${retryDelayMs}ms:`, msg);
 				onRetry?.(attempt + 1, CHAT_RETRY_TOTAL);
 				await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
@@ -784,7 +784,7 @@ export class ChatClient {
 		});
 		} catch (e) {
 			// User aborted — propagate as AbortError (NOT retryable).
-			if (signal?.aborted || (e as any)?.name === "AbortError") {
+			if (signal?.aborted || e?.name === "AbortError") {
 				throw new DOMException("Aborted", "AbortError");
 			}
 			// Network-level failure (CORS / DNS / connection reset / offline).
@@ -1134,7 +1134,7 @@ export class ChatClient {
 			});
 		} catch (e) {
 			// User aborted — propagate as AbortError (NOT retryable).
-			if (signal?.aborted || (e as any)?.name === "AbortError") {
+			if (signal?.aborted || e?.name === "AbortError") {
 				throw new DOMException("Aborted", "AbortError");
 			}
 			// Network-level failure — marked retryable; chat() retries once.

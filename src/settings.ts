@@ -64,7 +64,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			if (winTop > 0) window.scrollTo(0, winTop);
 		};
 		restore();
-		requestAnimationFrame(restore);
+		window.requestAnimationFrame(restore);
 		window.setTimeout(restore, 0);
 	}
 

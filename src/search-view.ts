@@ -205,7 +205,7 @@ export class SemanticSearchView extends ItemView {
 		});
 		this.menuBtnEl = menuBtn;
 		setIcon(menuBtn, "menu");
-		menuBtn.addEventListener("click", () => this.showHistoryDrawer());
+		menuBtn.addEventListener("click", () => void this.showHistoryDrawer());
 		// Usage & cost dashboard (Pro view; recording itself runs for all).
 		// Usage & Cost dashboard — entry hidden for now (feature stays wired:
 		// flip this flag to bring the header button back).
@@ -951,7 +951,7 @@ export class SemanticSearchView extends ItemView {
 				} catch (e) {
 					// User aborted — keep whatever streamed so far and show a
 					// "stopped" notice instead of an error.
-					if (controller.signal.aborted || (e as any)?.name === "AbortError") {
+					if (controller.signal.aborted || e?.name === "AbortError") {
 						stopAnswerAnim();
 						loadingEl.empty();
 						if (liveSteps.length > 0) {
@@ -1142,7 +1142,7 @@ export class SemanticSearchView extends ItemView {
 		if (added.length === 0) return;
 		// Defer DOM mutation (chips + notice) off the drop event so the UI
 		// doesn't jank; a single frame later is imperceptible.
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			this.insertAttachmentChips(added);
 			new Notice(t("attachAdded").replace("{n}", String(added.length)));
 		});
@@ -2066,7 +2066,7 @@ export class SemanticSearchView extends ItemView {
 			searchInput.addClass("semlink-history-search-locked");
 			searchInput.addEventListener("click", () => {
 				this.closeHistoryDrawer(backdrop, drawer);
-				new LicenseModal(this.app, this.plugin, () => this.showHistoryDrawer()).open();
+				new LicenseModal(this.app, this.plugin, () => void this.showHistoryDrawer()).open();
 			});
 		}
 
@@ -2328,7 +2328,7 @@ export class SemanticSearchView extends ItemView {
 					});
 					if (n.path !== "__folders_root__") {
 						row.addEventListener("dragover", (e) => {
-							const dt = (e as DragEvent).dataTransfer;
+							const dt = e.dataTransfer;
 							if (dt?.types.includes("text/semlink-session")) {
 								e.preventDefault();
 								e.stopPropagation();
@@ -2343,7 +2343,7 @@ export class SemanticSearchView extends ItemView {
 							e.preventDefault();
 							e.stopPropagation();
 							row.removeClass("is-drop");
-							const id = (e as DragEvent).dataTransfer?.getData("text/semlink-session");
+							const id = e.dataTransfer?.getData("text/semlink-session");
 							if (!id) return;
 							this.history.updateSession(id, { folder: n.path });
 							void this.history.save();
@@ -2402,7 +2402,7 @@ export class SemanticSearchView extends ItemView {
 				const cta = mask.createDiv({ cls: "semlink-history-folder-mask-cta", text: t("unlockPro") });
 				cta.addEventListener("click", () => {
 					this.closeHistoryDrawer(backdrop, drawer);
-					new LicenseModal(this.app, this.plugin, () => this.showHistoryDrawer()).open();
+					new LicenseModal(this.app, this.plugin, () => void this.showHistoryDrawer()).open();
 				});
 			} else {
 				// Time tab (and Pro search): pinned group first, then flat
@@ -2448,7 +2448,7 @@ export class SemanticSearchView extends ItemView {
 						unlock.addEventListener("click", (e) => {
 							e.stopPropagation();
 							this.closeHistoryDrawer(backdrop, drawer);
-							new LicenseModal(this.app, this.plugin, () => this.showHistoryDrawer()).open();
+							new LicenseModal(this.app, this.plugin, () => void this.showHistoryDrawer()).open();
 						});
 						const lockedItems = list.createDiv({ cls: "semlink-history-group-items semlink-history-archive-items" });
 						for (const session of locked.slice(0, lockedVisible)) renderArchivedItem(lockedItems, session, false);
@@ -2502,8 +2502,8 @@ export class SemanticSearchView extends ItemView {
 			// Drag a conversation onto a folder row (Folders tab) to file it.
 			item.draggable = true;
 			item.addEventListener("dragstart", (e) => {
-				(e as DragEvent).dataTransfer?.setData("text/semlink-session", session.id);
-				(e as DragEvent).dataTransfer!.effectAllowed = "move";
+				e.dataTransfer?.setData("text/semlink-session", session.id);
+				e.dataTransfer!.effectAllowed = "move";
 			});
 			// showPin=false (Folders-tab un-filed rows): no pin at all —
 			// pinning belongs to the Time tab, and no sibling row there
@@ -2525,7 +2525,7 @@ export class SemanticSearchView extends ItemView {
 					pinBtn.addEventListener("click", (e) => {
 						e.stopPropagation();
 						this.closeHistoryDrawer(backdrop, drawer);
-						new LicenseModal(this.app, this.plugin, () => this.showHistoryDrawer()).open();
+						new LicenseModal(this.app, this.plugin, () => void this.showHistoryDrawer()).open();
 					});
 				}
 			}
@@ -2580,7 +2580,7 @@ export class SemanticSearchView extends ItemView {
 		});
 		render();
 
-		requestAnimationFrame(() => {
+		window.requestAnimationFrame(() => {
 			drawer.addClass("semlink-history-drawer-open");
 			backdrop.addClass("semlink-history-backdrop-open");
 		});
@@ -2862,7 +2862,7 @@ export class SemanticSearchView extends ItemView {
 		if (!window) return;
 
 		const pct = Math.min(100, Math.max(0, Math.round((tokens / window) * 100)));
-		const fg = this.contextRingEl.querySelector(".ring-fg") as SVGCircleElement | null;
+		const fg = this.contextRingEl.querySelector(".ring-fg");
 		const C = 2 * Math.PI * 15.9;
 		if (fg) {
 			fg.setAttribute("stroke-dasharray", String(C));

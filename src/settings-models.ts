@@ -841,10 +841,10 @@ export async function fetchAvailableModels(
 	const results: FetchedModel[] = [];
 	let done = 0;
 	await runPool(entries, 4, async (e) => {
-		let kind = cache!.get(e.id);
+		let kind = cache.get(e.id);
 		if (!kind) {
 			kind = await classifyModel(base, apiKey, e.id);
-			cache!.set(e.id, kind);
+			cache.set(e.id, kind);
 		}
 		const model: FetchedModel = {
 			id: e.id,
@@ -1274,7 +1274,7 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 		const base = baseUrl.trim();
 		// A live interrogation needs both the base URL and the key.
 		const ok = base.length > 0 && apiKey.trim().length > 0;
-		(fetchBtn as HTMLButtonElement).disabled = !ok || fetching;
+		fetchBtn.disabled = !ok || fetching;
 		fetchBtn.setAttr("title", ok ? "" : t("fetchNeedsBaseUrl"));
 	};
 
@@ -1407,7 +1407,7 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 		rerender();
 	});
 
-	fetchBtn.addEventListener("click", async () => {
+	fetchBtn.addEventListener("click", () => void (async () => {
 		const { baseUrl, apiKey, apiFormat } = opts.probe();
 		const base = baseUrl.trim().replace(/\/+$/, "");
 		fetching = true;
@@ -1482,7 +1482,7 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 			fetchBtn.setText(t("fetchModels"));
 			updateProbeState();
 		}
-	});
+	})());
 
 	rerender();
 	return { updateProbeState };
@@ -1722,7 +1722,7 @@ function renderProviderEditor(
 				})
 		)
 		.then((setting) => {
-			const input = setting.controlEl.querySelector("input") as HTMLInputElement | null;
+			const input = setting.controlEl.querySelector("input");
 			if (input) input.type = "password";
 		});
 
@@ -1741,7 +1741,7 @@ function renderProviderEditor(
 	footer.createEl("button", { cls: "semlink-btn", text: t("cancel") })
 		.addEventListener("click", close);
 	footer.createEl("button", { cls: "semlink-btn semlink-btn-cta", text: t("confirm") })
-		.addEventListener("click", async () => {
+		.addEventListener("click", () => void (async () => {
 			Object.assign(p, draft);
 			p.models = draft.models;
 			// The list is now user-curated: the onboarding guide must stop
@@ -1750,7 +1750,7 @@ function renderProviderEditor(
 			await plugin.saveSettings();
 			refresh();
 			close();
-		});
+		})());
 }
 
 // ──── Create cards (add provider / add custom provider) ────
@@ -1834,7 +1834,7 @@ function renderDraftEditor(
 				})
 		)
 		.then((setting) => {
-			const input = setting.controlEl.querySelector("input") as HTMLInputElement | null;
+			const input = setting.controlEl.querySelector("input");
 			if (input) input.type = "password";
 		});
 
@@ -1917,7 +1917,7 @@ function renderProviderCatalogGrid(
 			card.createDiv({ cls: "semlink-add-provider-card-fallback", text: entry.name.charAt(0).toUpperCase() });
 		}
 		card.createDiv({ cls: "semlink-add-provider-card-name", text: entry.name });
-		card.addEventListener("click", async () => {
+		card.addEventListener("click", () => void (async () => {
 			const provider: ModelProvider = {
 				id: `provider-${Date.now()}`,
 				name: entry.name,
@@ -1930,7 +1930,7 @@ function renderProviderCatalogGrid(
 			plugin.settings.providers.push(provider);
 			await plugin.saveSettings();
 			opts.onCreated(provider);
-		});
+		})());
 	}
 
 	// Trailing "custom provider" chip: closes this catalog modal and opens the

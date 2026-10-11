@@ -686,7 +686,7 @@ export class DbEngine {
 		const query = new Float32Array(dim);
 		let qNorm = 0;
 		for (let j = 0; j < dim; j++) {
-			query[j] = this.allDocVectors![srcOffset + j];
+			query[j] = this.allDocVectors[srcOffset + j];
 			qNorm += query[j] * query[j];
 		}
 		qNorm = Math.sqrt(qNorm);
@@ -701,7 +701,7 @@ export class DbEngine {
 			let dot = 0;
 			let normB = 0;
 			for (let j = 0; j < dim; j++) {
-				const v = this.allDocVectors![offset + j];
+				const v = this.allDocVectors[offset + j];
 				dot += query[j] * v;
 				normB += v * v;
 			}
@@ -751,7 +751,7 @@ export class DbEngine {
 				let normB = 0;
 
 				for (let j = 0; j < dim; j++) {
-					const v = this.allVectors![offset + j];
+					const v = this.allVectors[offset + j];
 					dot += query[j] * v;
 					normB += v * v;
 				}
@@ -910,7 +910,7 @@ export class DbEngine {
 			// Build a query vector from this probe's stored embedding.
 			const qOffset = qIdx * dim;
 			const query = new Float32Array(dim);
-			for (let j = 0; j < dim; j++) query[j] = this.allVectors![qOffset + j];
+			for (let j = 0; j < dim; j++) query[j] = this.allVectors[qOffset + j];
 
 			// Use search() — it normalizes the query, ranks ALL chunks by cosine
 			// score, and returns the top-perQueryLimit with metadata attached.

@@ -60,7 +60,7 @@ export class McpServer {
 
 	start(): Promise<void> {
 		return new Promise((resolve, reject) => {
-			this.server = createServer((req, res) => this.handleRequest(req, res));
+			this.server = createServer((req, res) => { void this.handleRequest(req, res); });
 
 			this.server.on("error", (err: any) => {
 				if (err.code === "EADDRINUSE") {
@@ -68,7 +68,7 @@ export class McpServer {
 					this.settings.mcpPort++;
 					this.server!.listen(this.settings.mcpPort, "127.0.0.1");
 				} else {
-					reject(err);
+					reject(err instanceof Error ? err : new Error(String(err)));
 				}
 			});
 
@@ -592,7 +592,7 @@ export class McpServer {
 
 		const notes = filtered.map((p) => {
 			const file = this.vault.getAbstractFileByPath(p);
-			const stat = (file as any)?.stat;
+			const stat = file?.stat;
 			return {
 				path: p,
 				created: stat ? new Date(stat.ctime).toISOString() : null,

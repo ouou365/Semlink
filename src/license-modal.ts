@@ -8,7 +8,7 @@
 
 import { App, Modal, Notice, Setting } from "obsidian";
 import type SmartVaultPlugin from "../main";
-import { licenseErrorMessage, type LicenseError } from "./license";
+import { licenseErrorMessage } from "./license";
 import { t } from "./i18n";
 
 export class LicenseModal extends Modal {
@@ -64,7 +64,7 @@ export class LicenseModal extends Modal {
 				// if no endpoint is reachable we say so instead of routing
 				// the buyer somewhere stale.
 				const buyBtn = buy.createEl("button", { cls: "mod-cta", text: t("upgradeBuyEarly") });
-				buyBtn.addEventListener("click", async () => {
+				buyBtn.addEventListener("click", () => void (async () => {
 					if (buyBtn.dataset.busy === "1") return;
 					buyBtn.dataset.busy = "1";
 					try {
@@ -74,7 +74,7 @@ export class LicenseModal extends Modal {
 					} finally {
 						buyBtn.dataset.busy = "";
 					}
-				});
+				})());
 				contentEl.createDiv({ cls: "semlink-license-anchor", text: t("upgradePriceAnchor") });
 			}
 
@@ -115,7 +115,7 @@ export class LicenseModal extends Modal {
 							new Notice(t("licenseActivated"));
 							this.render();
 						} catch (e) {
-							new Notice(licenseErrorMessage(e as LicenseError));
+							new Notice(licenseErrorMessage(e));
 						} finally {
 							btn.setDisabled(false);
 						}
@@ -134,7 +134,7 @@ export class LicenseModal extends Modal {
 								new Notice(t("licenseDeactivated"));
 								this.render();
 							} catch (e) {
-								new Notice(licenseErrorMessage(e as LicenseError));
+								new Notice(licenseErrorMessage(e));
 							} finally {
 								btn.setDisabled(false);
 							}

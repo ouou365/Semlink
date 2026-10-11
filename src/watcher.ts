@@ -74,10 +74,10 @@ export class VaultWatcher {
 		if (file.extension !== "md") return;
 		if (this.isExcluded(file.path)) return;
 
-		this.debounce(file.path, async () => {
+		this.debounce(file.path, () => void (async () => {
 			await this.scheduler.enqueueFile(file.path, "add");
 			this.ensureSchedulerRunning();
-		});
+		})());
 	}
 
 	private onModify(file: TAbstractFile) {
@@ -86,10 +86,10 @@ export class VaultWatcher {
 		if (file.extension !== "md") return;
 		if (this.isExcluded(file.path)) return;
 
-		this.debounce(file.path, async () => {
+		this.debounce(file.path, () => void (async () => {
 			await this.scheduler.enqueueFile(file.path, "update");
 			this.ensureSchedulerRunning();
-		});
+		})());
 	}
 
 	private onDelete(file: TAbstractFile) {

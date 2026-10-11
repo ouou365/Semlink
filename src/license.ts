@@ -9,8 +9,9 @@
 // Token wire format: base64url(JSON payload) + "." + base64url(signature).
 // Payload: { kh: keyHash, fp: deviceFingerprint, plan: "pro", iat, exp }.
 
-import { createHash, createPublicKey, verify as cryptoVerify } from "crypto";
+import { createHash, createPrivateKey, createPublicKey, sign as cryptoSign, verify as cryptoVerify } from "crypto";
 import type * as Crypto from "crypto";
+import { hostname, platform, userInfo } from "os";
 import { requestUrl } from "obsidian";
 import type SmartVaultPlugin from "../main";
 import { LICENSE_API_BASES, LICENSE_PUBLIC_KEY_B64, REVALIDATE_INTERVAL_MS, TOKEN_TTL_MS, FREE_HISTORY_LIMIT } from "./license-config";
@@ -22,9 +23,9 @@ import { t } from "./i18n";
 export function deviceFingerprint(extra: string): string {
 	const parts = [
 		extra,
-		require("os").hostname(),
-		require("os").platform(),
-		require("os").userInfo().username,
+		hostname(),
+		platform(),
+		userInfo().username,
 	];
 	return createHash("sha256").update(parts.join("\u0000")).digest("hex").slice(0, 32);
 }
@@ -59,7 +60,15 @@ export function verifyToken(token: string, fp: string, nowMs = Date.now()): bool
 
 /** Human-readable reason a license operation failed, mapped from the
  *  backend/Creem status codes the UI actually needs to distinguish. */
-export type LicenseError = "invalid" | "limit" | "revoked" | "network" | "notConfigured";
+export type LicenseErrorCode = "invalid" | "limit" | "revoked" | "network" | "notConfigured";
+
+/** Thrown by license calls. Carries a stable code (the former string
+ *  union, now an Error object per lint/type-safety rules). */
+export class LicenseError extends Error {
+	constructor(public code: LicenseErrorCode) {
+		super(code);
+	}
+}
 
 export class LicenseManager {
 	private plugin: SmartVaultPlugin;
@@ -112,7 +121,7 @@ export class LicenseManager {
 
 	/** Activate a license key on this device. Throws LicenseError codes. */
 	async activate(key: string): Promise<void> {
-		if (!this.configured) throw "notConfigured" as LicenseError;
+		if (!this.configured) throw new LicenseError("notConfigured");
 		const res = await this.call("POST", "/activate", { key: key.trim(), fp: this.fp, deviceName: this.deviceName() });
 		this.applyValidation(res);
 		await this.plugin.saveSettings();
@@ -159,7 +168,7 @@ export class LicenseManager {
 	// ── internals ──
 
 	private deviceName(): string {
-		try { return `${require("os").hostname()} · Obsidian`; } catch { return "Obsidian device"; }
+		try { return `${hostname()} · Obsidian`; } catch { return "Obsidian device"; }
 	}
 
 	private applyValidation(res: any): void {
@@ -178,7 +187,7 @@ export class LicenseManager {
 	 *  endpoint can create a session — callers surface a retry notice. */
 	async openCheckout(): Promise<string> {
 		const res = await this.call("POST", "/checkout", {});
-		if (!res?.url) throw "network" as LicenseError;
+		if (!res?.url) throw new LicenseError("network");
 		return res.url;
 	}
 
@@ -214,19 +223,20 @@ export class LicenseManager {
 					try { return res.json; } catch { continue; }
 				}
 				// Map the meaningful failures: 403 = activation limit, 410 = revoked.
-				if (res.status === 403) throw "limit" as LicenseError;
-				if (res.status === 410) throw "revoked" as LicenseError;
-				if (res.status === 401 || res.status === 404) throw "invalid" as LicenseError;
-				throw "network" as LicenseError;
+				if (res.status === 403) throw new LicenseError("limit");
+				if (res.status === 410) throw new LicenseError("revoked");
+				if (res.status === 401 || res.status === 404) throw new LicenseError("invalid");
+				throw new LicenseError("network");
 			}
 		}
-		throw "network" as LicenseError;
+		throw new LicenseError("network");
 	}
 }
 
 /** Shared error → user message mapping (used by modal + settings UI). */
 export function licenseErrorMessage(e: unknown): string {
-	switch (e) {
+	const code = e instanceof LicenseError ? e.code : null;
+	switch (code) {
 		case "notConfigured": return t("licenseNotConfigured");
 		case "invalid": return t("licenseInvalidKey");
 		case "limit": return t("licenseDeviceLimit");
@@ -239,10 +249,9 @@ export function licenseErrorMessage(e: unknown): string {
 /** Sign a token the way the backend does — DEV/TEST ONLY (used by the
  *  roundtrip test script; never imported by plugin runtime paths). */
 export function __devSignToken(payload: Record<string, unknown>, privateKeyB64: string): string {
-	const { sign, createPrivateKey } = require("crypto") as typeof Crypto;
 	const data = Buffer.from(JSON.stringify(payload), "utf-8");
 	const key = createPrivateKey({ key: Buffer.from(privateKeyB64, "base64"), format: "der", type: "pkcs8" });
-	const sig = sign(null, data, key);
+	const sig = cryptoSign(null, data, key);
 	return `${data.toString("base64url")}.${Buffer.from(sig).toString("base64url")}`;
 }
 

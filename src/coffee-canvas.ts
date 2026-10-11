@@ -231,11 +231,11 @@ export function mountCoffeeCanvas(
 	const frame = (now: number): void => {
 		// Schedule the next frame FIRST — an exception in the draw code must
 		// never silently kill the loop (that froze the cup on one frame).
-		raf = requestAnimationFrame(frame);
+		raf = window.requestAnimationFrame(frame);
 		try {
 			if (!canvas.isConnected) {
 				running = false;
-				cancelAnimationFrame(raf);
+				window.cancelAnimationFrame(raf);
 				return;
 			}
 			// A late rAF callback means the MAIN THREAD was busy elsewhere
@@ -506,7 +506,7 @@ export function mountCoffeeCanvas(
 				if (!idleSince) idleSince = now;
 				if (now - idleSince > 3000) {
 					running = false;
-					cancelAnimationFrame(raf);
+					window.cancelAnimationFrame(raf);
 					return;
 				}
 			} else {
@@ -523,7 +523,7 @@ export function mountCoffeeCanvas(
 		running = true;
 		idleSince = 0;
 		last = performance.now();
-		raf = requestAnimationFrame(frame);
+		raf = window.requestAnimationFrame(frame);
 	};
 
 	// Paint the idle scene immediately — an empty cup waiting to brew.
@@ -573,7 +573,7 @@ export function mountCoffeeCanvas(
 			ensureLoop();
 		},
 		destroy() {
-			cancelAnimationFrame(raf);
+			window.cancelAnimationFrame(raf);
 			running = false;
 			canvas.remove();
 		},

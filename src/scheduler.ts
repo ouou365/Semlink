@@ -514,7 +514,7 @@ export class Scheduler {
 			}
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : String(error);
-			const status = (error as any)?.status;
+			const status = error?.status;
 			console.error(`[Semlink] Error processing ${notePath}:`, msg);
 
 			for (const item of items) {

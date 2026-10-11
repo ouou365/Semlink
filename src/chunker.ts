@@ -173,6 +173,6 @@ export function makePreview(content: string, maxLen = 200): string {
  *  between totally unrelated documents. We strip structural / punctuation
  *  chars and require a minimum of "effective" characters (CJK + alphanumerics). */
 export function isSparseContent(content: string, minChars = 20): boolean {
-	const effective = content.replace(/[\s|\-=:_*#>`~\[\](){}<>"'.,;:!?/\\]+/g, "").length;
+	const effective = content.replace(/[\s|\-=:_*#>`~[\](){}<>"'.,;:!?/\\]+/g, "").length;
 	return effective < minChars;
 }

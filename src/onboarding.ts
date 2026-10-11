@@ -579,7 +579,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			] as const) {
 				formatSelect.createEl("option", { value, text: label });
 			}
-			(formatSelect as HTMLSelectElement).value = provider.wirePath === "/" ? "bare" : provider.apiFormat;
+			formatSelect.value = provider.wirePath === "/" ? "bare" : provider.apiFormat;
 
 			fieldLabel(form, t("apiKey"));
 			// SMS-code-style group: the "获取 Key" button sits inside the input's
@@ -651,12 +651,12 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 				nextBtn.setText(t("guideValidating"));
 				provider.name = nameInput.value.trim() || provider.name;
 				provider.apiBase = apiBase;
-				if ((formatSelect as HTMLSelectElement).value === "bare") {
+				if (formatSelect.value === "bare") {
 					// Bare: the address IS the endpoint — payload format stays
 					// whatever this provider already uses.
 					provider.wirePath = "/";
 				} else {
-					provider.apiFormat = (formatSelect as HTMLSelectElement).value as ChatApiFormat;
+					provider.apiFormat = formatSelect.value as ChatApiFormat;
 					if (provider.wirePath === "/") provider.wirePath = undefined;
 				}
 				provider.apiKey = key;

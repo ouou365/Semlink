@@ -19,7 +19,7 @@ import { createDispatcher } from "./db-worker-core";
 
 const dispatch = createDispatcher();
 
-parentPort?.on("message", async (msg: any) => {
+parentPort?.on("message", (msg: any) => void (async () => {
 	const { reqId, op, args } = msg;
 
 	// "close" is special: synchronous flush then exit, used by onunload.
@@ -44,7 +44,7 @@ parentPort?.on("message", async (msg: any) => {
 			error: e instanceof Error ? e.message : String(e),
 		});
 	}
-});
+})());
 
 // Safety net: if the host process is about to exit, flush what we can.
 // beforeExit fires on the main thread's event loop idle; in a worker it's

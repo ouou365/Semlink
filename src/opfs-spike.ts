@@ -54,7 +54,7 @@ export async function runOpfsSpike(app: App, pluginId: string): Promise<void> {
 		const worker = new Worker(URL.createObjectURL(new Blob([WORKER_CODE], { type: "text/javascript" })));
 		out.worker = await new Promise((resolve, reject) => {
 			worker.onmessage = (e) => resolve(e.data);
-			worker.onerror = (e) => reject(new Error(String((e as ErrorEvent).message || "worker error")));
+			worker.onerror = (e) => reject(new Error(String(e.message || "worker error")));
 			worker.postMessage("go");
 			window.setTimeout(() => reject(new Error("worker timeout (10s)")), 10000);
 		});
