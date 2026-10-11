@@ -1216,8 +1216,9 @@
     flex-shrink: 0;
 }
 
-/* Conversation area (middle, scrollable) */
-.semlink-search-messages {
+/* Conversation area (middle, scrollable). Doubled class specificity
+   replaces !important: beats Obsidian's global selection-disable rules. */
+.semlink-search-messages.semlink-search-messages {
     flex: 1 1 0;
     overflow-y: auto;
     display: flex;
@@ -1228,8 +1229,8 @@
     padding: 0 6px 8px;
     /* Obsidian's global CSS disables text selection in places; force it back
        on for the conversation so messages can be selected & copied. */
-    user-select: text !important;
-    -webkit-user-select: text !important;
+    user-select: text;
+    -webkit-user-select: text;
 }
 
 /* Welcome / empty-state placeholder shown when no conversation yet */
@@ -1615,7 +1616,10 @@
      * card's top border isn't clipped by the overflow. Horizontal stays 0
      * to keep the cards at the full 320px width. */
     padding: 3px 0;
-    scrollbar-width: none;
+}
+
+.semlink-guide-models-cards::-webkit-scrollbar {
+    display: none;
 }
 
 /* Fetch + custom-model action cards, side by side at the list's end. */
@@ -2381,11 +2385,11 @@
 
 /* Selected text on the colored bubble: white background + dark text is far
    more visible than the default subtle ::selection against the accent color.
-   !important beats Obsidian's global ::selection rule. */
-.semlink-msg-user ::selection,
-.semlink-msg-user::selection {
-	background: rgba(255, 255, 255, 0.9) !important;
-	color: #1e1e1e !important;
+   The body prefix raises specificity above Obsidian's global ::selection. */
+body .semlink-msg-user ::selection,
+body .semlink-msg-user::selection {
+	background: rgba(255, 255, 255, 0.9);
+	color: #1e1e1e;
 }
 
 .semlink-msg-assistant {
@@ -2589,8 +2593,8 @@
 
 /* Drag highlight on the whole input wrapper (subtle border tint, no dashed
    outline — the user found the dotted rectangle distracting). */
-.semlink-attach-bar-drag {
-	border-color: var(--interactive-accent) !important;
+.semlink-search-input-wrapper.semlink-attach-bar-drag {
+	border-color: var(--interactive-accent);
 }
 
 /* Inline dropped-note wiki links (contenteditable input, mixed with text).
