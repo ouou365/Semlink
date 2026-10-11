@@ -23,11 +23,21 @@ export function installFeishuWebSocket(): void {
 		// Node builtins unavailable — fall back to the shim below.
 	}
 
-	const Native = g.WebSocket;
+	interface NativeWs {
+		binaryType?: string;
+		onopen: (() => void) | null;
+		onmessage: ((ev: any) => void) | null;
+		onerror: ((ev: any) => void) | null;
+		onclose: ((ev: any) => void) | null;
+		send(data: string | ArrayBuffer): void;
+		close(): void;
+		readonly readyState: number;
+	}
+	const Native = g.WebSocket as (new (url: string, protocols?: string | string[]) => NativeWs) | undefined;
 	if (!Native) return;
 
 	class FeishuWsShim {
-		private native: any;
+		private native: NativeWs;
 		private listeners: Record<string, Array<(data?: any) => void>> = {};
 		private browserOnOpen: ((ev: any) => void) | null = null;
 		private browserOnMessage: ((ev: any) => void) | null = null;

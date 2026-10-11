@@ -292,8 +292,8 @@ export class SemanticSearchView extends ItemView {
 		this.settingsBtnEl = settingsBtn;
 		setIcon(settingsBtn, "settings");
 		settingsBtn.addEventListener("click", () => {
-			(this.app as any).setting.open();
-			(this.app as any).setting.openTabById("semlink");
+			(this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting.open();
+			(this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting.openTabById("semlink");
 		});
 		// Second header row: the first question in small text. It appears
 		// only while the first question is scrolled under the header (see
@@ -1319,7 +1319,7 @@ export class SemanticSearchView extends ItemView {
 		let p = rawPath.replace(/\\/g, "/");
 		// Strip the vault base dir if the drop carried an absolute OS path.
 		try {
-			const base = (this.app.vault.adapter as any).getBasePath?.();
+			const base = (this.app.vault.adapter as unknown as { getBasePath?: () => string }).getBasePath?.();
 			if (base && p.startsWith(base.replace(/\\/g, "/") + "/")) {
 				p = p.slice(base.length + 1);
 			}
@@ -1617,8 +1617,8 @@ export class SemanticSearchView extends ItemView {
 			});
 			setIcon(guideSettingsBtn, "settings");
 			guideSettingsBtn.addEventListener("click", () => {
-				(this.app as any).setting.open();
-				(this.app as any).setting.openTabById("semlink");
+				(this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting.open();
+				(this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting.openTabById("semlink");
 			});
 
 			// Modifier class: the guide fills the block top-down so the

@@ -12,10 +12,15 @@
 // for both the worker and the fallback, so behavior is identical either way.
 
 import initSqlJs, { Database } from "sql.js";
+import { debugLog } from "./log";
 import wasmBase64 from "sql.js/dist/sql-wasm.wasm";
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
 import type { NoteChunk, SearchResult, QueueItem, QueueAction, QueueItemStatus } from "./types";
+
+/** Minimal shape of sql.js exec() results — the package's own typings do not
+ *  resolve under this tsconfig, so we declare the boundary ourselves. */
+type QueryResult = { columns: string[]; values: unknown[][] };
 
 const EMBEDDING_DIM = 1024;
 const BYTES_PER_FLOAT = 4;
@@ -146,7 +151,7 @@ export class DbEngine {
 	/** Migrate from old vector_offset + vectors.bin to BLOB storage */
 	private async migrateIfNeeded(): Promise<void> {
 		// Check if old vector_offset column exists
-		const colCheck = this.db!.exec("PRAGMA table_info(chunks)");
+		const colCheck = this.db!.exec("PRAGMA table_info(chunks)") as unknown as QueryResult[];
 		if (colCheck.length === 0) return;
 
 		const columns = colCheck[0].values.map(row => row[1] as string);
@@ -155,7 +160,7 @@ export class DbEngine {
 
 		if (!hasVectorOffset) return; // New schema, no migration needed
 
-		console.log("[Semlink] Migrating from vectors.bin to SQLite BLOB...");
+		debugLog("[Semlink] Migrating from vectors.bin to SQLite BLOB...");
 
 		// Add vector BLOB column if not present
 		if (!hasVectorBlob) {
@@ -191,7 +196,7 @@ export class DbEngine {
 
 			// Delete legacy vectors.bin
 			unlinkSync(vecPath);
-			console.log("[Semlink] Migration complete, vectors.bin deleted");
+			debugLog("[Semlink] Migration complete, vectors.bin deleted");
 		}
 
 		// Drop old column by recreating table (SQLite doesn't support DROP COLUMN reliably)
@@ -490,7 +495,7 @@ export class DbEngine {
 	 * Returns the number of rows deleted.
 	 */
 	purgeGhostQueue(existingPaths: Set<string>): number {
-		const rows = this.db!.exec("SELECT id, note_path FROM queue");
+		const rows = this.db!.exec("SELECT id, note_path FROM queue") as unknown as QueryResult[];
 		if (rows.length === 0) return 0;
 		let removed = 0;
 		for (const row of rows[0].values) {
@@ -521,7 +526,7 @@ export class DbEngine {
 
 		const dbPath = join(this.dataDir, DB_FILE);
 		let dbSizeMb = 0;
-		try { dbSizeMb = statSync(dbPath).size / (1024 * 1024); } catch {}
+		try { dbSizeMb = statSync(dbPath).size / (1024 * 1024); } catch { /* file gone */ }
 
 		return { totalChunks, activeChunks, indexedNotes, dbSizeMb: Math.round(dbSizeMb * 10) / 10 };
 	}
@@ -606,7 +611,7 @@ export class DbEngine {
 		this.allVectorIds = ids;
 		this.cacheLoaded = true;
 
-		console.log(`[Semlink] Loaded ${numVectors} vectors into cache (${(numVectors * EMBEDDING_DIM * BYTES_PER_FLOAT / 1024 / 1024).toFixed(1)}MB)`);
+		debugLog(`[Semlink] Loaded ${numVectors} vectors into cache (${(numVectors * EMBEDDING_DIM * BYTES_PER_FLOAT / 1024 / 1024).toFixed(1)}MB)`);
 	}
 
 	/** Load all DOCUMENT-level vectors into a contiguous Float32Array. Mirrors
@@ -888,7 +893,7 @@ export class DbEngine {
 		const rows = this.db!.exec(
 			"SELECT id FROM chunks WHERE note_path = ? AND status = 'active' AND vector IS NOT NULL ORDER BY rowid",
 			[notePath],
-		);
+		) as unknown as QueryResult[];
 		if (rows.length === 0 || rows[0].values.length === 0) return [];
 		const ids: string[] = rows[0].values.map((r: any[]) => r[0] as string);
 
@@ -1090,7 +1095,7 @@ export class DbEngine {
 
 	private mapChunks(results: any[]): NoteChunk[] {
 		if (results.length === 0) return [];
-		const cols = results[0].columns;
+		const cols = (results[0] as QueryResult).columns ?? [];
 		return (results[0].values as unknown[][]).map((row) => {
 			const obj: Record<string, any> = {};
 			cols.forEach((c: string, i: number) => (obj[c] = row[i]));
@@ -1110,7 +1115,7 @@ export class DbEngine {
 
 	private mapItems(results: any[]): QueueItem[] {
 		if (results.length === 0) return [];
-		const cols = results[0].columns;
+		const cols = (results[0] as QueryResult).columns ?? [];
 		return (results[0].values as unknown[][]).map((row) => {
 			const obj: Record<string, any> = {};
 			cols.forEach((c: string, i: number) => (obj[c] = row[i]));

@@ -7,6 +7,7 @@
 // replied to as a CardKit streaming card (typewriter effect).
 
 import * as lark from "@larksuiteoapi/node-sdk";
+import { debugLog } from "./log";
 import type { FeishuBotConfig } from "./types";
 import type { ThinkingStep } from "./chat-client";
 import { makeFeishuHttp, verifyFeishuApp } from "./feishu-auth";
@@ -110,7 +111,7 @@ export class FeishuBot {
 	async start(): Promise<void> {
 		if (this.started) return;
 		this.started = true;
-		console.log(`[Semlink] Feishu bot starting (appId=${this.config.appId})`);
+		debugLog(`[Semlink] Feishu bot starting (appId=${this.config.appId})`);
 
 		// The SDK's WSClient expects a Node-style WebSocket (the `ws` package);
 		// Obsidian's renderer provides the browser one. Install the shim first.
@@ -119,7 +120,7 @@ export class FeishuBot {
 		// Pre-flight: a bad/unpublished app surfaces as a tenant_access_token
 		// failure (code 10014 "app unauthorized", etc.). Fail fast with a clear
 		// lastError instead of letting the WS hang silently with no signal.
-		console.log("[Semlink] Feishu pre-flight: verifying app credentials…");
+		debugLog("[Semlink] Feishu pre-flight: verifying app credentials…");
 		const result = await verifyFeishuApp(this.config.appId, this.config.appSecret);
 		if (!result.ok) {
 			const detail = result.error ? `（${result.error}）` : "";
@@ -135,7 +136,7 @@ export class FeishuBot {
 			this.scheduleRetry();
 			return;
 		}
-		console.log("[Semlink] Feishu pre-flight OK, starting WS long connection…");
+		debugLog("[Semlink] Feishu pre-flight OK, starting WS long connection…");
 
 		// The SDK's internal axios instance is blocked by CORS inside
 		// Obsidian's renderer — route all its HTTP through requestUrl.
@@ -163,7 +164,7 @@ export class FeishuBot {
 			autoReconnect: true,
 			httpInstance: http,
 			onReady: () => {
-				console.log("[Semlink] Feishu WS connected (onReady)");
+				debugLog("[Semlink] Feishu WS connected (onReady)");
 				this.config.connected = true;
 				this.config.lastError = undefined;
 				this.onStateChange?.(this.config);
@@ -243,7 +244,7 @@ export class FeishuBot {
 		this.retryTimer = window.setTimeout(() => {
 			this.retryTimer = null;
 			if (this.started) return;
-			console.log("[Semlink] Feishu pre-flight retry…");
+			debugLog("[Semlink] Feishu pre-flight retry…");
 			void this.start().catch((e) => {
 				console.error("[Semlink] Feishu retry start failed:", e);
 			});
@@ -275,7 +276,7 @@ export class FeishuBot {
 				if (now - ts > this.dedupeWindowMs) this.seenMessageIds.delete(id);
 			}
 			if (this.seenMessageIds.has(msgId)) {
-				console.log(`[Semlink] Feishu duplicate event ${msgId} — skipping`);
+				debugLog(`[Semlink] Feishu duplicate event ${msgId} — skipping`);
 				return;
 			}
 			this.seenMessageIds.set(msgId, now);
@@ -285,10 +286,10 @@ export class FeishuBot {
 		// Obsidian reload). create_time is ms since epoch.
 		const createTime = Number(message.create_time) || 0;
 		if (createTime && createTime < this.startedAt - 5000) {
-			console.log(`[Semlink] Feishu replay event (msg created ${new Date(createTime).toISOString()} < start ${new Date(this.startedAt).toISOString()}) — ignoring`);
+			debugLog(`[Semlink] Feishu replay event (msg created ${new Date(createTime).toISOString()} < start ${new Date(this.startedAt).toISOString()}) — ignoring`);
 			return;
 		}
-		console.log("[Semlink] Feishu event received:", data?.event_type || data?.header?.event_type || "im.message.receive_v1", msgId ? `msg=${msgId}` : "(no msg id)");
+		debugLog("[Semlink] Feishu event received:", data?.event_type || data?.header?.event_type || "im.message.receive_v1", msgId ? `msg=${msgId}` : "(no msg id)");
 
 		const chatType: string = message.chat_type; // "p2p" | "group"
 		const chatId: string = message.chat_id;
@@ -311,7 +312,7 @@ export class FeishuBot {
 		// also doubles as an end-to-end check that events actually arrive.
 		const bindMatch = text.match(/^\/bind[:\s]+([^\s]+)$/i);
 		if (bindMatch) {
-			console.log(`[Semlink] /bind matched, chatId=${chatId}, sender=${senderOpenId}`);
+			debugLog(`[Semlink] /bind matched, chatId=${chatId}, sender=${senderOpenId}`);
 			await this.handleBind(chatId, bindMatch[1], senderOpenId);
 			return;
 		}
@@ -326,19 +327,19 @@ export class FeishuBot {
 		if (!text || text.startsWith("/")) {
 			// Slash commands we DO handle below; anything else is ignored.
 			if (!/^\/(new|status)$/i.test(text)) {
-				console.log("[Semlink] Feishu message ignored (empty/command):", JSON.stringify(text).slice(0, 100));
+				debugLog("[Semlink] Feishu message ignored (empty/command):", JSON.stringify(text).slice(0, 100));
 				return;
 			}
 		}
 
 		// Private chats: only respond to the binding user (if known).
 		if (chatType === "p2p" && this.config.userOpenId && senderOpenId !== this.config.userOpenId) {
-			console.log(`[Semlink] Ignoring p2p message from ${senderOpenId} (bot bound to ${this.config.userOpenId})`);
+			debugLog(`[Semlink] Ignoring p2p message from ${senderOpenId} (bot bound to ${this.config.userOpenId})`);
 			return;
 		}
 		// Groups: only respond when the bot is @-mentioned.
 		if (chatType === "group" && !this.isBotMentioned(event)) {
-			console.log("[Semlink] Ignoring group message without @mention");
+			debugLog("[Semlink] Ignoring group message without @mention");
 			return;
 		}
 
@@ -357,7 +358,7 @@ export class FeishuBot {
 		// first is still streaming would create a second card and the two would
 		// race on their card sequences, truncating each other's content.
 		if (this.busyChats.has(chatId)) {
-			console.log(`[Semlink] ${chatId} busy, skipping duplicate message`);
+			debugLog(`[Semlink] ${chatId} busy, skipping duplicate message`);
 			await this.sendText(chatId, "⏳ 上一条消息还在回复中，请稍候再发。").catch(() => {});
 			return;
 		}
@@ -365,7 +366,7 @@ export class FeishuBot {
 		// React immediately so the user sees the bot is working on it.
 		const reactionId = msgId ? await this.reactToMessage(msgId, "Get") : "";
 		try {
-			console.log(`[Semlink] Answering "${text.slice(0, 50)}" in ${chatType} ${chatId}`);
+			debugLog(`[Semlink] Answering "${text.slice(0, 50)}" in ${chatType} ${chatId}`);
 			await this.answerWithCard(chatId, text);
 		} finally {
 			// Answer delivered — remove the reaction.
@@ -437,7 +438,7 @@ export class FeishuBot {
 		if (controller) {
 			controller.abort();
 			this.activeAsks.delete(chatId);
-			console.log(`[Semlink] /stop: aborted ask for ${chatId}`);
+			debugLog(`[Semlink] /stop: aborted ask for ${chatId}`);
 			await this.sendText(chatId, "⏹ 已停止当前回复。").catch(() => {});
 		} else {
 			await this.sendText(chatId, "（当前没有进行中的回复）").catch(() => {});
@@ -523,13 +524,13 @@ export class FeishuBot {
 			if (!this.config.userOpenId) this.config.userOpenId = sender;
 			this.config.bound = true;
 			this.onStateChange?.(this.config);
-			console.log(`[Semlink] Feishu bot bound by ${sender}`);
+			debugLog(`[Semlink] Feishu bot bound by ${sender}`);
 		}
 		const reply = ok ? "✅ 绑定成功！现在可以直接向我提问笔记内容啦。" : "❌ 绑定码不正确，请检查后重试。";
 
 		try {
 			await this.sendText(chatId, reply);
-			console.log("[Semlink] Feishu bind reply sent");
+			debugLog("[Semlink] Feishu bind reply sent");
 		} catch (e) {
 			// Reply failed but binding state already persisted above. Surface
 			// the cause as lastError so the user sees WHY no reply came back
@@ -574,7 +575,7 @@ export class FeishuBot {
 
 			const sendCard = async (content: string): Promise<void> => {
 				sequence++;
-				await (client.cardkit.v1.cardElement as any).content({
+				await (client.cardkit.v1.cardElement as unknown as { content(req: unknown): Promise<unknown> }).content({
 					path: { card_id: cardId, element_id: "thinking" },
 					data: { content, sequence, uuid: `t_${cardId}_${sequence}` },
 				} as any).catch((e: any) => {
@@ -651,7 +652,7 @@ export class FeishuBot {
 					await inflight;
 					if (cardId) {
 						sequence++;
-						await (client.cardkit.v1.card as any).settings({
+						await (client.cardkit.v1.card as unknown as { settings(req: unknown): Promise<unknown> }).settings({
 							path: { card_id: cardId },
 							data: { settings: JSON.stringify({ config: { streaming_mode: false } }), sequence, uuid: `s_${cardId}_${sequence}` },
 						} as any).catch(() => {});
@@ -683,7 +684,7 @@ export class FeishuBot {
 			if (cardId) {
 				// Rewrite the streaming card with the final layout.
 				sequence++;
-				await (client.cardkit.v1.card as any).update({
+				await (client.cardkit.v1.card as unknown as { update(req: unknown): Promise<unknown> }).update({
 					path: { card_id: cardId },
 					data: {
 						card: {

@@ -3,6 +3,7 @@
 // ========================================
 
 import { App, Vault, TFile, TAbstractFile, Notice } from "obsidian";
+import { debugLog } from "./log";
 import type { Scheduler } from "./scheduler";
 import type { SmartVaultSettings } from "./types";
 import { activeEmbeddingProvider } from "./types";
@@ -49,7 +50,7 @@ export class VaultWatcher {
 		// Grace period: ignore vault-loading events that fire at startup
 		window.setTimeout(() => {
 			this.ready = true;
-			console.log("[Semlink] Watcher ready, listening for file changes");
+			debugLog("[Semlink] Watcher ready, listening for file changes");
 		}, STARTUP_GRACE_MS);
 	}
 

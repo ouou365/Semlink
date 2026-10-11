@@ -12,6 +12,8 @@
 // (the original behavior). So the plugin is never worse off than before.
 
 import { join } from "path";
+import { debugLog } from "./log";
+import type { Worker as NodeWorker } from "worker_threads";
 import { requestUrl } from "obsidian";
 import type { NoteChunk, SearchResult, QueueAction, QueueItem } from "./types";
 import { DbEngine } from "./db-engine";
@@ -38,7 +40,7 @@ interface PendingRequest {
 
 export class VectorStore {
 	private dataDir: string;
-	private worker: any = null;
+	private worker: NodeWorker | null = null;
 	private reqId = 0;
 	private pending = new Map<number, PendingRequest>();
 	private fallback = false;
@@ -69,7 +71,7 @@ export class VectorStore {
 				await this.initWorker();
 				return;
 			} catch {
-				console.info("[Semlink] node worker_threads unavailable in the renderer — using the browser worker instead");
+				debugLog("node worker_threads unavailable in the renderer — using the browser worker instead");
 			}
 		}
 		if (this.browserWorkerUrl && typeof Worker !== "undefined") {
@@ -89,7 +91,7 @@ export class VectorStore {
 
 	private async initWorker(): Promise<void> {
 		const workerPath = join(__dirname, "db-worker.js");
-		this.worker = new WorkerCtor(workerPath);
+		this.worker = new (WorkerCtor as new (path: string) => NodeWorker)(workerPath);
 
 		// Wire up the response channel once.
 		this.worker.on("message", (msg: any) => {
@@ -109,7 +111,7 @@ export class VectorStore {
 
 		// Send init.
 		await this.call("init", [this.dataDir]);
-		console.log("[Semlink] VectorStore running in worker mode");
+		debugLog("[Semlink] VectorStore running in worker mode");
 	}
 
 	/** Browser Web Worker channel (used when worker_threads is missing). */
@@ -139,7 +141,7 @@ export class VectorStore {
 		// existing index survives the switch. The worker skips this if its
 		// own copy already exists (never overwrite a newer OPFS index).
 		try {
-			const fsMod = (window as any).require?.("fs");
+			const fsMod = (window as unknown as { require?: (id: string) => typeof import("fs") }).require?.("fs");
 			const dbPath = join(this.dataDir, "vault.db");
 			if (fsMod?.existsSync(dbPath)) {
 				await this.call("seedDb", [new Uint8Array(fsMod.readFileSync(dbPath))]);
@@ -150,7 +152,7 @@ export class VectorStore {
 		// The browser entry ignores the passed dataDir and uses the OPFS
 		// namespace root as its virtual root.
 		await this.call("init", [""]);
-		console.log("[Semlink] VectorStore running in browser worker mode — DB engine is off the main thread");
+		debugLog("[Semlink] VectorStore running in browser worker mode — DB engine is off the main thread");
 	}
 
 	/** Send one op to the worker and await its reply. */
@@ -265,7 +267,7 @@ export class VectorStore {
 			} catch {
 				/* worker already gone */
 			}
-			try { this.worker.terminate(); } catch {}
+			try { this.worker.terminate(); } catch { /* already gone */ }
 			this.worker = null;
 		}
 	}

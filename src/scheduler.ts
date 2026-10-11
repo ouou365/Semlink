@@ -3,6 +3,7 @@
 // ========================================
 
 import { App, Vault, TFile, Notice } from "obsidian";
+import { debugLog } from "./log";
 import type { SmartVaultSettings, QueueAction } from "./types";
 import { VectorStore } from "./vector-store";
 import { IndexQueue } from "./index-queue";
@@ -124,7 +125,7 @@ export class Scheduler {
 		// reorganizing the vault) and search returns dead paths.
 		const pruned = await this.store.pruneOrphanedPaths(existingPaths);
 		if (pruned > 0) {
-			console.log(`[Semlink] Pruned ${pruned} orphaned note paths from index`);
+			debugLog(`[Semlink] Pruned ${pruned} orphaned note paths from index`);
 		}
 
 		// Queue hygiene: drop stale completed/failed rows from earlier runs and
@@ -133,7 +134,7 @@ export class Scheduler {
 		const cleaned = await this.store.cleanupQueue();
 		const purged = await this.store.purgeGhostQueue(existingPaths);
 		if (cleaned > 0 || purged > 0) {
-			console.log(`[Semlink] Queue cleanup: ${cleaned} stale + ${purged} ghost rows removed`);
+			debugLog(`[Semlink] Queue cleanup: ${cleaned} stale + ${purged} ghost rows removed`);
 		}
 
 		// totalNotes = already indexed + to be indexed (excluding empty files)
@@ -145,7 +146,7 @@ export class Scheduler {
 
 		await this.queue.enqueueMany(items);
 		this.progress.incrementProcessed(0); // trigger UI update
-		console.log(`[Semlink] Scan complete: ${items.length} files to index, ${alreadyIndexed} unchanged`);
+		debugLog(`[Semlink] Scan complete: ${items.length} files to index, ${alreadyIndexed} unchanged`);
 	}
 
 	/**
@@ -167,7 +168,7 @@ export class Scheduler {
 		try {
 			const revived = await this.store.reviveProcessing();
 			if (revived > 0) {
-				console.log(`[Semlink] Revived ${revived} stuck 'processing' queue rows for re-processing`);
+				debugLog(`[Semlink] Revived ${revived} stuck 'processing' queue rows for re-processing`);
 			}
 		} catch (e) {
 			console.warn("[Semlink] reviveProcessing failed:", e);
@@ -430,7 +431,7 @@ export class Scheduler {
 			const missing = Array.from(indexed).filter((p) => !existing.has(p));
 			if (missing.length === 0) return 0;
 
-			console.log(`[Semlink] Backfilling document vectors for ${missing.length} notes…`);
+			debugLog(`[Semlink] Backfilling document vectors for ${missing.length} notes…`);
 			const tasks: Array<{ notePath: string; mtime: number; headingText: string }> = [];
 			for (const notePath of missing) {
 				if (this.aborted) break;
@@ -454,7 +455,7 @@ export class Scheduler {
 				for (let i = 0; i < tasks.length; i++) {
 					await this.store.saveDocEmbedding(tasks[i].notePath, allVecs[i], tasks[i].mtime, tasks[i].headingText);
 				}
-				console.log(`[Semlink] Document vectors backfilled: ${tasks.length}`);
+				debugLog(`[Semlink] Document vectors backfilled: ${tasks.length}`);
 				return tasks.length;
 			} catch (e) {
 				console.warn("[Semlink] doc-vector backfill embed failed:", e);

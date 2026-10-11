@@ -9,6 +9,7 @@
 // text delivered through an onStream callback.
 
 import type { SmartVaultSettings, ChatProvider, ChatModel, ContextBreakdown, HistoryMessage } from "./types";
+import { debugLog } from "./log";
 import type { SemlinkTools } from "./chat-tools";
 import { t } from "./i18n";
 
@@ -436,7 +437,7 @@ export class ChatClient {
 		}
 		if (drop > 0) {
 			conv.splice(0, drop);
-			console.log(`[Semlink] 历史上下文截断：丢弃最早 ${drop} 条消息（约 ${total} tokens / 阈值 ${threshold}）`);
+			debugLog(`[Semlink] 历史上下文截断：丢弃最早 ${drop} 条消息（约 ${total} tokens / 阈值 ${threshold}）`);
 		}
 	}
 
@@ -1028,7 +1029,7 @@ export class ChatClient {
 
 			// Record interim thoughts (visible text / extended thinking blocks)
 			// the model produced before calling tools, in order.
-			for (const b of stream.contentBlocks) {
+			for (const b of stream.contentBlocks as Array<{ type?: string; text?: string; thinking?: string }>) {
 				if (b?.type === "text" && b.text?.trim()) {
 					const step: ThinkingStep = { type: "thought", text: b.text.trim() };
 					thinking.push(step);
@@ -1392,7 +1393,7 @@ export class ChatClient {
 			paths = [args.path];
 		} else if (name === "search_notes" || name === "get_similar_notes") {
 			try {
-				const parsed = JSON.parse(result);
+				const parsed = JSON.parse(result) as { results?: Array<{ path?: string }> };
 				if (Array.isArray(parsed?.results)) {
 					paths = parsed.results
 						.filter((r: any) => typeof r?.path === "string")

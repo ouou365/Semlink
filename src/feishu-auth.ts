@@ -47,7 +47,7 @@ const FEISHU_ADDONS = {
  */
 function encodeAddons(): string {
 	const json = JSON.stringify(FEISHU_ADDONS);
-	const bytes = gzip(new TextEncoder().encode(json));
+	const bytes = gzip(new TextEncoder().encode(json)) as Uint8Array;
 	let bin = "";
 	bytes.forEach((b) => {
 		bin += String.fromCharCode(b);
@@ -102,7 +102,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(r
 export function makeFeishuHttp(): any {
 	const call = async (opts: any) => {
 		const url = opts.url;
-		const method = (opts.method || "GET").toUpperCase();
+		const method = String(opts.method || "GET").toUpperCase();
 		const headers: Record<string, string> = { ...(opts.headers || {}) };
 		let body: string | undefined;
 		if (opts.data !== undefined && opts.data !== null) {
@@ -111,7 +111,7 @@ export function makeFeishuHttp(): any {
 				headers["Content-Type"] = "application/json";
 			}
 		}
-		let finalUrl = url;
+		let finalUrl = String(url);
 		if (opts.params) {
 			const qs = new URLSearchParams(opts.params).toString();
 			finalUrl += (finalUrl.includes("?") ? "&" : "?") + qs;

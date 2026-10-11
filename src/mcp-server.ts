@@ -2,6 +2,8 @@
 // Semlink - HTTP MCP Server
 // ========================================
 
+import type { Vault } from "obsidian";
+import { debugLog } from "./log";
 import { createServer, IncomingMessage, ServerResponse, Server } from "http";
 import { VectorStore } from "./vector-store";
 import { EmbeddingClient } from "./embedding-client";
@@ -32,7 +34,7 @@ export class McpServer {
 	private progress: ProgressTracker;
 	private scheduler: Scheduler;
 	private settings: SmartVaultSettings;
-	private vault: any; // Obsidian Vault
+	private vault: Vault; // Obsidian Vault
 	/** Vault path of the note currently open in Obsidian (or null). */
 	private getActiveNote: () => string | null;
 
@@ -42,7 +44,7 @@ export class McpServer {
 		progress: ProgressTracker,
 		scheduler: Scheduler,
 		settings: SmartVaultSettings,
-		vault: any,
+		vault: Vault,
 		getActiveNote: () => string | null = () => null,
 	) {
 		this.store = store;
@@ -73,7 +75,7 @@ export class McpServer {
 			});
 
 			this.server.listen(this.settings.mcpPort, "127.0.0.1", () => {
-				console.log(`[Semlink] Server listening on http://127.0.0.1:${this.settings.mcpPort}`);
+				debugLog(`[Semlink] Server listening on http://127.0.0.1:${this.settings.mcpPort}`);
 				resolve();
 			});
 		});

@@ -16,7 +16,12 @@ import { createDispatcher } from "./db-worker-core";
 const dispatch = createDispatcher();
 let ready = false;
 
-const selfAsAny: any = self;
+interface WorkerScope {
+	postMessage(msg: unknown): void;
+	close(): void;
+	onmessage: ((e: MessageEvent) => void) | null;
+}
+const selfAsAny = self as unknown as WorkerScope;
 
 selfAsAny.onmessage = async (e: MessageEvent) => {
 	const { reqId, op, args } = (e.data ?? {}) as { reqId?: number; op: string; args?: any[] };
