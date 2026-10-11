@@ -2497,30 +2497,29 @@ export class SemanticSearchView extends ItemView {
 				(e as DragEvent).dataTransfer?.setData("text/semlink-session", session.id);
 				(e as DragEvent).dataTransfer!.effectAllowed = "move";
 			});
-			if (!showPin) {
-				// e.g. Folders-tab un-filed rows: pinning belongs to the Time tab.
-				const spacer = item.createDiv({ cls: "semlink-history-item-pin" });
-				spacer.style.visibility = "hidden";
-			} else {
-			const pinBtn = item.createEl("button", {
-				cls: "semlink-history-item-pin clickable-icon" + (session.pinned ? " is-pinned" : ""),
-				attr: { "aria-label": t("historyPin") },
-			});
-			setIcon(pinBtn, session.pinned ? "pin-off" : "pin");
-			if (pro) {
-				pinBtn.addEventListener("click", (e) => {
-					e.stopPropagation();
-					this.history.updateSession(session.id, { pinned: !session.pinned });
-					void this.history.save();
-					render();
+			// showPin=false (Folders-tab un-filed rows): no pin at all —
+			// pinning belongs to the Time tab, and no sibling row there
+			// shows one, so there is no slot to keep aligned.
+			if (showPin) {
+				const pinBtn = item.createEl("button", {
+					cls: "semlink-history-item-pin clickable-icon" + (session.pinned ? " is-pinned" : ""),
+					attr: { "aria-label": t("historyPin") },
 				});
-			} else {
-				pinBtn.addEventListener("click", (e) => {
-					e.stopPropagation();
-					this.closeHistoryDrawer(backdrop, drawer);
-					new LicenseModal(this.app, this.plugin, () => this.showHistoryDrawer()).open();
-				});
-			}
+				setIcon(pinBtn, session.pinned ? "pin-off" : "pin");
+				if (pro) {
+					pinBtn.addEventListener("click", (e) => {
+						e.stopPropagation();
+						this.history.updateSession(session.id, { pinned: !session.pinned });
+						void this.history.save();
+						render();
+					});
+				} else {
+					pinBtn.addEventListener("click", (e) => {
+						e.stopPropagation();
+						this.closeHistoryDrawer(backdrop, drawer);
+						new LicenseModal(this.app, this.plugin, () => this.showHistoryDrawer()).open();
+					});
+				}
 			}
 			const info = item.createDiv({ cls: "semlink-history-item-info" });
 			info.createDiv({ cls: "semlink-history-item-title", text: session.title });
