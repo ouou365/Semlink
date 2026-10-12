@@ -434,7 +434,7 @@ const S: Strings = {
 	// ──── Pro / license (docs/freemium-design.md v3) ────
 	licenseStatusFree:  { zh: "Semlink 免费版",           en: "Semlink Free" },
 	licenseStatusPro:   { zh: "Semlink Pro",              en: "Semlink Pro" },
-	licenseFreeDesc:    { zh: "搜索、问答、索引与 MCP 完整免费；Pro 解锁完整对话历史与飞书机器人", en: "Search, chat, indexing and MCP are fully free; Pro unlocks the full chat history and the Feishu bot" },
+	licenseFreeDesc:    { zh: "搜索、问答、索引与 MCP 完整免费；Pro 解锁完整对话历史", en: "Search, chat, indexing and MCP are fully free; Pro unlocks the full chat history" },
 	licenseManage:      { zh: "管理许可",                 en: "Manage license" },
 	licenseKeyTitle:    { zh: "许可密钥",                 en: "License key" },
 	licenseKeyLabel:    { zh: "激活密钥",                 en: "Activate key" },

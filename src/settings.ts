@@ -109,7 +109,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const tabs: Array<{ id: SettingsTab; label: string }> = [
 			{ id: "general", label: t("tabGeneral") },
 			{ id: "mcp", label: t("tabMcp") },
-			{ id: "bot", label: t("tabBot") },
+			// Bot tab deliberately not listed: the Feishu bot is unpublished
+			// (freemium-design v3.6). renderBotTab stays available for re-enable.
 		];
 		for (const tab of tabs) {
 			const btn = navEl.createEl("button", {

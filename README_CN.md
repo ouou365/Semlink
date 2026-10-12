@@ -14,7 +14,6 @@
 - **上下文管理**：历史对话以原生消息数组发送（前缀稳定 → 缓存命中率高）；接近上下文上限时按滑动窗口自动截断
 - **实时索引**：文件变更自动更新索引；你正在操作时索引自动让路
 - **MCP 服务**：通过 HTTP（JSON-RPC）暴露检索/读取工具
-- **飞书机器人**：扫码绑定后，直接在飞书里对话，流式卡片回复
 
 ### 聊天面板
 
@@ -101,7 +100,6 @@ npm run build
 | MCP | 端口 / 访问密钥 | HTTP 服务端口与可选鉴权密钥 |
 | 聊天 | Provider / Base URL / API Key | 对话模型服务商（默认预置 DeepSeek，任何 OpenAI/Anthropic 兼容接口均可） |
 | 聊天 | 模型列表 | 增删模型、配置上下文窗口大小 |
-| 机器人 | 飞书机器人 | 扫码绑定飞书机器人（见下） |
 
 ### 连接 AI 客户端
 
@@ -142,13 +140,6 @@ claude mcp add --transport http semlink http://127.0.0.1:3001/mcp
 claude mcp add --transport http semlink http://127.0.0.1:3001/mcp --header "Authorization: Bearer your-key"
 ```
 
-### 飞书机器人
-
-1. 在飞书开放平台创建机器人应用（开启机器人能力，申请 `im:message`、`im:message:send_as_bot`、`cardkit:card:write` 等权限，事件订阅选长连接模式）
-2. 在 **设置 → Semlink → 机器人** 填入 App ID / App Secret，用飞书扫码完成授权
-3. 向机器人发送 `/bind <code>` 完成绑定
-4. 之后直接与机器人对话——它会以流式卡片回复，展示思考过程、工具调用和最终答案
-
 ### 命令
 
 | 命令 | 说明 |
@@ -187,7 +178,6 @@ claude mcp add --transport http semlink http://127.0.0.1:3001/mcp --header "Auth
 - **检索**：暴力余弦相似度
 - **对话**：OpenAI / Anthropic 兼容聊天接口（流式 + 工具调用）
 - **MCP**：HTTP 传输（JSON-RPC 2.0）
-- **机器人**：飞书长连接 SDK + CardKit 流式卡片
 
 ### 开发
 

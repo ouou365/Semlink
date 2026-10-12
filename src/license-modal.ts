@@ -47,7 +47,7 @@ export class LicenseModal extends Modal {
 			// ── Pro benefits ──
 			contentEl.createDiv({ cls: "semlink-license-subhead", text: t("upgradeBenefitsTitle") });
 			const benefits = contentEl.createDiv({ cls: "semlink-license-benefits" });
-			for (const line of [t("upgradeBenefitHistory"), t("upgradeBenefitOrganize"), t("upgradeBenefitFeishu")]) {
+			for (const line of [t("upgradeBenefitHistory"), t("upgradeBenefitOrganize")]) {
 				const row = benefits.createDiv({ cls: "semlink-license-benefit-row" });
 				row.createSpan({ cls: "semlink-license-check" });
 				row.createSpan({ text: line });

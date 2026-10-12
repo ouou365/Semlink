@@ -14,7 +14,6 @@ Ask questions in natural language: Semlink retrieves the most relevant notes, fe
 - **Context management**: prior turns are sent as a native message array (stable prompt prefix → high cache hit rate); the history is trimmed by a sliding window once it approaches the context limit
 - **Real-time Indexing**: file changes are picked up automatically; indexing yields while you are actively working
 - **MCP Server**: expose search/read tools over HTTP (JSON-RPC) for AI clients
-- **Feishu (Lark) bot**: scan a QR code to bind, then chat with your Vault from Feishu via streaming cards
 
 ### Chat Panel
 
@@ -101,7 +100,6 @@ Download `main.js`, `manifest.json`, `styles.css` from the Release page and plac
 | MCP | Port / Access Key | HTTP server port and optional auth key |
 | Chat | Provider / Base URL / API Key | Chat model provider (DeepSeek preconfigured; any OpenAI/Anthropic-compatible API works) |
 | Chat | Models | Add/remove models, pick the context window size |
-| Bot | Feishu Bot | Scan a QR code to bind a Feishu bot (see below) |
 
 ### Connect AI Clients
 
@@ -142,13 +140,6 @@ claude mcp add --transport http semlink http://127.0.0.1:3001/mcp
 claude mcp add --transport http semlink http://127.0.0.1:3001/mcp --header "Authorization: Bearer your-key"
 ```
 
-### Feishu (Lark) Bot
-
-1. Create a bot app in the Feishu open platform (enable bot capability, grant `im:message` / `im:message:send_as_bot` / `cardkit:card:write` etc., subscribe events via long connection)
-2. In **Settings → Semlink → Bot**, enter the App ID / App Secret and scan the QR code with your Feishu
-3. Send `/bind <code>` to the bot to finish binding
-4. Chat with the bot — it replies with streaming cards showing the thinking process, tool calls and the answer
-
 ### Commands
 
 | Command | Description |
@@ -187,7 +178,6 @@ Never uploaded anywhere. Indexing consumes embedding API credits (e.g. SiliconFl
 - **Search**: brute-force cosine similarity
 - **Chat**: OpenAI / Anthropic-compatible chat APIs with streaming + tool calling
 - **MCP**: HTTP transport (JSON-RPC 2.0)
-- **Bot**: Feishu long-connection SDK + CardKit streaming cards
 
 ### Development
 
