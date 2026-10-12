@@ -12,6 +12,10 @@ import { join } from "path";
 /** Maximum number of sessions to keep on disk. */
 const MAX_SESSIONS = 500;
 
+/** Shape of chat-history.json on disk: v1 was a bare session array; v2 wraps
+ *  the sessions with an explicit folder registry. */
+type StoredHistory = ChatSession[] | { sessions?: ChatSession[]; folders?: string[] };
+
 export class ChatHistoryStore {
 	private filePath: string;
 	private sessions: ChatSession[] = [];
@@ -28,7 +32,7 @@ export class ChatHistoryStore {
 		if (this.loaded) return this.sessions;
 		try {
 			if (existsSync(this.filePath)) {
-				const raw = JSON.parse(readFileSync(this.filePath, "utf-8"));
+				const raw = JSON.parse(readFileSync(this.filePath, "utf-8")) as StoredHistory;
 				// v1 format was a bare session array; v2 wraps it so empty
 				// folders survive without any session pointing at them.
 				if (Array.isArray(raw)) {

@@ -4,7 +4,7 @@
 
 import { App, Vault, TFile, Notice } from "obsidian";
 import { debugLog } from "./log";
-import type { SmartVaultSettings, QueueAction } from "./types";
+import type { SmartVaultSettings, QueueAction, QueueItem } from "./types";
 import { VectorStore } from "./vector-store";
 import { IndexQueue } from "./index-queue";
 import { EmbeddingClient } from "./embedding-client";
@@ -264,7 +264,7 @@ export class Scheduler {
 	}
 
 	/** Process a single note's queue items. Returns true if chunks were actually indexed. */
-	private async processNote(notePath: string, items: any[]): Promise<boolean> {
+	private async processNote(notePath: string, items: QueueItem[]): Promise<boolean> {
 		const file = this.vault.getAbstractFileByPath(notePath);
 		if (!file || !(file instanceof TFile)) {
 			// File deleted
@@ -467,7 +467,7 @@ export class Scheduler {
 	}
 
 	/** Process multiple notes concurrently with limited parallelism */
-	private async processConcurrently(noteEntries: [string, any[]][]): Promise<void> {
+	private async processConcurrently(noteEntries: [string, QueueItem[]][]): Promise<void> {
 		// Process in chunks of concurrency
 		for (let i = 0; i < noteEntries.length; i += this.concurrency) {
 			if (this.aborted) break;
@@ -492,7 +492,7 @@ export class Scheduler {
 	}
 
 	/** Process a single note with error handling (for concurrent use) */
-	private async processNoteSafe(notePath: string, items: any[]): Promise<void> {
+	private async processNoteSafe(notePath: string, items: QueueItem[]): Promise<void> {
 		this.progress.setCurrentFile(notePath);
 
 		try {
@@ -515,7 +515,7 @@ export class Scheduler {
 			}
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : String(error);
-			const status = error?.status;
+			const status = (error as { status?: number } | undefined)?.status;
 			console.error(`[Semlink] Error processing ${notePath}:`, msg);
 
 			for (const item of items) {
@@ -593,7 +593,7 @@ export class Scheduler {
 	 * Does NOT scan the vault. Used by the watcher for file change events.
 	 */
 	runIncremental(): void {
-		this.run(false);
+		void this.run(false);
 	}
 
 	/** Pause indexing (synchronous — run() finally block handles save) */
@@ -609,7 +609,7 @@ export class Scheduler {
 		this.progress.setNetworkStatus("healthy");
 		this.aborted = false;
 		// Re-scan to restore totalNotes and already-indexed count, then continue
-		this.run(true);
+		void this.run(true);
 	}
 
 	/** Abort indexing — synchronous, caller must call store.save()/close() to persist */
@@ -653,8 +653,8 @@ export class Scheduler {
 		});
 	}
 
-	private groupByNote(items: any[]): Map<string, any[]> {
-		const map = new Map<string, any[]>();
+	private groupByNote(items: QueueItem[]): Map<string, QueueItem[]> {
+		const map = new Map<string, QueueItem[]>();
 		for (const item of items) {
 			if (!map.has(item.notePath)) {
 				map.set(item.notePath, []);

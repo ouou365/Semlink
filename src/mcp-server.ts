@@ -2,7 +2,7 @@
 // Semlink - HTTP MCP Server
 // ========================================
 
-import type { Vault } from "obsidian";
+import type { TFile, Vault } from "obsidian";
 import { debugLog } from "./log";
 import { createServer, IncomingMessage, ServerResponse, Server } from "http";
 import { VectorStore } from "./vector-store";
@@ -13,18 +13,41 @@ import { readFileSync } from "fs";
 import { extractSection, extractHeadings } from "./section-utils";
 import type { SmartVaultSettings } from "./types";
 
+/** Tool arguments read from tools/call params — only fields this server uses. */
+interface ToolCallArgs {
+	query?: string;
+	limit?: number;
+	threshold?: number;
+	path?: string;
+	prefix?: string;
+	offset?: number;
+	force?: boolean;
+	heading?: string;
+	maxDepth?: number;
+	pattern?: string;
+	regex?: boolean;
+	pathFilter?: string;
+	caseSensitive?: boolean;
+	contextLines?: number;
+}
+
+interface ToolCallParams {
+	name?: string;
+	arguments?: ToolCallArgs;
+}
+
 interface JsonRpcRequest {
 	jsonrpc: "2.0";
 	id?: string | number | null;
 	method: string;
-	params?: Record<string, any>;
+	params?: ToolCallParams;
 }
 
 interface JsonRpcResponse {
 	jsonrpc: "2.0";
 	id: string | number | null;
-	result?: any;
-	error?: { code: number; message: string; data?: any };
+	result?: unknown;
+	error?: { code: number; message: string; data?: unknown };
 }
 
 export class McpServer {
@@ -64,7 +87,7 @@ export class McpServer {
 		return new Promise((resolve, reject) => {
 			this.server = createServer((req, res) => { void this.handleRequest(req, res); });
 
-			this.server.on("error", (err: any) => {
+			this.server.on("error", (err: NodeJS.ErrnoException) => {
 				if (err.code === "EADDRINUSE") {
 					console.warn(`[Semlink] Port ${this.settings.mcpPort} in use, trying ${this.settings.mcpPort + 1}`);
 					this.settings.mcpPort++;
@@ -134,7 +157,7 @@ export class McpServer {
 
 			try {
 				const body = await this.readBody(req);
-				const request: JsonRpcRequest = JSON.parse(body);
+				const request = JSON.parse(body) as JsonRpcRequest;
 				const response = await this.route(request);
 				this.sendJsonRpc(res, response);
 			} catch (e) {
@@ -172,7 +195,7 @@ export class McpServer {
 		const { method, params, id } = request;
 
 		try {
-			let result: any;
+			let result: unknown;
 
 			switch (method) {
 				case "initialize":
@@ -436,17 +459,17 @@ export class McpServer {
 		};
 	}
 
-	private async handleToolsCall(params: Record<string, any>): Promise<any> {
+	private async handleToolsCall(params: ToolCallParams): Promise<any> {
 		const toolName = params.name;
-		const args = params.arguments || {};
+		const args: ToolCallArgs = params.arguments || {};
 
 		switch (toolName) {
 			case "search_notes":
-				return await this.toolSearchNotes(args.query, args.limit, args.threshold);
+				return await this.toolSearchNotes(args.query as string, args.limit, args.threshold);
 			case "get_note":
-				return await this.toolGetNote(args.path);
+				return await this.toolGetNote(args.path as string);
 			case "get_similar_notes":
-				return await this.toolGetSimilarNotes(args.path, args.limit, args.threshold);
+				return await this.toolGetSimilarNotes(args.path as string, args.limit, args.threshold);
 			case "list_indexed":
 				return await this.toolListIndexed(args.prefix, args.limit, args.offset);
 			case "list_indexed_detailed":
@@ -456,13 +479,13 @@ export class McpServer {
 			case "reindex":
 				return await this.toolReindex(args.path, args.force);
 			case "get_section":
-				return await this.toolGetSection(args.path, args.heading, args.maxDepth);
+				return await this.toolGetSection(args.path as string, args.heading as string, args.maxDepth);
 			case "grep_notes":
-				return await this.toolGrepNotes(args.pattern, args.regex, args.pathFilter, args.caseSensitive, args.limit, args.contextLines);
+				return await this.toolGrepNotes(args.pattern as string, args.regex, args.pathFilter, args.caseSensitive, args.limit, args.contextLines);
 			case "get_active_note":
 				return await this.toolGetActiveNote();
 			default:
-				throw new Error(`Unknown tool: ${toolName}`);
+				throw new Error(`Unknown tool: ${String(toolName)}`);
 		}
 	}
 
@@ -497,7 +520,7 @@ export class McpServer {
 
 	private async toolGetNote(path: string) {
 		try {
-			const file = this.vault.getAbstractFileByPath(path);
+			const file = this.vault.getAbstractFileByPath(path) as TFile | null;
 			if (!file) {
 				return {
 					content: [{ type: "text", text: `File not found: ${path}` }],
@@ -593,7 +616,7 @@ export class McpServer {
 			: Array.from(paths);
 
 		const notes = filtered.map((p) => {
-			const file = this.vault.getAbstractFileByPath(p);
+			const file = this.vault.getAbstractFileByPath(p) as TFile | null;
 			const stat = file?.stat;
 			return {
 				path: p,
@@ -760,7 +783,7 @@ export class McpServer {
 				this.progress.reset();
 			}
 			if (!this.scheduler.isRunning) {
-				this.scheduler.run();
+				void this.scheduler.run();
 			}
 		}
 
@@ -780,7 +803,7 @@ export class McpServer {
 
 	private async toolGetSection(path: string, heading: string, maxDepth?: number) {
 	    try {
-	        const file = this.vault.getAbstractFileByPath(path);
+	        const file = this.vault.getAbstractFileByPath(path) as TFile | null;
 	        if (!file) {
 	            return {
 	                content: [{ type: "text", text: "File not found: " + path }],
@@ -812,7 +835,7 @@ export class McpServer {
 	private readBody(req: IncomingMessage): Promise<string> {
 		return new Promise((resolve, reject) => {
 			const chunks: Buffer[] = [];
-			req.on("data", (chunk) => chunks.push(chunk));
+			req.on("data", (chunk: Buffer) => chunks.push(chunk));
 			req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
 			req.on("error", reject);
 		});

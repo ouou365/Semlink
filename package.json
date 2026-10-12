@@ -1,6 +1,6 @@
 {
 	"name": "semlink",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"description": "Semlink: Semantic search for Obsidian Vault via MCP",
 	"main": "main.js",
 	"scripts": {

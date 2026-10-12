@@ -19,7 +19,7 @@ let ready = false;
 interface WorkerScope {
 	postMessage(msg: unknown): void;
 	close(): void;
-	onmessage: ((e: MessageEvent) => void) | null;
+	onmessage: ((e: MessageEvent) => void | Promise<void>) | null;
 }
 const selfAsAny = self as unknown as WorkerScope;
 

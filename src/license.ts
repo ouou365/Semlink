@@ -30,6 +30,13 @@ export function deviceFingerprint(extra: string): string {
 	return createHash("sha256").update(parts.join("\u0000")).digest("hex").slice(0, 32);
 }
 
+/** Fields read off the decoded activation-token payload. */
+interface TokenPayload {
+	plan?: unknown;
+	exp?: number;
+	fp?: unknown;
+}
+
 /** Verify a token string against the embedded public key. Pure + synchronous.
  *  `now` is ms epoch; the payload's exp/iat are SECONDS (compact wire form). */
 export function verifyToken(token: string, fp: string, nowMs = Date.now()): boolean {
@@ -38,9 +45,9 @@ export function verifyToken(token: string, fp: string, nowMs = Date.now()): bool
 	// The signature covers the DECODED payload bytes — decode once and use
 	// that buffer for both the JSON parse and the signature check.
 	const payloadBytes = Buffer.from(token.slice(0, dot), "base64url");
-	let payload: any;
+	let payload: TokenPayload | null;
 	try {
-		payload = JSON.parse(payloadBytes.toString("utf-8"));
+		payload = JSON.parse(payloadBytes.toString("utf-8")) as TokenPayload | null;
 	} catch {
 		return false;
 	}
@@ -70,6 +77,25 @@ export class LicenseError extends Error {
 	}
 }
 
+/** JSON envelope returned by the license endpoints — each endpoint returns
+ *  a different subset, so every field is optional. Cast once off the wire
+ *  JSON in call(). */
+interface LicenseResponse {
+	key?: string;
+	instanceId?: string;
+	token?: string;
+	exp?: number;
+	activation?: number;
+	activationLimit?: number;
+	url?: string;
+}
+
+/** Subset of the requestUrl response the license client reads. */
+interface LicenseHttpResult {
+	status: number;
+	json: unknown;
+}
+
 export class LicenseManager {
 	private plugin: SmartVaultPlugin;
 
@@ -85,7 +111,7 @@ export class LicenseManager {
 	private get fp(): string {
 		if (!this._fp) {
 			let appId = "";
-			try { appId = String((this.plugin.app as any).appId ?? ""); } catch { /* ok */ }
+			try { appId = String((this.plugin.app as { appId?: string }).appId ?? ""); } catch { /* ok */ }
 			this._fp = deviceFingerprint(appId);
 		}
 		return this._fp;
@@ -171,7 +197,7 @@ export class LicenseManager {
 		try { return `${hostname()} · Obsidian`; } catch { return "Obsidian device"; }
 	}
 
-	private applyValidation(res: any): void {
+	private applyValidation(res: LicenseResponse): void {
 		const s = this.state;
 		s.key = res.key ?? s.key;
 		s.instanceId = res.instanceId ?? s.instanceId;
@@ -200,10 +226,10 @@ export class LicenseManager {
 	 *  Maps HTTP status codes onto the LicenseError vocabulary. */
 	private static readonly REQUEST_TIMEOUT_MS = 12_000;
 	private static readonly ATTEMPTS_PER_ENDPOINT = 2;
-	private async call(method: "GET" | "POST", path: string, body?: unknown): Promise<any> {
+	private async call(method: "GET" | "POST", path: string, body?: unknown): Promise<LicenseResponse> {
 		for (let attempt = 0; attempt < LicenseManager.ATTEMPTS_PER_ENDPOINT; attempt++) {
 			for (const base of LICENSE_API_BASES) {
-				let res: any;
+				let res: LicenseHttpResult;
 				try {
 					res = await Promise.race([
 						requestUrl({
@@ -215,12 +241,12 @@ export class LicenseManager {
 						}),
 						new Promise((_, reject) =>
 							window.setTimeout(() => reject(new Error("license request timeout")), LicenseManager.REQUEST_TIMEOUT_MS)),
-					]);
+					]) as LicenseHttpResult;
 				} catch {
 					continue;
 				}
 				if (res.status >= 200 && res.status < 300) {
-					try { return res.json; } catch { continue; }
+					try { return res.json as LicenseResponse; } catch { continue; }
 				}
 				// Map the meaningful failures: 403 = activation limit, 410 = revoked.
 				if (res.status === 403) throw new LicenseError("limit");

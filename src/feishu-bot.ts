@@ -35,6 +35,50 @@ export interface ThinkingEvent {
 	result?: string;      // for "tool": tool result
 }
 
+// Minimal shapes read off the SDK's event payloads (the WS dispatcher hands us
+// the unwrapped event, but some SDK builds forward the full `{ schema, header,
+// event }` envelope — handleMessage accepts either).
+
+/** A single entry of `message.mentions` (only the self-detection fields). */
+interface FeishuMention {
+	is_self?: boolean;
+	mention_type?: string;
+	mentioned_type?: string;
+}
+
+/** The `im.message.receive_v1` message payload, as far as we read it. */
+interface FeishuMessage {
+	message_id: string;
+	create_time: string;
+	chat_type: string;
+	chat_id: string;
+	content: string;
+	mentions?: FeishuMention[];
+}
+
+/** Sender info: newer payloads nest the open_id under `sender_id`. */
+interface FeishuSender {
+	open_id?: string;
+	sender_id?: { open_id?: string };
+}
+
+/** Event payload; `event` covers the full-envelope shape some SDKs forward. */
+interface FeishuEvent {
+	message?: FeishuMessage;
+	sender?: FeishuSender;
+	event_type?: string;
+	header?: { event_type?: string };
+	event?: FeishuEvent;
+}
+
+/** Axios-like error shape thrown by makeFeishuHttp (mirrors AxiosError). */
+interface FeishuApiError extends Error {
+	response?: {
+		status?: number;
+		data?: { code: number; msg: string } | string;
+	};
+}
+
 /** Runs embed → search → chat; onToken receives the growing answer text.
  * `history` carries prior turns for multi-turn context; `signal` allows /stop
  * to abort an in-flight request. `onThinking` fires per tool-call so callers
@@ -258,7 +302,8 @@ export class FeishuBot {
 		// (so `data.message` / `data.sender`), but some SDK builds forward the
 		// full `{ schema, header, event }` envelope — in which case the message
 		// lives under `data.event.message`. Accept either shape.
-		const event = data?.event ?? data;
+		const src = data as FeishuEvent;
+		const event = src?.event ?? src;
 		const message = event?.message;
 		const sender = event?.sender;
 		if (!message) {
@@ -289,7 +334,7 @@ export class FeishuBot {
 			debugLog(`[Semlink] Feishu replay event (msg created ${new Date(createTime).toISOString()} < start ${new Date(this.startedAt).toISOString()}) — ignoring`);
 			return;
 		}
-		debugLog("[Semlink] Feishu event received:", data?.event_type || data?.header?.event_type || "im.message.receive_v1", msgId ? `msg=${msgId}` : "(no msg id)");
+		debugLog("[Semlink] Feishu event received:", src?.event_type || src?.header?.event_type || "im.message.receive_v1", msgId ? `msg=${msgId}` : "(no msg id)");
 
 		const chatType: string = message.chat_type; // "p2p" | "group"
 		const chatId: string = message.chat_id;
@@ -297,7 +342,7 @@ export class FeishuBot {
 
 		let text = "";
 		try {
-			const content = JSON.parse(message.content || "{}");
+			const content = JSON.parse(message.content || "{}") as { text?: string };
 			text = content.text || "";
 		} catch {
 			// not JSON content
@@ -375,7 +420,7 @@ export class FeishuBot {
 		}
 	}
 
-	private isBotMentioned(event: any): boolean {
+	private isBotMentioned(event: FeishuEvent): boolean {
 		const mentions = event?.message?.mentions || [];
 		if (Array.isArray(mentions)) {
 			for (const m of mentions) {
@@ -395,7 +440,7 @@ export class FeishuBot {
 	 * unwrapping it, a 400 shows only "status code 400" — useless for triage.
 	 */
 	private describeError(e: unknown): string {
-		const err = e as any;
+		const err = e as FeishuApiError;
 		const body = err?.response?.data;
 		// Feishu API error body: { code, msg, data? }
 		if (body && typeof body === "object" && (body.code != null || body.msg)) {
@@ -505,7 +550,7 @@ export class FeishuBot {
 		if (!client || !reactionId) return;
 		client.im.messageReaction.delete({
 			path: { message_id: messageId, reaction_id: reactionId },
-		} as any).catch((e: any) => {
+		}).catch((e: any) => {
 			console.warn("[Semlink] remove reaction failed:", this.describeError(e));
 		});
 	}
@@ -569,7 +614,10 @@ export class FeishuBot {
 			// cardkit round-trip before sending the next, so requests never pile
 			// up. The first event creates the streaming card; the complete trace
 			// (all steps) is written into the collapsible panel at the end.
-			let cardId: string | null = null;
+			// The `as string | null` keeps flow analysis from narrowing cardId to
+			// `never` below — the closure assignments (ensureCard) are invisible
+			// to control-flow analysis, so a plain `= null` initializer would.
+			let cardId = null as string | null;
 			let sequence = 0;
 			let inflight: Promise<void> = Promise.resolve();
 

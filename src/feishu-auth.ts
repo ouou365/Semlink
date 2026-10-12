@@ -12,6 +12,7 @@
 
 import { requestUrl } from "obsidian";
 import { gzip } from "pako";
+import type { HttpInstance, HttpRequestOptions } from "@larksuiteoapi/node-sdk";
 
 // Pre-filled permissions + event subscriptions carried by the QR scan.
 // When the user confirms app creation in Feishu, the confirm page pre-applies
@@ -71,8 +72,20 @@ export interface FeishuScanHandle {
 // the standard open.feishu.cn API domain (verified against the SDK defaults).
 const REG_ENDPOINT = "https://accounts.feishu.cn/oauth/v1/app/registration";
 
+/** JSON body of the device-registration endpoints (begin/poll). */
+interface RegistrationResponse {
+	verification_uri_complete?: string;
+	device_code?: string;
+	expires_in?: number;
+	interval?: number;
+	error?: string;
+	client_id?: string;
+	client_secret?: string;
+	user_info?: { open_id?: string; name?: string };
+}
+
 /** POST the registration endpoint (form-urlencoded) and return the JSON body. */
-async function registrationRequest(action: string, extra: Record<string, string>): Promise<any> {
+async function registrationRequest(action: string, extra: Record<string, string>): Promise<RegistrationResponse> {
 	const params = new URLSearchParams({ action, ...extra });
 	const resp = await requestUrl({
 		url: REG_ENDPOINT,
@@ -81,9 +94,9 @@ async function registrationRequest(action: string, extra: Record<string, string>
 		body: params.toString(),
 		throw: false,
 	});
-	let data: any = {};
+	let data: RegistrationResponse = {};
 	try {
-		data = typeof resp.json === "object" && resp.json ? resp.json : JSON.parse(resp.text);
+		data = (typeof resp.json === "object" && resp.json ? resp.json : JSON.parse(resp.text)) as RegistrationResponse;
 	} catch {
 		// not JSON
 	}
@@ -99,8 +112,21 @@ const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(r
  * SDK consumes it that way (verified against the token API; standard API
  * responses carry their own `{ code, msg, data }` wrapper).
  */
-export function makeFeishuHttp(): any {
-	const call = async (opts: any) => {
+/** Axios-like error built for 4xx/5xx responses so the SDK's error handling
+ * (and FeishuBot.describeError) sees the usual `.response` shape. */
+interface FeishuHttpError extends Error {
+	response?: {
+		status: number;
+		data?: unknown;
+		headers?: unknown;
+		config?: unknown;
+		request?: unknown;
+	};
+	isAxiosError?: boolean;
+}
+
+export function makeFeishuHttp(): HttpInstance {
+	const call = async (opts: HttpRequestOptions<unknown>): Promise<any> => {
 		const url = opts.url;
 		const method = String(opts.method || "GET").toUpperCase();
 		const headers: Record<string, string> = { ...(opts.headers || {}) };
@@ -125,7 +151,7 @@ export function makeFeishuHttp(): any {
 			throw: false,
 		});
 
-		let data: any = null;
+		let data: unknown = null;
 		try {
 			data = typeof resp.json === "object" && resp.json ? resp.json : JSON.parse(resp.text);
 		} catch {
@@ -135,24 +161,24 @@ export function makeFeishuHttp(): any {
 		// Mirror axios's default behavior: throw on 4xx/5xx so the SDK's
 		// error handling sees an axios-like error.
 		if (resp.status >= 400) {
-			const err: any = new Error(`Request failed with status code ${resp.status}`);
+			const err: FeishuHttpError = new Error(`Request failed with status code ${resp.status}`);
 			err.response = { status: resp.status, data, headers: {}, config: {}, request: {} };
 			err.isAxiosError = true;
 			throw err;
 		}
 
-		return data as unknown;
+		return data;
 	};
 
 	return {
 		request: call,
-		get: (url: string, o?: any) => call({ ...o, url, method: "GET" }),
-		delete: (url: string, o?: any) => call({ ...o, url, method: "DELETE" }),
-		head: (url: string, o?: any) => call({ ...o, url, method: "HEAD" }),
-		options: (url: string, o?: any) => call({ ...o, url, method: "OPTIONS" }),
-		post: (url: string, d?: any, o?: any) => call({ ...o, url, method: "POST", data: d }),
-		put: (url: string, d?: any, o?: any) => call({ ...o, url, method: "PUT", data: d }),
-		patch: (url: string, d?: any, o?: any) => call({ ...o, url, method: "PATCH", data: d }),
+		get: (url: string, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "GET" }),
+		delete: (url: string, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "DELETE" }),
+		head: (url: string, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "HEAD" }),
+		options: (url: string, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "OPTIONS" }),
+		post: (url: string, d?: unknown, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "POST", data: d }),
+		put: (url: string, d?: unknown, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "PUT", data: d }),
+		patch: (url: string, d?: unknown, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "PATCH", data: d }),
 	};
 }
 
@@ -226,6 +252,13 @@ export interface FeishuAppVerifyResult {
 	error?: string;
 }
 
+/** Body of the tenant_access_token endpoint. */
+interface TenantTokenResponse {
+	tenant_access_token?: string;
+	code?: number;
+	msg?: string;
+}
+
 /**
  * Validate an appId/appSecret pair by requesting a tenant_access_token.
  * The bot needs this credential to start its long connection.
@@ -239,7 +272,7 @@ export async function verifyFeishuApp(appId: string, appSecret: string): Promise
 			body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
 			throw: false,
 		});
-		const data: any = typeof resp.json === "object" ? resp.json : {};
+		const data = (typeof resp.json === "object" ? resp.json : {}) as TenantTokenResponse;
 		if (data?.tenant_access_token) return { ok: true };
 		return { ok: false, error: `code=${data?.code ?? "?"} msg=${data?.msg ?? "?"}` };
 	} catch (e) {

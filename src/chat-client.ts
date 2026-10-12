@@ -97,6 +97,97 @@ export interface CacheSample {
 	total: number;
 }
 
+// ──── API wire types ────
+// Narrow structural views of the two chat wire formats — only the fields
+// this file actually reads/writes. SSE events and JSON bodies are cast to
+// these once at the parse boundary; type-only, no runtime effect.
+
+/** Token usage of an OpenAI-compatible response (DeepSeek cache fields included). */
+interface OpenAIUsage {
+	prompt_tokens?: number;
+	completion_tokens?: number;
+	prompt_cache_hit_tokens?: number;
+	prompt_cache_miss_tokens?: number;
+}
+
+/** Delta payload of an OpenAI-compatible stream chunk. */
+interface OpenAIStreamDelta {
+	content?: string;
+	tool_calls?: Array<{
+		index?: number;
+		id?: string;
+		function?: { name?: string; arguments?: string };
+	}>;
+}
+
+/** One SSE event of an OpenAI-compatible chat stream. */
+interface OpenAIStreamEvent {
+	choices?: Array<{ delta?: OpenAIStreamDelta }>;
+	usage?: OpenAIUsage;
+}
+
+/** An OpenAI tool_call, as echoed back into the conversation. */
+interface OpenAIToolCall {
+	id: string;
+	type: string;
+	function: { name: string; arguments: string };
+}
+
+/** Token usage of an Anthropic response (prompt-cache fields included). */
+interface AnthropicUsage {
+	input_tokens?: number;
+	output_tokens?: number;
+	cache_read_input_tokens?: number;
+	cache_creation_input_tokens?: number;
+}
+
+/** One SSE event of an Anthropic messages stream. */
+interface AnthropicStreamEvent {
+	type?: string;
+	index?: number;
+	message?: { usage?: AnthropicUsage };
+	usage?: AnthropicUsage;
+	content_block?: { type?: string; id?: string; name?: string };
+	delta?: {
+		type?: string;
+		text?: string;
+		thinking?: string;
+		stop_reason?: string;
+		partial_json?: string;
+	};
+}
+
+/** A content block in a message's content array (Anthropic text / thinking /
+ *  tool_use / tool_result) — one loose shape covering all readers here. */
+interface ContentBlock {
+	type?: string;
+	text?: string;
+	thinking?: string;
+	/** tool_use blocks. */
+	id?: string;
+	name?: string;
+	/** tool_use input — accumulated as a JSON string while streaming. */
+	input?: string;
+	/** tool_result blocks. */
+	tool_use_id?: string;
+	content?: unknown;
+}
+
+/** A tool_use extracted from an Anthropic stream, with its input parsed. */
+interface AnthropicToolUse {
+	id: string;
+	name: string;
+	input: Record<string, unknown>;
+}
+
+/** One wire message of the conversation array (both API formats). */
+interface ConversationMessage {
+	role: string;
+	content?: string | ContentBlock[];
+	tool_calls?: OpenAIToolCall[];
+	tool_call_id?: string;
+}
+
 // Context usage types now live in types.ts (search-view imports them from
 // here for back-compat — re-export so both paths keep working).
 export type { ContextCategory, ContextBreakdown } from "./types";
@@ -365,12 +456,12 @@ export class ChatClient {
 				return await dispatch();
 			} catch (e) {
 				// User aborted — never retry, propagate the AbortError as-is.
-				if (signal?.aborted || e?.name === "AbortError") throw e;
+				if (signal?.aborted || (e as Error)?.name === "AbortError") throw e;
 				const retryDelayMs = CHAT_RETRY_DELAYS_MS[attempt - 1];
 				if (retryDelayMs === undefined || totalAttempts > CHAT_RETRY_TOTAL + 5 || !this.isTransientChatError(e)) {
 					throw e;
 				}
-				const msg = String(e?.message || e || "");
+				const msg = String((e as Error)?.message || e || "");
 				console.warn(`[Semlink] transient error (attempt ${attempt}), retrying in ${retryDelayMs}ms:`, msg);
 				onRetry?.(attempt + 1, CHAT_RETRY_TOTAL);
 				await new Promise((resolve) => window.setTimeout(resolve, retryDelayMs));
@@ -381,11 +472,11 @@ export class ChatClient {
 	}
 
 	/** ZCode-style retryable check: only transient failures get retried. */
-	private isTransientChatError(e: any): boolean {
+	private isTransientChatError(e: unknown): boolean {
 		if (e instanceof TypeError) return true;
-		const msg = String(e?.message || e || "");
+		const msg = String((e as Error)?.message || (e as string) || "");
 		if (/NETWORK:|failed to fetch/i.test(msg)) return true;
-		const status = e?.status;
+		const status = (e as { status?: number } | null)?.status;
 		return status === 429 || status === 503 || /busy|rate ?limit/i.test(msg);
 	}
 
@@ -397,8 +488,8 @@ export class ChatClient {
 	 * messages with segments (dropped-note chips) are re-expanded to
 	 * `[[path]]` links so the model still sees the attached files.
 	 */
-	private buildConversation(history: HistoryMessage[], question: string): any[] {
-		const conv: any[] = [];
+	private buildConversation(history: HistoryMessage[], question: string): ConversationMessage[] {
+		const conv: ConversationMessage[] = [];
 		for (const h of history) {
 			if (h.role === "user" && h.segments && h.segments.length > 0) {
 				const text = h.segments
@@ -420,7 +511,7 @@ export class ChatClient {
 	 * latest question is never dropped. Runs before the first request, so the
 	 * prompt prefix stays identical across a turn's tool rounds.
 	 */
-	private truncateConversation(conv: any[], systemPrompt: string, contextWindow: number): void {
+	private truncateConversation(conv: ConversationMessage[], systemPrompt: string, contextWindow: number): void {
 		if (contextWindow <= 0) return;
 		// Reserve headroom for the answer (≈ ZCode's output reserve; ~15% of
 		// the window, clamped), then trigger at 95% of the effective window.
@@ -442,7 +533,7 @@ export class ChatClient {
 	}
 
 	/** Estimate one message's tokens (string content or content blocks). */
-	private estimateMessageTokens(m: any): number {
+	private estimateMessageTokens(m: ConversationMessage): number {
 		const c = m?.content;
 		let n = 0;
 		if (typeof c === "string") {
@@ -462,9 +553,9 @@ export class ChatClient {
 	// ──── OpenAI format (streaming) ────
 
 	/** Primary free-text argument of a query-bearing tool (for dedup). */
-	private primaryQueryArg(name: string, args: any): string {
-		if (name === "search_notes" || name === "get_similar_notes") return String(args?.query ?? "");
-		if (name === "grep_notes") return String(args?.pattern ?? "");
+	private primaryQueryArg(name: string, args: Record<string, unknown>): string {
+		if (name === "search_notes" || name === "get_similar_notes") return String((args?.query as string) ?? "");
+		if (name === "grep_notes") return String((args?.pattern as string) ?? "");
 		return "";
 	}
 
@@ -474,7 +565,7 @@ export class ChatClient {
 	 * being a substring of a previous query (same tool) means it's repeating
 	 * itself — force an answer instead of re-running the tool.
 	 */
-	private isNearDuplicateQuery(name: string, args: any, seenQueries: Map<string, string[]>): boolean {
+	private isNearDuplicateQuery(name: string, args: Record<string, unknown>, seenQueries: Map<string, string[]>): boolean {
 		const q = this.primaryQueryArg(name, args).toLowerCase().replace(/\s+/g, " ").trim();
 		if (q.length < 4) return false;
 		const prev = seenQueries.get(name);
@@ -514,7 +605,7 @@ export class ChatClient {
 		// Format 2: <tool_call>{"name":"...","arguments":{...}}</tool_call>
 		clean = clean.replace(/<tool_call[^>]*>([\s\S]*?)<\/tool_call>/gi, (_whole, inner: string) => {
 			try {
-				const parsed = JSON.parse(inner.trim());
+				const parsed = JSON.parse(inner.trim()) as { name?: string; arguments?: Record<string, unknown>; input?: Record<string, unknown> };
 				if (parsed?.name) {
 					calls.push({ name: String(parsed.name), args: parsed.arguments || parsed.input || {} });
 				}
@@ -536,7 +627,7 @@ export class ChatClient {
 		model: string,
 		contextWindow: number,
 		systemPrompt: string,
-		conversation: any[],
+		conversation: ConversationMessage[],
 		onToolCall?: (toolName: string, args: any) => void,
 		thinking: ThinkingStep[] = [],
 		usedNotes: string[] = [],
@@ -550,7 +641,7 @@ export class ChatClient {
 		const openaiUrl = chatEndpoint(baseUrl, provider.wirePath, "/v1/chat/completions");
 		const tools = this.buildOpenAITools();
 
-		const messages: any[] = [
+		const messages: ConversationMessage[] = [
 			{ role: "system", content: systemPrompt },
 			...conversation,
 		];
@@ -701,9 +792,9 @@ export class ChatClient {
 			for (const tc of stream.toolCalls) {
 				const name = tc?.function?.name;
 				const rawArgs = tc?.function?.arguments || "{}";
-				let args: any = {};
+				let args: Record<string, unknown> = {};
 				try {
-					args = JSON.parse(rawArgs);
+					args = JSON.parse(rawArgs) as Record<string, unknown>;
 				} catch {
 					args = { _error: `invalid JSON arguments: ${rawArgs}` };
 				}
@@ -771,7 +862,7 @@ export class ChatClient {
 		body: any,
 		onStream?: (text: string) => void,
 		signal?: AbortSignal,
-	): Promise<{ content: string; toolCalls: any[]; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
+	): Promise<{ content: string; toolCalls: OpenAIToolCall[]; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
 		let resp: Response;
 		try {
 			// SSE streaming: requestUrl buffers the whole body and cannot deliver
@@ -788,7 +879,7 @@ export class ChatClient {
 		});
 		} catch (e) {
 			// User aborted — propagate as AbortError (NOT retryable).
-			if (signal?.aborted || e?.name === "AbortError") {
+			if (signal?.aborted || (e as Error)?.name === "AbortError") {
 				throw new DOMException("Aborted", "AbortError");
 			}
 			// Network-level failure (CORS / DNS / connection reset / offline).
@@ -797,7 +888,7 @@ export class ChatClient {
 		}
 		if (resp.status !== 200) {
 			const text = await resp.text();
-			let parsed: any = {};
+			let parsed: unknown = {};
 			try { parsed = JSON.parse(text); } catch { /* not JSON */ }
 			throw this.extractError(resp.status, parsed);
 		}
@@ -806,7 +897,7 @@ export class ChatClient {
 		// silent empty answer — fail loudly with the body's message instead.
 		if (!/text\/event-stream/i.test(String(resp.headers?.get?.("content-type") || ""))) {
 			const text = await resp.text();
-			let parsed: any = {};
+			let parsed: unknown = {};
 			try { parsed = JSON.parse(text); } catch { /* not JSON */ }
 			throw this.extractError(resp.status, parsed);
 		}
@@ -817,8 +908,8 @@ export class ChatClient {
 		let roundOut = 0;
 		const cacheHits: CacheSample[] = [];
 		// Tool calls accumulate by their stream index.
-		const toolCalls: Record<number, any> = {};
-		await this.readSSE(resp, (json) => {
+		const toolCalls: Record<number, OpenAIToolCall> = {};
+		await this.readSSE<OpenAIStreamEvent>(resp, (json) => {
 			const delta = json?.choices?.[0]?.delta;
 			if (typeof delta?.content === "string" && delta.content) {
 				content += delta.content;
@@ -878,7 +969,7 @@ export class ChatClient {
 		model: string,
 		contextWindow: number,
 		systemPrompt: string,
-		conversation: any[],
+		conversation: ConversationMessage[],
 		onToolCall?: (toolName: string, args: any) => void,
 		thinking: ThinkingStep[] = [],
 		usedNotes: string[] = [],
@@ -892,7 +983,7 @@ export class ChatClient {
 		const anthropicUrl = chatEndpoint(baseUrl, provider.wirePath, "/v1/messages");
 		const tools = this.buildAnthropicTools();
 
-		const messages: any[] = [...conversation];
+		const messages: ConversationMessage[] = [...conversation];
 
 		// Latest assistant text (graceful fallback if the model never produces
 		// a final answer), plus a guard against repeated identical tool calls.
@@ -955,8 +1046,8 @@ export class ChatClient {
 			usageOut += analysisStream.roundOut || 0;
 			cacheHits.push(...analysisStream.cacheHits);
 			analysis = (analysisStream.contentBlocks || [])
-				.filter((b: any) => b?.type === "text")
-				.map((b: any) => String(b.text))
+				.filter((b) => b?.type === "text")
+				.map((b) => String(b.text))
 				.join("\n")
 				.trim();
 			// Strip any echoed instruction labels (e.g. "（分析阶段）初步结论：").
@@ -1019,8 +1110,8 @@ export class ChatClient {
 
 			if (stream.stopReason !== "tool_use") {
 				const answer = stream.contentBlocks
-					.filter((b: any) => b?.type === "text")
-					.map((b: any) => String(b.text))
+					.filter((b) => b?.type === "text")
+					.map((b) => String(b.text))
 					.join("\n")
 					.trim();
 				if (answer) lastText = answer;
@@ -1031,7 +1122,7 @@ export class ChatClient {
 
 			// Record interim thoughts (visible text / extended thinking blocks)
 			// the model produced before calling tools, in order.
-			for (const b of stream.contentBlocks as Array<{ type?: string; text?: string; thinking?: string }>) {
+			for (const b of stream.contentBlocks) {
 				if (b?.type === "text" && b.text?.trim()) {
 					const step: ThinkingStep = { type: "thought", text: b.text.trim() };
 					thinking.push(step);
@@ -1047,7 +1138,7 @@ export class ChatClient {
 			// Echo the assistant content blocks (including tool_use) back.
 			messages.push({ role: "assistant", content: stream.contentBlocks });
 
-			const toolResults: any[] = [];
+			const toolResults: ContentBlock[] = [];
 			for (const tu of stream.toolUses) {
 				const name = tu.name;
 				const args = tu.input || {};
@@ -1114,8 +1205,8 @@ export class ChatClient {
 		body: any,
 		signal?: AbortSignal,
 	): Promise<{
-		contentBlocks: any[];
-		toolUses: any[];
+		contentBlocks: ContentBlock[];
+		toolUses: AnthropicToolUse[];
 		stopReason: string;
 		usageTokens: number;
 		cacheHits: CacheSample[];
@@ -1141,7 +1232,7 @@ export class ChatClient {
 			});
 		} catch (e) {
 			// User aborted — propagate as AbortError (NOT retryable).
-			if (signal?.aborted || e?.name === "AbortError") {
+			if (signal?.aborted || (e as Error)?.name === "AbortError") {
 				throw new DOMException("Aborted", "AbortError");
 			}
 			// Network-level failure — marked retryable; chat() retries once.
@@ -1149,7 +1240,7 @@ export class ChatClient {
 		}
 		if (resp.status !== 200) {
 			const text = await resp.text();
-			let parsed: any = {};
+			let parsed: unknown = {};
 			try { parsed = JSON.parse(text); } catch { /* not JSON */ }
 			throw this.extractError(resp.status, parsed);
 		}
@@ -1158,7 +1249,7 @@ export class ChatClient {
 		// silent empty answer — fail loudly with the body's message instead.
 		if (!/text\/event-stream/i.test(String(resp.headers?.get?.("content-type") || ""))) {
 			const text = await resp.text();
-			let parsed: any = {};
+			let parsed: unknown = {};
 			try { parsed = JSON.parse(text); } catch { /* not JSON */ }
 			throw this.extractError(resp.status, parsed);
 		}
@@ -1168,9 +1259,9 @@ export class ChatClient {
 		let text = "";
 		const cacheHits: CacheSample[] = [];
 		// Content blocks accumulate by their stream index.
-		const blocks: Record<number, any> = {};
+		const blocks: Record<number, ContentBlock> = {};
 
-		await this.readSSE(resp, (json) => {
+		await this.readSSE<AnthropicStreamEvent>(resp, (json) => {
 			const type = json?.type;
 			if (type === "message_start") {
 				const su = json?.message?.usage ?? json?.usage;
@@ -1203,12 +1294,12 @@ export class ChatClient {
 				const idx = json?.index ?? 0;
 				const delta = json?.delta;
 				if (delta?.type === "text_delta" && delta.text) {
-					if (blocks[idx]) blocks[idx].text += delta.text;
+					if (blocks[idx]) blocks[idx].text! += delta.text;
 					text += delta.text;
 				} else if (delta?.type === "thinking_delta" && delta.thinking) {
-					if (blocks[idx]) blocks[idx].thinking += delta.thinking;
+					if (blocks[idx]) blocks[idx].thinking! += delta.thinking;
 				} else if (delta?.type === "input_json_delta") {
-					if (blocks[idx]) blocks[idx].input += delta.partial_json || "";
+					if (blocks[idx]) blocks[idx].input! += delta.partial_json || "";
 				}
 			} else if (type === "message_delta") {
 				stopReason = json?.delta?.stop_reason || stopReason;
@@ -1220,14 +1311,14 @@ export class ChatClient {
 		// Reassemble blocks in order for the assistant echo.
 		const contentBlocks = Object.entries(blocks)
 			.sort(([a], [b]) => Number(a) - Number(b))
-			.map(([, b]) => b as unknown);
+			.map(([, b]) => b);
 
 		const toolUses = contentBlocks
-			.filter((b: any) => b?.type === "tool_use")
-			.map((b: any) => {
-				let input: any = {};
-				try { input = JSON.parse(b.input || "{}"); } catch { /* keep {} */ }
-				return { id: b.id, name: b.name, input };
+			.filter((b) => b?.type === "tool_use")
+			.map((b) => {
+				let input: Record<string, unknown> = {};
+				try { input = JSON.parse(b.input || "{}") as Record<string, unknown>; } catch { /* keep {} */ }
+				return { id: b.id, name: b.name, input } as AnthropicToolUse;
 			});
 
 		// Models may emit tool calls as text markup inside text blocks — parse
@@ -1268,7 +1359,7 @@ export class ChatClient {
 	// ──── Shared helpers ────
 
 	/** Read an SSE response body, invoking onData for each parsed JSON event. */
-	private async readSSE(resp: Response, onData: (json: any) => void, signal?: AbortSignal): Promise<void> {
+	private async readSSE<T>(resp: Response, onData: (json: T) => void, signal?: AbortSignal): Promise<void> {
 		const reader = resp.body!.getReader();
 		const decoder = new TextDecoder();
 		let buffer = "";
@@ -1290,7 +1381,7 @@ export class ChatClient {
 					const data = trimmed.slice(5).trim();
 					if (!data || data === "[DONE]") continue;
 					try {
-						onData(JSON.parse(data));
+						onData(JSON.parse(data) as T);
 					} catch {
 						// Skip malformed events.
 					}
@@ -1312,7 +1403,7 @@ export class ChatClient {
 		capacity: number,
 		systemPrompt: string,
 		tools: any[],
-		messages: any[],
+		messages: ConversationMessage[],
 	): ContextBreakdown {
 		const sysTokens = this.estimateTextTokens(systemPrompt);
 		const toolSchemaTokens = this.estimateTextTokens(JSON.stringify(tools));
@@ -1338,13 +1429,13 @@ export class ChatClient {
 						else if (b?.type === "tool_use") toolResultTokens += this.estimateTextTokens(contentOf(b.input));
 					}
 				} else {
-					messageTokens += this.estimateTextTokens(m.content || "");
+					messageTokens += this.estimateTextTokens((m.content as string) || "");
 				}
 				for (const tc of m.tool_calls || []) {
 					toolResultTokens += this.estimateTextTokens(tc?.function?.arguments || "");
 				}
 			} else if (m?.role === "user") {
-				if (Array.isArray(content) && content.some((b: any) => b?.type === "tool_result")) {
+				if (Array.isArray(content) && content.some((b) => b?.type === "tool_result")) {
 					// Anthropic tool results belong to the MCP tools category.
 					for (const b of content) {
 						if (b?.type === "tool_result") toolResultTokens += this.estimateTextTokens(contentOf(b.content));
@@ -1391,7 +1482,7 @@ export class ChatClient {
 	 * notes read via get_note/get_section (from args) and notes surfaced by
 	 * search_notes/get_similar_notes (parsed from the result JSON).
 	 */
-	private collectUsedNotes(usedNotes: string[], name: string, args: any, result: string): void {
+	private collectUsedNotes(usedNotes: string[], name: string, args: Record<string, unknown>, result: string): void {
 		let paths: string[] = [];
 		if ((name === "get_note" || name === "get_section") && typeof args?.path === "string") {
 			paths = [args.path];
@@ -1400,8 +1491,8 @@ export class ChatClient {
 				const parsed = JSON.parse(result) as { results?: Array<{ path?: string }> };
 				if (Array.isArray(parsed?.results)) {
 					paths = parsed.results
-						.filter((r: any) => typeof r?.path === "string")
-						.map((r: any) => String(r.path));
+						.filter((r) => typeof r?.path === "string")
+						.map((r) => String(r.path));
 				}
 			} catch {
 				// Unparseable result — ignore.
@@ -1413,10 +1504,13 @@ export class ChatClient {
 	}
 
 	/** Build an Error from an HTTP failure, mirroring the embedding client. */
-	private extractError(status: number, body: any): Error {
+	private extractError(status: number, body: unknown): Error {
 		let msg = "";
 		if (typeof body === "object" && body) {
-			msg = body?.error?.message || body?.message || body?.msg || body?.error || "";
+			const b = body as { error?: { message?: string }; message?: string; msg?: string };
+			// `error` may also arrive as a raw string (or a message-less object
+			// that lands in msg verbatim) — re-read it unshaped for that case.
+			msg = b?.error?.message || b?.message || b?.msg || (body as { error?: string }).error || "";
 		}
 		const err = Object.assign(new Error(msg || `HTTP ${status}`), { status });
 		return err;

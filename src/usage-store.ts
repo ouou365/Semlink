@@ -38,7 +38,7 @@ export class UsageStore {
 		if (this.loaded) return this.records;
 		try {
 			if (existsSync(this.filePath)) {
-				this.records = JSON.parse(readFileSync(this.filePath, "utf-8")) || [];
+				this.records = (JSON.parse(readFileSync(this.filePath, "utf-8")) as UsageRecord[]) || [];
 			}
 		} catch {
 			this.records = [];

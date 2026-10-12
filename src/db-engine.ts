@@ -61,8 +61,8 @@ export class DbEngine {
 
 	async init(): Promise<void> {
 		// Decode inline WASM base64
-		const wasmBinary = Buffer.from(wasmBase64, "base64");
-		const SQL = await initSqlJs({ wasmBinary });
+		const wasmBinary = Buffer.from(wasmBase64 as string, "base64");
+		const SQL = await initSqlJs({ wasmBinary } as Parameters<typeof initSqlJs>[0]);
 
 		const dbPath = join(this.dataDir, DB_FILE);
 		// A leftover temp file means a previous write died before rename —

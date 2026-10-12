@@ -32,10 +32,10 @@ export class VaultWatcher {
 		this.settings = settings;
 
 		// Bound handlers
-		this.createHandler = this.onCreate.bind(this);
-		this.modifyHandler = this.onModify.bind(this);
-		this.deleteHandler = this.onDelete.bind(this);
-		this.renameHandler = this.onRename.bind(this);
+		this.createHandler = this.onCreate.bind(this) as (file: TAbstractFile) => void;
+		this.modifyHandler = this.onModify.bind(this) as (file: TAbstractFile) => void;
+		this.deleteHandler = this.onDelete.bind(this) as (file: TAbstractFile) => void;
+		this.renameHandler = this.onRename.bind(this) as (file: TAbstractFile, oldPath: string) => void;
 	}
 
 	start(autoIndex: boolean): void {

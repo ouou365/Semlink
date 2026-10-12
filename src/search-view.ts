@@ -606,7 +606,7 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	private hasApiKey(): boolean {
-		return !!(this.client as any).apiKey;
+		return !!(this.client as unknown as { apiKey?: unknown }).apiKey;
 	}
 
 	/** Send-button state machine: "idle"(arrow-up) | "stop"(solid square, aborts the run). */
@@ -951,7 +951,7 @@ export class SemanticSearchView extends ItemView {
 				} catch (e) {
 					// User aborted — keep whatever streamed so far and show a
 					// "stopped" notice instead of an error.
-					if (controller.signal.aborted || e?.name === "AbortError") {
+					if (controller.signal.aborted || (e as { name?: string } | undefined)?.name === "AbortError") {
 						stopAnswerAnim();
 						loadingEl.empty();
 						if (liveSteps.length > 0) {
@@ -1482,7 +1482,7 @@ export class SemanticSearchView extends ItemView {
 	/** Compact one-line preview of the request args, e.g. " — MIBT". */
 	private summarizeArgs(args: any): string {
 		if (args && typeof args === "object") {
-			const first = Object.entries(args).find(([, v]) => typeof v === "string" && v.length > 0);
+			const first = Object.entries(args as Record<string, string>).find(([, v]) => typeof v === "string" && v.length > 0);
 			if (first) return ` — ${first[1]}`;
 		}
 		return "";
@@ -1928,7 +1928,7 @@ export class SemanticSearchView extends ItemView {
 				type: s.type,
 				text: s.type === "thought" ? s.text : undefined,
 				name: s.type === "tool" ? s.name : undefined,
-				args: s.type === "tool" ? s.args : undefined,
+				args: s.type === "tool" ? (s.args as unknown) : undefined,
 				result: s.type === "tool" ? s.result : undefined,
 			})),
 			sources,
@@ -1985,7 +1985,7 @@ export class SemanticSearchView extends ItemView {
 					await MarkdownRenderer.render(this.app, protectHyphens(msg.content), answerEl, "", this);
 					if (msg.sources && msg.sources.length > 0) {
 						const usedSources = msg.sources.map((p) => ({ notePath: p, heading: "", contentPreview: "" }));
-						this.renderSources(bubble, usedSources as any, false);
+						this.renderSources(bubble, usedSources as SearchResult[], false);
 					}
 					// Copy / save actions for history answers too.
 					this.appendActions(bubble, msg.content, lastUserQuery);

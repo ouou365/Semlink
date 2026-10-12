@@ -9,14 +9,26 @@
 // browser API (onopen/onmessage/addEventListener), so other plugins are
 // unaffected. Falls back to a small wrapper shim if Node builtins are missing.
 
+/** Fields this module installs on the renderer's global scope. */
+interface FeishuWsGlobal {
+	__semlinkWsInstalled?: boolean;
+	WebSocket?: unknown;
+}
+
+/** Minimal shape of the events read off the native browser WebSocket. */
+interface NativeWsEvent {
+	data?: unknown;
+	error?: unknown;
+}
+
 export function installFeishuWebSocket(): void {
-	const g = window as any;
+	const g = window as unknown as FeishuWsGlobal;
 	if (g.__semlinkWsInstalled) return;
 	g.__semlinkWsInstalled = true;
 
 	try {
 		// eslint-disable-next-line @typescript-eslint/no-require-imports -- "ws" is an optional dependency; the lazy require keeps it out of the bundle
-		const WS = require("ws");
+		const WS = require("ws") as unknown;
 		g.WebSocket = WS;
 		return;
 	} catch {
@@ -26,8 +38,8 @@ export function installFeishuWebSocket(): void {
 	interface NativeWs {
 		binaryType?: string;
 		onopen: (() => void) | null;
-		onmessage: ((ev: any) => void) | null;
-		onerror: ((ev: any) => void) | null;
+		onmessage: ((ev: NativeWsEvent) => void) | null;
+		onerror: ((ev: NativeWsEvent) => void) | null;
 		onclose: ((ev: any) => void) | null;
 		send(data: string | ArrayBuffer): void;
 		close(): void;
@@ -56,18 +68,18 @@ export function installFeishuWebSocket(): void {
 			if (typeof protocols === "string") p = protocols;
 			else if (Array.isArray(protocols)) p = protocols as string[];
 
-			this.native = new Native(url, p);
+			this.native = new Native!(url, p);
 			this.native.binaryType = "arraybuffer";
 
 			this.native.onopen = () => {
 				this.browserOnOpen?.({});
 				this.emit("open");
 			};
-			this.native.onmessage = (ev: any) => {
+			this.native.onmessage = (ev) => {
 				this.browserOnMessage?.(ev);
 				this.emit("message", ev.data);
 			};
-			this.native.onerror = (ev: any) => {
+			this.native.onerror = (ev) => {
 				this.browserOnError?.(ev);
 				this.emit("error", ev?.error || new Error("WebSocket error"));
 			};
@@ -99,10 +111,10 @@ export function installFeishuWebSocket(): void {
 		}
 
 		// Browser-style API.
-		addEventListener(event: string, cb: any): void {
+		addEventListener(event: string, cb: (data?: any) => void): void {
 			this.on(event, cb);
 		}
-		removeEventListener(event: string, cb: any): void {
+		removeEventListener(event: string, cb: (data?: any) => void): void {
 			this.off(event, cb);
 		}
 		set onopen(v: ((ev: any) => void) | null) { this.browserOnOpen = v; }
@@ -114,20 +126,20 @@ export function installFeishuWebSocket(): void {
 		set onclose(v: ((ev: any) => void) | null) { this.browserOnClose = v; }
 		get onclose() { return this.browserOnClose; }
 
-		send(data: any): void {
+		send(data: string | ArrayBuffer | Buffer): void {
 			// Node Buffers → pass the underlying ArrayBuffer to the browser WS.
 			if (typeof Buffer !== "undefined" && Buffer.isBuffer(data)) {
-				this.native.send(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+				this.native.send(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer);
 			} else {
-				this.native.send(data);
+				this.native.send(data as string | ArrayBuffer);
 			}
 		}
 		close(): void {
 			this.native.close();
 		}
 
-		private emit(event: string, data?: any): void {
-			let payload = data;
+		private emit(event: string, data?: unknown): void {
+			let payload: unknown = data;
 			if (event === "message" && data !== undefined && typeof Buffer !== "undefined") {
 				if (data instanceof ArrayBuffer) payload = Buffer.from(data);
 				else if (ArrayBuffer.isView(data)) payload = Buffer.from(data.buffer, data.byteOffset, data.byteLength);

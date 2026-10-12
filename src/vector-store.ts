@@ -27,7 +27,7 @@ try {
 	// worker_threads is a Node built-in; Obsidian runs on Electron with full
 	// Node integration (the plugin already uses `fs`, `http`, etc.).
 	// eslint-disable-next-line @typescript-eslint/no-require-imports -- deliberately lazy: must not throw at import time in hosts without it
-	WorkerCtor = require("worker_threads").Worker;
+	WorkerCtor = (require("worker_threads") as { Worker: typeof WorkerCtor }).Worker;
 	workerAvailable = !!WorkerCtor;
 } catch {
 	workerAvailable = false;
@@ -180,7 +180,7 @@ export class VectorStore {
 				this.browserWorker!.postMessage({ reqId, op, args });
 			});
 		}
-		return new Promise((resolve, reject) => {
+		return new Promise<T>((resolve, reject) => {
 			const reqId = ++this.reqId;
 			this.pending.set(reqId, { resolve, reject });
 			try {
@@ -274,7 +274,7 @@ export class VectorStore {
 			} catch {
 				/* worker already gone */
 			}
-			try { this.worker.terminate(); } catch { /* already gone */ }
+			try { void this.worker.terminate(); } catch { /* already gone */ }
 			this.worker = null;
 		}
 	}

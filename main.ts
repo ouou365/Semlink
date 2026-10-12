@@ -73,7 +73,7 @@ export default class SmartVaultPlugin extends Plugin {
 		const adapter = this.app.vault.adapter;
 		const vaultBasePath = adapter instanceof FileSystemAdapter
 			? adapter.getBasePath()
-			: (adapter as any).basePath as string;
+			: (adapter as unknown as { basePath: string }).basePath;
 		this.pluginDir = join(vaultBasePath, this.manifest.dir
 			|| join(this.app.vault.configDir, "plugins", this.manifest.id));
 
@@ -138,7 +138,7 @@ export default class SmartVaultPlugin extends Plugin {
 		this.statusBarEl.createSpan({ cls: "status-dot" });
 		this.statusBarEl.createSpan({ cls: "status-count" });
 		this.statusBarEl.onClickEvent(() => {
-			this.showProgressModal();
+			void this.showProgressModal();
 		});
 
 		// Subscribe to progress for status bar updates.
@@ -266,7 +266,7 @@ export default class SmartVaultPlugin extends Plugin {
 		// All synchronous — Obsidian does NOT await async onunload.
 		try { this.scheduler?.abort(); } catch { /* best-effort */ }
 		try { this.watcher?.stop(); } catch { /* best-effort */ }
-		try { this.mcpServer?.stop(); } catch { /* best-effort */ }
+		try { void this.mcpServer?.stop(); } catch { /* best-effort */ }
 		try { this.activityGate?.dispose(); } catch { /* best-effort */ }
 		for (const bot of this.feishuBots.values()) {
 			try { void bot.stop(); } catch { /* best-effort */ }
@@ -285,12 +285,12 @@ export default class SmartVaultPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		const data = await this.loadData();
+		const data = (await this.loadData()) as Partial<SmartVaultSettings> | null;
 		this.settings = { ...DEFAULT_SETTINGS, ...data };
 		// Data written before the unified provider list existed carries the
 		// old embeddingProviders/chatProviders split (and earlier still, flat
 		// provider/apiBase/*ApiKey fields) — fold them into `providers` once.
-		const raw = data as Partial<SmartVaultSettings> | null | undefined;
+		const raw = data;
 		const hasProviders = Array.isArray(raw?.providers) && (raw.providers?.length ?? 0) > 0;
 		if (!hasProviders) migrateEmbeddingSettings(this.settings);
 		// Providers added from an earlier catalog version may carry a base URL
@@ -424,7 +424,7 @@ export default class SmartVaultPlugin extends Plugin {
 			// Bridge chat-client's onToolCall into our per-event onThinking, so
 			// the Feishu bot can stream each tool call into the thinking panel.
 			const onToolCall = onThinking
-				? (name: string, args: any) => onThinking({ type: "tool", name, args })
+				? (name: string, args: unknown) => onThinking({ type: "tool", name, args })
 				: undefined;
 			// Same depth heuristic as the sidebar (介绍/分析/总结 → enhanced).
 			const chatResult = await this.chatClient.chat(
@@ -461,7 +461,7 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 
 		new Notice(`Semlink: ${t("noticeStartIndex")}`);
-		this.scheduler.run();
+		void this.scheduler.run();
 	}
 
 	/** Force a full rebuild: wipe ALL vectors and re-embed every note. Use after
@@ -480,7 +480,7 @@ export default class SmartVaultPlugin extends Plugin {
 		new Notice(`Semlink: ${t("noticeRebuildStarted")}`);
 		await this.store.clearAll();
 		this.progress.reset();
-		this.scheduler.run();
+		void this.scheduler.run();
 	}
 
 	// ──── UI ────

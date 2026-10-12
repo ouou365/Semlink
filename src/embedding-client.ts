@@ -19,6 +19,14 @@ interface StatusError extends Error {
 	status?: number;
 }
 
+/** Fields read off a failed embed response's JSON body: SiliconFlow sends
+ *  OpenAI-style `{error:{message}}`, HF a flat `error` string — the code
+ *  reads `.message` off either, hence the intersection. */
+interface EmbedErrorBody {
+	error?: string & { message?: string };
+	message?: string;
+}
+
 /** Hard ceiling per embed request — requestUrl has no timeout of its own. */
 const EMBED_TIMEOUT_MS = 60_000;
 
@@ -243,7 +251,7 @@ private async callSiliconFlowApi(input: string[]): Promise<EmbeddingResponse> {
 		});
 
 		if (resp.status !== 200) {
-			const errBody = typeof resp.json === "object" ? resp.json : {};
+			const errBody = (typeof resp.json === "object" ? resp.json : {}) as EmbedErrorBody;
 			const errMsg = errBody?.error?.message || errBody?.message || `HTTP ${resp.status}`;
 			const err = new Error(errMsg) as StatusError;
 			err.status = resp.status;
@@ -290,7 +298,7 @@ private async callSiliconFlowApi(input: string[]): Promise<EmbeddingResponse> {
 		});
 
 		if (resp.status !== 200) {
-			const errBody = typeof resp.json === "object" ? resp.json : {};
+			const errBody = (typeof resp.json === "object" ? resp.json : {}) as EmbedErrorBody;
 			const errMsg = errBody?.error || errBody?.error?.message || errBody?.message || `HTTP ${resp.status}`;
 			const err = new Error(errMsg) as StatusError;
 			err.status = resp.status;
