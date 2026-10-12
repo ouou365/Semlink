@@ -9,7 +9,6 @@ import { VectorStore } from "./vector-store";
 import { EmbeddingClient } from "./embedding-client";
 import { ProgressTracker } from "./progress";
 import { Scheduler } from "./scheduler";
-import { readFileSync } from "fs";
 import { extractSection, extractHeadings } from "./section-utils";
 import type { SmartVaultSettings } from "./types";
 
@@ -459,7 +458,7 @@ export class McpServer {
 		};
 	}
 
-	private async handleToolsCall(params: ToolCallParams): Promise<any> {
+	private async handleToolsCall(params: ToolCallParams): Promise<unknown> {
 		const toolName = params.name;
 		const args: ToolCallArgs = params.arguments || {};
 

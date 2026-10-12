@@ -31,11 +31,11 @@ export class VaultWatcher {
 		this.scheduler = scheduler;
 		this.settings = settings;
 
-		// Bound handlers
-		this.createHandler = this.onCreate.bind(this) as (file: TAbstractFile) => void;
-		this.modifyHandler = this.onModify.bind(this) as (file: TAbstractFile) => void;
-		this.deleteHandler = this.onDelete.bind(this) as (file: TAbstractFile) => void;
-		this.renameHandler = this.onRename.bind(this) as (file: TAbstractFile, oldPath: string) => void;
+		// Bound handlers (arrow wrappers: typed in every tsconfig, no casts)
+		this.createHandler = (file) => this.onCreate(file);
+		this.modifyHandler = (file) => this.onModify(file);
+		this.deleteHandler = (file) => this.onDelete(file);
+		this.renameHandler = (file, oldPath) => this.onRename(file, oldPath);
 	}
 
 	start(autoIndex: boolean): void {

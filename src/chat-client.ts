@@ -53,7 +53,7 @@ export interface UsageSample {
 /** A step in the model's thinking process, in chronological order. */
 export type ThinkingStep =
 	| { type: "thought"; text: string }
-	| { type: "tool"; name: string; args: any; result: string };
+	| { type: "tool"; name: string; args: unknown; result: string };
 
 /** Agent style for the chat system prompt: "classic" answers from snippets
  *  with minimal tool use, "proactive" actively reads related notes. */
@@ -186,6 +186,38 @@ interface ConversationMessage {
 	content?: string | ContentBlock[];
 	tool_calls?: OpenAIToolCall[];
 	tool_call_id?: string;
+}
+
+/** One tool schema in an OpenAI request body's `tools` array. */
+interface OpenAIToolSchema {
+	type: "function";
+	function: { name: string; description: string; parameters: Record<string, unknown> };
+}
+
+/** Request body of one OpenAI-compatible chat round (only the fields set here). */
+interface OpenAIChatBody {
+	model: string;
+	messages: ConversationMessage[];
+	stream: boolean;
+	stream_options: { include_usage: boolean };
+	tools?: OpenAIToolSchema[];
+}
+
+/** One tool schema in an Anthropic request body's `tools` array. */
+interface AnthropicToolSchema {
+	name: string;
+	description: string;
+	input_schema: Record<string, unknown>;
+}
+
+/** Request body of one Anthropic messages round (only the fields set here). */
+interface AnthropicChatBody {
+	model: string;
+	max_tokens: number;
+	system: string;
+	messages: ConversationMessage[];
+	stream: boolean;
+	tools?: AnthropicToolSchema[];
 }
 
 // Context usage types now live in types.ts (search-view imports them from
@@ -402,7 +434,7 @@ export class ChatClient {
 		 *  stable across requests → prompt-cache hits stay high. Truncated by
 		 *  a sliding window when the estimate exceeds the context threshold. */
 		history: HistoryMessage[] = [],
-		onToolCall?: (toolName: string, args: any) => void,
+		onToolCall?: (toolName: string, args: unknown) => void,
 		depth: "standard" | "enhanced" = "standard",
 		onStream?: (text: string) => void,
 		onRoundStart?: () => void,
@@ -581,13 +613,13 @@ export class ChatClient {
 	 * Returns the parsed calls and the text with all tool markup removed
 	 * (non-parameter prose inside `<invoke>` blocks is preserved).
 	 */
-	private extractTextToolCalls(text: string): { calls: Array<{ name: string; args: Record<string, any> }>; cleanText: string } {
-		const calls: Array<{ name: string; args: Record<string, any> }> = [];
+	private extractTextToolCalls(text: string): { calls: Array<{ name: string; args: Record<string, unknown> }>; cleanText: string } {
+		const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
 		let clean = text;
 
 		// Format 1: <invoke name="tool"><parameter name="k">v</parameter>...</invoke>
 		clean = clean.replace(/<invoke\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/invoke>/gi, (_whole, name: string, inner: string) => {
-			const args: Record<string, any> = {};
+			const args: Record<string, unknown> = {};
 			let leftover = "";
 			let idx = 0;
 			let m: RegExpExecArray | null;
@@ -628,7 +660,7 @@ export class ChatClient {
 		contextWindow: number,
 		systemPrompt: string,
 		conversation: ConversationMessage[],
-		onToolCall?: (toolName: string, args: any) => void,
+		onToolCall?: (toolName: string, args: unknown) => void,
 		thinking: ThinkingStep[] = [],
 		usedNotes: string[] = [],
 		onStream?: (text: string) => void,
@@ -749,7 +781,7 @@ export class ChatClient {
 				messages.push({ role: "user", content: t("searchAnswerNowHint") });
 			}
 
-			const body: Record<string, any> = {
+			const body: OpenAIChatBody = {
 				model,
 				messages,
 				stream: true,
@@ -841,7 +873,7 @@ export class ChatClient {
 		return finalize(t("searchNoMatchAnswer"));
 	}
 
-	private buildOpenAITools(): any[] {
+	private buildOpenAITools(): OpenAIToolSchema[] {
 		if (!this.tools) return [];
 		return this.tools.list().map((tool) => ({
 			type: "function",
@@ -859,7 +891,7 @@ export class ChatClient {
 	private async streamOpenAIChat(
 		url: string,
 		provider: ChatProvider,
-		body: any,
+		body: OpenAIChatBody,
 		onStream?: (text: string) => void,
 		signal?: AbortSignal,
 	): Promise<{ content: string; toolCalls: OpenAIToolCall[]; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
@@ -970,7 +1002,7 @@ export class ChatClient {
 		contextWindow: number,
 		systemPrompt: string,
 		conversation: ConversationMessage[],
-		onToolCall?: (toolName: string, args: any) => void,
+		onToolCall?: (toolName: string, args: unknown) => void,
 		thinking: ThinkingStep[] = [],
 		usedNotes: string[] = [],
 		onStream?: (text: string) => void,
@@ -1087,7 +1119,7 @@ export class ChatClient {
 			if (round === NUDGE_AFTER_ROUND || forceAnswer) {
 				messages.push({ role: "user", content: t("searchAnswerNowHint") });
 			}
-			const body: Record<string, any> = {
+			const body: AnthropicChatBody = {
 				model,
 				max_tokens: 4096,
 				system: systemPrompt,
@@ -1189,7 +1221,7 @@ export class ChatClient {
 		return finalize(t("searchNoMatchAnswer"));
 	}
 
-	private buildAnthropicTools(): any[] {
+	private buildAnthropicTools(): AnthropicToolSchema[] {
 		if (!this.tools) return [];
 		return this.tools.list().map((tool) => ({
 			name: tool.name,
@@ -1202,7 +1234,7 @@ export class ChatClient {
 	private async streamAnthropicChat(
 		url: string,
 		provider: ChatProvider,
-		body: any,
+		body: AnthropicChatBody,
 		signal?: AbortSignal,
 	): Promise<{
 		contentBlocks: ContentBlock[];
@@ -1402,7 +1434,7 @@ export class ChatClient {
 		total: number,
 		capacity: number,
 		systemPrompt: string,
-		tools: any[],
+		tools: unknown[],
 		messages: ConversationMessage[],
 	): ContextBreakdown {
 		const sysTokens = this.estimateTextTokens(systemPrompt);
@@ -1410,10 +1442,16 @@ export class ChatClient {
 
 		let messageTokens = 0;
 		let toolResultTokens = 0;
-		const contentOf = (c: any): string => {
+		const contentOf = (c: unknown): string => {
 			if (typeof c === "string") return c;
 			if (c && typeof c === "object") return JSON.stringify(c);
-			return String(c ?? "");
+			// Remaining JSON primitives stringify directly; null/undefined → "".
+			if (typeof c === "number" || typeof c === "boolean" || typeof c === "bigint" || typeof c === "symbol") {
+				return String(c);
+			}
+			// Only null / undefined remain — both rendered as "" by the previous
+			// String(c ?? "") fallback; JSON cannot deliver any other shape here.
+			return "";
 		};
 
 		for (const m of messages) {

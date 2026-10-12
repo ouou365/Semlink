@@ -1480,7 +1480,7 @@ export class SemanticSearchView extends ItemView {
 	 *  depth: full-note reads allowed and a larger per-result cap, so the
 	 *  model can read related protocol/design docs before answering. */
 	/** Compact one-line preview of the request args, e.g. " — MIBT". */
-	private summarizeArgs(args: any): string {
+	private summarizeArgs(args: unknown): string {
 		if (args && typeof args === "object") {
 			const first = Object.entries(args as Record<string, string>).find(([, v]) => typeof v === "string" && v.length > 0);
 			if (first) return ` — ${first[1]}`;
@@ -1489,7 +1489,7 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	/** JSON in tool-call pre blocks — hyphens protected from line breaks. */
-	private prettyJson(value: any): string {
+	private prettyJson(value: unknown): string {
 		let out: string;
 		if (typeof value === "string") out = value;
 		else {
@@ -1928,7 +1928,7 @@ export class SemanticSearchView extends ItemView {
 				type: s.type,
 				text: s.type === "thought" ? s.text : undefined,
 				name: s.type === "tool" ? s.name : undefined,
-				args: s.type === "tool" ? (s.args as unknown) : undefined,
+				args: s.type === "tool" ? s.args : undefined,
 				result: s.type === "tool" ? s.result : undefined,
 			})),
 			sources,
@@ -2565,7 +2565,7 @@ export class SemanticSearchView extends ItemView {
 				// the right edge (aligned with where 📦 appears); hover swaps
 				// it out for the button group. Row height stays constant (the
 				// always-in-flow pin button anchors it).
-				item.createEl("span", { cls: "semlink-history-item-time", text: timeStr });
+				item.createSpan({ cls: "semlink-history-item-time", text: timeStr });
 			}
 			item.addEventListener("click", () => {
 				this.closeHistoryDrawer(backdrop, drawer);

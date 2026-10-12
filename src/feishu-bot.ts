@@ -31,7 +31,7 @@ export interface ThinkingEvent {
 	type: "thought" | "tool";
 	text?: string;        // for "thought": the model's interim reasoning
 	name?: string;        // for "tool": tool name
-	args?: any;           // for "tool": tool args
+	args?: unknown;       // for "tool": tool args
 	result?: string;      // for "tool": tool result
 }
 
@@ -77,6 +77,13 @@ interface FeishuApiError extends Error {
 		status?: number;
 		data?: { code: number; msg: string } | string;
 	};
+}
+
+/** Loose shape of the CardKit card-body elements we emit (markdown blocks and
+ * collapsible panels); the panel-specific props ride the index signature. */
+interface CardElement {
+	tag: string;
+	[key: string]: unknown;
 }
 
 /** Runs embed → search → chat; onToken receives the growing answer text.
@@ -195,7 +202,7 @@ export class FeishuBot {
 		});
 
 		const dispatcher = new lark.EventDispatcher({}).register({
-			"im.message.receive_v1": async (data: any) => {
+			"im.message.receive_v1": async (data: unknown) => {
 				this.touchLiveness();
 				await this.handleMessage(data);
 			},
@@ -297,7 +304,7 @@ export class FeishuBot {
 
 	// ──── Message handling ────
 
-	private async handleMessage(data: any): Promise<void> {
+	private async handleMessage(data: unknown): Promise<void> {
 		// The Lark SDK's EventDispatcher hands us the unwrapped `event` payload
 		// (so `data.message` / `data.sender`), but some SDK builds forward the
 		// full `{ schema, header, event }` envelope — in which case the message
@@ -550,7 +557,7 @@ export class FeishuBot {
 		if (!client || !reactionId) return;
 		client.im.messageReaction.delete({
 			path: { message_id: messageId, reaction_id: reactionId },
-		}).catch((e: any) => {
+		}).catch((e: unknown) => {
 			console.warn("[Semlink] remove reaction failed:", this.describeError(e));
 		});
 	}
@@ -626,7 +633,7 @@ export class FeishuBot {
 				await (client.cardkit.v1.cardElement as unknown as { content(req: unknown): Promise<unknown> }).content({
 					path: { card_id: cardId, element_id: "thinking" },
 					data: { content, sequence, uuid: `t_${cardId}_${sequence}` },
-				} as any).catch((e: any) => {
+				}).catch((e: unknown) => {
 					console.warn("[Semlink] thinking update failed:", this.describeError(e));
 				});
 			};
@@ -703,7 +710,7 @@ export class FeishuBot {
 						await (client.cardkit.v1.card as unknown as { settings(req: unknown): Promise<unknown> }).settings({
 							path: { card_id: cardId },
 							data: { settings: JSON.stringify({ config: { streaming_mode: false } }), sequence, uuid: `s_${cardId}_${sequence}` },
-						} as any).catch(() => {});
+						}).catch(() => {});
 					}
 					return;
 				}
@@ -720,7 +727,7 @@ export class FeishuBot {
 			this.recordTurn(chatId, { role: "assistant", content: result.answer });
 
 			// ── Final card: full answer → collapsible thinking → sources ──
-			const finalElements: any[] = [];
+			const finalElements: CardElement[] = [];
 			finalElements.push({ tag: "markdown", content: result.answer });
 			if (result.thinking.length > 0) {
 				finalElements.push(this.buildThinkingPanel(result.thinking));
@@ -746,7 +753,7 @@ export class FeishuBot {
 						sequence,
 						uuid: `u_${cardId}_${sequence}`,
 					},
-				} as any).catch((e: any) => {
+				}).catch((e: unknown) => {
 					console.warn("[Semlink] card.update (finalize) failed:", this.describeError(e));
 				});
 			} else {
@@ -783,7 +790,7 @@ export class FeishuBot {
 	 * Build a collapsible_panel element holding the thinking trace (tool calls
 	 * + interim thoughts). Collapsed by default so the answer stays the focus.
 	 */
-	private buildThinkingPanel(thinking: ThinkingStep[]): any {
+	private buildThinkingPanel(thinking: ThinkingStep[]): CardElement {
 		const lines = thinking.map((s) =>
 			s.type === "thought" ? `💭 ${s.text}` : `🔧 ${s.name}(${JSON.stringify(s.args || {})})`
 		);
@@ -813,7 +820,7 @@ export class FeishuBot {
 	 * Build a collapsible_panel element holding the reference sources. Collapsed
 	 * by default so the answer stays the visual focus; users tap to expand.
 	 */
-	private buildSourcesPanel(usedNotes: string[]): any {
+	private buildSourcesPanel(usedNotes: string[]): CardElement {
 		const list = usedNotes.map((p, i) => `${i + 1}. ${p}`).join("\n");
 		return {
 			tag: "collapsible_panel",

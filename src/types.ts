@@ -442,7 +442,7 @@ export interface HistoryThinkingStep {
 	type: "thought" | "tool";
 	text?: string;
 	name?: string;
-	args?: any;
+	args?: unknown;
 	result?: string;
 }
 

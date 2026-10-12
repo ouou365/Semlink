@@ -126,7 +126,11 @@ interface FeishuHttpError extends Error {
 }
 
 export function makeFeishuHttp(): HttpInstance {
-	const call = async (opts: HttpRequestOptions<unknown>): Promise<any> => {
+	// Generic in R to satisfy the SDK's axios-like HttpInstance methods
+	// (`request<T, R, D>(...): Promise<R>`): the response body's shape is the
+	// CALLER's claim, so hand it over as R (the cast is type-only — `data`
+	// is whatever the endpoint returned, exactly as before).
+	const call = async <R>(opts: HttpRequestOptions<unknown>): Promise<R> => {
 		const url = opts.url;
 		const method = String(opts.method || "GET").toUpperCase();
 		const headers: Record<string, string> = { ...(opts.headers || {}) };
@@ -167,18 +171,18 @@ export function makeFeishuHttp(): HttpInstance {
 			throw err;
 		}
 
-		return data;
+		return data as R;
 	};
 
 	return {
 		request: call,
-		get: (url: string, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "GET" }),
-		delete: (url: string, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "DELETE" }),
-		head: (url: string, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "HEAD" }),
-		options: (url: string, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "OPTIONS" }),
-		post: (url: string, d?: unknown, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "POST", data: d }),
-		put: (url: string, d?: unknown, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "PUT", data: d }),
-		patch: (url: string, d?: unknown, o?: HttpRequestOptions<unknown>) => call({ ...o, url, method: "PATCH", data: d }),
+		get: <R>(url: string, o?: HttpRequestOptions<unknown>) => call<R>({ ...o, url, method: "GET" }),
+		delete: <R>(url: string, o?: HttpRequestOptions<unknown>) => call<R>({ ...o, url, method: "DELETE" }),
+		head: <R>(url: string, o?: HttpRequestOptions<unknown>) => call<R>({ ...o, url, method: "HEAD" }),
+		options: <R>(url: string, o?: HttpRequestOptions<unknown>) => call<R>({ ...o, url, method: "OPTIONS" }),
+		post: <R>(url: string, d?: unknown, o?: HttpRequestOptions<unknown>) => call<R>({ ...o, url, method: "POST", data: d }),
+		put: <R>(url: string, d?: unknown, o?: HttpRequestOptions<unknown>) => call<R>({ ...o, url, method: "PUT", data: d }),
+		patch: <R>(url: string, d?: unknown, o?: HttpRequestOptions<unknown>) => call<R>({ ...o, url, method: "PATCH", data: d }),
 	};
 }
 

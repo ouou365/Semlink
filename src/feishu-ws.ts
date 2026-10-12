@@ -21,6 +21,11 @@ interface NativeWsEvent {
 	error?: unknown;
 }
 
+/** Browser-style event callback (onopen/onmessage/onerror/onclose). The
+ * forwarded payload is the native event object where one exists — the open
+ * event carries `{}` — so it stays unknown. */
+type BrowserWsHandler = (ev: unknown) => void;
+
 export function installFeishuWebSocket(): void {
 	const g = window as unknown as FeishuWsGlobal;
 	if (g.__semlinkWsInstalled) return;
@@ -40,7 +45,7 @@ export function installFeishuWebSocket(): void {
 		onopen: (() => void) | null;
 		onmessage: ((ev: NativeWsEvent) => void) | null;
 		onerror: ((ev: NativeWsEvent) => void) | null;
-		onclose: ((ev: any) => void) | null;
+		onclose: ((ev: CloseEvent) => void) | null;
 		send(data: string | ArrayBuffer): void;
 		close(): void;
 		readonly readyState: number;
@@ -50,18 +55,18 @@ export function installFeishuWebSocket(): void {
 
 	class FeishuWsShim {
 		private native: NativeWs;
-		private listeners: Record<string, Array<(data?: any) => void>> = {};
-		private browserOnOpen: ((ev: any) => void) | null = null;
-		private browserOnMessage: ((ev: any) => void) | null = null;
-		private browserOnError: ((ev: any) => void) | null = null;
-		private browserOnClose: ((ev: any) => void) | null = null;
+		private listeners: Record<string, Array<(data?: unknown) => void>> = {};
+		private browserOnOpen: BrowserWsHandler | null = null;
+		private browserOnMessage: BrowserWsHandler | null = null;
+		private browserOnError: BrowserWsHandler | null = null;
+		private browserOnClose: BrowserWsHandler | null = null;
 
 		static CONNECTING = 0;
 		static OPEN = 1;
 		static CLOSING = 2;
 		static CLOSED = 3;
 
-		constructor(url: string, protocols?: any) {
+		constructor(url: string, protocols?: unknown) {
 			// The SDK passes `{ agent }` (Node-style options) — map to valid
 			// browser protocols and drop the options.
 			let p: string | string[] | undefined;
@@ -83,7 +88,7 @@ export function installFeishuWebSocket(): void {
 				this.browserOnError?.(ev);
 				this.emit("error", ev?.error || new Error("WebSocket error"));
 			};
-			this.native.onclose = (ev: any) => {
+			this.native.onclose = (ev) => {
 				this.browserOnClose?.(ev);
 				this.emit("close");
 			};
@@ -94,10 +99,10 @@ export function installFeishuWebSocket(): void {
 		}
 
 		// Node-style API.
-		on(event: string, cb: (data?: any) => void): void {
+		on(event: string, cb: (data?: unknown) => void): void {
 			(this.listeners[event] ||= []).push(cb);
 		}
-		off(event: string, cb?: (data?: any) => void): void {
+		off(event: string, cb?: (data?: unknown) => void): void {
 			const list = this.listeners[event];
 			if (!list) return;
 			if (!cb) {
@@ -111,19 +116,19 @@ export function installFeishuWebSocket(): void {
 		}
 
 		// Browser-style API.
-		addEventListener(event: string, cb: (data?: any) => void): void {
+		addEventListener(event: string, cb: (data?: unknown) => void): void {
 			this.on(event, cb);
 		}
-		removeEventListener(event: string, cb: (data?: any) => void): void {
+		removeEventListener(event: string, cb: (data?: unknown) => void): void {
 			this.off(event, cb);
 		}
-		set onopen(v: ((ev: any) => void) | null) { this.browserOnOpen = v; }
+		set onopen(v: BrowserWsHandler | null) { this.browserOnOpen = v; }
 		get onopen() { return this.browserOnOpen; }
-		set onmessage(v: ((ev: any) => void) | null) { this.browserOnMessage = v; }
+		set onmessage(v: BrowserWsHandler | null) { this.browserOnMessage = v; }
 		get onmessage() { return this.browserOnMessage; }
-		set onerror(v: ((ev: any) => void) | null) { this.browserOnError = v; }
+		set onerror(v: BrowserWsHandler | null) { this.browserOnError = v; }
 		get onerror() { return this.browserOnError; }
-		set onclose(v: ((ev: any) => void) | null) { this.browserOnClose = v; }
+		set onclose(v: BrowserWsHandler | null) { this.browserOnClose = v; }
 		get onclose() { return this.browserOnClose; }
 
 		send(data: string | ArrayBuffer | Buffer): void {

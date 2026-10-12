@@ -1,6 +1,6 @@
 {
 	"name": "semlink",
-	"version": "1.1.1",
+	"version": "1.1.2",
 	"description": "Semlink: Semantic search for Obsidian Vault via MCP",
 	"main": "main.js",
 	"scripts": {
@@ -18,8 +18,11 @@
 	"devDependencies": {
 		"@types/node": "^20.0.0",
 		"esbuild": "^0.20.0",
+		"eslint": "^9.39.0",
+		"eslint-plugin-obsidianmd": "^0.4.2",
 		"obsidian": "latest",
-		"typescript": "^5.4.0"
+		"typescript": "^5.4.0",
+		"typescript-eslint": "^8.0.0"
 	},
 	"dependencies": {
 		"@larksuiteoapi/node-sdk": "^1.72.0",
@@ -28,9 +31,11 @@
 		"force-graph": "^1.51.4",
 		"pako": "^3.0.1",
 		"qrcode": "^1.5.4",
-		"sql.js": "^1.11.0"
+		"sql.js": "^1.11.0",
+		"ws": "^8.21.1"
 	},
 	"overrides": {
-		"qs": "^6.16.0"
+		"qs": "^6.16.0",
+		"axios": "^1.20.0"
 	}
 }
