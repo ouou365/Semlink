@@ -14,6 +14,7 @@ import { LicenseModal } from "./license-modal";
 import { t } from "./i18n";
 import { setDebugLogging } from "./log";
 import { ConfirmModal } from "./confirm-modal";
+import { markDestructive, rerenderSettingsTab, showSliderValue } from "./ui-compat";
 
 type SettingsTab = "general" | "mcp" | "bot";
 
@@ -59,7 +60,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// Fallback for layouts that scroll the window itself (short settings
 		// panel inside a small window) rather than an inner container.
 		const winTop = window.scrollY;
-		this.display();
+		rerenderSettingsTab(this);
 		const restore = () => {
 			scrollers.forEach((s, i) => { s.scrollTop = tops[i]; });
 			if (winTop > 0) window.scrollTo(0, winTop);
@@ -122,7 +123,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			btn.addEventListener("click", () => {
 				if (this.activeTab !== tab.id) {
 					this.activeTab = tab.id;
-					this.display();
+					rerenderSettingsTab(this);
 				}
 			});
 		}
@@ -152,7 +153,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.language = value as SmartVaultSettings["language"];
 						await this.plugin.saveSettings();
-						this.display();
+						rerenderSettingsTab(this);
 					})
 			);
 
@@ -310,88 +311,71 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		new Setting(body)
 			.setName(t("chunkSize"))
 			.setDesc(t("chunkSizeDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(200, 2000, 100)
-					.setValue(this.plugin.settings.chunkSize)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.chunkSize = value;
-						await this.plugin.saveSettings();
-					})
-			);
+			.addSlider((slider) => {
+				showSliderValue(slider.setLimits(200, 2000, 100).setValue(this.plugin.settings.chunkSize));
+				return slider.onChange(async (value) => {
+					this.plugin.settings.chunkSize = value;
+					await this.plugin.saveSettings();
+				});
+			});
 
 		new Setting(body)
 			.setName(t("chunkOverlap"))
 			.setDesc(t("chunkOverlapDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 500, 50)
-					.setValue(this.plugin.settings.chunkOverlap)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.chunkOverlap = value;
-						await this.plugin.saveSettings();
-					})
-			);
+			.addSlider((slider) => {
+				showSliderValue(slider.setLimits(0, 500, 50).setValue(this.plugin.settings.chunkOverlap));
+				return slider.onChange(async (value) => {
+					this.plugin.settings.chunkOverlap = value;
+					await this.plugin.saveSettings();
+				});
+			});
 
 		new Setting(body)
 			.setName(t("batchSize"))
 			.setDesc(t("batchSizeDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(1, 128, 1)
-					.setValue(this.plugin.settings.batchSize)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.batchSize = value;
-						await this.plugin.saveSettings();
-					})
-			);
+			.addSlider((slider) => {
+				showSliderValue(slider.setLimits(1, 128, 1).setValue(this.plugin.settings.batchSize));
+				return slider.onChange(async (value) => {
+					this.plugin.settings.batchSize = value;
+					await this.plugin.saveSettings();
+				});
+			});
 
 		new Setting(body)
 			.setName(t("requestDelay"))
 			.setDesc(t("requestDelayDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 1000, 50)
-					.setValue(this.plugin.settings.requestDelayMs)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.requestDelayMs = value;
-						await this.plugin.saveSettings();
-					})
-			);
+			.addSlider((slider) => {
+				showSliderValue(slider.setLimits(0, 1000, 50).setValue(this.plugin.settings.requestDelayMs));
+				return slider.onChange(async (value) => {
+					this.plugin.settings.requestDelayMs = value;
+					await this.plugin.saveSettings();
+				});
+			});
 
 		new Setting(body)
 			.setName(t("embedConcurrency"))
 			.setDesc(t("embedConcurrencyDesc"))
-			.addSlider((slider) =>
-				slider
-					.setLimits(1, 5, 1)
-					.setValue(this.plugin.settings.embedConcurrency ?? 3)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.embedConcurrency = value;
-						await this.plugin.saveSettings();
-					})
-			);
+			.addSlider((slider) => {
+				showSliderValue(slider.setLimits(1, 5, 1).setValue(this.plugin.settings.embedConcurrency ?? 3));
+				return slider.onChange(async (value) => {
+					this.plugin.settings.embedConcurrency = value;
+					await this.plugin.saveSettings();
+				});
+			});
 
 		// ── Re-embed (force full rebuild) ──
 		new Setting(body)
 			.setName(t("rebuildIndex"))
 			.setDesc(t("rebuildIndexDesc"))
-			.addButton((btn) =>
-				btn
-					.setButtonText(t("rebuildIndex"))
-					.setWarning()
-					.onClick(() => {
-						new ConfirmModal(this.app, t("rebuildIndex"), t("rebuildConfirm"), () => {
-							// 重建索引并直接在引导页数据索引环节可视化进度
-							void this.plugin.rebuildIndexWithGuide();
-						}).open();
-					})
-			);
+			.addButton((btn) => {
+				btn.setButtonText(t("rebuildIndex"));
+				markDestructive(btn).onClick(() => {
+					new ConfirmModal(this.app, t("rebuildIndex"), t("rebuildConfirm"), () => {
+						// 重建索引并直接在引导页数据索引环节可视化进度
+						void this.plugin.rebuildIndexWithGuide();
+					}).open();
+				});
+			});
 	}
 
 	// ══════════════════════════════════════
@@ -412,7 +396,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 						if (!isNaN(port) && port > 0 && port < 65536) {
 							this.plugin.settings.mcpPort = port;
 							await this.plugin.saveSettings();
-							this.display();
+							rerenderSettingsTab(this);
 						}
 					})
 			);
@@ -427,7 +411,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.mcpApiKey = value;
 						await this.plugin.saveSettings();
-						this.display();
+						rerenderSettingsTab(this);
 					})
 			);
 
@@ -440,7 +424,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					.setButtonText(this.plugin.mcpServer ? t("restartService") : t("startService"))
 					.onClick(async () => {
 						await this.plugin.restartMcpServer();
-						this.display();
+						rerenderSettingsTab(this);
 					})
 			);
 
@@ -537,14 +521,14 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 						.onChange(async (value) => {
 							bot.enabled = value;
 							await this.plugin.saveSettings();
-							this.display();
+							rerenderSettingsTab(this);
 						})
 				)
 				.addExtraButton((btn) => {
 					btn.setIcon("trash").setTooltip(t("botDelete")).onClick(async () => {
 						bots.splice(i, 1);
 						await this.plugin.saveSettings();
-						this.display();
+						rerenderSettingsTab(this);
 					});
 				});
 		}
@@ -557,7 +541,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// Manual entry as an alternative.
 		new Setting(containerEl).addButton((btn) => {
 			btn.setButtonText(t("botAddManual")).onClick(() => {
-				new AddFeishuBotModal(this.app, this.plugin, () => this.display()).open();
+				new AddFeishuBotModal(this.app, this.plugin, () => rerenderSettingsTab(this)).open();
 			});
 		});
 	}
@@ -602,7 +586,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 				await this.plugin.saveSettings();
 				new Notice(`${t("botSaved")} · ${t("botBindHint").replace("{code}", bindCode)}`);
-				this.display();
+				rerenderSettingsTab(this);
 			})
 			.catch((e) => {
 				if (!box.isConnected) return;

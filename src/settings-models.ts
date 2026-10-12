@@ -11,6 +11,7 @@ import { App, Modal, Setting, requestUrl, setIcon } from "obsidian";
 import type SmartVaultPlugin from "../main";
 import type { ChatApiFormat, ChatModel, ChatModelKind, EmbeddingProvider, ModelProvider, SmartVaultSettings } from "./types";
 import { t } from "./i18n";
+import { markDestructive } from "./ui-compat";
 
 // ──── Tab state (owned by SmartVaultSettingTab, survives re-renders) ────
 
@@ -1179,15 +1180,13 @@ class DeleteProviderModal extends Modal {
 		contentEl.createDiv({ cls: "semlink-delete-desc", text: t("deleteDescription") });
 		new Setting(contentEl)
 			.addButton((btn) => btn.setButtonText(t("cancel")).onClick(() => this.close()))
-			.addButton((btn) =>
-				btn
-					.setButtonText(t("deleteConfirm"))
-					.setWarning()
-					.onClick(() => {
-						this.close();
-						this.onConfirm();
-					})
-			);
+			.addButton((btn) => {
+				btn.setButtonText(t("deleteConfirm"));
+				markDestructive(btn).onClick(() => {
+					this.close();
+					this.onConfirm();
+				});
+			});
 	}
 
 	onClose() {
