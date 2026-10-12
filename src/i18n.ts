@@ -186,6 +186,11 @@ const S: Strings = {
 	reportBug: { zh: "报告 Bug", en: "Report Bug" },
 	reportBugDesc: { zh: "遇到问题？通过邮件反馈给我们", en: "Found an issue? Report it via email" },
 	reportBugButton: { zh: "发送邮件", en: "Send Email" },
+	debugLogging:      { zh: "调试日志", en: "Debug logging" },
+	debugLoggingDesc:  { zh: "在控制台输出 [Semlink] 诊断日志，供排查问题使用", en: "Verbose [Semlink] diagnostics in the console, for troubleshooting" },
+	cmdToggleDebug:    { zh: "开关调试日志", en: "Toggle debug logging" },
+	noticeDebugOn:     { zh: "调试日志已开启（控制台查看）", en: "Debug logging on (see the console)" },
+	noticeDebugOff:    { zh: "调试日志已关闭", en: "Debug logging off" },
 	errorAuthFailed: { zh: "⚠ API Key 无效或未配置，请前往插件设置填写 API Key", en: "⚠ API Key invalid or missing. Please configure it in plugin Settings" },
 
 	// ──── Semantic Search View ────

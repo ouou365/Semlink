@@ -241,6 +241,8 @@ export interface SmartVaultSettings {
 	requestDelayMs: number;
 	/** Notes embedded in parallel (1 = serial). */
 	embedConcurrency: number;
+	/** Verbose console diagnostics (Settings → General, or the toggle command). */
+	debugLogging?: boolean;
 	/** Feishu bots bound to Semlink */
 	feishuBots: FeishuBotConfig[];
 	/** First-run guide state. Steps: ① chat model ② embedding model ③ data
@@ -299,6 +301,8 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	batchSize: 64,
 	requestDelayMs: 200,
 	embedConcurrency: 3,
+	/** Verbose console diagnostics (Settings → General, or the toggle command). */
+	debugLogging: false,
 	feishuBots: [],
 	onboarding: {},
 };

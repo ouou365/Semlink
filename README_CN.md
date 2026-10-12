@@ -148,6 +148,7 @@ claude mcp add --transport http semlink http://127.0.0.1:3001/mcp --header "Auth
 | Semlink: 全量重建索引 | 重新扫描所有文件 |
 | Semlink: 继续索引 | 恢复暂停的索引 |
 | Semlink: 暂停索引 | 暂停索引 |
+| Semlink: 开关调试日志 | 开关控制台诊断日志 |
 | Semlink: 启动/停止 MCP 服务 | 开关 MCP 服务 |
 | Semlink: 查看索引进度 | 打开进度面板 |
 

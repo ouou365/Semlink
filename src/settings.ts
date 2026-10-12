@@ -12,6 +12,7 @@ import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
 import { LicenseModal } from "./license-modal";
 import { t } from "./i18n";
+import { setDebugLogging } from "./log";
 import { ConfirmModal } from "./confirm-modal";
 
 type SettingsTab = "general" | "mcp" | "bot";
@@ -175,6 +176,18 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 		// ── Secondary: embedding parameters (click to expand) ──
 		this.renderEmbeddingParamsSection(containerEl);
+
+		// Debug logging (support diagnostics)
+		new Setting(containerEl)
+			.setName(t("debugLogging"))
+			.setDesc(t("debugLoggingDesc"))
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.debugLogging ?? false).onChange((value) => {
+					this.plugin.settings.debugLogging = value;
+					setDebugLogging(value);
+					void this.plugin.saveSettings();
+				})
+			);
 
 		// Report Bug
 		new Setting(containerEl)

@@ -3,12 +3,16 @@
 // ========================================
 // Plugin guidelines ask for minimal console output. Routine [Semlink]
 // diagnostics route through here and stay silent unless explicitly enabled:
-// set localStorage "semlink-debug" to "1" and reload Obsidian.
+// run "Semlink: Toggle debug logging" (or flip the toggle in Settings →
+// Semlink → General) and reload is not needed — new logs appear immediately.
 // console.warn / console.error stay at their call sites — failures should
 // always be visible.
 
 let enabled = false;
-try { enabled = window.localStorage.getItem("semlink-debug") === "1"; } catch { /* storage unavailable */ }
+
+export function setDebugLogging(on: boolean): void {
+	enabled = on;
+}
 
 export function debugLog(...args: unknown[]): void {
 	if (!enabled) return;

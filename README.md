@@ -148,6 +148,7 @@ claude mcp add --transport http semlink http://127.0.0.1:3001/mcp --header "Auth
 | Semlink: Full Reindex | Re-scan all files |
 | Semlink: Resume Index | Continue paused indexing |
 | Semlink: Pause Index | Pause indexing |
+| Semlink: Toggle Debug Logging | Toggle verbose console diagnostics |
 | Semlink: Start/Stop MCP Service | Toggle the MCP server |
 | Semlink: View Index Progress | Open the progress panel |
 

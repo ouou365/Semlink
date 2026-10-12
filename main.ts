@@ -3,7 +3,7 @@
 // ========================================
 
 import { Notice, Plugin, FileSystemAdapter, WorkspaceSidedock, addIcon } from "obsidian";
-import { debugLog } from "./src/log";
+import { debugLog, setDebugLogging } from "./src/log";
 import { join } from "path";
 import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
 import { UsageStore } from "./src/usage-store";
@@ -56,6 +56,7 @@ export default class SmartVaultPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+		setDebugLogging(this.settings.debugLogging ?? false);
 
 		// Initialize i18n
 		setLang(this.settings.language);
@@ -238,6 +239,17 @@ export default class SmartVaultPlugin extends Plugin {
 			callback: () => {
 				this.scheduler.pause();
 				new Notice(`Semlink: ${t("noticeIndexPaused")}`);
+			},
+		});
+
+		this.addCommand({
+			id: "smart-vault-toggle-debug-logging",
+			name: t("cmdToggleDebug"),
+			callback: () => {
+				this.settings.debugLogging = !(this.settings.debugLogging ?? false);
+				setDebugLogging(this.settings.debugLogging);
+				void this.saveSettings();
+				new Notice(`Semlink: ${this.settings.debugLogging ? t("noticeDebugOn") : t("noticeDebugOff")}`);
 			},
 		});
 
