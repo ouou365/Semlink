@@ -217,8 +217,10 @@ export interface FeishuBotConfig {
 }
 
 /** Plugin settings persisted via Obsidian loadData/saveData */
+import type { LangSetting } from "./i18n";
+
 export interface SmartVaultSettings {
-	language: "auto" | "zh" | "en";
+	language: LangSetting;
 	/** Unified model-provider list — embedding and chat are not distinct
 	 *  provider kinds; each provider's models carry a kind tag. */
 	providers: ModelProvider[];

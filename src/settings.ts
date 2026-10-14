@@ -11,7 +11,7 @@ import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
 import { LicenseModal } from "./license-modal";
-import { t } from "./i18n";
+import { LANGUAGES, t } from "./i18n";
 import { setDebugLogging } from "./log";
 import { ConfirmModal } from "./confirm-modal";
 import { markDestructive, rerenderSettingsTab, showSliderValue } from "./ui-compat";
@@ -142,20 +142,19 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName(t("language"))
 			.setDesc(t("languageDesc"))
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOptions({
-						auto: t("langAuto"),
-						zh: t("langZh"),
-						en: t("langEn"),
-					})
+			.addDropdown((dropdown) => {
+				// Native names (never translated) + the "auto" option in UI language.
+				const options: Record<string, string> = { auto: t("langAuto") };
+				for (const l of LANGUAGES) options[l.value] = l.label;
+				return dropdown
+					.addOptions(options)
 					.setValue(this.plugin.settings.language)
 					.onChange(async (value) => {
 						this.plugin.settings.language = value as SmartVaultSettings["language"];
 						await this.plugin.saveSettings();
 						rerenderSettingsTab(this);
-					})
-			);
+					});
+			});
 
 		// Open the semantic-search sidebar panel.
 		new Setting(containerEl)

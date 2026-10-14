@@ -1,198 +1,150 @@
-# Semlink
+# 🧠 Semlink — Ask your vault. Watch it think.
 
-[中文](README_CN.md)
+**English** | [简体中文](README_CN.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md) | [Deutsch](README_de.md) | [Français](README_fr.md) | [Español](README_es.md) | [Português](README_pt.md) | [Italiano](README_it.md) | [Русский](README_ru.md)
 
-Semlink is an Obsidian plugin that vectorizes your Vault notes and adds a **conversational AI assistant** directly in the sidebar — plus an **MCP server** so Claude Desktop, Claude Code, Cursor and other AI tools can search and read your notes.
+An Obsidian plugin that turns years of notes into a second brain: a transparent AI agent that lives where you write, searches everything you've ever noted, reasons over it with real tools, and answers with numbered citations you can click.
 
-Ask questions in natural language: Semlink retrieves the most relevant notes, feeds them to your chat model, and answers with a visible thinking process, tool calls and cited sources — all grounded in your own notes.
+**Agent inside your vault • Thinking + tool calls, visible • Clickable citations • Local SQLite index — no server • Any OpenAI/Anthropic-compatible provider • MCP for Claude & Cursor • 11 languages • Free core, one-time Pro**
 
-### Features
+<br>
 
-- **Semantic Search**: query your Vault in natural language; returns the most relevant chunks by vector similarity
-- **Conversational Q&A**: an in-sidebar chat panel where the LLM answers from retrieved notes, with collapsible thinking process, tool-call traces and numbered reference sources
-- **Tool-using agent**: the model can search, grep, read notes and inspect your current open note while answering
-- **Context management**: prior turns are sent as a native message array (stable prompt prefix → high cache hit rate); the history is trimmed by a sliding window once it approaches the context limit
-- **Real-time Indexing**: file changes are picked up automatically; indexing yields while you are actively working
-- **MCP Server**: expose search/read tools over HTTP (JSON-RPC) for AI clients
+Official site: [getsemlink.com](https://getsemlink.com) · [Pro license — $3 early bird](https://getsemlink.com) · [Issues](https://github.com/ouou365/Semlink/issues)
 
-### Chat Panel
+🤔 Why Semlink? | 🚀 Quick start | ✨ Features | 🤖 Bring your own model | 🌐 MCP | ❓ FAQ
 
-- Click the Semlink icon in the left ribbon (or run **Semlink: Open Search**)
-- Type a question — the model first thinks, then calls tools if it needs more, then answers with sources below
-- **Drag & drop**: drop notes ANYWHERE in the panel — a guidance overlay appears while dragging — to attach them to the input (`[[links]]` supported inline)
-- **History**: every conversation is saved; open it from the menu button, first question shown as the header subtitle
-- **Model switcher**: pick any model from any configured provider; the context-usage ring and cache hit rate are shown next to it
-- **Home question cards**: a curated pool of example prompts (recent notes / the "reading" topic / summarize the current note / knowledge review / duplicate notes / monthly review), three picked at random per visit
+← If Semlink earns its place in your sidebar, drop a star ⭐ — it's the only marketing an indie plugin has.
 
-### Tools
+## 🤔 Why Semlink?
 
-| Tool | Description |
-|------|-------------|
-| `search_notes` | Semantic search with natural language queries, returns the most relevant chunks |
-| `get_note` | Get the full content of a note |
-| `get_section` | Get the content under a specific heading of a note |
-| `get_similar_notes` | Find notes semantically similar to a given note |
-| `list_indexed` | List indexed note paths (paginated) |
-| `list_indexed_detailed` | List indexed notes with created/modified times, newest first (for time-based questions) |
-| `grep_notes` | Exact text / regex search across notes (keywords, IDs, dates, code) |
-| `get_active_note` | Path of the note currently open in Obsidian (content via `get_note`) |
+You've written for years. Then you ask a question about your own knowledge — and the workflow is: remember which folder, Ctrl+F, copy-paste into a chat window, lose the thread.
 
-MCP additionally exposes `index_status` and `reindex` for index management.
+Other Obsidian AI plugins will chat with your notes. What they won't show you is the work. Most RAG plugins retrieve a few chunks behind a black box and answer anyway — wrong chunks, confident tone. Smart Connections finds related notes but never answers. Omnisearch stops at keywords. And the "serious" path — pasting notes into ChatGPT or driving Claude Code from a terminal — means your knowledge lives somewhere other than your editor.
 
-### How It Works
+Semlink is built the other way around:
 
-```
-Obsidian Vault Notes
-        │
-        ▼
-   Text Chunking
-        │
-        ▼
-  Embedding API (BGE-M3)  ──→  Vector Embedding
-        │
-        ▼
-  Local Storage (SQLite + Binary)
-        │
-        ▼
-  Chat Pipeline (retrieval → LLM with tools → answer)
-        │                        │
-        ▼                        ▼
-  Sidebar Chat Panel        MCP HTTP Server (:3001)
-                                │
-                                ▼
-                      Claude / Cursor / Other AI Clients
-```
+**The agent lives inside your vault — and you watch it work.** Every answer comes with the model's thinking process, every tool call it made (`search_notes` → `get_note` → …), and numbered citations pointing back into your own notes. You don't have to trust the answer. You check it.
 
-### Installation
+### How we compare
 
-#### Option 1: Build from Source
+| | Semlink | Copilot-style RAG | Smart Connections | Omnisearch | ChatGPT / Claude Code |
+|---|---|---|---|---|---|
+| Where the AI lives | ✅ Inside Obsidian | 🟡 Chat panel only | 🟡 Related notes only | 🟡 Search box only | ❌ Browser / terminal |
+| Agent loop (search → read → reason) | ✅ 9 tools, model decides | ❌ Fixed chunk retrieval | ❌ No Q&A | ❌ | ✅ but outside your editor |
+| Reasoning transparency | ✅ Thinking + tool traces | ❌ Black box | — | — | 🟡 Terminal scrollback |
+| Citations into your notes | ✅ Numbered, clickable | 🟡 Chunk refs | ❌ | ❌ | ❌ |
+| Index location | ✅ Local SQLite, no server | ✅ Local | ✅ Local | ✅ Local | — |
+| Other AIs can read your vault (MCP) | ✅ Built in | ❌ | ❌ | ❌ | 🟡 Via terminals |
+| Pricing | ✅ Free core + one-time Pro | BYOK | Free | Free | Subscription |
 
-```bash
-git clone https://gitee.com/ouzhongyuan/semlink.git
-cd semlink
-npm install
-npm run build
-# Copy the whole directory to MyVault/.obsidian/plugins/semlink/
-```
+### Three choices we made on purpose
 
-#### Option 2: Direct Download
+🗄️ **Local-first, structurally.** Your index is a SQLite file on your own disk. There is no Semlink server — not "we promise not to upload your notes", there is literally nothing to upload to.
 
-Download `main.js`, `manifest.json`, `styles.css` from the Release page and place them in `YourVault/.obsidian/plugins/semlink/`.
+🔌 **Any model you already pay for.** DeepSeek, GLM, SiliconFlow, OpenAI, Claude, Ollama, LM Studio — any OpenAI- or Anthropic-compatible endpoint. Semlink adds no markup and never touches your tokens; usage is billed by your provider, directly to you.
 
-#### Enable
+🪟 **A vault citizen.** Drag a note into the chat to attach it, save answers back as notes, watch the context ring fill in real time. Indexing steps aside while you type. The agent works where your notes already live — nothing to export, nothing to sync.
 
-1. Obsidian → Settings → Community plugins
-2. Find **Semlink** and enable it
+## 🎯 Is it for me?
 
-### Configuration
+**✅ Yes, if you:**
 
-**Settings → Semlink**:
+- Have months (or years) of notes and want to *ask* them questions in plain language
+- Want reasoning you can inspect — thinking, tool calls, citations — not a confident black box
+- Care that your notes never leave your machine
+- Already have an LLM API key (or run a local model) and resent middleman markups
+- Use Claude Desktop, Claude Code or Cursor — and want them to read your vault too
 
-| Section | Setting | Description |
-|---------|---------|-------------|
-| General | Language | UI language (中文 / English) |
-| Index | Exclude Paths | Paths excluded from indexing (one per line) |
-| Index | Auto Index | Automatically index on file changes |
-| Embedding | Embedding Model | Model used for vectorization (e.g. `BAAI/bge-m3`) |
-| Embedding | API Key | SiliconFlow (or HuggingFace) API key |
-| Chunking | Chunk Size / Overlap | Characters per chunk and overlap |
-| Chunking | Batch Size / Delay | API batching and rate limiting |
-| MCP | Port / Access Key | HTTP server port and optional auth key |
-| Chat | Provider / Base URL / API Key | Chat model provider (DeepSeek preconfigured; any OpenAI/Anthropic-compatible API works) |
-| Chat | Models | Add/remove models, pick the context window size |
+**❌ No, if you:**
 
-### Connect AI Clients
+- Want a general ChatGPT replacement — Semlink answers from your vault, not the internet
+- Expect zero configuration — you'll need an embedding API key and a chat model key (free tiers work)
+- Need team collaboration or cloud sync — there is no backend, by design
 
-Client configs are auto-generated at the bottom of the plugin settings page.
+## 🚀 Quick start
 
-#### Claude Desktop / Cursor
+1. **Install** — grab `main.js`, `manifest.json`, `styles.css` from [Releases](https://github.com/ouou365/Semlink/releases) into `YourVault/.obsidian/plugins/semlink/`, or build from source. Enable it under Community plugins.
+2. **Configure** — paste an embedding API key (SiliconFlow BGE-M3 preconfigured) and a chat provider key. The three-step onboarding validates both and starts indexing.
+3. **Ask.** Open the sidebar: *"What have I written about Zettelkasten?"* — then watch: thinking → `search_notes` → `get_note` → an answer with [1][2][3].
+
+That's it. Your notes are never modified — Semlink only reads.
+
+## ✨ Features
+
+### 🕵️ A tool-using agent, not a chatbot
+
+Nine built-in tools — semantic search, read note, read section, similar notes, regex grep, indexed listing (with timestamps), current-note awareness — and the model decides what to pull while answering. It doesn't retrieve three chunks and hallucinate over them; it searches, reads the right section, and shows every step.
+
+### 🔍 Semantic search that reaches everything
+
+Query by meaning, not keywords — one natural-language query touches every note you've ever written. Similar-note suggestions and regex grep are there for when you *do* know the exact string.
+
+### 🪟 A vault citizen
+
+- **Drag & drop**: drop a note anywhere in the panel to attach it — `[[wiki-links]]` resolve inline
+- **Save answers as notes**: one click, back into your vault
+- **Context you can see**: a live context ring shows how full the model's window is, with the cache hit rate next to it — so you know why an answer got shallow before you blame the model
+- **Home question cards**: curated example prompts, some picked from your own recent notes
+
+### ⚡ Real-time indexing
+
+File changes are picked up automatically and re-embedded as you write — and indexing steps aside while you're working, so the editor never stutters.
+
+### 🌍 11 languages
+
+English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Français, Español, Português, Italiano, Русский — pick in Settings → General.
+
+## 🤖 Bring your own model
+
+Any OpenAI-compatible or Anthropic-compatible endpoint works: DeepSeek (preconfigured), SiliconFlow, GLM, OpenAI, Anthropic, Ollama, LM Studio, OpenRouter — your keys, your rates, unlimited switching. What matters:
+
+- **Chat model**: long context helps — answers quote your notes at length
+- **Embedding model**: BGE-M3 (1024-dim) preconfigured via SiliconFlow; any compatible embedding endpoint works
+- Model usage is billed by your provider — Semlink never sees a cent of it
+
+## 🌐 MCP — give your other AIs a memory
+
+The same tools ship as a local MCP server, so Claude Desktop, Claude Code and Cursor can search and cite your vault too:
 
 ```json
-{
-  "mcpServers": {
-    "semlink": {
-      "type": "http",
-      "url": "http://127.0.0.1:3001/mcp"
-    }
-  }
-}
+{ "mcpServers": { "semlink": { "type": "http", "url": "http://127.0.0.1:3001/mcp" } } }
 ```
 
-With access key:
+Localhost-only, optional access key. No cloud relay.
 
-```json
-{
-  "mcpServers": {
-    "semlink": {
-      "type": "http",
-      "url": "http://127.0.0.1:3001/mcp",
-      "headers": { "Authorization": "Bearer your-key" }
-    }
-  }
-}
-```
+## ⭐ Pro — free where it matters
 
-#### Claude Code
+The core is free forever, promised inside the app itself: semantic search, chat with the full agent, indexing, MCP — unlimited, no trial timer. Model tokens are billed by your provider, never by us.
 
-```bash
-claude mcp add --transport http semlink http://127.0.0.1:3001/mcp
-# with key:
-claude mcp add --transport http semlink http://127.0.0.1:3001/mcp --header "Authorization: Bearer your-key"
-```
+[Pro](https://getsemlink.com) is a **one-time license** (no subscription): unlimited chat history plus history management — search, pin, folders.
 
-### Commands
+## ❓ FAQ
 
-| Command | Description |
-|---------|-------------|
+**Is my data sent anywhere?**
+Your index lives in `data/` inside the plugin folder, on your disk. The only network calls go to the providers *you* configure. See the [privacy policy](https://getsemlink.com/privacy.html).
+
+**How is this different from Copilot for Obsidian?**
+Transparency and the agent loop: you see the thinking and every tool call, the model chooses which notes to read, and answers cite specific notes you can open. If Copilot works for you, keep it — Semlink is for when you want to watch the work.
+
+**Do I need an API key?**
+Yes — Semlink is bring-your-own-key by design. Free tiers (SiliconFlow, Groq…) work fine for both embedding and chat.
+
+**Where does the index live?**
+`data/vault.db` (SQLite) and `data/vectors.bin` inside the plugin folder. Delete them and re-index anytime; nothing ever leaves your machine.
+
+**Which model should I use?**
+Any long-context chat model you like — answers quote your notes at length. Embeddings are cheap and infrequent (BGE-M3).
+
+## 🛠 Commands
+
+| Command | What it does |
+|---|---|
 | Semlink: Open Search | Open the sidebar chat panel |
 | Semlink: Full Reindex | Re-scan all files |
-| Semlink: Resume Index | Continue paused indexing |
-| Semlink: Pause Index | Pause indexing |
-| Semlink: Toggle Debug Logging | Toggle verbose console diagnostics |
+| Semlink: Resume / Pause Index | Control indexing |
 | Semlink: Start/Stop MCP Service | Toggle the MCP server |
+| Semlink: Toggle Debug Logging | Verbose console diagnostics |
 | Semlink: View Index Progress | Open the progress panel |
 
-### Data Storage
+## 📜 License
 
-Everything stays local:
-
-| File | Description |
-|------|-------------|
-| `data/vault.db` | SQLite database (chunk metadata) |
-| `data/vectors.bin` | Vector index binary |
-
-Never uploaded anywhere. Indexing consumes embedding API credits (e.g. SiliconFlow BGE-M3).
-
-### Embedding Models
-
-| Model | Feature | Max Tokens |
-|-------|---------|-----------|
-| BAAI/bge-m3 | Recommended, multilingual | 8192 |
-| Pro/BAAI/bge-m3 | Enhanced version | 8192 |
-| BAAI/bge-large-zh-v1.5 | Chinese optimized | 512 |
-| BAAI/bge-large-en-v1.5 | English optimized | 512 |
-
-### Tech Stack
-
-- **Embedding**: SiliconFlow API (BGE-M3, 1024-dim)
-- **Storage**: sql.js (SQLite WASM, embedded in the bundle) + binary vector file
-- **Search**: brute-force cosine similarity
-- **Chat**: OpenAI / Anthropic-compatible chat APIs with streaming + tool calling
-- **MCP**: HTTP transport (JSON-RPC 2.0)
-
-### Development
-
-```bash
-npm run dev     # watch + auto-rebuild
-npm run build   # production build
-```
-
-### Notes
-
-- Indexing consumes embedding API credits; watch usage on large Vaults
-- Vector search runs in local memory; 100K+ notes may use significant memory
-- MCP server binds to `127.0.0.1` by default (localhost only)
-
-### License
-
-MIT
+MIT — see [LICENSE](LICENSE). The optional Pro license is a one-time purchase and never a subscription.
