@@ -739,6 +739,53 @@ export class SemanticSearchView extends ItemView {
 				const loadingTextSpan = loadingTextEl.createSpan({ cls: "semlink-msg-loading-text", text: t("searchThinking") });
 				const loadingDotsSpan = loadingTextEl.createSpan({ cls: "semlink-msg-loading-dots" });
 				const streamEl = loadingEl.createDiv({ cls: "semlink-msg-stream semlink-hidden" });
+				// Live markdown preview container. Uses the SAME renderer as
+				// the final answer so the stream shows styled markdown instead
+				// of raw syntax. Rendering is throttled (per-delta renders
+				// would jank): the first delta renders immediately, then at
+				// most every 400ms, with a queued catch-up for deltas that
+				// arrived mid-render.
+				const streamInner = streamEl.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
+				let streamText = "";
+				let streamRenderAt = 0;
+				let streamRendering = false;
+				let streamRenderQueued = false;
+				let streamTimer: number | null = null;
+				const followScroll = (): void => {
+					// Follow the growing answer only while the user is already
+					// near the bottom — reading back must not be fought.
+					const m = this.messagesEl;
+					if (m.scrollHeight - m.scrollTop - m.clientHeight < 80) this.scrollToBottom();
+				};
+				const renderStream = async (): Promise<void> => {
+					if (streamRendering) {
+						streamRenderQueued = true;
+						return;
+					}
+					streamRendering = true;
+					streamRenderAt = Date.now();
+					try {
+						if (streamEl.isConnected) {
+							streamInner.empty();
+							await MarkdownRenderer.render(this.app, protectHyphens(streamText), streamInner, "", this);
+							followScroll();
+						}
+					} finally {
+						streamRendering = false;
+						if (streamRenderQueued && streamEl.isConnected) {
+							streamRenderQueued = false;
+							void renderStream();
+						}
+					}
+				};
+				const scheduleStreamRender = (): void => {
+					if (streamTimer !== null) return;
+					const wait = Math.max(0, 400 - (Date.now() - streamRenderAt));
+					streamTimer = window.setTimeout(() => {
+						streamTimer = null;
+						void renderStream();
+					}, wait);
+				};
 
 				// Status indicator: the elapsed-seconds counter ticks along once
 				// per second (the phase label itself stays static — no dots).
@@ -752,7 +799,8 @@ export class SemanticSearchView extends ItemView {
 				const startDots = (label: string): void => {
 					loadingTextEl.removeClass("semlink-hidden");
 					streamEl.addClass("semlink-hidden");
-					streamEl.textContent = "";
+					streamText = "";
+					streamInner.empty();
 					stopAnswerAnim();
 					// Static status text — NO animated dots ("思考了 14 秒（生成
 					// 回答中）"). Only the elapsed seconds tick along once per
@@ -873,18 +921,16 @@ export class SemanticSearchView extends ItemView {
 					(text) => {
 							// Answer streaming started — fold the thinking preview
 							// back up (it auto-expanded during thinking) and let
-							// the answer body take over the bubble.
+							// the answer body take over the bubble. Text renders
+							// as throttled live markdown (renderStream above);
+							// scroll following happens after each render.
 							stopAnswerAnim();
 							loadingTextEl.addClass("semlink-hidden");
 							liveBody.addClass("semlink-hidden");
 							loadingTextEl.removeClass("is-open");
 							streamEl.removeClass("semlink-hidden");
-							streamEl.textContent = text;
-							// Follow the growing answer only while the user is
-							// already near the bottom — reading back must not
-							// be fought by forced scrolling.
-							const m = this.messagesEl;
-							if (m.scrollHeight - m.scrollTop - m.clientHeight < 80) this.scrollToBottom();
+							streamText = text;
+							scheduleStreamRender();
 						},						() => {
 							// Round start: before any tool was called it's the
 							// thinking phase (模型思考中); after tools it's the

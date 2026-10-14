@@ -3386,9 +3386,10 @@ body .semlink-msg-user::selection {
 
 /* Streaming answer text (raw markdown, shown while the model streams) */
 .semlink-msg-stream {
-    font-size: 14px;
-    line-height: 1.55;
-    white-space: pre-wrap;
+    /* Wrapper only — typography (font, line-height, colors of rendered
+       markdown) comes from the .semlink-msg-answer.markdown-rendered child.
+       No white-space: pre-wrap here: it would inject extra blank space
+       around the rendered markdown blocks. */
     word-break: break-word;
     color: var(--text-normal);
 }
