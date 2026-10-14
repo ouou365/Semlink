@@ -2,7 +2,7 @@
 
 **日本語** | [English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_zh-Hant.md) | [한국어](README_ko.md) | [Deutsch](README_de.md) | [Français](README_fr.md) | [Español](README_es.md) | [Português](README_pt.md) | [Italiano](README_it.md) | [Русский](README_ru.md)
 
-長年書きためたノートをセカンドブレインに変える Obsidian プラグイン。書く場所に住み着いた透明な AI エージェントが、これまで書いたすべてを検索し、本物のツールで推論し、クリックできる番号付き引用つきで答えてくれます。
+Obsidian があなたのセカンドブレインを作りました。Semlink はそこにエージェントを住みつかせます。書く場所に住み着いた透明な AI エージェントが、これまで書いたすべてを検索し、本物のツールで推論し、クリックできる番号付き引用つきで答えてくれます。
 
 **エージェントは Vault の中 • 思考もツール呼び出しも見える • クリックできる引用 • ローカル SQLite インデックス — サーバー不要 • OpenAI/Anthropic 互換の任意のプロバイダー • Claude & Cursor 向け MCP • 11 言語 • コアは無料、Pro は買い切り**
 

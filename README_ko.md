@@ -2,7 +2,7 @@
 
 **한국어** | [English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [Deutsch](README_de.md) | [Français](README_fr.md) | [Español](README_es.md) | [Português](README_pt.md) | [Italiano](README_it.md) | [Русский](README_ru.md)
 
-수년간 쌓인 노트를 제2의 뇌로 바꾸는 Obsidian 플러그인입니다: 투명한 AI 에이전트가 당신이 글을 쓰는 곳에 살며, 지금까지 적어 온 모든 것을 검색하고, 진짜 도구로 추론하며, 클릭할 수 있는 번호 매기기 인용과 함께 답변합니다.
+Obsidian이 당신의 제2의 뇌를 만들었습니다. Semlink는 그 안에 에이전트를 살립니다: 투명한 AI 에이전트가 당신이 글을 쓰는 곳에 살며, 지금까지 적어 온 모든 것을 검색하고, 진짜 도구로 추론하며, 클릭할 수 있는 번호 매기기 인용과 함께 답변합니다.
 
 **Vault 안에 사는 에이전트 • 보이는 생각 + 도구 호출 • 클릭 가능한 인용 • 로컬 SQLite 인덱스 — 서버 없음 • 모든 OpenAI/Anthropic 호환 제공자 • Claude & Cursor용 MCP • 11개 언어 • 무료 코어, 일회성 Pro**
 

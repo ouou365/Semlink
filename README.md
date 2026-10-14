@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README_CN.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md) | [Deutsch](README_de.md) | [Français](README_fr.md) | [Español](README_es.md) | [Português](README_pt.md) | [Italiano](README_it.md) | [Русский](README_ru.md)
 
-An Obsidian plugin that turns years of notes into a second brain: a transparent AI agent that lives where you write, searches everything you've ever noted, reasons over it with real tools, and answers with numbered citations you can click.
+Obsidian gave you a second brain. Semlink puts an agent inside it: a transparent AI that lives where you write, searches everything you've ever noted, reasons over it with real tools, and answers with numbered citations you can click.
 
 **Agent inside your vault • Thinking + tool calls, visible • Clickable citations • Local SQLite index — no server • Any OpenAI/Anthropic-compatible provider • MCP for Claude & Cursor • 11 languages • Free core, one-time Pro**
 
