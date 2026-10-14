@@ -3,6 +3,11 @@ name: Release
 # Builds the plugin from the tagged source (committed lockfile) and publishes
 # the release with build-provenance attestations, so every asset is
 # reproducible and verifiable: `gh attestation verify main.js -R ouou365/Semlink`.
+#
+# Release notes: write them to `.github/releases/<tag>.md` in the release
+# commit (English, community style) — the workflow posts that file verbatim.
+# (Reading the annotated-tag message on the runner proved unreliable: the tag
+# object isn't always fetched, which silently published the wrong notes.)
 on:
   push:
     tags: ['*']
@@ -17,9 +22,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0       # full history: the annotated tag object must be local
-          fetch-tags: true     # checkout doesn't fetch tag objects by default
 
       - uses: actions/setup-node@v4
         with:
@@ -36,15 +38,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          # Annotated tag: raw object body after the header block. If the tag
-          # object isn't local (fetch problem), FAIL loudly — falling back to
-          # the commit message silently published Chinese release notes twice.
-          NOTES=$(git cat-file tag "$TAG" 2>/dev/null | sed '1,/^$/d' || true)
-          if [ -z "$NOTES" ]; then
-            echo "::error::annotated tag object for $TAG not available — cannot read English release notes"
+          NOTES_FILE=".github/releases/${TAG}.md"
+          if [ ! -f "$NOTES_FILE" ]; then
+            echo "::error::release notes file $NOTES_FILE missing — create it in the release commit"
             exit 1
           fi
-          gh release create "$TAG" --title "$TAG" --notes "$NOTES" \
+          gh release create "$TAG" --title "$TAG" --notes-file "$NOTES_FILE" \
             main.js manifest.json styles.css
 
       - name: Attest build provenance
