@@ -606,6 +606,51 @@ export class ChatClient {
 	}
 
 	/**
+	 * Drop thought steps that essentially duplicate the final answer. Models
+	 * sometimes write the full answer as interim text in a tool round (and
+	 * still attach a tool call), then repeat it as the real answer — or the
+	 * loop ends with that interim text as `lastText`. Either way the whole
+	 * answer would show twice: once under 💭 and once as the answer body.
+	 * Comparison is whitespace-collapsed character-bigram Dice similarity,
+	 * which is robust for CJK text; tool steps are never touched.
+	 */
+	private dedupeAnswerThoughts(thinking: ThinkingStep[], answer: string): ThinkingStep[] {
+		const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, "");
+		const target = norm(answer);
+		// Short answers can't meaningfully duplicate a thought — and the UI
+		// promotes a long thought INTO a short answer, so keep candidates.
+		if (target.length < 80) return thinking;
+		const bigrams = (s: string): Map<string, number> => {
+			const m = new Map<string, number>();
+			for (let i = 0; i < s.length - 1; i++) {
+				const g = s.slice(i, i + 2);
+				m.set(g, (m.get(g) || 0) + 1);
+			}
+			return m;
+		};
+		const targetGrams = bigrams(target);
+		let targetTotal = 0;
+		for (const n of targetGrams.values()) targetTotal += n;
+		const dice = (s: string): number => {
+			const grams = bigrams(s);
+			let total = targetTotal;
+			let inter = 0;
+			for (const [g, n] of grams) {
+				total += n;
+				inter += Math.min(targetGrams.get(g) || 0, n);
+			}
+			return total === 0 ? 0 : (2 * inter) / total;
+		};
+		return thinking.filter((s) => {
+			if (s.type !== "thought") return true;
+			const t = norm(s.text);
+			// Tiny stage-direction thoughts ("（读取笔记中）") always stay.
+			if (t.length < 40) return true;
+			return dice(t) < 0.5;
+		});
+	}
+
+	/**
 	 * Parse text-style tool calls some models emit as plain markup instead of
 	 * using the structured function-calling protocol — e.g.
 	 * `<invoke name="get_section"><parameter name="heading">X</parameter>
@@ -710,7 +755,7 @@ export class ChatClient {
 			const breakdown = this.computeBreakdown(usageTokens, contextWindow, systemPrompt, tools, messages);
 			return {
 				answer,
-				thinking,
+				thinking: this.dedupeAnswerThoughts(thinking, answer),
 				usedNotes,
 				contextTokens: breakdown.used,
 				contextBreakdown: breakdown,
@@ -1052,7 +1097,7 @@ export class ChatClient {
 			const breakdown = this.computeBreakdown(usageTokens, contextWindow, systemPrompt, tools, messages);
 			return {
 				answer,
-				thinking,
+				thinking: this.dedupeAnswerThoughts(thinking, answer),
 				usedNotes,
 				contextTokens: breakdown.used,
 				contextBreakdown: breakdown,
