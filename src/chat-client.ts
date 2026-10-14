@@ -789,14 +789,15 @@ export class ChatClient {
 			};
 			if (tools.length > 0 && !forceAnswer && round < NUDGE_AFTER_ROUND) body.tools = tools;
 
-			// Stream this round. streamOpenAIChat forwards content deltas live
-			// via onStream, but ONLY once it's seen that the round has no tool
-			// calls (i.e. this is the final answer). Tool rounds stay buffered.
+			// Stream this round. Rounds WITH tools stay buffered — their interim
+			// text becomes thinking steps (streaming it live would flash text
+			// that then "vanishes" into 💭). Rounds with tools stripped are
+			// guaranteed final answers, so onStream forwards each delta live.
 			const stream = await this.streamOpenAIChat(
 				openaiUrl,
 				provider,
 				body,
-				onStream,
+				body.tools ? undefined : onStream,
 				signal,
 			);
 			onRoundSuccess?.();
@@ -886,8 +887,9 @@ export class ChatClient {
 	}
 
 	/** Stream one OpenAI-compatible chat round. When `onStream` is provided,
-	 * each content delta is forwarded live (true streaming, not buffered-then-
-	 * replayed). Tool rounds pass no onStream so their content stays buffered. */
+	 * each content delta is forwarded live (true streaming). The caller only
+	 * passes it for rounds with no tools attached, i.e. guaranteed final
+	 * answers; tool rounds pass no onStream so their content stays buffered. */
 	private async streamOpenAIChat(
 		url: string,
 		provider: ChatProvider,
@@ -945,6 +947,10 @@ export class ChatClient {
 			const delta = json?.choices?.[0]?.delta;
 			if (typeof delta?.content === "string" && delta.content) {
 				content += delta.content;
+				// Live forward: the caller only passes onStream for rounds with
+				// no tools attached (guaranteed final answers), so every delta
+				// is answer body — push it out as it arrives.
+				onStream?.(content);
 			}
 			for (const tc of delta?.tool_calls || []) {
 				const idx = tc.index ?? 0;
@@ -983,10 +989,9 @@ export class ChatClient {
 			}
 		}
 
-		// Only forward content to onStream if this was the FINAL answer round
-		// (no tool calls). Tool rounds' interim content is never shown — this
-		// avoids the "text flashes then vanishes" flicker that happened when
-		// onStream fired before a tool_call arrived mid-stream.
+		// Deltas were already forwarded live above; this final emit is an
+		// idempotent normalization pass (content after text-markup stripping)
+		// so the UI always ends on the exact text returned as the answer.
 		if (onStream && calls.length === 0 && content) {
 			onStream(content);
 		}
@@ -1071,7 +1076,7 @@ export class ChatClient {
 				system: systemPrompt,
 				messages,
 				stream: true,
-			}, signal);
+			}, undefined, signal);
 			onRoundSuccess?.();
 			if (analysisStream.usageTokens) usageTokens = Math.max(usageTokens, analysisStream.usageTokens);
 			usageIn += analysisStream.roundIn || 0;
@@ -1132,6 +1137,7 @@ export class ChatClient {
 				anthropicUrl,
 				provider,
 				body,
+				body.tools ? undefined : onStream,
 				signal,
 			);
 			onRoundSuccess?.();
@@ -1147,7 +1153,8 @@ export class ChatClient {
 					.join("\n")
 					.trim();
 				if (answer) lastText = answer;
-				// Final round: stream the answer body to the UI.
+				// Final round: deltas were streamed live above; replay is the
+				// idempotent normalization pass (stripped markup, joined blocks).
 				await this.replay(answer || lastText, onStream);
 				return finalize(answer || lastText);
 			}
@@ -1230,11 +1237,14 @@ export class ChatClient {
 		}));
 	}
 
-	/** Stream one Anthropic messages round (content buffered, no UI emit). */
+	/** Stream one Anthropic messages round. When `onStream` is provided, each
+	 * text delta is forwarded live — the caller only passes it for rounds with
+	 * no tools attached (guaranteed final answers). */
 	private async streamAnthropicChat(
 		url: string,
 		provider: ChatProvider,
 		body: AnthropicChatBody,
+		onStream?: (text: string) => void,
 		signal?: AbortSignal,
 	): Promise<{
 		contentBlocks: ContentBlock[];
@@ -1328,6 +1338,9 @@ export class ChatClient {
 				if (delta?.type === "text_delta" && delta.text) {
 					if (blocks[idx]) blocks[idx].text! += delta.text;
 					text += delta.text;
+					// Live forward — onStream is only passed for final-answer
+					// rounds (no tools), so every text delta is answer body.
+					onStream?.(text);
 				} else if (delta?.type === "thinking_delta" && delta.thinking) {
 					if (blocks[idx]) blocks[idx].thinking! += delta.thinking;
 				} else if (delta?.type === "input_json_delta") {

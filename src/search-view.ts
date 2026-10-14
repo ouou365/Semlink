@@ -804,23 +804,32 @@ export class SemanticSearchView extends ItemView {
 						),
 					};
 
-				// Live thinking preview while generating: hidden by default;
-				// clicking the loading line toggles it. Renders the same steps
-				// the finished answer's thinking section will show.
+				// Live thinking preview while generating: auto-expanded so the
+				// user watches progress instead of staring at a static status
+				// line while retrieval is heavy. Clicking the loading line still
+				// toggles it manually; it folds back up the moment answer text
+				// starts streaming. Renders the same steps the finished
+				// answer's thinking section will show.
 				const liveSteps: ThinkingStep[] = [firstStep];
 				const liveBody = loadingEl.createDiv({ cls: "semlink-thinking-live-body" });
-				liveBody.addClass("semlink-hidden");
 				// Steps rendered so far. New steps are APPENDED (never a full
 				// re-render) so an expanded tool call stays expanded while the
 				// model keeps producing steps.
 				let renderedSteps = 0;
 				const refreshLiveBody = (): void => {
 					if (liveBody.hasClass("semlink-hidden")) return;
+					// Sticky scroll: follow the newest step only while the user
+					// is already at the bottom — scrolling up to read earlier
+					// steps must not be fought.
+					const nearBottom = liveBody.scrollHeight - liveBody.scrollTop - liveBody.clientHeight < 40;
 					while (renderedSteps < liveSteps.length) {
 						this.renderThinkingSteps(liveBody, [liveSteps[renderedSteps]]);
 						renderedSteps++;
 					}
+					if (nearBottom) liveBody.scrollTop = liveBody.scrollHeight;
 				};
+				refreshLiveBody();
+				loadingTextEl.addClass("is-open");
 				loadingTextEl.addEventListener("click", () => {
 					if (liveBody.hasClass("semlink-hidden")) {
 						liveBody.removeClass("semlink-hidden");
@@ -862,11 +871,20 @@ export class SemanticSearchView extends ItemView {
 					// Analysis/overview-heavy prompts get deeper reading.
 					inferAgentDepth(query),
 					(text) => {
-							// Answer streaming started.
+							// Answer streaming started — fold the thinking preview
+							// back up (it auto-expanded during thinking) and let
+							// the answer body take over the bubble.
 							stopAnswerAnim();
 							loadingTextEl.addClass("semlink-hidden");
+							liveBody.addClass("semlink-hidden");
+							loadingTextEl.removeClass("is-open");
 							streamEl.removeClass("semlink-hidden");
 							streamEl.textContent = text;
+							// Follow the growing answer only while the user is
+							// already near the bottom — reading back must not
+							// be fought by forced scrolling.
+							const m = this.messagesEl;
+							if (m.scrollHeight - m.scrollTop - m.clientHeight < 80) this.scrollToBottom();
 						},						() => {
 							// Round start: before any tool was called it's the
 							// thinking phase (模型思考中); after tools it's the

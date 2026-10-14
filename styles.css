@@ -3020,6 +3020,10 @@ body .semlink-msg-user::selection {
        gap keeps its tuned 8px (tool-call's own margin-top). */
     background: #f5f6f7;
     border: none;
+    /* Auto-expanded while thinking: cap the height so a long tool chain
+       doesn't push the rest of the panel away; new steps scroll inside. */
+    max-height: 240px;
+    overflow-y: auto;
 }
 
 .semlink-thinking-live-body .semlink-thinking-thought,
