@@ -2,7 +2,7 @@
 
 **简体中文** | [English](README.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md) | [Deutsch](README_de.md) | [Français](README_fr.md) | [Español](README_es.md) | [Português](README_pt.md) | [Italiano](README_it.md) | [Русский](README_ru.md)
 
-Obsidian 给了你第二大脑，Semlink 在里面住进一个智能体：透明的 AI 住在你写作的地方，检索你写过的每一个字，用真正的工具推理，并给出可点击的编号引用。
+一个把多年笔记变成"第二大脑"的 Obsidian 插件：一个透明的 AI 智能体住进你写作的地方，检索你写过的每一个字，用真正的工具推理，并给出可点击的编号引用。
 
 **智能体住在库内 • 思考与工具调用可见 • 引用可点击 • 本地 SQLite 索引，没有服务器 • 任意 OpenAI/Anthropic 兼容供应商 • 内置 MCP 给 Claude 和 Cursor • 11 种语言 • 核心免费，Pro 一次性买断**
 

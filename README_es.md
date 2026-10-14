@@ -2,7 +2,7 @@
 
 **Español** | [English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md) | [Deutsch](README_de.md) | [Français](README_fr.md) | [Português](README_pt.md) | [Italiano](README_it.md) | [Русский](README_ru.md)
 
-Obsidian te dio un segundo cerebro. Semlink mete un agente dentro: un agente de IA transparente que vive donde escribes, busca todo lo que has anotado jamás, razona sobre ello con herramientas reales y responde con citas numeradas en las que puedes hacer clic.
+Un plugin de Obsidian que convierte años de notas en un segundo cerebro: un agente de IA transparente que vive donde escribes, busca todo lo que has anotado jamás, razona sobre ello con herramientas reales y responde con citas numeradas en las que puedes hacer clic.
 
 **Agente dentro de tu bóveda • Razonamiento y llamadas a herramientas, visibles • Citas en las que puedes hacer clic • Índice SQLite local — sin servidor • Cualquier proveedor compatible con OpenAI/Anthropic • MCP para Claude y Cursor • 11 idiomas • Núcleo gratuito, Pro de pago único**
 
