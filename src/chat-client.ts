@@ -651,6 +651,42 @@ export class ChatClient {
 	}
 
 	/**
+	 * Strip robotic process-narration lead-ins some models prepend to the
+	 * final answer ("我已经获取到足够的信息，现在给出完整的介绍。" / "Sure, I
+	 * have gathered all the details. Now here is the complete
+	 * introduction."). That narration belongs in the thinking card — the
+	 * body must start with the answer itself. Only whole LEADING sentences
+	 * whose every clause is meta narration are removed (max 2), so a
+	 * sentence that carries real content after the comma is never eaten;
+	 * if nothing survives, the original text is returned untouched.
+	 */
+	private stripAnswerPreamble(answer: string): string {
+		let text = answer.trim();
+		for (let i = 0; i < 2; i++) {
+			const m = text.match(/^[^。！？!?.]*[。！？!?.]/);
+			if (!m) break;
+			if (!this.isProcessPreamble(m[0])) break;
+			text = text.slice(m[0].length).trim();
+		}
+		return text || answer.trim();
+	}
+
+	/** A sentence counts as process narration only when EVERY comma clause
+	 * opens with a self-reference or discourse filler AND either names the
+	 * gather/answer act or is a pure filler. Length caps keep dense real
+	 * answers (markdown, long first sentences) out of the stripper. */
+	private isProcessPreamble(sentence: string): boolean {
+		const s = sentence.trim();
+		if (!s || s.length > 80) return false;
+		const clauses = s.split(/[，,；;、]/).map((c) => c.trim()).filter(Boolean);
+		if (clauses.length === 0 || clauses.length > 4) return false;
+		const filler = /^(好的|当然|没问题|明白了|收到|嗯|那么|现在|接下来|下面|我|我们|已|已经|根据|基于|综合|sure|of course|certainly|okay|ok|alright|got it|now|so|well|i|we|based on|according to)/i;
+		const act = /(获取|收集|检索|查阅|读取|掌握|整理|汇总|分析|给出|提供|介绍|回答|总结|呈现|梳理|gather|collect|retriev|found|read|review|analyz|present|provid|introduc|answer|summar)/i;
+		const pureFiller = /^(好的|当然|没问题|明白了|收到|嗯|sure|of course|certainly|okay|ok|alright|got it)[。！？!?.]*$/i;
+		return clauses.every((c) => filler.test(c) && (act.test(c) || pureFiller.test(c)));
+	}
+
+	/**
 	 * Parse text-style tool calls some models emit as plain markup instead of
 	 * using the structured function-calling protocol — e.g.
 	 * `<invoke name="get_section"><parameter name="heading">X</parameter>
@@ -742,7 +778,10 @@ export class ChatClient {
 		// Per-request cache hit ratios (e.g. DeepSeek prompt caching).
 		const cacheHits: CacheSample[] = [];
 
-		const finalize = (answer: string): ChatResult => {
+		const finalize = (rawAnswer: string): ChatResult => {
+			// Strip the robotic process lead-in BEFORE anything else — dedupe
+			// compares against the cleaned text.
+			const answer = this.stripAnswerPreamble(rawAnswer);
 			if (usageIn > 0 || usageOut > 0) {
 				try { this.onUsage?.({ model, promptTokens: usageIn, completionTokens: usageOut }); } catch { /* never break chat */ }
 			}
@@ -1084,7 +1123,10 @@ export class ChatClient {
 		// Per-request cache hit ratios (Anthropic prompt caching).
 		const cacheHits: CacheSample[] = [];
 
-		const finalize = (answer: string): ChatResult => {
+		const finalize = (rawAnswer: string): ChatResult => {
+			// Strip the robotic process lead-in BEFORE anything else — dedupe
+			// compares against the cleaned text.
+			const answer = this.stripAnswerPreamble(rawAnswer);
 			if (usageIn > 0 || usageOut > 0) {
 				try { this.onUsage?.({ model, promptTokens: usageIn, completionTokens: usageOut }); } catch { /* never break chat */ }
 			}
