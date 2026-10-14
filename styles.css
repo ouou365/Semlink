@@ -2436,10 +2436,11 @@ body .semlink-msg-user::selection {
 }
 
 /* When the live thinking preview is EXPANDED (shown), give the loading line
-   the same gray panel background as the preview below it — they read as one
-   connected block. Collapsed (thinking only) stays backgroundless. */
+   the same panel background as the preview below it — they read as one
+   connected block. Collapsed (thinking only) stays backgroundless. Uses the
+   theme's secondary surface so dark themes get a dark panel. */
 .semlink-msg-loading.is-open {
-    background: #f5f6f7;
+    background: var(--background-secondary);
     border-radius: 6px 6px 0 0;
 }
 
@@ -2729,7 +2730,7 @@ body .semlink-msg-user::selection {
 /* Flat icon: no box-shadow (the shared .semlink-search-icon-btn hover
    background looks heavy next to the circular send button). The compound
    selector's specificity (0,2,0) beats the shared hover rule (0,1,1).
-   Hover gets the light #ebebeb chip background per design. */
+   Hover gets the shared translucent chip tint (theme-adaptive). */
 .semlink-search-icon-btn.semlink-search-expand-btn,
 .semlink-search-icon-btn.semlink-search-expand-btn:focus-visible,
 .semlink-search-icon-btn.semlink-search-expand-btn:active {
@@ -2738,7 +2739,7 @@ body .semlink-msg-user::selection {
 }
 
 .semlink-search-icon-btn.semlink-search-expand-btn:hover {
-    background-color: #ebebeb;
+    background-color: var(--background-modifier-hover);
     box-shadow: none;
 }
 
@@ -2965,11 +2966,12 @@ body .semlink-msg-user::selection {
     gap: 2px;
 }
 
-/* Thinking process — #f5f6f7 panel inside the merged card; the gray
-   background separates it from the white answer below (no divider
-   needed). */
+/* Thinking process — secondary-surface panel inside the merged card; the
+   tinted background separates it from the answer below (no divider needed).
+   Theme variable, so it's a light gray in light themes and a dark gray in
+   dark themes (a hardcoded #f5f6f7 glared on dark backgrounds). */
 .semlink-thinking {
-    background: #f5f6f7;
+    background: var(--background-secondary);
     border-radius: 6px;
     padding: 8px 12px;
 }
@@ -2991,7 +2993,7 @@ body .semlink-msg-user::selection {
     position: sticky;
     top: 0;
     z-index: 1;
-    background: #f5f6f7;
+    background: var(--background-secondary);
 }
 
 .semlink-thinking-summary::-webkit-details-marker {
@@ -3014,11 +3016,11 @@ body .semlink-msg-user::selection {
     padding: 0 8px;
     border-radius: 6px;
     font-size: 14px;
-    /* Same look as the finished thinking panel: gray #f5f6f7 card, no own
+    /* Same look as the finished thinking panel: tinted card, no own
        border — the live preview must not look different from the final
        state. The top padding stays 0 so the loading line → first tool-call
        gap keeps its tuned 8px (tool-call's own margin-top). */
-    background: #f5f6f7;
+    background: var(--background-secondary);
     border: none;
     /* Auto-expanded while thinking: cap the height so a long tool chain
        doesn't push the rest of the panel away; new steps scroll inside. */
@@ -3050,8 +3052,8 @@ body .semlink-msg-user::selection {
 
 .semlink-tool-call {
     margin-top: 6px;
-    /* No own box — sits directly on the #f5f6f7 thinking panel, so the
-       visual layers stay at: white card > gray thinking > white content. */
+    /* No own box — sits directly on the thinking panel, so the visual
+       layers stay at: card > thinking panel > content. */
     padding: 0;
     border: none;
     background: transparent;
@@ -3092,7 +3094,7 @@ body .semlink-msg-user::selection {
 
 /* While a tool call is EXPANDED, pin its header row to the top of the
    scrollable conversation so it can be collapsed again from anywhere.
-   The background matches the thinking panel (#f5f6f7) so content passing
+   The background matches the thinking panel so content passing
    underneath stays hidden; the hover tint still gives feedback.
    top: 20px keeps it BELOW the pinned thinking header ("思考了 N 秒"),
    so the two sticky rows never overlap. */
@@ -3100,13 +3102,15 @@ body .semlink-msg-user::selection {
     position: sticky;
     top: 20px;
     z-index: 1;
-    background: #f5f6f7;
+    background: var(--background-secondary);
 }
 
 .semlink-tool-call[open] > .semlink-tool-call-summary:hover {
-    /* Opaque tint: a translucent one would let the pinned thinking header
-       show through while hovering and distract. */
-    background: #e8e9ea;
+    /* Opaque tint (color-mix stays opaque — a translucent hover would let
+       the pinned thinking header show through while hovering and
+       distract). Mixing toward text-normal lightens the dark panel /
+       darkens the light panel symmetrically. */
+    background: color-mix(in srgb, var(--background-secondary) 90%, var(--text-normal) 10%);
 }
 
 /* Tool-call response block: collapsed by default; the "返回 ›" summary
@@ -3360,7 +3364,7 @@ body .semlink-msg-user::selection {
 }
 
 .semlink-search-model-name:hover {
-    background-color: #ebebeb;
+    background-color: var(--background-modifier-hover);
     color: var(--text-normal);
 }
 
