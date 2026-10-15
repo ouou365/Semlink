@@ -960,21 +960,29 @@ export class SemanticSearchView extends ItemView {
 						const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
 					stopAnswerAnim();
 					loadingEl.empty();
-					// The model sometimes writes the FULL answer inside the
-					// pre-analysis thinking step (common when the retrieved
-					// snippets were already enough) and then leaves the real
-					// answer as a one-liner — promoting that thought keeps the
-					// content in the answer body instead of trapping it under 💭.
+					// The model sometimes writes the FULL answer inside a
+					// thinking step (the pre-analysis, or a mid-turn thought)
+					// and leaves the real answer as a shell — an intro line
+					// like "基于笔记内容，以下是……完整介绍。", which the chat
+					// client strips to "" when a substantial thought exists.
+					// Promoting the LONGEST thought keeps the content in the
+					// answer body instead of trapping it under 💭.
 					let answer = result.answer;
 					let thinking: ThinkingStep[] = result.thinking;
 					if (answer.trim().length < 30 && thinking.length > 0) {
-						for (let i = thinking.length - 1; i >= 0; i--) {
+						let best = -1;
+						let bestLen = 0;
+						for (let i = 0; i < thinking.length; i++) {
 							const s = thinking[i];
-							if (s.type === "thought" && s.text.trim().length >= 80) {
-								answer = s.text;
-								thinking = thinking.filter((_, j) => j !== i);
-								break;
+							const len = s.type === "thought" ? s.text.trim().length : 0;
+							if (len >= 80 && len > bestLen) {
+								best = i;
+								bestLen = len;
 							}
+						}
+						if (best >= 0) {
+							answer = (thinking[best] as Extract<ThinkingStep, { type: "thought" }>).text;
+							thinking = thinking.filter((_, j) => j !== best);
 						}
 					}
 					this.renderThinking(loadingEl, [firstStep, ...thinking], elapsedSec);

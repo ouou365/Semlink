@@ -194,6 +194,74 @@ interface OpenAIToolSchema {
 	function: { name: string; description: string; parameters: Record<string, unknown> };
 }
 
+/** Name of the forced submit tool: final-answer rounds make the model call
+ *  it with the user-facing body as the `answer` argument, so thinking and
+ *  answer are separated at the protocol level (no per-language text
+ *  heuristics). */
+const SUBMIT_TOOL_NAME = "submit_answer";
+
+const SUBMIT_TOOL_DESCRIPTION =
+	"Submit the final answer for the user. The `answer` argument must contain " +
+	"the complete, user-facing response — the actual content only. Never put " +
+	"process narration (reading notes, gathering information, announcing the " +
+	"answer) inside `answer`; any commentary belongs in regular text before " +
+	"the call.";
+
+function submitAnswerParameters(): Record<string, unknown> {
+	return {
+		type: "object",
+		properties: {
+			answer: {
+				type: "string",
+				description: "The complete final answer shown to the user. Markdown allowed. No process narration.",
+			},
+		},
+		required: ["answer"],
+	};
+}
+
+/** Incrementally decode a top-level string field out of PARTIAL JSON — used
+ *  to live-stream the `answer` argument while the submit_answer tool call is
+ *  still streaming (arguments arrive as input_json_delta / tool_calls deltas
+ *  fragments). Returns null when the key has not started yet; stops decoding
+ *  at the closing quote or at a truncated escape, whichever comes first. */
+export function extractPartialJsonString(json: string, field: string): string | null {
+	const key = `"${field}"`;
+	const keyIdx = json.indexOf(key);
+	if (keyIdx === -1) return null;
+	let i = json.indexOf(":", keyIdx + key.length);
+	if (i === -1) return null;
+	i++;
+	while (i < json.length && /\s/.test(json[i])) i++;
+	if (json[i] !== '"') return null;
+	i++;
+	let out = "";
+	const simple: Record<string, string> = { '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t" };
+	while (i < json.length) {
+		const ch = json[i];
+		if (ch === "\\") {
+			const esc = json[i + 1];
+			if (esc === undefined) break; // truncated escape — wait for more
+			if (esc === "u") {
+				const hex = json.slice(i + 2, i + 6);
+				if (hex.length < 4 || !/^[0-9a-fA-F]{4}$/.test(hex)) break; // incomplete \uXXXX
+				out += String.fromCharCode(parseInt(hex, 16));
+				i += 6;
+				continue;
+			}
+			const decoded = simple[esc];
+			if (decoded === undefined) break; // invalid escape — stop decoding
+			out += decoded;
+			i += 2;
+			continue;
+		}
+		if (ch === '"') break; // closing quote — field complete
+		out += ch;
+		i++;
+	}
+	return out;
+}
+
 /** Request body of one OpenAI-compatible chat round (only the fields set here). */
 interface OpenAIChatBody {
 	model: string;
@@ -201,6 +269,7 @@ interface OpenAIChatBody {
 	stream: boolean;
 	stream_options: { include_usage: boolean };
 	tools?: OpenAIToolSchema[];
+	tool_choice?: { type: "function"; function: { name: string } };
 }
 
 /** One tool schema in an Anthropic request body's `tools` array. */
@@ -218,6 +287,7 @@ interface AnthropicChatBody {
 	messages: ConversationMessage[];
 	stream: boolean;
 	tools?: AnthropicToolSchema[];
+	tool_choice?: { type: "tool"; name: string };
 }
 
 // Context usage types now live in types.ts (search-view imports them from
@@ -674,7 +744,30 @@ export class ChatClient {
 		}
 		// Ate too much? A real answer is more than a couple of fragments.
 		if (text.length < 40 && original.length >= 40) return original;
-		return text || original;
+		// May be "" when the WHOLE answer was a preamble shell — finalize
+		// decides whether a thought can stand in (see hasPromotableThought).
+		return text;
+	}
+
+	/** A thought substantial enough to stand in for a shell-only answer
+	 * ("基于笔记内容，以下是……完整介绍。" with the real content written
+	 * into the model's pre-analysis). */
+	private hasPromotableThought(thinking: ThinkingStep[]): boolean {
+		return thinking.some((s) => s.type === "thought" && s.text.trim().length >= 80);
+	}
+
+	/** Extract the user-facing answer from a submit_answer call's arguments.
+	 * Preferred: full JSON.parse. Fallbacks: the incremental extractor
+	 * (tolerates broken JSON around the field), then the round's plain text
+	 * content (model ignored the tool body entirely). */
+	private parseSubmittedAnswer(argsJson: string, fallbackContent: string): string {
+		try {
+			const parsed = JSON.parse(argsJson) as { answer?: unknown };
+			if (typeof parsed.answer === "string") return parsed.answer;
+		} catch { /* fall through to partial extraction */ }
+		const partial = extractPartialJsonString(argsJson, "answer");
+		if (partial && partial.trim()) return partial;
+		return fallbackContent.trim();
 	}
 
 	/** A sentence counts as process narration when it is a post-tool
@@ -804,6 +897,9 @@ export class ChatClient {
 		// Set when the model repeats itself — tools are removed from the next
 		// round so it must produce a real answer (not loop or echo a thought).
 		let forceAnswer = false;
+		// Set when a provider rejects the forced submit_answer tool_choice —
+		// remaining rounds degrade to the legacy plain-text answer path.
+		let submitDisabled = false;
 		// Context tokens reported by the API for the latest request.
 		let usageTokens = 0;
 		// Token usage summed across ALL rounds (usage dashboard). usageTokens
@@ -815,8 +911,13 @@ export class ChatClient {
 
 		const finalize = (rawAnswer: string): ChatResult => {
 			// Strip the robotic process lead-in BEFORE anything else — dedupe
-			// compares against the cleaned text.
-			const answer = this.stripAnswerPreamble(rawAnswer);
+			// compares against the cleaned text. A shell-only answer (nothing
+			// but an intro line) strips to "": pass the emptiness through when
+			// a substantial thought exists so the UI promotes that thought
+			// (the model wrote the real content into its analysis); without
+			// one, keep the shell — an empty answer helps nobody.
+			const answer = this.stripAnswerPreamble(rawAnswer)
+				|| (this.hasPromotableThought(thinking) ? "" : rawAnswer.trim());
 			if (usageIn > 0 || usageOut > 0) {
 				try { this.onUsage?.({ model, promptTokens: usageIn, completionTokens: usageOut }); } catch { /* never break chat */ }
 			}
@@ -906,25 +1007,66 @@ export class ChatClient {
 				stream: true,
 				stream_options: { include_usage: true },
 			};
-			if (tools.length > 0 && !forceAnswer && round < NUDGE_AFTER_ROUND) body.tools = tools;
+			// Final rounds FORCE the submit_answer tool: thinking and answer
+			// are separated at the protocol level, in every language — interim
+			// text becomes a 💭 thought, and the user-facing body arrives as
+			// the `answer` argument (streamed live out of the partial JSON).
+			// If a provider rejects the forced tool_choice, the round degrades
+			// to the legacy plain-text path for the rest of the turn.
+			const submitRound = !submitDisabled && tools.length > 0 && (forceAnswer || round >= NUDGE_AFTER_ROUND);
+			if (submitRound) {
+				body.tools = [{
+					type: "function",
+					function: { name: SUBMIT_TOOL_NAME, description: SUBMIT_TOOL_DESCRIPTION, parameters: submitAnswerParameters() },
+				}];
+				body.tool_choice = { type: "function", function: { name: SUBMIT_TOOL_NAME } };
+			} else if (tools.length > 0) {
+				body.tools = tools;
+			}
 
-			// Stream this round. Rounds WITH tools stay buffered — their interim
-			// text becomes thinking steps (streaming it live would flash text
-			// that then "vanishes" into 💭). Rounds with tools stripped are
-			// guaranteed final answers, so onStream forwards each delta live.
-			const stream = await this.streamOpenAIChat(
-				openaiUrl,
-				provider,
-				body,
-				body.tools ? undefined : onStream,
-				signal,
-			);
+			// Stream this round. Regular tool rounds stay buffered — their
+			// interim text becomes thinking steps (streaming it live would
+			// flash text that then "vanishes" into 💭). Submit rounds and
+			// plain no-tool rounds stream live: what arrives is answer body.
+			let stream;
+			try {
+				stream = await this.streamOpenAIChat(
+					openaiUrl,
+					provider,
+					body,
+					submitRound || !body.tools ? onStream : undefined,
+					signal,
+				);
+			} catch (e) {
+				if (!submitRound || signal?.aborted || (e as Error)?.name === "AbortError") throw e;
+				// Provider rejected the forced submit tool — degrade this turn
+				// to the legacy plain-text answer and retry the round once.
+				submitDisabled = true;
+				console.warn("[Semlink] submit_answer rejected, degrading to plain text:", e);
+				stream = await this.streamOpenAIChat(
+					openaiUrl,
+					provider,
+					{ ...body, tools: undefined, tool_choice: undefined },
+					onStream,
+					signal,
+				);
+			}
 			onRoundSuccess?.();
 			if (stream.usageTokens) usageTokens = Math.max(usageTokens, stream.usageTokens);
 			usageIn += stream.roundIn || 0;
 			usageOut += stream.roundOut || 0;
 			cacheHits.push(...stream.cacheHits);
 			if (stream.content) lastText = stream.content;
+
+			// Forced submit call: the answer arrives as the tool call's
+			// `answer` argument. Deltas were streamed live out of the partial
+			// JSON; this final parse is authoritative.
+			const submitCall = stream.toolCalls.find((tc) => tc?.function?.name === SUBMIT_TOOL_NAME);
+			if (submitCall) {
+				const submitted = this.parseSubmittedAnswer(submitCall.function.arguments || "", stream.content);
+				onStream?.(submitted);
+				return finalize(submitted);
+			}
 
 			if (stream.toolCalls.length === 0) {
 				// Final round — answer was already streamed live above.
@@ -944,6 +1086,15 @@ export class ChatClient {
 			for (const tc of stream.toolCalls) {
 				const name = tc?.function?.name;
 				const rawArgs = tc?.function?.arguments || "{}";
+
+				// Model self-submitted the answer in a regular tool round —
+				// accept it as final instead of executing a bogus tool.
+				if (name === SUBMIT_TOOL_NAME) {
+					const submitted = this.parseSubmittedAnswer(rawArgs, stream.content);
+					onStream?.(submitted);
+					return finalize(submitted);
+				}
+
 				let args: Record<string, unknown> = {};
 				try {
 					args = JSON.parse(rawArgs) as Record<string, unknown>;
@@ -1062,6 +1213,9 @@ export class ChatClient {
 		const cacheHits: CacheSample[] = [];
 		// Tool calls accumulate by their stream index.
 		const toolCalls: Record<number, OpenAIToolCall> = {};
+		// Last submit_answer partial already forwarded — deltas recompute the
+		// field from scratch, so skip no-change emissions.
+		let lastSubmitPartial = "";
 		await this.readSSE<OpenAIStreamEvent>(resp, (json) => {
 			const delta = json?.choices?.[0]?.delta;
 			if (typeof delta?.content === "string" && delta.content) {
@@ -1076,7 +1230,18 @@ export class ChatClient {
 				toolCalls[idx] ??= { id: tc.id || "", type: "function", function: { name: "", arguments: "" } };
 				if (tc.id) toolCalls[idx].id = tc.id;
 				if (tc.function?.name) toolCalls[idx].function.name += tc.function.name;
-				if (tc.function?.arguments) toolCalls[idx].function.arguments += tc.function.arguments;
+				if (tc.function?.arguments) {
+					toolCalls[idx].function.arguments += tc.function.arguments;
+					// Submit rounds stream the answer live out of the partial
+					// JSON `answer` field (escapes and truncation handled).
+					if (toolCalls[idx].function.name === SUBMIT_TOOL_NAME) {
+						const partial = extractPartialJsonString(toolCalls[idx].function.arguments, "answer");
+						if (partial !== null && partial !== lastSubmitPartial) {
+							lastSubmitPartial = partial;
+							onStream?.(partial);
+						}
+					}
+				}
 			}
 			// Usage arrives in the final chunk when stream_options.include_usage.
 			const u = json?.usage;
@@ -1150,6 +1315,9 @@ export class ChatClient {
 		// Set when the model repeats itself — tools are removed from the next
 		// round so it must produce a real answer (not loop or echo a thought).
 		let forceAnswer = false;
+		// Set when a provider rejects the forced submit_answer tool_choice —
+		// remaining rounds degrade to the legacy plain-text answer path.
+		let submitDisabled = false;
 		// Context tokens reported by the API for the latest request.
 		let usageTokens = 0;
 		// Token usage summed across ALL rounds (usage dashboard).
@@ -1160,8 +1328,13 @@ export class ChatClient {
 
 		const finalize = (rawAnswer: string): ChatResult => {
 			// Strip the robotic process lead-in BEFORE anything else — dedupe
-			// compares against the cleaned text.
-			const answer = this.stripAnswerPreamble(rawAnswer);
+			// compares against the cleaned text. A shell-only answer (nothing
+			// but an intro line) strips to "": pass the emptiness through when
+			// a substantial thought exists so the UI promotes that thought
+			// (the model wrote the real content into its analysis); without
+			// one, keep the shell — an empty answer helps nobody.
+			const answer = this.stripAnswerPreamble(rawAnswer)
+				|| (this.hasPromotableThought(thinking) ? "" : rawAnswer.trim());
 			if (usageIn > 0 || usageOut > 0) {
 				try { this.onUsage?.({ model, promptTokens: usageIn, completionTokens: usageOut }); } catch { /* never break chat */ }
 			}
@@ -1253,20 +1426,73 @@ export class ChatClient {
 				messages,
 				stream: true,
 			};
-			if (tools.length > 0 && !forceAnswer && round < NUDGE_AFTER_ROUND) body.tools = tools;
+			// Final rounds FORCE the submit_answer tool — protocol-level
+			// thinking/answer separation (see the OpenAI path for the full
+			// rationale). Providers rejecting the forced tool_choice degrade
+			// to the legacy plain-text path for the rest of the turn.
+			const submitRound = !submitDisabled && tools.length > 0 && (forceAnswer || round >= NUDGE_AFTER_ROUND);
+			if (submitRound) {
+				body.tools = [{
+					name: SUBMIT_TOOL_NAME,
+					description: SUBMIT_TOOL_DESCRIPTION,
+					input_schema: submitAnswerParameters(),
+				}];
+				body.tool_choice = { type: "tool", name: SUBMIT_TOOL_NAME };
+			} else if (tools.length > 0) {
+				body.tools = tools;
+			}
 
-			const stream = await this.streamAnthropicChat(
-				anthropicUrl,
-				provider,
-				body,
-				body.tools ? undefined : onStream,
-				signal,
-			);
+			let stream;
+			try {
+				stream = await this.streamAnthropicChat(
+					anthropicUrl,
+					provider,
+					body,
+					submitRound || !body.tools ? onStream : undefined,
+					signal,
+				);
+			} catch (e) {
+				if (!submitRound || signal?.aborted || (e as Error)?.name === "AbortError") throw e;
+				// Provider rejected the forced submit tool — degrade this turn
+				// to the legacy plain-text answer and retry the round once.
+				submitDisabled = true;
+				console.warn("[Semlink] submit_answer rejected, degrading to plain text:", e);
+				stream = await this.streamAnthropicChat(
+					anthropicUrl,
+					provider,
+					{ ...body, tools: undefined, tool_choice: undefined },
+					onStream,
+					signal,
+				);
+			}
 			onRoundSuccess?.();
 			if (stream.usageTokens) usageTokens = Math.max(usageTokens, stream.usageTokens);
 			usageIn += stream.roundIn || 0;
 			usageOut += stream.roundOut || 0;
 			cacheHits.push(...stream.cacheHits);
+
+			// Forced submit call: the answer arrives as the tool_use input.
+			// Deltas were streamed live out of the partial JSON; the final
+			// parse is authoritative, with plain text as the last fallback.
+			const submitUse = stream.toolUses.find((tu) => tu.name === SUBMIT_TOOL_NAME);
+			if (submitUse) {
+				let submitted = "";
+				const ans = (submitUse.input as { answer?: unknown } | undefined)?.answer;
+				if (typeof ans === "string") submitted = ans;
+				if (!submitted.trim()) {
+					const partial = extractPartialJsonString(stream.rawToolInputs[SUBMIT_TOOL_NAME] || "", "answer");
+					if (partial && partial.trim()) submitted = partial;
+				}
+				if (!submitted.trim()) {
+					submitted = stream.contentBlocks
+						.filter((b) => b?.type === "text")
+						.map((b) => String(b.text))
+						.join("\n")
+						.trim();
+				}
+				await this.replay(submitted, onStream);
+				return finalize(submitted);
+			}
 
 			if (stream.stopReason !== "tool_use") {
 				const answer = stream.contentBlocks
@@ -1303,6 +1529,15 @@ export class ChatClient {
 			for (const tu of stream.toolUses) {
 				const name = tu.name;
 				const args = tu.input || {};
+
+				// Model self-submitted the answer in a regular tool round —
+				// accept it as final instead of executing a bogus tool.
+				if (name === SUBMIT_TOOL_NAME) {
+					const ans = (args as { answer?: unknown }).answer;
+					const submitted = typeof ans === "string" ? ans : "";
+					await this.replay(submitted, onStream);
+					return finalize(submitted);
+				}
 
 				// Repeated call (exact or rephrased query): don't re-execute and
 				// don't echo a thought as the answer — flag a forced answer so
@@ -1376,6 +1611,9 @@ export class ChatClient {
 		cacheHits: CacheSample[];
 		roundIn: number;
 		roundOut: number;
+		/** Raw accumulated tool-call input JSON by tool name (submit_answer
+		 *  re-extraction fallback when the model's JSON fails to parse). */
+		rawToolInputs: Record<string, string>;
 	}> {
 		let roundIn = 0;
 		let roundOut = 0;
@@ -1424,6 +1662,12 @@ export class ChatClient {
 		const cacheHits: CacheSample[] = [];
 		// Content blocks accumulate by their stream index.
 		const blocks: Record<number, ContentBlock> = {};
+		// Raw tool-call input JSON by tool name — lets the caller re-extract
+		// a submit_answer field even when the model's JSON fails to parse.
+		const rawToolInputs: Record<string, string> = {};
+		// Last submit_answer partial already forwarded (deltas recompute the
+		// field from scratch — skip no-change emissions).
+		let lastSubmitPartial = "";
 
 		await this.readSSE<AnthropicStreamEvent>(resp, (json) => {
 			const type = json?.type;
@@ -1466,7 +1710,20 @@ export class ChatClient {
 				} else if (delta?.type === "thinking_delta" && delta.thinking) {
 					if (blocks[idx]) blocks[idx].thinking! += delta.thinking;
 				} else if (delta?.type === "input_json_delta") {
-					if (blocks[idx]) blocks[idx].input! += delta.partial_json || "";
+					const block = blocks[idx];
+					if (block && block.type === "tool_use") {
+						block.input! += delta.partial_json || "";
+						rawToolInputs[block.name!] = (rawToolInputs[block.name!] || "") + (delta.partial_json || "");
+						// Submit rounds stream the answer live out of the
+						// partial JSON `answer` field.
+						if (block.name === SUBMIT_TOOL_NAME) {
+							const partial = extractPartialJsonString(rawToolInputs[block.name], "answer");
+							if (partial !== null && partial !== lastSubmitPartial) {
+								lastSubmitPartial = partial;
+								onStream?.(partial);
+							}
+						}
+					}
 				}
 			} else if (type === "message_delta") {
 				stopReason = json?.delta?.stop_reason || stopReason;
@@ -1508,7 +1765,7 @@ export class ChatClient {
 			}
 		}
 
-		return { contentBlocks, toolUses, stopReason, usageTokens, cacheHits, roundIn, roundOut };
+		return { contentBlocks, toolUses, stopReason, usageTokens, cacheHits, roundIn, roundOut, rawToolInputs };
 	}
 
 	/**
