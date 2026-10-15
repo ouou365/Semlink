@@ -652,38 +652,73 @@ export class ChatClient {
 
 	/**
 	 * Strip robotic process-narration lead-ins some models prepend to the
-	 * final answer ("我已经获取到足够的信息，现在给出完整的介绍。" / "Sure, I
-	 * have gathered all the details. Now here is the complete
-	 * introduction."). That narration belongs in the thinking card — the
-	 * body must start with the answer itself. Only whole LEADING sentences
-	 * whose every clause is meta narration are removed (max 2), so a
-	 * sentence that carries real content after the comma is never eaten;
-	 * if nothing survives, the original text is returned untouched.
+	 * final answer: self-referential openers ("我已经获取到足够的信息，现在
+	 * 给出完整的介绍。") AND post-tool reflections ("这段笔记补充了预制表盘
+	 * 和产品概述…。片段[4]也列出了多个表盘。我将结合这两处信息来给出完整
+	 * 回答。") — models often narrate what the just-read note contributed
+	 * before starting the actual answer. That narration belongs in the
+	 * thinking card. Only whole LEADING sentences are removed (max 4); a
+	 * sentence carrying real content is never eaten, and if stripping would
+	 * leave almost nothing behind, the original text is returned untouched.
 	 */
 	private stripAnswerPreamble(answer: string): string {
-		let text = answer.trim();
-		for (let i = 0; i < 2; i++) {
-			const m = text.match(/^[^。！？!?.]*[。！？!?.]/);
+		const original = answer.trim();
+		let text = original;
+		for (let i = 0; i < 4; i++) {
+			// Sentence terminators include "：" — announcements like
+			// "……表盘信息如下：" are their own lead-in sentence.
+			const m = text.match(/^[^。！？!?.：:]*[。！？!?.：:]/);
 			if (!m) break;
 			if (!this.isProcessPreamble(m[0])) break;
 			text = text.slice(m[0].length).trim();
 		}
-		return text || answer.trim();
+		// Ate too much? A real answer is more than a couple of fragments.
+		if (text.length < 40 && original.length >= 40) return original;
+		return text || original;
 	}
 
-	/** A sentence counts as process narration only when EVERY comma clause
-	 * opens with a self-reference or discourse filler AND either names the
-	 * gather/answer act or is a pure filler. Length caps keep dense real
-	 * answers (markdown, long first sentences) out of the stripper. */
+	/** A sentence counts as process narration when it is a post-tool
+	 * reflection (sources named as the actor of an informational verb, or
+	 * the writer announcing the answer), or when EVERY comma clause opens
+	 * with a self-reference or discourse filler AND names the gather/answer
+	 * act. Length caps keep dense real answers (markdown, long first
+	 * sentences) out of the stripper. */
 	private isProcessPreamble(sentence: string): boolean {
 		const s = sentence.trim();
 		if (!s || s.length > 80) return false;
+		if (this.isToolReflection(s)) return true;
 		const clauses = s.split(/[，,；;、]/).map((c) => c.trim()).filter(Boolean);
 		if (clauses.length === 0 || clauses.length > 4) return false;
 		const filler = /^(好的|当然|没问题|明白了|收到|嗯|那么|现在|接下来|下面|我|我们|已|已经|根据|基于|综合|sure|of course|certainly|okay|ok|alright|got it|now|so|well|i|we|based on|according to)/i;
 		const act = /(获取|收集|检索|查阅|读取|掌握|整理|汇总|分析|给出|提供|介绍|回答|总结|呈现|梳理|gather|collect|retriev|found|read|review|analyz|present|provid|introduc|answer|summar)/i;
-		const pureFiller = /^(好的|当然|没问题|明白了|收到|嗯|sure|of course|certainly|okay|ok|alright|got it)[。！？!?.]*$/i;
+		const pureFiller = /^(好的|当然|没问题|明白了|收到|嗯|sure|of course|certainly|okay|ok|alright|got it)[。！？!?.：:]*$/i;
 		return clauses.every((c) => filler.test(c) && (act.test(c) || pureFiller.test(c)));
+	}
+
+	/** Post-tool reflection: the just-read source talks about itself
+	 * ("这段笔记补充了…", "片段[4]也列出了…"), the writer announces how they
+	 * will answer ("我将结合这两处信息来给出完整回答"), or the answer is
+	 * announced ("以下是完整的表盘清单："). The (?!的) lookahead excludes
+	 * relative-clause usage ("片段[4]列出的水深仪表…" — content citing
+	 * evidence), so only process narration matches. */
+	private isToolReflection(s: string): boolean {
+		// Chinese: source as actor of an informational verb.
+		if (/(片段\[\d+\]|这段?笔记|该笔记|这份?笔记|这段?文档|笔记内容|初始片段|这些?信息|两处信息|以上信息|上述信息|该文档)/.test(s)
+			&& /(补充|列出|提到|描述|给出|说明|提供|读取|查阅|结合|综合)(?!的)/.test(s)) return true;
+		// Chinese: announcing the combined answer.
+		if (/(我)?将?(结合|综合|根据|基于)[^。？！]{0,20}(片段|笔记|信息|资料|内容)[^。？！]{0,30}(给出|提供|回答|整理|总结|梳理)/.test(s)) return true;
+		// Chinese: "综合初始片段和笔记内容，……如下" / "以下是完整的清单".
+		if (/(综合|结合)[^。？！]{0,25}(片段|笔记|信息|资料|内容)[^。？！]{0,30}如下/.test(s)) return true;
+		if (/(以下(是|为)|下面(是|为))[^。？！]{0,25}(回答|介绍|总结|清单|列表|说明)/.test(s)) return true;
+		if (/(已经?|已)[^。？！]{0,4}(读取|获取|查阅|读完|看完)[^。？！]{0,20}(笔记|文档|信息|资料|内容)/.test(s)) return true;
+		// English equivalents, anchored near the sentence start so content
+		// that merely cites a snippet ("The gauge listed in snippet [4]…")
+		// never matches.
+		if (/^[^.?!]{0,20}\b(note|document|snippet|section)s?(\s*\[\d+\])?(\s+(also|just))?\s+(adds?|lists?|mentions?|describes?|provides?|confirms?|covers?)\b/i.test(s)) return true;
+		if (/\b(i'll|i will|i've|i have)\s+(now\s+)?(combine|combined|based|using|drawn|draw)\b[^.?!]{0,40}\b(answer|respond|present|summariz|write|give)\b/i.test(s)) return true;
+		if (/^here (is|'s) (the|my) (complete |full |detailed |short )?(answer|introduction|summary|list|overview)/i.test(s)) return true;
+		if (/^(based on|according to) (the |my )?(initial |retrieved |above |collected )?(snippets?|notes?|sources?|results?|research)\b/i.test(s)) return true;
+		return false;
 	}
 
 	/**
