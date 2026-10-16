@@ -62,7 +62,7 @@ Semlink ist umgekehrt gebaut:
 
 ## 🚀 Schnellstart
 
-1. **Installieren** — lade `main.js`, `manifest.json`, `styles.css` aus den [Releases](https://github.com/ouou365/Semlink/releases) nach `YourVault/.obsidian/plugins/semlink/`, oder baue aus dem Quellcode. Aktiviere es unter Community-Plugins.
+1. **Installieren** — ein Klick auf der [Plugin-Seite](https://community.obsidian.md/plugins/semlink), oder suche „Semlink“ unter Einstellungen → Community-Plugins.
 2. **Konfigurieren** — füge einen Embedding-API-Key ein (SiliconFlow BGE-M3 ist vorkonfiguriert) und einen Key für einen Chat-Anbieter. Die dreistufige Einführung prüft beides und startet die Indexierung.
 3. **Fragen.** Öffne die Seitenleiste: *„Was habe ich über Zettelkasten geschrieben?“* — und schau zu: Denken → `search_notes` → `get_note` → eine Antwort mit [1][2][3].
 

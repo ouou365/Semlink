@@ -62,7 +62,7 @@ Semlink está construido al revés:
 
 ## 🚀 Inicio rápido
 
-1. **Instala** — copia `main.js`, `manifest.json`, `styles.css` de [Releases](https://github.com/ouou365/Semlink/releases) a `YourVault/.obsidian/plugins/semlink/`, o compila desde el código fuente. Actívalo en Plugins comunitarios.
+1. **Instala** — con un clic desde la [página del plugin](https://community.obsidian.md/plugins/semlink), o busca «Semlink» en Ajustes → Plugins comunitarios.
 2. **Configura** — pega una API key de embeddings (SiliconFlow BGE-M3 preconfigurado) y la clave de un proveedor de chat. La guía de tres pasos valida ambas e inicia el indexado.
 3. **Pregunta.** Abre la barra lateral: *«¿Qué he escrito sobre Zettelkasten?»* — y observa: razonamiento → `search_notes` → `get_note` → una respuesta con [1][2][3].
 

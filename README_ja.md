@@ -62,7 +62,7 @@ Semlink は逆の発想で作られています:
 
 ## 🚀 クイックスタート
 
-1. **インストール** — [Releases](https://github.com/ouou365/Semlink/releases) から `main.js`、`manifest.json`、`styles.css` を取り出して `YourVault/.obsidian/plugins/semlink/` に置くか、ソースからビルドします。コミュニティプラグインで有効化してください。
+1. **インストール** — Obsidian の 設定 → コミュニティプラグイン で「Semlink」を検索してワンクリックで導入、または[プラグインページ](https://community.obsidian.md/plugins/semlink)から直接インストール。
 2. **設定** — 埋め込み用の APIキー（SiliconFlow BGE-M3 を事前設定済み）とチャットプロバイダーのキーを貼り付けます。3 ステップのオンボーディングが両方を検証し、インデックス作成を開始します。
 3. **質問する。** サイドバーを開いて *「Zettelkasten について何を書いたっけ？」* — 見てください: 思考 → `search_notes` → `get_note` → [1][2][3] 付きの回答。
 

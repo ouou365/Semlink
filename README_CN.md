@@ -62,7 +62,7 @@ Semlink 反着来：
 
 ## 🚀 快速上手
 
-1. **安装** — 从 [Releases](https://github.com/ouou365/Semlink/releases) 下载 `main.js`、`manifest.json`、`styles.css` 放入 `你的库/.obsidian/plugins/semlink/`，或从源码构建。在第三方插件中启用。
+1. **安装** — 在 Obsidian 的 设置 → 第三方插件 中搜索 "Semlink" 一键安装，或直接打开[插件页面](https://community.obsidian.md/plugins/semlink)安装。
 2. **配置** — 粘贴嵌入 API key（预置 SiliconFlow BGE-M3）和对话供应商 key。三步引导会校验两者并开始索引。
 3. **提问。** 打开侧边栏："关于卡片盒笔记法我都写过什么？"——然后看：思考 → `search_notes` → `get_note` → 带 [1][2][3] 的回答。
 
