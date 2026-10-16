@@ -2444,6 +2444,23 @@ body .semlink-msg-user::selection {
     border-radius: 6px 6px 0 0;
 }
 
+/* Collapsed-thinking state while the answer streams: mirror the finished
+   .semlink-thinking panel (secondary surface, rounded, bold summary) so the
+   header looks the same during and after streaming. Shimmer is off — this
+   state is a finished summary, not a progress line. */
+.semlink-msg-loading.is-thinking {
+    background: var(--background-secondary);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-weight: 600;
+}
+
+.semlink-msg-loading.is-thinking .semlink-msg-loading-text {
+    animation: none;
+    background: none;
+    color: var(--text-muted);
+}
+
 .semlink-msg-loading-text {
     min-width: 0;
     overflow: hidden;

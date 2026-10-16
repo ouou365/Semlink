@@ -819,6 +819,9 @@ export class SemanticSearchView extends ItemView {
 				};
 				const startDots = (label: string): void => {
 					loadingTextEl.removeClass("semlink-hidden");
+					// Back to the live status line (shimmer resumes) — drop the
+					// collapsed-thinking summary look if a flash set it.
+					loadingTextEl.removeClass("is-thinking");
 					streamEl.addClass("semlink-hidden");
 					streamText = "";
 					shownText = "";
@@ -967,6 +970,9 @@ export class SemanticSearchView extends ItemView {
 							loadingDotsSpan.textContent = "";
 							liveBody.addClass("semlink-hidden");
 							loadingTextEl.removeClass("is-open");
+							// Mirror the finished thinking panel's look so the
+							// header is identical during and after streaming.
+							loadingTextEl.addClass("is-thinking");
 							streamEl.removeClass("semlink-hidden");
 							streamText = text;
 							startTypewriter();
