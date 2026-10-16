@@ -757,12 +757,6 @@ export class SemanticSearchView extends ItemView {
 				// preview — startDots restores it when the flag is still set
 				// from a PREVIOUS round; the real answer leaves it collapsed.
 				let streamShown = false;
-				const followScroll = (): void => {
-					// Follow the growing answer only while the user is already
-					// near the bottom — reading back must not be fought.
-					const m = this.messagesEl;
-					if (m.scrollHeight - m.scrollTop - m.clientHeight < 80) this.scrollToBottom();
-				};
 				const stopTypewriter = (): void => {
 					if (typeTimer !== null) {
 						window.clearInterval(typeTimer);
@@ -774,9 +768,15 @@ export class SemanticSearchView extends ItemView {
 					typeRendering = true;
 					try {
 						if (streamEl.isConnected) {
+							// Sticky scroll, sampled BEFORE the re-render: the render
+							// itself grows the content, so a tall block (>80px) landing
+							// on an at-bottom viewport would otherwise read as "user
+							// scrolled up" and permanently break following.
+							const m = this.messagesEl;
+							const nearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 80;
 							streamInner.empty();
 							await MarkdownRenderer.render(this.app, protectHyphens(shownText), streamInner, "", this);
-							followScroll();
+							if (nearBottom) this.scrollToBottom();
 						}
 					} finally {
 						typeRendering = false;
@@ -1003,8 +1003,16 @@ export class SemanticSearchView extends ItemView {
 							controller.signal,
 						);
 						const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
-					stopAnswerAnim();
-					loadingEl.empty();
+						stopAnswerAnim();
+						// Sticky scroll across the final swap: sample while the
+						// streaming bubble is still the view (BEFORE thinking +
+						// answer + sources + actions replace it) — the swapped block
+						// is taller, so sampling after the swap would misread the
+						// jump as a user scroll-up and leave the sources card and
+						// the copy/save buttons below the fold.
+						const wasNearBottom =
+							this.messagesEl.scrollHeight - this.messagesEl.scrollTop - this.messagesEl.clientHeight < 120;
+						loadingEl.empty();
 					// The model sometimes writes the FULL answer inside a
 					// thinking step (the pre-analysis, or a mid-turn thought)
 					// and leaves the real answer as a shell — an intro line
@@ -1091,8 +1099,9 @@ export class SemanticSearchView extends ItemView {
 						result.cacheHitRate,
 					);
 
-					// Action buttons (icons) below the sources: copy / save.
-					this.appendActions(loadingEl, answer, query);
+						// Action buttons (icons) below the sources: copy / save.
+						this.appendActions(loadingEl, answer, query);
+						if (wasNearBottom) this.scrollToBottom();
 				} catch (e) {
 					// User aborted — keep whatever streamed so far and show a
 					// "stopped" notice instead of an error.
