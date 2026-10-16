@@ -1043,11 +1043,13 @@ export class SemanticSearchView extends ItemView {
 					// protocol/design docs vanish from the sources card).
 					// Sources the model DECLARED in submit_answer are validated
 					// against the known path set (initial retrieval + dropped
-					// attachments + tool-read notes). When a declaration
-					// survives validation it takes PRIORITY: the card lists
-					// declared + actually-opened notes only — bare search hits
-					// the model never used are dropped. Without a declaration
-					// the previous inference floor applies.
+					// attachments + tool-read notes). Precision mode kicks in
+					// when a declaration survives validation OR the model
+					// actually opened notes (get_note/get_section): the card
+					// lists declared + opened notes only — bare search hits
+					// the model never used are dropped. Only a turn answered
+					// purely from snippets (nothing declared, nothing opened)
+					// keeps the full retrieval floor.
 					const knownPaths = new Set<string>([
 						...turnAttachments,
 						...initialResults.map((r) => r.notePath),
@@ -1061,7 +1063,7 @@ export class SemanticSearchView extends ItemView {
 					const readNotes = result.readNotes || [];
 					let sourceContext = initialResults;
 					let sourcePaths = usedNotes;
-					if (!hasAttachments && declared.length > 0) {
+					if (!hasAttachments && (declared.length > 0 || readNotes.length > 0)) {
 						const keep = new Set<string>(declared);
 						for (const p of readNotes) keep.add(p);
 						sourceContext = initialResults.filter((r) => keep.has(r.notePath));
