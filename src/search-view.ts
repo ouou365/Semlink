@@ -741,16 +741,17 @@ export class SemanticSearchView extends ItemView {
 				const streamEl = loadingEl.createDiv({ cls: "semlink-msg-stream semlink-hidden" });
 				// Live markdown preview container. Uses the SAME renderer as
 				// the final answer so the stream shows styled markdown instead
-				// of raw syntax. Rendering is throttled (per-delta renders
-				// would jank): the first delta renders immediately, then at
-				// most every 400ms, with a queued catch-up for deltas that
-				// arrived mid-render.
+				// of raw syntax. Character reveal is decoupled from rendering:
+				// a ~30ms typewriter loop reveals the source text smoothly
+				// (adaptive rate — the further behind, the faster it catches
+				// up), while markdown re-renders stay paced at ~120ms so the
+				// styled output keeps up without janking.
 				const streamInner = streamEl.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
 				let streamText = "";
-				let streamRenderAt = 0;
-				let streamRendering = false;
-				let streamRenderQueued = false;
-				let streamTimer: number | null = null;
+				let shownText = "";
+				let typeTimer: number | null = null;
+				let typeRendering = false;
+				let typeTicks = 0;
 				// Set when any streamed text reached the UI. A round's interim
 				// flash (live-forwarded pre-tool text) collapses the thinking
 				// preview — startDots restores it when the flag is still set
@@ -762,34 +763,48 @@ export class SemanticSearchView extends ItemView {
 					const m = this.messagesEl;
 					if (m.scrollHeight - m.scrollTop - m.clientHeight < 80) this.scrollToBottom();
 				};
-				const renderStream = async (): Promise<void> => {
-					if (streamRendering) {
-						streamRenderQueued = true;
-						return;
+				const stopTypewriter = (): void => {
+					if (typeTimer !== null) {
+						window.clearInterval(typeTimer);
+						typeTimer = null;
 					}
-					streamRendering = true;
-					streamRenderAt = Date.now();
+				};
+				const renderShown = async (): Promise<void> => {
+					if (typeRendering) return;
+					typeRendering = true;
 					try {
 						if (streamEl.isConnected) {
 							streamInner.empty();
-							await MarkdownRenderer.render(this.app, protectHyphens(streamText), streamInner, "", this);
+							await MarkdownRenderer.render(this.app, protectHyphens(shownText), streamInner, "", this);
 							followScroll();
 						}
 					} finally {
-						streamRendering = false;
-						if (streamRenderQueued && streamEl.isConnected) {
-							streamRenderQueued = false;
-							void renderStream();
-						}
+						typeRendering = false;
 					}
 				};
-				const scheduleStreamRender = (): void => {
-					if (streamTimer !== null) return;
-					const wait = Math.max(0, 400 - (Date.now() - streamRenderAt));
-					streamTimer = window.setTimeout(() => {
-						streamTimer = null;
-						void renderStream();
-					}, wait);
+				const typeTick = (): void => {
+					if (!streamEl.isConnected) {
+						stopTypewriter();
+						return;
+					}
+					const remaining = streamText.length - shownText.length;
+					if (remaining <= 0) {
+						// Caught up — idle until the next delta restarts us.
+						stopTypewriter();
+						return;
+					}
+					// Adaptive reveal: sweep big backlogs fast (a large chunk
+					// arrives at once), keep a light baseline for the snappy
+					// character-by-character feel.
+					const step = Math.min(60, Math.max(2, Math.ceil(remaining / 10)));
+					shownText = streamText.slice(0, shownText.length + step);
+					typeTicks++;
+					// Markdown re-render paced (~every 4th tick ≈ 120ms), and
+					// always the moment we catch up so the tail never lags.
+					if (typeTicks % 4 === 0 || shownText.length >= streamText.length) void renderShown();
+				};
+				const startTypewriter = (): void => {
+					if (typeTimer === null) typeTimer = window.setInterval(typeTick, 30);
 				};
 
 				// Status indicator: the elapsed-seconds counter ticks along once
@@ -805,6 +820,8 @@ export class SemanticSearchView extends ItemView {
 					loadingTextEl.removeClass("semlink-hidden");
 					streamEl.addClass("semlink-hidden");
 					streamText = "";
+					shownText = "";
+					stopTypewriter();
 					streamInner.empty();
 					// The previous round's interim flash collapsed the thinking
 					// preview — restore it; the real answer re-collapses when
@@ -936,7 +953,7 @@ export class SemanticSearchView extends ItemView {
 							// Streamed text arrived — fold the thinking preview
 							// back up (it auto-expanded during thinking) and let
 							// the answer body take over the bubble. Text renders
-							// as throttled live markdown (renderStream above);
+							// as throttled live markdown (typewriter above);
 							// scroll following happens after each render. NOTE:
 							// this also fires for an interim flash (pre-tool text
 							// past the live threshold) — startDots restores the
@@ -948,7 +965,7 @@ export class SemanticSearchView extends ItemView {
 							loadingTextEl.removeClass("is-open");
 							streamEl.removeClass("semlink-hidden");
 							streamText = text;
-							scheduleStreamRender();
+							startTypewriter();
 						},						() => {
 							// Round start: before any tool was called it's the
 							// thinking phase (模型思考中); after tools it's the
