@@ -2447,8 +2447,11 @@ body .semlink-msg-user::selection {
 /* Collapsed-thinking state while the answer streams: mirror the finished
    .semlink-thinking panel (secondary surface, rounded, bold summary) so the
    header looks the same during and after streaming. Shimmer is off — this
-   state is a finished summary, not a progress line. */
+   state is a finished summary, not a progress line. NOT sticky: once the
+   answer is flowing, the collapsed header scrolls away like normal content
+   (pinning to the top is for the thinking-in-progress status line only). */
 .semlink-msg-loading.is-thinking {
+    position: static;
     background: var(--background-secondary);
     border-radius: 6px;
     padding: 6px 12px;
