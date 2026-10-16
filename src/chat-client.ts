@@ -733,8 +733,15 @@ export class ChatClient {
 			}
 			return total === 0 ? 0 : (2 * inter) / total;
 		};
-		return thinking.filter((s) => {
+		return thinking.filter((s, idx) => {
 			if (s.type !== "thought") return true;
+			// The FIRST thought is the pre-analysis — the model's reasoning
+			// record, and the core of the transparent-thinking promise. It
+			// often drafts the same facts as the answer (the snippets were
+			// enough), but it must stay in the card even then. Only later
+			// thoughts — mid-flow answer dumps written alongside a tool call
+			// — are treated as duplication.
+			if (idx === 0) return true;
 			const t = norm(s.text);
 			// Tiny stage-direction thoughts ("（读取笔记中）") always stay.
 			if (t.length < 40) return true;
