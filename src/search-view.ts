@@ -1043,24 +1043,36 @@ export class SemanticSearchView extends ItemView {
 					// protocol/design docs vanish from the sources card).
 					// Sources the model DECLARED in submit_answer are validated
 					// against the known path set (initial retrieval + dropped
-					// attachments + tool-read notes) and unioned in — declaration
-					// captures what tool-based inference misses, inference stays
-					// as the floor.
+					// attachments + tool-read notes). When a declaration
+					// survives validation it takes PRIORITY: the card lists
+					// declared + actually-opened notes only — bare search hits
+					// the model never used are dropped. Without a declaration
+					// the previous inference floor applies.
 					const knownPaths = new Set<string>([
 						...turnAttachments,
 						...initialResults.map((r) => r.notePath),
 						...result.usedNotes,
 					]);
+					const declared = this.matchDeclaredSources(result.declaredSources || [], knownPaths);
 					const usedNotes = [...result.usedNotes];
-					for (const p of this.matchDeclaredSources(result.declaredSources || [], knownPaths)) {
+					for (const p of declared) {
 						if (!usedNotes.includes(p)) usedNotes.push(p);
+					}
+					const readNotes = result.readNotes || [];
+					let sourceContext = initialResults;
+					let sourcePaths = usedNotes;
+					if (!hasAttachments && declared.length > 0) {
+						const keep = new Set<string>(declared);
+						for (const p of readNotes) keep.add(p);
+						sourceContext = initialResults.filter((r) => keep.has(r.notePath));
+						sourcePaths = [...keep];
 					}
 					const usedSources = hasAttachments
 						? this.buildUsedSources(
 							turnAttachments.map((p) => ({ chunkId: "", notePath: p, heading: "", contentPreview: "", score: -1 })),
 							usedNotes,
 						)
-						: this.buildUsedSources(initialResults, usedNotes);
+						: this.buildUsedSources(sourceContext, sourcePaths);
 					this.renderSources(loadingEl, usedSources, false);
 
 					// Persist this turn into chat history (incl. context usage so
@@ -1070,7 +1082,7 @@ export class SemanticSearchView extends ItemView {
 					await this.recordAssistantMessage(
 						answer,
 						[firstStep, ...thinking],
-						usedNotes,
+						sourcePaths,
 						elapsedSec,
 						result.contextTokens,
 						result.contextBreakdown,

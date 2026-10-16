@@ -313,6 +313,9 @@ export interface ChatResult {
 	answer: string;
 	thinking: ThinkingStep[];
 	usedNotes: string[];
+	/** Notes actually opened via get_note/get_section this turn — a stronger
+	 *  "used" signal than search hits, for the source cards. */
+	readNotes: string[];
 	/** Note paths the model declared in submit_answer's `sources` argument —
 	 *  raw and unvalidated; the caller matches them against known paths. */
 	declaredSources: string[];
@@ -545,6 +548,9 @@ export class ChatClient {
 
 		const thinking: ThinkingStep[] = [];
 		const usedNotes: string[] = [];
+		// Notes actually OPENED via get_note/get_section — a stronger "used"
+		// signal than search hits, exposed separately for source cards.
+		const readNotes: string[] = [];
 
 		// Native message array: system + history (verbatim) + the current
 		// question. History is truncated early (sliding window) so the prompt
@@ -921,6 +927,9 @@ export class ChatClient {
 		// Set when a provider rejects the forced submit_answer tool_choice —
 		// remaining rounds degrade to the legacy plain-text answer path.
 		let submitDisabled = false;
+		// Notes actually OPENED via get_note/get_section this turn — a
+		// stronger "used" signal than search hits, for the source cards.
+		const readNotes: string[] = [];
 		// Context tokens reported by the API for the latest request.
 		let usageTokens = 0;
 		// Token usage summed across ALL rounds (usage dashboard). usageTokens
@@ -953,6 +962,8 @@ export class ChatClient {
 				answer,
 				thinking: this.dedupeAnswerThoughts(thinking, answer),
 				usedNotes,
+				// Notes actually opened via get_note/get_section this turn.
+				readNotes,
 				// Sources the model declared in submit_answer — transported
 				// raw; the caller validates them against known paths.
 				declaredSources: declaredSources ?? [],
@@ -1159,6 +1170,10 @@ export class ChatClient {
 				thinking.push(step);
 				onThinking?.(step);
 				this.collectUsedNotes(usedNotes, name, args, result);
+				if ((name === "get_note" || name === "get_section") && typeof (args as { path?: unknown }).path === "string") {
+					const rp = (args as { path: string }).path;
+					if (!readNotes.includes(rp)) readNotes.push(rp);
+				}
 				messages.push({ role: "tool", tool_call_id: tc.id || `call_${round}_${stream.toolCalls.indexOf(tc)}`, content: result });
 			}
 		}
@@ -1356,6 +1371,9 @@ export class ChatClient {
 		// Set when a provider rejects the forced submit_answer tool_choice —
 		// remaining rounds degrade to the legacy plain-text answer path.
 		let submitDisabled = false;
+		// Notes actually OPENED via get_note/get_section this turn — a
+		// stronger "used" signal than search hits, for the source cards.
+		const readNotes: string[] = [];
 		// Context tokens reported by the API for the latest request.
 		let usageTokens = 0;
 		// Token usage summed across ALL rounds (usage dashboard).
@@ -1387,6 +1405,8 @@ export class ChatClient {
 				answer,
 				thinking: this.dedupeAnswerThoughts(thinking, answer),
 				usedNotes,
+				// Notes actually opened via get_note/get_section this turn.
+				readNotes,
 				// Sources the model declared in submit_answer — transported
 				// raw; the caller validates them against known paths.
 				declaredSources: declaredSources ?? [],
@@ -1620,6 +1640,10 @@ export class ChatClient {
 				thinking.push(step);
 				onThinking?.(step);
 				this.collectUsedNotes(usedNotes, name, args, result);
+				if ((name === "get_note" || name === "get_section") && typeof (args as { path?: unknown }).path === "string") {
+					const rp = (args as { path: string }).path;
+					if (!readNotes.includes(rp)) readNotes.push(rp);
+				}
 				toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: result });
 			}
 			if (toolResults.length === 0) {
