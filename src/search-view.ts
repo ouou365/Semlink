@@ -794,9 +794,10 @@ export class SemanticSearchView extends ItemView {
 						return;
 					}
 					// Adaptive reveal: sweep big backlogs fast (a large chunk
-					// arrives at once), keep a light baseline for the snappy
-					// character-by-character feel.
-					const step = Math.min(60, Math.max(2, Math.ceil(remaining / 10)));
+					// arrives at once), keep a brisk baseline (≈130 字/秒 at
+					// 30ms ticks) so the reveal stays neck-and-neck with the
+					// model instead of trailing behind it.
+					const step = Math.min(80, Math.max(4, Math.ceil(remaining / 6)));
 					shownText = streamText.slice(0, shownText.length + step);
 					typeTicks++;
 					// Markdown re-render paced (~every 4th tick ≈ 120ms), and
