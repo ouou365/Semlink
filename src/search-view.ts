@@ -951,17 +951,20 @@ export class SemanticSearchView extends ItemView {
 					// Analysis/overview-heavy prompts get deeper reading.
 					inferAgentDepth(query),
 					(text) => {
-							// Streamed text arrived — fold the thinking preview
-							// back up (it auto-expanded during thinking) and let
-							// the answer body take over the bubble. Text renders
-							// as throttled live markdown (typewriter above);
-							// scroll following happens after each render. NOTE:
-							// this also fires for an interim flash (pre-tool text
-							// past the live threshold) — startDots restores the
-							// preview when the next round proves it was thinking.
+							// Streamed text arrived — COLLAPSE the thinking process
+							// (the header row stays visible as a "▸ 思考了 N 秒"
+							// toggle the user can re-open mid-stream) and let the
+							// answer body stream below it. Text renders as live
+							// markdown (typewriter above); scroll following happens
+							// after each render. NOTE: this also fires for an
+							// interim flash (pre-tool text past the live threshold)
+							// — startDots restores the expanded preview when the
+							// next round proves it was thinking.
 							streamShown = true;
 							stopAnswerAnim();
-							loadingTextEl.addClass("semlink-hidden");
+							loadingTextSpan.textContent =
+								t("searchThinkingDuration").replace("{seconds}", this.formatDuration(Math.max(1, Math.round((Date.now() - thinkStart) / 1000))));
+							loadingDotsSpan.textContent = "";
 							liveBody.addClass("semlink-hidden");
 							loadingTextEl.removeClass("is-open");
 							streamEl.removeClass("semlink-hidden");
