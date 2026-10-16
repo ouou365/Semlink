@@ -751,6 +751,11 @@ export class SemanticSearchView extends ItemView {
 				let streamRendering = false;
 				let streamRenderQueued = false;
 				let streamTimer: number | null = null;
+				// Set when any streamed text reached the UI. A round's interim
+				// flash (live-forwarded pre-tool text) collapses the thinking
+				// preview — startDots restores it when the flag is still set
+				// from a PREVIOUS round; the real answer leaves it collapsed.
+				let streamShown = false;
 				const followScroll = (): void => {
 					// Follow the growing answer only while the user is already
 					// near the bottom — reading back must not be fought.
@@ -801,6 +806,15 @@ export class SemanticSearchView extends ItemView {
 					streamEl.addClass("semlink-hidden");
 					streamText = "";
 					streamInner.empty();
+					// The previous round's interim flash collapsed the thinking
+					// preview — restore it; the real answer re-collapses when
+					// its own text starts arriving.
+					if (streamShown) {
+						streamShown = false;
+						liveBody.removeClass("semlink-hidden");
+						refreshLiveBody();
+						loadingTextEl.addClass("is-open");
+					}
 					stopAnswerAnim();
 					// Static status text — NO animated dots ("思考了 14 秒（生成
 					// 回答中）"). Only the elapsed seconds tick along once per
@@ -919,11 +933,15 @@ export class SemanticSearchView extends ItemView {
 					// Analysis/overview-heavy prompts get deeper reading.
 					inferAgentDepth(query),
 					(text) => {
-							// Answer streaming started — fold the thinking preview
+							// Streamed text arrived — fold the thinking preview
 							// back up (it auto-expanded during thinking) and let
 							// the answer body take over the bubble. Text renders
 							// as throttled live markdown (renderStream above);
-							// scroll following happens after each render.
+							// scroll following happens after each render. NOTE:
+							// this also fires for an interim flash (pre-tool text
+							// past the live threshold) — startDots restores the
+							// preview when the next round proves it was thinking.
+							streamShown = true;
 							stopAnswerAnim();
 							loadingTextEl.addClass("semlink-hidden");
 							liveBody.addClass("semlink-hidden");

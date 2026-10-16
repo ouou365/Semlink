@@ -207,6 +207,13 @@ const SUBMIT_TOOL_DESCRIPTION =
 	"answer) inside `answer`; any commentary belongs in regular text before " +
 	"the call.";
 
+/** Live-forward threshold for tool-attached rounds: content growing past
+ *  this size with NO tool-call delta yet is overwhelmingly the final answer
+ *  (interim pre-tool text is short), so streaming starts — including the
+ *  already-buffered prefix. Below the threshold the round stays buffered and
+ *  the caller's end-of-round forward covers it. */
+const ANSWER_LIVE_THRESHOLD = 200;
+
 function submitAnswerParameters(): Record<string, unknown> {
 	return {
 		type: "object",
@@ -1030,11 +1037,14 @@ export class ChatClient {
 			// plain no-tool rounds stream live: what arrives is answer body.
 			let stream;
 			try {
+				// onStream is passed for EVERY round — streamOpenAIChat gates
+				// forwarding internally (submit-arg partials, live threshold,
+				// end-of-round one-shot).
 				stream = await this.streamOpenAIChat(
 					openaiUrl,
 					provider,
 					body,
-					submitRound || !body.tools ? onStream : undefined,
+					onStream,
 					signal,
 				);
 			} catch (e) {
@@ -1156,10 +1166,11 @@ export class ChatClient {
 		}));
 	}
 
-	/** Stream one OpenAI-compatible chat round. When `onStream` is provided,
-	 * each content delta is forwarded live (true streaming). The caller only
-	 * passes it for rounds with no tools attached, i.e. guaranteed final
-	 * answers; tool rounds pass no onStream so their content stays buffered. */
+	/** Stream one OpenAI-compatible chat round. `onStream` receives answer
+	 *  body live: submit rounds stream the `answer` argument out of the
+	 *  partial JSON; tool-attached rounds start live-forwarding content once
+	 *  it passes ANSWER_LIVE_THRESHOLD with no tool_call delta (and one-shot
+	 *  at round end otherwise); no-tool rounds stream every delta. */
 	private async streamOpenAIChat(
 		url: string,
 		provider: ChatProvider,
@@ -1216,14 +1227,23 @@ export class ChatClient {
 		// Last submit_answer partial already forwarded — deltas recompute the
 		// field from scratch, so skip no-change emissions.
 		let lastSubmitPartial = "";
+		// Live-forward gating for tool-attached rounds (see ANSWER_LIVE_THRESHOLD).
+		const submitRound = !!body.tool_choice;
+		const liveThreshold = body.tools ? ANSWER_LIVE_THRESHOLD : 0;
+		let toolDeltaSeen = false;
+		let liveForward = false;
 		await this.readSSE<OpenAIStreamEvent>(resp, (json) => {
 			const delta = json?.choices?.[0]?.delta;
 			if (typeof delta?.content === "string" && delta.content) {
 				content += delta.content;
-				// Live forward: the caller only passes onStream for rounds with
-				// no tools attached (guaranteed final answers), so every delta
-				// is answer body — push it out as it arrives.
-				onStream?.(content);
+				// Live forward: no-tool rounds stream every delta; tool-attached
+				// rounds start once the text passes the threshold with no tool
+				// call in sight. In submit rounds content is thinking — never
+				// forwarded (only the answer argument below is).
+				if (!submitRound && !toolDeltaSeen && (liveForward || content.length >= liveThreshold)) {
+					liveForward = true;
+					onStream?.(content);
+				}
 			}
 			for (const tc of delta?.tool_calls || []) {
 				const idx = tc.index ?? 0;
@@ -1242,6 +1262,7 @@ export class ChatClient {
 						}
 					}
 				}
+				toolDeltaSeen = true;
 			}
 			// Usage arrives in the final chunk when stream_options.include_usage.
 			const u = json?.usage;
@@ -1444,11 +1465,14 @@ export class ChatClient {
 
 			let stream;
 			try {
+				// onStream is passed for EVERY round — streamAnthropicChat gates
+				// forwarding internally (submit-arg partials, live threshold,
+				// end-of-round replay).
 				stream = await this.streamAnthropicChat(
 					anthropicUrl,
 					provider,
 					body,
-					submitRound || !body.tools ? onStream : undefined,
+					onStream,
 					signal,
 				);
 			} catch (e) {
@@ -1668,6 +1692,11 @@ export class ChatClient {
 		// Last submit_answer partial already forwarded (deltas recompute the
 		// field from scratch — skip no-change emissions).
 		let lastSubmitPartial = "";
+		// Live-forward gating for tool-attached rounds (see ANSWER_LIVE_THRESHOLD).
+		const submitRound = !!body.tool_choice;
+		const liveThreshold = body.tools ? ANSWER_LIVE_THRESHOLD : 0;
+		let toolBlockSeen = false;
+		let liveForward = false;
 
 		await this.readSSE<AnthropicStreamEvent>(resp, (json) => {
 			const type = json?.type;
@@ -1697,6 +1726,9 @@ export class ChatClient {
 					blocks[idx] = { type: "thinking", thinking: "" };
 				} else if (block?.type === "tool_use") {
 					blocks[idx] = { type: "tool_use", id: block.id, name: block.name, input: "" };
+					// A tool_use block means this round is a tool round — stop
+					// live-forwarding text (see ANSWER_LIVE_THRESHOLD).
+					toolBlockSeen = true;
 				}
 			} else if (type === "content_block_delta") {
 				const idx = json?.index ?? 0;
@@ -1704,9 +1736,14 @@ export class ChatClient {
 				if (delta?.type === "text_delta" && delta.text) {
 					if (blocks[idx]) blocks[idx].text! += delta.text;
 					text += delta.text;
-					// Live forward — onStream is only passed for final-answer
-					// rounds (no tools), so every text delta is answer body.
-					onStream?.(text);
+					// Live forward: no-tool rounds stream every delta;
+					// tool-attached rounds start once the text passes the
+					// threshold with no tool_use block in sight. In submit
+					// rounds content is thinking — never forwarded.
+					if (!submitRound && !toolBlockSeen && (liveForward || text.length >= liveThreshold)) {
+						liveForward = true;
+						onStream?.(text);
+					}
 				} else if (delta?.type === "thinking_delta" && delta.thinking) {
 					if (blocks[idx]) blocks[idx].thinking! += delta.thinking;
 				} else if (delta?.type === "input_json_delta") {
