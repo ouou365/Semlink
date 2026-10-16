@@ -205,7 +205,8 @@ const SUBMIT_TOOL_DESCRIPTION =
 	"the complete, user-facing response — the actual content only. Never put " +
 	"process narration (reading notes, gathering information, announcing the " +
 	"answer) inside `answer`; any commentary belongs in regular text before " +
-	"the call.";
+	"the call. In `sources`, optionally list the vault note paths the answer " +
+	"actually drew on (only paths that appear in the provided context).";
 
 /** Live-forward threshold for tool-attached rounds: content growing past
  *  this size with NO tool-call delta yet is overwhelmingly the final answer
@@ -221,6 +222,11 @@ function submitAnswerParameters(): Record<string, unknown> {
 			answer: {
 				type: "string",
 				description: "The complete final answer shown to the user. Markdown allowed. No process narration.",
+			},
+			sources: {
+				type: "array",
+				items: { type: "string" },
+				description: "Vault paths of the notes the answer actually drew on. Omit when the answer is not based on notes.",
 			},
 		},
 		required: ["answer"],
@@ -307,6 +313,9 @@ export interface ChatResult {
 	answer: string;
 	thinking: ThinkingStep[];
 	usedNotes: string[];
+	/** Note paths the model declared in submit_answer's `sources` argument —
+	 *  raw and unvalidated; the caller matches them against known paths. */
+	declaredSources: string[];
 	/** Context tokens used by this turn (usage from the API, or an estimate). */
 	contextTokens: number;
 	/** Per-category context breakdown for the usage tooltip. */
@@ -763,18 +772,23 @@ export class ChatClient {
 		return thinking.some((s) => s.type === "thought" && s.text.trim().length >= 80);
 	}
 
-	/** Extract the user-facing answer from a submit_answer call's arguments.
-	 * Preferred: full JSON.parse. Fallbacks: the incremental extractor
-	 * (tolerates broken JSON around the field), then the round's plain text
-	 * content (model ignored the tool body entirely). */
-	private parseSubmittedAnswer(argsJson: string, fallbackContent: string): string {
+	/** Extract the user-facing answer and declared sources from a
+	 * submit_answer call's arguments. Preferred: full JSON.parse. Fallbacks
+	 * for the answer: the incremental extractor (tolerates broken JSON
+	 * around the field), then the round's plain text content (model ignored
+	 * the tool body entirely). Sources ride along only when the JSON parses. */
+	private parseSubmittedAnswer(argsJson: string, fallbackContent: string): { answer: string; sources: string[] } {
 		try {
-			const parsed = JSON.parse(argsJson) as { answer?: unknown };
-			if (typeof parsed.answer === "string") return parsed.answer;
+			const parsed = JSON.parse(argsJson) as { answer?: unknown; sources?: unknown };
+			const answer = typeof parsed.answer === "string" ? parsed.answer : "";
+			const sources = Array.isArray(parsed.sources)
+				? parsed.sources.filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+				: [];
+			if (parsed.answer !== undefined || sources.length > 0) return { answer, sources };
 		} catch { /* fall through to partial extraction */ }
 		const partial = extractPartialJsonString(argsJson, "answer");
-		if (partial && partial.trim()) return partial;
-		return fallbackContent.trim();
+		if (partial && partial.trim()) return { answer: partial, sources: [] };
+		return { answer: fallbackContent.trim(), sources: [] };
 	}
 
 	/** A sentence counts as process narration when it is a post-tool
@@ -916,7 +930,7 @@ export class ChatClient {
 		// Per-request cache hit ratios (e.g. DeepSeek prompt caching).
 		const cacheHits: CacheSample[] = [];
 
-		const finalize = (rawAnswer: string): ChatResult => {
+		const finalize = (rawAnswer: string, declaredSources?: string[]): ChatResult => {
 			// Strip the robotic process lead-in BEFORE anything else — dedupe
 			// compares against the cleaned text. A shell-only answer (nothing
 			// but an intro line) strips to "": pass the emptiness through when
@@ -939,6 +953,9 @@ export class ChatClient {
 				answer,
 				thinking: this.dedupeAnswerThoughts(thinking, answer),
 				usedNotes,
+				// Sources the model declared in submit_answer — transported
+				// raw; the caller validates them against known paths.
+				declaredSources: declaredSources ?? [],
 				contextTokens: breakdown.used,
 				contextBreakdown: breakdown,
 				cacheHitRate,
@@ -1074,8 +1091,8 @@ export class ChatClient {
 			const submitCall = stream.toolCalls.find((tc) => tc?.function?.name === SUBMIT_TOOL_NAME);
 			if (submitCall) {
 				const submitted = this.parseSubmittedAnswer(submitCall.function.arguments || "", stream.content);
-				onStream?.(submitted);
-				return finalize(submitted);
+				onStream?.(submitted.answer);
+				return finalize(submitted.answer, submitted.sources);
 			}
 
 			if (stream.toolCalls.length === 0) {
@@ -1101,8 +1118,8 @@ export class ChatClient {
 				// accept it as final instead of executing a bogus tool.
 				if (name === SUBMIT_TOOL_NAME) {
 					const submitted = this.parseSubmittedAnswer(rawArgs, stream.content);
-					onStream?.(submitted);
-					return finalize(submitted);
+					onStream?.(submitted.answer);
+					return finalize(submitted.answer, submitted.sources);
 				}
 
 				let args: Record<string, unknown> = {};
@@ -1347,7 +1364,7 @@ export class ChatClient {
 		// Per-request cache hit ratios (Anthropic prompt caching).
 		const cacheHits: CacheSample[] = [];
 
-		const finalize = (rawAnswer: string): ChatResult => {
+		const finalize = (rawAnswer: string, declaredSources?: string[]): ChatResult => {
 			// Strip the robotic process lead-in BEFORE anything else — dedupe
 			// compares against the cleaned text. A shell-only answer (nothing
 			// but an intro line) strips to "": pass the emptiness through when
@@ -1370,6 +1387,9 @@ export class ChatClient {
 				answer,
 				thinking: this.dedupeAnswerThoughts(thinking, answer),
 				usedNotes,
+				// Sources the model declared in submit_answer — transported
+				// raw; the caller validates them against known paths.
+				declaredSources: declaredSources ?? [],
 				contextTokens: breakdown.used,
 				contextBreakdown: breakdown,
 				cacheHitRate,
@@ -1503,6 +1523,10 @@ export class ChatClient {
 				let submitted = "";
 				const ans = (submitUse.input as { answer?: unknown } | undefined)?.answer;
 				if (typeof ans === "string") submitted = ans;
+				const rawSources = (submitUse.input as { sources?: unknown } | undefined)?.sources;
+				const sources = Array.isArray(rawSources)
+					? rawSources.filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+					: [];
 				if (!submitted.trim()) {
 					const partial = extractPartialJsonString(stream.rawToolInputs[SUBMIT_TOOL_NAME] || "", "answer");
 					if (partial && partial.trim()) submitted = partial;
@@ -1515,7 +1539,7 @@ export class ChatClient {
 						.trim();
 				}
 				await this.replay(submitted, onStream);
-				return finalize(submitted);
+				return finalize(submitted, sources);
 			}
 
 			if (stream.stopReason !== "tool_use") {
@@ -1557,10 +1581,13 @@ export class ChatClient {
 				// Model self-submitted the answer in a regular tool round —
 				// accept it as final instead of executing a bogus tool.
 				if (name === SUBMIT_TOOL_NAME) {
-					const ans = (args as { answer?: unknown }).answer;
-					const submitted = typeof ans === "string" ? ans : "";
+					const payload = args as { answer?: unknown; sources?: unknown };
+					const submitted = typeof payload.answer === "string" ? payload.answer : "";
+					const sources = Array.isArray(payload.sources)
+						? payload.sources.filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+						: [];
 					await this.replay(submitted, onStream);
-					return finalize(submitted);
+					return finalize(submitted, sources);
 				}
 
 				// Repeated call (exact or rephrased query): don't re-execute and

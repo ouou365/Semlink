@@ -1041,12 +1041,26 @@ export class SemanticSearchView extends ItemView {
 					// With attachments the sources ARE the dropped notes — plus
 					// any notes the model read via tools afterwards (otherwise
 					// protocol/design docs vanish from the sources card).
+					// Sources the model DECLARED in submit_answer are validated
+					// against the known path set (initial retrieval + dropped
+					// attachments + tool-read notes) and unioned in — declaration
+					// captures what tool-based inference misses, inference stays
+					// as the floor.
+					const knownPaths = new Set<string>([
+						...turnAttachments,
+						...initialResults.map((r) => r.notePath),
+						...result.usedNotes,
+					]);
+					const usedNotes = [...result.usedNotes];
+					for (const p of this.matchDeclaredSources(result.declaredSources || [], knownPaths)) {
+						if (!usedNotes.includes(p)) usedNotes.push(p);
+					}
 					const usedSources = hasAttachments
 						? this.buildUsedSources(
 							turnAttachments.map((p) => ({ chunkId: "", notePath: p, heading: "", contentPreview: "", score: -1 })),
-							result.usedNotes,
+							usedNotes,
 						)
-						: this.buildUsedSources(initialResults, result.usedNotes);
+						: this.buildUsedSources(initialResults, usedNotes);
 					this.renderSources(loadingEl, usedSources, false);
 
 					// Persist this turn into chat history (incl. context usage so
@@ -1056,7 +1070,7 @@ export class SemanticSearchView extends ItemView {
 					await this.recordAssistantMessage(
 						answer,
 						[firstStep, ...thinking],
-						result.usedNotes,
+						usedNotes,
 						elapsedSec,
 						result.contextTokens,
 						result.contextBreakdown,
@@ -1125,6 +1139,30 @@ export class SemanticSearchView extends ItemView {
 	 * the model read/retrieved via tools, deduped by path (initial first).
 	 * Tool-only notes have no preview/score — they render as path cards.
 	 */
+	/** Validate the note paths a model declared in submit_answer's `sources`
+	 *  against the paths actually known to this turn. Models sometimes drop
+	 *  the folder prefix or reword separators, so exact matches win and
+	 *  whole-segment prefix/suffix matches remap to the known path; anything
+	 *  else is a hallucination and gets dropped. */
+	private matchDeclaredSources(declared: string[], known: Set<string>): string[] {
+		const norm = (p: string): string => p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").toLowerCase();
+		const out: string[] = [];
+		for (const d of declared) {
+			const nd = norm(d);
+			if (!nd) continue;
+			let matched = "";
+			for (const k of known) {
+				const nk = norm(k);
+				if (nk === nd || nk.endsWith("/" + nd) || nd.endsWith("/" + nk)) {
+					matched = k;
+					break;
+				}
+			}
+			if (matched && !out.includes(matched)) out.push(matched);
+		}
+		return out;
+	}
+
 	private buildUsedSources(contextResults: SearchResult[], usedPaths: string[]): SearchResult[] {
 		const byPath = new Map<string, SearchResult>();
 		for (const r of contextResults) {
