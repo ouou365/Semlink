@@ -145,7 +145,6 @@ export class SemanticSearchView extends ItemView {
 	 *  only dismisses it for the current view session, not forever. */
 	private guideDismissed = false;
 	/** Home ("new session") button — hidden while the welcome screen is up. */
-	private newChatBtnEl: HTMLElement | null = null;
 	private newChatPillEl: HTMLElement | null = null;
 
 	// Current conversation state
@@ -220,33 +219,6 @@ export class SemanticSearchView extends ItemView {
 			setIcon(usageBtn, "gauge");
 			usageBtn.addEventListener("click", () => new UsageModal(this.app, this.plugin).open());
 		}
-		const newChatBtn = leftIcons.createEl("button", {
-			cls: "semlink-search-icon-btn clickable-icon",
-			attr: { "aria-label": t("searchNewChat") },
-		});
-		this.newChatBtnEl = newChatBtn;
-		// Home icon: Obsidian's icon set has no house icon, so inline the
-		// classic lucide home (house + door) — same stroke style as built-in
-		// icons, 24px to match Obsidian's default icon size.
-		const homeSvg = newChatBtn.createSvg("svg", {
-			cls: "svg-icon",
-			attr: {
-				viewBox: "0 0 24 24",
-				width: "24",
-				height: "24",
-				fill: "none",
-				stroke: "currentColor",
-				"stroke-width": "2",
-				"stroke-linecap": "round",
-				"stroke-linejoin": "round",
-				"aria-hidden": "true",
-			},
-		});
-		homeSvg.createSvg("path", { attr: { d: "m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" } });
-		homeSvg.createSvg("polyline", { attr: { points: "9 22 9 12 15 12 15 22" } });
-		newChatBtn.addEventListener("click", () => {
-			this.newChatFromUi();
-		});
 		// Help icon: (re-)opens the setup guide on the welcome screen.
 		const helpBtn = leftIcons.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
@@ -1990,13 +1962,10 @@ export class SemanticSearchView extends ItemView {
 		});
 	}
 
-	/** Home icon is the "back to start" button — it only makes sense once a
-	 *  conversation exists, so hide it while the welcome screen is up. The
-	 *  toolbar new-chat pill follows the same rule (nothing to new-chat away
-	 *  from on a fresh welcome screen). */
+	/** The toolbar new-chat pill only makes sense once a conversation exists
+	 *  — hide it while the welcome screen is up. */
 	private updateHomeIconVisibility(): void {
 		const onHome = !!this.messagesEl.querySelector(".semlink-search-welcome");
-		this.newChatBtnEl?.toggleClass("is-hidden", onHome);
 		this.newChatPillEl?.toggleClass("is-hidden", onHome);
 	}
 
@@ -2009,10 +1978,6 @@ export class SemanticSearchView extends ItemView {
 		if (this.menuBtnEl) {
 			this.menuBtnEl.setAttr("aria-label", t("historyTitle"));
 			this.menuBtnEl.setAttr("title", t("historyTitle"));
-		}
-		if (this.newChatBtnEl) {
-			this.newChatBtnEl.setAttr("aria-label", t("searchNewChat"));
-			this.newChatBtnEl.setAttr("title", t("searchNewChat"));
 		}
 		if (this.settingsBtnEl) {
 			this.settingsBtnEl.setAttr("aria-label", t("settingsTitle"));
