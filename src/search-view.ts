@@ -1773,12 +1773,17 @@ export class SemanticSearchView extends ItemView {
 			langBtn.addEventListener("click", () => {
 				// All UI languages from the registry (native labels), not just
 				// zh/en — the guide must be reachable in every language. The
-				// active one gets a checkmark.
+				// active one is marked with the accent color (no checkmark).
 				const menu = new Menu();
 				for (const l of LANGUAGES) {
 					menu.addItem((item) => {
 						item.setTitle(l.label).onClick(() => switchLang(l.value));
-						if (l.value === getLang()) item.setIcon("check");
+						if (l.value === getLang()) {
+							// titleEl isn't in the pinned Obsidian typings yet —
+							// it exists at runtime (menu item's label span).
+							const titleEl = (item as unknown as { titleEl: HTMLElement }).titleEl;
+							titleEl.addClass("semlink-lang-active");
+						}
 					});
 				}
 				// Anchor to the BUTTON, right-aligned: the menu's right edge

@@ -2662,6 +2662,13 @@ body .semlink-msg-user::selection {
     height: 12px;
 }
 
+/* Language menu: the active language is marked with the accent color
+   (purple by default) instead of a checkmark. */
+.semlink-lang-active {
+    color: var(--interactive-accent) !important;
+    font-weight: 600;
+}
+
 /* Hidden while the welcome screen is up — there is no conversation to
    new-chat away from until the first message exists. */
 .semlink-search-newchat.is-hidden {
