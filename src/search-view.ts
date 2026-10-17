@@ -1772,10 +1772,14 @@ export class SemanticSearchView extends ItemView {
 			};
 			langBtn.addEventListener("click", () => {
 				// All UI languages from the registry (native labels), not just
-				// zh/en — the guide must be reachable in every language.
+				// zh/en — the guide must be reachable in every language. The
+				// active one gets a checkmark.
 				const menu = new Menu();
 				for (const l of LANGUAGES) {
-					menu.addItem((item) => item.setTitle(l.label).onClick(() => switchLang(l.value)));
+					menu.addItem((item) => {
+						item.setTitle(l.label).onClick(() => switchLang(l.value));
+						if (l.value === getLang()) item.setIcon("check");
+					});
 				}
 				// Anchor to the BUTTON, right-aligned: the menu's right edge
 				// meets the button's right edge (top-left anchoring alone
