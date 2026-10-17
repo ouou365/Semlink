@@ -309,6 +309,10 @@ export class SemanticSearchView extends ItemView {
 		setSvgIcon(this.modelNameEl, llmIconSvg);
 		this.modelLabelEl = modelTrigger.createSpan({ cls: "semlink-search-model-label" });
 		this.updateModelLabel();
+		// Visible dropdown affordance on the right — the whole trigger opens
+		// the model-switcher popup.
+		const modelCaret = modelTrigger.createSpan({ cls: "semlink-search-model-caret" });
+		setIcon(modelCaret, "chevron-down");
 		this.modelTriggerEl = modelTrigger;
 		modelTrigger.addEventListener("click", (e) => {
 			e.stopPropagation();
