@@ -2598,6 +2598,54 @@ body .semlink-msg-user::selection {
     padding: 10px 12px 12px;
 }
 
+/* Toolbar above the input box: model switcher (left) + new-chat pill
+   (right), ZCode-style. Sits OUTSIDE the bordered input wrapper. */
+.semlink-search-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.semlink-search-toolbar-left {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+
+.semlink-search-toolbar-right {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.semlink-search-newchat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    padding: 5px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    box-shadow: none;
+}
+
+.semlink-search-newchat:hover {
+    background: var(--interactive-accent-hover);
+}
+
+.semlink-search-newchat .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
 .semlink-search-input-wrapper {
     display: flex;
     flex-direction: column;

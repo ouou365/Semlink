@@ -243,14 +243,7 @@ export class SemanticSearchView extends ItemView {
 		homeSvg.createSvg("path", { attr: { d: "m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" } });
 		homeSvg.createSvg("polyline", { attr: { points: "9 22 9 12 15 12 15 22" } });
 		newChatBtn.addEventListener("click", () => {
-			this.startNewSession();
-			this.messagesEl.empty();
-			this.statusEl.textContent = "";
-			this.inputEl.empty();
-			this.renderWelcome();
-			// Empty area cannot hide a first question — drop the subtitle row.
-			this.updateCompactHeader();
-			this.inputEl.focus();
+			this.newChatFromUi();
 		});
 		// Help icon: (re-)opens the setup guide on the welcome screen.
 		const helpBtn = leftIcons.createEl("button", {
@@ -330,6 +323,34 @@ export class SemanticSearchView extends ItemView {
 
 		// ── Input footer (bottom, fixed) ──
 		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
+
+		// Toolbar ABOVE the input box: model switcher (left) + new-chat pill
+		// (right), ZCode-style. The send/expand row stays inside the box.
+		const toolbarEl = footer.createDiv({ cls: "semlink-search-toolbar" });
+		const toolbarLeft = toolbarEl.createDiv({ cls: "semlink-search-toolbar-left" });
+		// Active chat model indicator: LLM icon + model name + "▾" — clicking
+		// opens the model-switcher popup (same pattern as the depth popup).
+		const modelTrigger = toolbarLeft.createSpan({ cls: "semlink-search-model-trigger" });
+		this.modelNameEl = modelTrigger.createSpan({ cls: "semlink-search-model-name" });
+		setSvgIcon(this.modelNameEl, llmIconSvg);
+		this.modelLabelEl = modelTrigger.createSpan({ cls: "semlink-search-model-label" });
+		this.updateModelLabel();
+		this.modelTriggerEl = modelTrigger;
+		modelTrigger.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.toggleModelPopup();
+		});
+		this.registerDomEvent(document, "click", () => this.hideModelPopup());
+		// New-chat pill (right): fresh conversation — same action as the
+		// header house button, surfaced next to the input for reachability.
+		const toolbarRight = toolbarEl.createDiv({ cls: "semlink-search-toolbar-right" });
+		const newChatPill = toolbarRight.createEl("button", {
+			cls: "semlink-search-newchat",
+			attr: { "aria-label": t("searchNewChat") },
+		});
+		setIcon(newChatPill, "refresh-cw");
+		newChatPill.createSpan({ cls: "semlink-search-newchat-label", text: t("searchNewChat") });
+		newChatPill.addEventListener("click", () => this.newChatFromUi());
 
 		const wrapper = footer.createDiv({ cls: "semlink-search-input-wrapper" });
 		// Drag & drop is handled on the WHOLE input wrapper. preventDefault +
@@ -496,24 +517,9 @@ export class SemanticSearchView extends ItemView {
 			this.sanitizeInputLayout();
 		});
 
-		// Active chat model indicator inside the input box, with a donut
-		// showing how much of the context window the current turn uses.
-		// Clicking the model name (with its "▾" arrow) opens the
-		// model-switcher popup (same pattern as the search-depth popup).
+		// Expand/send row inside the input box (the model switcher moved to
+		// the toolbar above the box).
 		const modelEl = wrapper.createDiv({ cls: "semlink-search-model" });
-		const modelTrigger = modelEl.createSpan({ cls: "semlink-search-model-trigger" });
-		// LLM icon with the active model name to its right (e.g.
-		// "DeepSeek/deepseek-v4-flash") — the trigger opens the model picker.
-		this.modelNameEl = modelTrigger.createSpan({ cls: "semlink-search-model-name" });
-		setSvgIcon(this.modelNameEl, llmIconSvg);
-		this.modelLabelEl = modelTrigger.createSpan({ cls: "semlink-search-model-label" });
-		this.updateModelLabel();
-		this.modelTriggerEl = modelTrigger;
-		modelTrigger.addEventListener("click", (e) => {
-			e.stopPropagation();
-			this.toggleModelPopup();
-		});
-		this.registerDomEvent(document, "click", () => this.hideModelPopup());
 
 		// Expand/collapse toggle left of the send button: grows the input to
 		// half the screen for long prompts, collapses back on click (and after
@@ -2052,8 +2058,20 @@ export class SemanticSearchView extends ItemView {
 	// ── Chat history: session lifecycle ──
 
 	/** Seal the current session (if any) and reset to a blank conversation. */
-	private startNewSession(): void {
-		this.currentSessionId = null;
+	/** New-chat action shared by the header house button and the toolbar pill:
+	 *  archive the current session, clear the transcript, show the welcome. */
+	private newChatFromUi(): void {
+		this.startNewSession();
+		this.messagesEl.empty();
+		this.statusEl.textContent = "";
+		this.inputEl.empty();
+		this.renderWelcome();
+		// Empty area cannot hide a first question — drop the subtitle row.
+		this.updateCompactHeader();
+		this.inputEl.focus();
+	}
+
+	private startNewSession(): void {		this.currentSessionId = null;
 		this.currentMessages = [];
 		this.attachments = [];
 		// Clear the subtitle until a question is asked.
