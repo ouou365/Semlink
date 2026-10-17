@@ -2622,7 +2622,7 @@ body .semlink-msg-user::selection {
     flex-shrink: 0;
 }
 
-.semlink-search-newchat {
+.semlink-search-view .semlink-search-newchat {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -2637,13 +2637,13 @@ body .semlink-msg-user::selection {
     box-shadow: none;
 }
 
-.semlink-search-newchat:hover {
+.semlink-search-view .semlink-search-newchat:hover {
     /* Background appears on hover only (gray, like the send button). */
     background: var(--background-modifier-hover);
     color: var(--text-normal);
 }
 
-.semlink-search-newchat .svg-icon {
+.semlink-search-view .semlink-search-newchat .svg-icon {
     width: 14px;
     height: 14px;
 }
@@ -2672,7 +2672,7 @@ body .semlink-msg-user::selection {
    new-chat away from until the first message exists. visibility (not
    display:none) keeps the toolbar row height stable: switching to display
    would grow the row when the pill appears and jitter the model text. */
-.semlink-search-newchat.is-hidden {
+.semlink-search-view .semlink-search-newchat.is-hidden {
     visibility: hidden;
     pointer-events: none;
 }
