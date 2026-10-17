@@ -351,6 +351,10 @@ export class SemanticSearchView extends ItemView {
 		});
 		setIcon(newChatPill, "plus");
 		newChatPill.createSpan({ cls: "semlink-search-newchat-label", text: t("searchNewChat") });
+		// Default-hidden: on first load the welcome screen may render before
+		// (or after) this toolbar — start hidden and let
+		// updateHomeIconVisibility reveal it once a conversation exists.
+		newChatPill.addClass("is-hidden");
 		this.newChatPillEl = newChatPill;
 		newChatPill.addEventListener("click", () => this.newChatFromUi());
 
