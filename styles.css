@@ -2632,14 +2632,14 @@ body .semlink-msg-user::selection {
     padding: 5px 12px;
     font-size: 13px;
     font-weight: 600;
-    background: var(--interactive-accent);
-    color: var(--text-on-accent);
+    /* Flat ghost by default — no background/border until hovered. */
+    background: transparent;
+    color: var(--text-normal);
     box-shadow: none;
 }
 
 .semlink-search-newchat:hover {
-    /* Same hover treatment as the send button: gray background, label flips
-       to the normal text color (not a darker accent). */
+    /* Background appears on hover only (gray, like the send button). */
     background: var(--background-modifier-hover);
     color: var(--text-normal);
 }
