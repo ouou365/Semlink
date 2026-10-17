@@ -2638,7 +2638,10 @@ body .semlink-msg-user::selection {
 }
 
 .semlink-search-newchat:hover {
-    background: var(--interactive-accent-hover);
+    /* Same hover treatment as the send button: gray background, label flips
+       to the normal text color (not a darker accent). */
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
 }
 
 .semlink-search-newchat .svg-icon {
