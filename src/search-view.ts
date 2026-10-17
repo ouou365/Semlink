@@ -3263,7 +3263,12 @@ export class SemanticSearchView extends ItemView {
 		}
 		if (this.modelLabelEl) {
 			const active = this.chatClient.getActiveModel();
-			this.modelLabelEl.setText(active ? active.model.id : "");
+			// Display the bare model name — strip the "org/" prefix
+			// ("deepseek-ai/DeepSeek-V4-Flash" → "DeepSeek-V4-Flash") to save
+			// toolbar space. Display only: selection keeps the full id.
+			const id = active ? active.model.id : "";
+			const slash = id.lastIndexOf("/");
+			this.modelLabelEl.setText(slash >= 0 ? id.slice(slash + 1) : id);
 		}
 		// The context window may differ across models — recompute the ring
 		// against the last turn's usage.
