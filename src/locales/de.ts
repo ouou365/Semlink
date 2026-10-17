@@ -443,7 +443,7 @@ const t: Record<keyof typeof en, string> = {
 	upgradeBuyTitle: "Einmalkauf",
 	upgradeBuyEarly: "Lebenslange Lizenz holen",
 	upgradeCheckoutUnavailable: "Kasse ist vorübergehend nicht verfügbar – bitte versuche es später erneut",
-	upgradePriceAnchor: "Frühbucher $3 für begrenzte Zeit, regulär $9 · lebenslange Lizenz, kein Abo",
+	upgradePriceAnchor: "Frühbucher $3 für begrenzte Zeit, regulär $19.9 · lebenslange Lizenz, kein Abo",
 	upgradeFreeListTitle: "Für immer kostenlos",
 	upgradeFreeSearch: "Semantische Suche / ähnliche Notizen / grep – unbegrenzt",
 	upgradeFreeMcp: "Voller MCP-Server – kostenlos für Claude, Cursor und andere KI-Clients",

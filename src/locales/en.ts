@@ -442,7 +442,7 @@ const en = {
 	upgradeBuyTitle: "One-time purchase",
 	upgradeBuyEarly: "Get a lifetime license",
 	upgradeCheckoutUnavailable: "Checkout is temporarily unavailable — please try again later",
-	upgradePriceAnchor: "Early bird $3 for a limited time, regular $9 · lifetime license, no subscription",
+	upgradePriceAnchor: "Early bird $3 for a limited time, regular $19.9 · lifetime license, no subscription",
 	upgradeFreeListTitle: "Free forever",
 	upgradeFreeSearch: "Semantic search / similar notes / grep — no caps, unlimited",
 	upgradeFreeMcp: "Full MCP server — free for Claude, Cursor and other AI clients",

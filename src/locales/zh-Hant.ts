@@ -443,7 +443,7 @@ const t: Record<keyof typeof en, string> = {
 	upgradeBuyTitle: "一次買斷",
 	upgradeBuyEarly: "取得終身許可",
 	upgradeCheckoutUnavailable: "購買通道暫時無法使用，請稍後重試",
-	upgradePriceAnchor: "限時早鳥 $3，原價 $9 · 一次買斷終身有效，無訂閱",
+	upgradePriceAnchor: "限時早鳥 $3，原價 $19.9 · 一次買斷終身有效，無訂閱",
 	upgradeFreeListTitle: "永久免費",
 	upgradeFreeSearch: "語意搜尋 / 相似筆記 / grep：不限筆記數、不限次數",
 	upgradeFreeMcp: "MCP 全套：Claude、Cursor 等 AI 用戶端免費接入",

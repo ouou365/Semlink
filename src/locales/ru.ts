@@ -444,7 +444,7 @@ const t: Record<keyof typeof en, string> = {
 	upgradeBuyTitle: "Разовая покупка",
 	upgradeBuyEarly: "Получить пожизненную лицензию",
 	upgradeCheckoutUnavailable: "Оплата временно недоступна — попробуйте позже",
-	upgradePriceAnchor: "Стартовая цена $3 на ограниченное время, обычная $9 · бессрочная лицензия, без подписки",
+	upgradePriceAnchor: "Стартовая цена $3 на ограниченное время, обычная $19.9 · бессрочная лицензия, без подписки",
 	upgradeFreeListTitle: "Бесплатно навсегда",
 	upgradeFreeSearch: "Семантический поиск / похожие заметки / grep — без лимитов",
 	upgradeFreeMcp: "Полноценный MCP-сервер — бесплатно для Claude, Cursor и других AI-клиентов",

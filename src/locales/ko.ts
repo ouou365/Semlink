@@ -443,7 +443,7 @@ const t: Record<keyof typeof en, string> = {
 	upgradeBuyTitle: "일회성 구매",
 	upgradeBuyEarly: "평생 라이선스 구매",
 	upgradeCheckoutUnavailable: "결제가 일시적으로 불가합니다 — 잠시 후 다시 시도하세요",
-	upgradePriceAnchor: "한정 기간 얼리버드 $3, 정가 $9 · 평생 라이선스, 구독 없음",
+	upgradePriceAnchor: "한정 기간 얼리버드 $3, 정가 $19.9 · 평생 라이선스, 구독 없음",
 	upgradeFreeListTitle: "영구 무료",
 	upgradeFreeSearch: "의미 검색 / 유사 노트 / grep — 제한 없음, 무제한",
 	upgradeFreeMcp: "전체 MCP 서버 — Claude, Cursor 등 AI 클라이언트에서 무료",

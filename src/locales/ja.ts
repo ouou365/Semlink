@@ -443,7 +443,7 @@ const t: Record<keyof typeof en, string> = {
 	upgradeBuyTitle: "買い切り購入",
 	upgradeBuyEarly: "永久ライセンスを入手",
 	upgradeCheckoutUnavailable: "決済は現在一時的に利用できません — 後でもう一度お試しください",
-	upgradePriceAnchor: "早期割引 $3 は期間限定、通常 $9 · 買い切りライセンス、サブスクリプションなし",
+	upgradePriceAnchor: "早期割引 $3 は期間限定、通常 $19.9 · 買い切りライセンス、サブスクリプションなし",
 	upgradeFreeListTitle: "ずっと無料",
 	upgradeFreeSearch: "セマンティック検索 / 類似ノート / grep — 上限なし・無制限",
 	upgradeFreeMcp: "フル MCP サーバー — Claude、Cursor などの AI クライアントで無料",

@@ -444,7 +444,7 @@ const zh: Record<keyof typeof en, string> = {
 	upgradeBuyTitle: "一次性买断",
 	upgradeBuyEarly: "获取终身许可",
 	upgradeCheckoutUnavailable: "购买通道暂时不可用，请稍后重试",
-	upgradePriceAnchor: "限时早鸟 $3，常价 $9 · 一次买断终身有效，无订阅",
+	upgradePriceAnchor: "限时早鸟 $3，常价 $19.9 · 一次买断终身有效，无订阅",
 	upgradeFreeListTitle: "永久免费",
 	upgradeFreeSearch: "语义搜索 / 相似笔记 / grep：不限笔记数、不限次数",
 	upgradeFreeMcp: "MCP 全套：Claude、Cursor 等 AI 客户端免费接入",
