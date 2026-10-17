@@ -2631,10 +2631,9 @@ body .semlink-msg-user::selection {
     cursor: pointer;
     padding: 5px 12px;
     font-size: 13px;
-    /* Flat ghost by default — no background/border until hovered. */
     background: transparent;
     color: var(--text-normal);
-    box-shadow: none;
+    box-shadow: var(--input-shadow);
 }
 
 .semlink-search-view .semlink-search-newchat:hover {
@@ -3474,7 +3473,7 @@ body .semlink-msg-user::selection {
 
 /* Active model name to the right of the LLM icon in the input row. */
 .semlink-search-model-label {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
     max-width: 240px;
     overflow: hidden;
