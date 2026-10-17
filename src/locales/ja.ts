@@ -441,7 +441,7 @@ const t: Record<keyof typeof en, string> = {
 	upgradeBenefitOrganize: "履歴管理 — 検索、ピン留め、フォルダ分けができます",
 	upgradeBenefitFeishu: "Feishu ボット — Vault 全体と Feishu からいつでもチャットできます",
 	upgradeBuyTitle: "買い切り購入",
-	upgradeBuyEarly: "Pro を入手 — 早期割引 $3",
+	upgradeBuyEarly: "永久ライセンスを入手",
 	upgradeCheckoutUnavailable: "決済は現在一時的に利用できません — 後でもう一度お試しください",
 	upgradePriceAnchor: "早期割引 $3 は期間限定、通常 $9 · 買い切りライセンス、サブスクリプションなし",
 	upgradeFreeListTitle: "ずっと無料",

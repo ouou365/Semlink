@@ -443,7 +443,7 @@ const t: Record<keyof typeof en, string> = {
 	upgradeBenefitOrganize: "Gestione della cronologia — cerca, fissa e archivia le chat in cartelle",
 	upgradeBenefitFeishu: "Bot Feishu — chatta con l'intero Vault da Feishu quando vuoi",
 	upgradeBuyTitle: "Acquisto una tantum",
-	upgradeBuyEarly: "Ottieni Pro — early bird a 3 $",
+	upgradeBuyEarly: "Ottieni una licenza a vita",
 	upgradeCheckoutUnavailable: "Il checkout è temporaneamente non disponibile — riprova più tardi",
 	upgradePriceAnchor: "Early bird 3 $ per tempo limitato, regolare 9 $ · licenza a vita, nessun abbonamento",
 	upgradeFreeListTitle: "Gratis per sempre",

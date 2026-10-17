@@ -440,7 +440,7 @@ const en = {
 	upgradeBenefitOrganize: "History management — search, pin and file chats into folders",
 	upgradeBenefitFeishu: "Feishu bot — chat with your whole vault from Feishu anytime",
 	upgradeBuyTitle: "One-time purchase",
-	upgradeBuyEarly: "Get Pro — $3 early bird",
+	upgradeBuyEarly: "Get a lifetime license",
 	upgradeCheckoutUnavailable: "Checkout is temporarily unavailable — please try again later",
 	upgradePriceAnchor: "Early bird $3 for a limited time, regular $9 · lifetime license, no subscription",
 	upgradeFreeListTitle: "Free forever",

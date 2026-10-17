@@ -441,7 +441,7 @@ const t: Record<keyof typeof en, string> = {
 	upgradeBenefitOrganize: "기록 관리 — 채팅을 검색, 고정, 폴더로 정리",
 	upgradeBenefitFeishu: "Feishu 봇 — Feishu에서 언제든 Vault 전체와 채팅",
 	upgradeBuyTitle: "일회성 구매",
-	upgradeBuyEarly: "Pro 구매 — $3 얼리버드",
+	upgradeBuyEarly: "평생 라이선스 구매",
 	upgradeCheckoutUnavailable: "결제가 일시적으로 불가합니다 — 잠시 후 다시 시도하세요",
 	upgradePriceAnchor: "한정 기간 얼리버드 $3, 정가 $9 · 평생 라이선스, 구독 없음",
 	upgradeFreeListTitle: "영구 무료",

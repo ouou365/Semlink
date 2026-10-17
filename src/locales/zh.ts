@@ -442,7 +442,7 @@ const zh: Record<keyof typeof en, string> = {
 	upgradeBenefitOrganize: "历史管理 — 搜索、置顶、文件夹归档，对话再多也井井有条",
 	upgradeBenefitFeishu: "飞书机器人 — 在飞书里随时问答你的整个知识库",
 	upgradeBuyTitle: "一次性买断",
-	upgradeBuyEarly: "早鸟 $3 · 获取 Pro",
+	upgradeBuyEarly: "获取终身许可",
 	upgradeCheckoutUnavailable: "购买通道暂时不可用，请稍后重试",
 	upgradePriceAnchor: "限时早鸟 $3，常价 $9 · 一次买断终身有效，无订阅",
 	upgradeFreeListTitle: "永久免费",

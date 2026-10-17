@@ -441,7 +441,7 @@ const t: Record<keyof typeof en, string> = {
 	upgradeBenefitOrganize: "歷史管理 — 搜尋、置頂、資料夾封存，對話再多也井井有條",
 	upgradeBenefitFeishu: "飛書機器人 — 在飛書裡隨時問答你的整個知識庫",
 	upgradeBuyTitle: "一次買斷",
-	upgradeBuyEarly: "早鳥 $3 · 取得 Pro",
+	upgradeBuyEarly: "取得終身許可",
 	upgradeCheckoutUnavailable: "購買通道暫時無法使用，請稍後重試",
 	upgradePriceAnchor: "限時早鳥 $3，原價 $9 · 一次買斷終身有效，無訂閱",
 	upgradeFreeListTitle: "永久免費",

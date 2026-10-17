@@ -441,7 +441,7 @@ const t: Record<keyof typeof en, string> = {
 	upgradeBenefitOrganize: "Verlauf verwalten – durchsuchen, anheften und in Ordnern ablegen",
 	upgradeBenefitFeishu: "Feishu-Bot – chatte jederzeit aus Feishu mit deinem gesamten Vault",
 	upgradeBuyTitle: "Einmalkauf",
-	upgradeBuyEarly: "Hol dir Pro – $3 Frühbucher",
+	upgradeBuyEarly: "Lebenslange Lizenz holen",
 	upgradeCheckoutUnavailable: "Kasse ist vorübergehend nicht verfügbar – bitte versuche es später erneut",
 	upgradePriceAnchor: "Frühbucher $3 für begrenzte Zeit, regulär $9 · lebenslange Lizenz, kein Abo",
 	upgradeFreeListTitle: "Für immer kostenlos",

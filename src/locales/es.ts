@@ -443,7 +443,7 @@ const t: Record<keyof typeof en, string> = {
 	upgradeBenefitOrganize: "Gestión del historial — busca, fija y archiva chats en carpetas",
 	upgradeBenefitFeishu: "Bot de Feishu — conversa con todo tu Vault desde Feishu cuando quieras",
 	upgradeBuyTitle: "Pago único",
-	upgradeBuyEarly: "Consigue Pro — $3 precio de lanzamiento",
+	upgradeBuyEarly: "Obtener licencia de por vida",
 	upgradeCheckoutUnavailable: "El pago no está disponible temporalmente — inténtalo de nuevo más tarde",
 	upgradePriceAnchor: "Precio de lanzamiento: $3 por tiempo limitado, después $9 · licencia de por vida, sin suscripción",
 	upgradeFreeListTitle: "Gratis para siempre",
