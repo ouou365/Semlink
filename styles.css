@@ -2670,9 +2670,12 @@ body .semlink-msg-user::selection {
 }
 
 /* Hidden while the welcome screen is up — there is no conversation to
-   new-chat away from until the first message exists. */
+   new-chat away from until the first message exists. visibility (not
+   display:none) keeps the toolbar row height stable: switching to display
+   would grow the row when the pill appears and jitter the model text. */
 .semlink-search-newchat.is-hidden {
-    display: none;
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .semlink-search-input-wrapper {
