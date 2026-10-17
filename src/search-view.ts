@@ -14,6 +14,7 @@ import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
 import { inferAgentDepth, buildNoteContext } from "./chat-client";
 import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
 import { ChatHistoryStore } from "./chat-history";
+import { brandLogoOf } from "./settings-models";
 import { LicenseModal } from "./license-modal";
 import { UsageModal } from "./usage-modal";
 import { guideInProgress, onboardingActive, renderOnboarding } from "./onboarding";
@@ -3283,10 +3284,13 @@ export class SemanticSearchView extends ItemView {
 
 	/** Refresh the model label and the context ring after switching. */
 	private updateModelLabel(): void {
-		// The LLM icon on the left; the model id on its right — provider
-		// names are skipped to keep the row compact.
+		// The active provider's brand logo on the left (generic LLM mark when
+		// the provider has no known logo); the model id on its right —
+		// provider names are skipped to keep the row compact.
 		if (this.modelNameEl) {
-			setSvgIcon(this.modelNameEl, llmIconSvg);
+			const active = this.chatClient.getActiveModel();
+			const brand = active ? brandLogoOf(active.provider.name || active.provider.id).svg : undefined;
+			setSvgIcon(this.modelNameEl, brand || llmIconSvg);
 		}
 		if (this.modelLabelEl) {
 			const active = this.chatClient.getActiveModel();
