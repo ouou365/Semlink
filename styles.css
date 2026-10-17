@@ -2631,7 +2631,6 @@ body .semlink-msg-user::selection {
     cursor: pointer;
     padding: 5px 12px;
     font-size: 13px;
-    font-weight: 600;
     /* Flat ghost by default — no background/border until hovered. */
     background: transparent;
     color: var(--text-normal);
