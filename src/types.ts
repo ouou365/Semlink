@@ -302,7 +302,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	maxRetries: 3,
 	batchSize: 64,
 	requestDelayMs: 200,
-	embedConcurrency: 3,
+	embedConcurrency: 2,
 	/** Verbose console diagnostics (Settings → General, or the toggle command). */
 	debugLogging: false,
 	feishuBots: [],

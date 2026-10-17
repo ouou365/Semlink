@@ -355,7 +355,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			.setName(t("embedConcurrency"))
 			.setDesc(t("embedConcurrencyDesc"))
 			.addSlider((slider) => {
-				showSliderValue(slider.setLimits(1, 5, 1).setValue(this.plugin.settings.embedConcurrency ?? 3));
+				showSliderValue(slider.setLimits(1, 5, 1).setValue(this.plugin.settings.embedConcurrency ?? 2));
 				return slider.onChange(async (value) => {
 					this.plugin.settings.embedConcurrency = value;
 					await this.plugin.saveSettings();

@@ -31,7 +31,7 @@ export class Scheduler {
 	/** 并发嵌入请求数 — 设置页"嵌入参数"可调（默认 2）。串行(1) 对免费档
 	 *  API 最稳；并发过高会触发 429 限流。 */
 	private get concurrency(): number {
-		return Math.max(1, this.settings.embedConcurrency ?? 3);
+		return Math.max(1, this.settings.embedConcurrency ?? 2);
 	}
 	private saveInterval = 40; // 每处理 N 个笔记存盘一次（sync 模式下 save 是全量导出，代价很高）
 	private lastSaveAt = 0; // 上次存盘时刻 — sync 模式下两次全量导出之间至少隔 20s
