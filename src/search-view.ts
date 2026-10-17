@@ -1777,11 +1777,14 @@ export class SemanticSearchView extends ItemView {
 				for (const l of LANGUAGES) {
 					menu.addItem((item) => item.setTitle(l.label).onClick(() => switchLang(l.value)));
 				}
-				// Anchor to the BUTTON (below its left edge), not the mouse —
-				// the menu must open at a fixed spot no matter where the click
-				// lands inside the button.
+				// Anchor to the BUTTON, right-aligned: the menu's right edge
+				// meets the button's right edge (top-left anchoring alone
+				// would let the menu run past the panel edge). Clicking the
+				// button anywhere opens the menu at this same spot.
 				const rect = langBtn.getBoundingClientRect();
 				menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
+				const menuEl = (menu as unknown as { menuEl?: HTMLElement }).menuEl;
+				if (menuEl) menuEl.style.left = `${rect.right - menuEl.offsetWidth}px`;
 			});
 
 			// Modifier class: the guide fills the block top-down so the
