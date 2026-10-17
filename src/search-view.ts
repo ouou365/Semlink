@@ -22,7 +22,7 @@ import type { IndexStatsView } from "./onboarding";
 import type SmartVaultPlugin from "../main";
 import { SaveNoteModal } from "./save-note-modal";
 import { ConfirmModal } from "./confirm-modal";
-import { getLang, t } from "./i18n";
+import { getLang, t, LANGUAGES, type Lang } from "./i18n";
 import logoSvg from "./semlink-logo.svg";
 import llmIconSvg from "./network-icon.svg";
 import expandIconSvg from "./expand-icon.svg";
@@ -1759,33 +1759,25 @@ export class SemanticSearchView extends ItemView {
 			const rightSide = corners.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
 			const langBtn = rightSide.createEl("button", {
 				cls: "semlink-search-icon-btn clickable-icon",
-				attr: { "aria-label": "Language", title: "中文 / English" },
+				attr: { "aria-label": t("language"), title: t("language") },
 			});
 			setIcon(langBtn, "languages");
 			// Persisting via saveSettings drives the whole chain: it calls
 			// setLang and refreshLanguage() on this view, which rebuilds the
 			// welcome in the new language. Calling setLang alone (as an
 			// earlier version did) changes nothing on screen.
-			const switchLang = (lang: "zh" | "en"): void => {
+			const switchLang = (lang: Lang): void => {
 				this.plugin.settings.language = lang;
 				void this.plugin.saveSettings();
 			};
 			langBtn.addEventListener("click", (evt) => {
-				const menu = new Menu()
-					.addItem((item) => item.setTitle("中文").onClick(() => switchLang("zh")))
-					.addItem((item) => item.setTitle("English").onClick(() => switchLang("en")));
+				// All UI languages from the registry (native labels), not just
+				// zh/en — the guide must be reachable in every language.
+				const menu = new Menu();
+				for (const l of LANGUAGES) {
+					menu.addItem((item) => item.setTitle(l.label).onClick(() => switchLang(l.value)));
+				}
 				menu.showAtMouseEvent(evt);
-			});
-			// Settings: same behavior as the header gear — opens Obsidian's
-			// settings on this plugin's tab.
-			const guideSettingsBtn = rightSide.createEl("button", {
-				cls: "semlink-search-icon-btn clickable-icon",
-				attr: { "aria-label": t("settingsTitle") },
-			});
-			setIcon(guideSettingsBtn, "settings");
-			guideSettingsBtn.addEventListener("click", () => {
-				(this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting.open();
-				(this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting.openTabById("semlink");
 			});
 
 			// Modifier class: the guide fills the block top-down so the
