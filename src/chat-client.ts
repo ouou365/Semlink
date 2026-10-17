@@ -479,6 +479,7 @@ export class ChatClient {
 			t("promptToolGuide") +
 			depthHint +
 			t("promptNoFabricate") +
+			"\n" + t("promptGrounding") +
 			"\n\n" + t("promptContextHead") + "\n" + context +
 			"\n\n" + t("promptLangRule");
 		
