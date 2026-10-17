@@ -180,6 +180,8 @@ const t: Record<keyof typeof en, string> = {
 	searchCollapseInput: "입력란 축소",
 	searchInputHint: "Shift+Enter 줄바꿈 · Enter 전송",
 	searchNewChat: "새 채팅",
+	searchNewChatConfirmTitle: "생성 진행 중",
+	searchNewChatConfirmBody: "새 대화를 시작하면 현재 생성이 중단됩니다. 계속하시겠습니까?",
 	historyTitle: "채팅 기록",
 	historyEmpty: "아직 채팅 기록이 없습니다",
 	historyMessages: "개 메시지",

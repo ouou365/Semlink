@@ -182,6 +182,8 @@ const t: Record<keyof typeof en, string> = {
 	searchCollapseInput: "Comprimi input",
 	searchInputHint: "Shift+Invio a capo · Invio invia",
 	searchNewChat: "Nuova chat",
+	searchNewChatConfirmTitle: "Generazione in corso",
+	searchNewChatConfirmBody: "Avviare una nuova chat interromperà la generazione corrente. Continuare?",
 	historyTitle: "Cronologia chat",
 	historyEmpty: "Ancora nessuna cronologia chat",
 	historyMessages: "messaggi",

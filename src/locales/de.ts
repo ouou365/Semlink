@@ -180,6 +180,8 @@ const t: Record<keyof typeof en, string> = {
 	searchCollapseInput: "Eingabe verkleinern",
 	searchInputHint: "Shift+Enter Zeilenumbruch · Enter senden",
 	searchNewChat: "Neuer Chat",
+	searchNewChatConfirmTitle: "Generierung läuft",
+	searchNewChatConfirmBody: "Ein neuer Chat unterbricht die aktuelle Generierung. Fortfahren?",
 	historyTitle: "Chat-Verlauf",
 	historyEmpty: "Noch kein Chat-Verlauf vorhanden",
 	historyMessages: "Nachr.",

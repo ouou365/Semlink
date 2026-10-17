@@ -181,6 +181,8 @@ const zh: Record<keyof typeof en, string> = {
 	searchCollapseInput: "收起输入框",
 	searchInputHint: "Shift+Enter 换行 · Enter 发送",
 	searchNewChat: "新会话",
+	searchNewChatConfirmTitle: "正在生成回答",
+	searchNewChatConfirmBody: "开始新对话会中断当前生成，确定要开始新对话吗？",
 	historyTitle: "历史对话",
 	historyEmpty: "还没有历史对话",
 	historyMessages: "条消息",

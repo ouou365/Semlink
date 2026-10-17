@@ -181,6 +181,8 @@ const t: Record<keyof typeof en, string> = {
 	searchCollapseInput: "Свернуть поле ввода",
 	searchInputHint: "Shift+Enter — перенос строки · Enter — отправить",
 	searchNewChat: "Новый чат",
+	searchNewChatConfirmTitle: "Идёт генерация",
+	searchNewChatConfirmBody: "Новый чат прервёт текущую генерацию. Продолжить?",
 	historyTitle: "История чатов",
 	historyEmpty: "История чатов пока пуста",
 	historyMessages: "сообщ.",

@@ -180,6 +180,8 @@ const t: Record<keyof typeof en, string> = {
 	searchCollapseInput: "入力欄を縮小",
 	searchInputHint: "Shift+Enter で改行 · Enter で送信",
 	searchNewChat: "新しいチャット",
+	searchNewChatConfirmTitle: "生成中",
+	searchNewChatConfirmBody: "新しいチャットを開始すると現在の生成が中断されます。続行しますか？",
 	historyTitle: "チャット履歴",
 	historyEmpty: "チャット履歴はまだありません",
 	historyMessages: "件のメッセージ",

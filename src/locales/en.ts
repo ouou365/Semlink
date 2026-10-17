@@ -179,6 +179,8 @@ const en = {
 	searchCollapseInput: "Collapse input",
 	searchInputHint: "Shift+Enter newline · Enter send",
 	searchNewChat: "New Chat",
+	searchNewChatConfirmTitle: "Generation in progress",
+	searchNewChatConfirmBody: "Starting a new chat will interrupt the current generation. Continue?",
 	historyTitle: "Chat History",
 	historyEmpty: "No chat history yet",
 	historyMessages: "msgs",

@@ -2068,8 +2068,21 @@ export class SemanticSearchView extends ItemView {
 
 	/** Seal the current session (if any) and reset to a blank conversation. */
 	/** New-chat action shared by the header house button and the toolbar pill:
-	 *  archive the current session, clear the transcript, show the welcome. */
+	 *  archive the current session, clear the transcript, show the welcome.
+	 *  While a generation is running, ask first — new chat interrupts it, and
+	 *  an accidental click would silently throw away the in-flight answer. */
 	private newChatFromUi(): void {
+		if (this.isGenerating) {
+			new ConfirmModal(this.app, t("searchNewChatConfirmTitle"), t("searchNewChatConfirmBody"), () => {
+				this.activeAskController?.abort();
+				this.doNewChat();
+			}).open();
+			return;
+		}
+		this.doNewChat();
+	}
+
+	private doNewChat(): void {
 		this.startNewSession();
 		this.messagesEl.empty();
 		this.statusEl.textContent = "";

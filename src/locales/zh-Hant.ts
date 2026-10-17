@@ -180,6 +180,8 @@ const t: Record<keyof typeof en, string> = {
 	searchCollapseInput: "收合輸入框",
 	searchInputHint: "Shift+Enter 換行 · Enter 傳送",
 	searchNewChat: "新對話",
+	searchNewChatConfirmTitle: "正在生成回答",
+	searchNewChatConfirmBody: "開始新對話會中斷當前生成，確定要開始新對話嗎？",
 	historyTitle: "歷史對話",
 	historyEmpty: "還沒有歷史對話",
 	historyMessages: "則訊息",
