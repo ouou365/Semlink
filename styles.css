@@ -2646,6 +2646,12 @@ body .semlink-msg-user::selection {
     height: 14px;
 }
 
+/* Hidden while the welcome screen is up — there is no conversation to
+   new-chat away from until the first message exists. */
+.semlink-search-newchat.is-hidden {
+    display: none;
+}
+
 .semlink-search-input-wrapper {
     display: flex;
     flex-direction: column;

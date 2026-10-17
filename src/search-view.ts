@@ -145,6 +145,7 @@ export class SemanticSearchView extends ItemView {
 	private guideDismissed = false;
 	/** Home ("new session") button — hidden while the welcome screen is up. */
 	private newChatBtnEl: HTMLElement | null = null;
+	private newChatPillEl: HTMLElement | null = null;
 
 	// Current conversation state
 	private currentSessionId: string | null = null;
@@ -348,8 +349,9 @@ export class SemanticSearchView extends ItemView {
 			cls: "semlink-search-newchat",
 			attr: { "aria-label": t("searchNewChat") },
 		});
-		setIcon(newChatPill, "refresh-cw");
+		setIcon(newChatPill, "plus");
 		newChatPill.createSpan({ cls: "semlink-search-newchat-label", text: t("searchNewChat") });
+		this.newChatPillEl = newChatPill;
 		newChatPill.addEventListener("click", () => this.newChatFromUi());
 
 		const wrapper = footer.createDiv({ cls: "semlink-search-input-wrapper" });
@@ -1984,10 +1986,13 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	/** Home icon is the "back to start" button — it only makes sense once a
-	 *  conversation exists, so hide it while the welcome screen is up. */
+	 *  conversation exists, so hide it while the welcome screen is up. The
+	 *  toolbar new-chat pill follows the same rule (nothing to new-chat away
+	 *  from on a fresh welcome screen). */
 	private updateHomeIconVisibility(): void {
 		const onHome = !!this.messagesEl.querySelector(".semlink-search-welcome");
 		this.newChatBtnEl?.toggleClass("is-hidden", onHome);
+		this.newChatPillEl?.toggleClass("is-hidden", onHome);
 	}
 
 	/** Re-render language-dependent UI after a language switch (settings). */
