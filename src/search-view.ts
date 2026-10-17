@@ -14,7 +14,7 @@ import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
 import { inferAgentDepth, buildNoteContext } from "./chat-client";
 import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
 import { ChatHistoryStore } from "./chat-history";
-import { brandLogoOf } from "./settings-models";
+import { brandLogoOf, formatContextWindow } from "./settings-models";
 import { LicenseModal } from "./license-modal";
 import { UsageModal } from "./usage-modal";
 import { guideInProgress, onboardingActive, renderOnboarding } from "./onboarding";
@@ -3225,15 +3225,40 @@ export class SemanticSearchView extends ItemView {
 		popup.empty();
 
 		const active = this.chatClient.getActiveModel();
+		const shortName = (id: string): string => {
+			const slash = id.lastIndexOf("/");
+			return slash >= 0 ? id.slice(slash + 1) : id;
+		};
+
+		// Header card: the ACTIVE model — brand logo + "Provider: Model" +
+		// context window on the right (reference: ZCode's model switcher).
+		if (active) {
+			const header = popup.createDiv({ cls: "semlink-search-model-popup-header" });
+			const headerLogo = header.createSpan({ cls: "semlink-search-model-popup-logo" });
+			setSvgIcon(headerLogo, brandLogoOf(active.provider.name || active.provider.id).svg || llmIconSvg);
+			header.createSpan({
+				cls: "semlink-search-model-popup-title",
+				text: `${active.provider.name}: ${shortName(active.model.id)}`,
+			});
+			if (active.model.contextWindow > 0) {
+				header.createSpan({ cls: "semlink-search-model-popup-ctx", text: formatContextWindow(active.model.contextWindow) });
+			}
+		}
+
 		for (const group of this.chatClient.getModelOptions()) {
-			popup.createDiv({ cls: "semlink-search-model-popup-group", text: group.providerName });
+			popup.createDiv({ cls: "semlink-search-model-popup-group", text: group.providerName.toUpperCase() });
 			for (const m of group.models) {
 				const isActive = active !== null && active.provider.id === group.providerId && active.model.id === m.id;
-				const opt = popup.createDiv({
-					cls: "semlink-search-depth-option" + (isActive ? " is-active" : ""),
-					text: m.id,
+				const row = popup.createDiv({
+					cls: "semlink-search-model-popup-row" + (isActive ? " is-active" : ""),
 				});
-				opt.addEventListener("click", () => {
+				const logoEl = row.createSpan({ cls: "semlink-search-model-popup-logo" });
+				setSvgIcon(logoEl, brandLogoOf(group.providerName).svg || llmIconSvg);
+				row.createSpan({ cls: "semlink-search-model-popup-name", text: shortName(m.id) });
+				if (m.contextWindow > 0) {
+					row.createSpan({ cls: "semlink-search-model-popup-ctx", text: formatContextWindow(m.contextWindow) });
+				}
+				row.addEventListener("click", () => {
 					if (this.chatClient.setActiveModel(group.providerId, m.id)) {
 						this.updateModelLabel();
 						this.hideModelPopup();
