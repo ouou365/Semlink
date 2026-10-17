@@ -14,7 +14,6 @@
 import { join } from "path";
 import { debugLog } from "./log";
 import type { Worker as NodeWorker } from "worker_threads";
-import { requestUrl } from "obsidian";
 import type { NoteChunk, SearchResult, QueueAction, QueueItem } from "./types";
 import { DbEngine } from "./db-engine";
 import { chunkMarkdown, ChunkResult } from "./chunker";
@@ -123,13 +122,14 @@ export class VectorStore {
 
 	/** Browser Web Worker channel (used when worker_threads is missing). */
 	private async initBrowserWorker(url: string): Promise<void> {
-		// Chromium refuses to construct a Worker from an app:// resource URL
-		// (SecurityError). Fetch the script and spawn the worker from a Blob
-		// URL instead — verified working in this environment by the spike.
-		// requestUrl rejects on non-2xx itself, replacing the old !res.ok check.
-		const res = await requestUrl({ url });
-		const blobUrl = URL.createObjectURL(new Blob([res.text], { type: "text/javascript" }));
-		const w = new Worker(blobUrl);
+		// `url` is a ready-to-use Blob URL: main.ts reads the worker script
+		// through the vault adapter (plain file text) and wraps it in a Blob.
+		// The previous requestUrl(resourcePath) approach failed on desktop —
+		// resource URLs are app://, and Electron's net module only speaks
+		// http/https — which forced every desktop user onto the sync
+		// fallback. Chromium also refuses a Worker from an app:// URL
+		// directly, hence the Blob detour.
+		const w = new Worker(url);
 		w.onmessage = (e: MessageEvent) => {
 			const { reqId, result, error } = (e.data ?? {}) as WorkerResponse;
 			const pending = this.pending.get(reqId);

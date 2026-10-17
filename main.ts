@@ -84,11 +84,16 @@ export default class SmartVaultPlugin extends Plugin {
 		this.progress = new ProgressTracker();
 		// Browser Web Worker fallback channel: loads the same DB engine from
 		// the plugin folder when worker_threads is unavailable in the host.
+		// Read the script through the VAULT ADAPTER (plain text) and spawn the
+		// worker from a Blob URL — getResourcePath()'s app:// URL can't be
+		// fetched via requestUrl (Electron net only supports http/https),
+		// which used to force desktop onto the sync fallback.
 		let browserWorkerUrl: string | undefined;
 		try {
-			browserWorkerUrl = this.app.vault.adapter.getResourcePath(
+			const code = await this.app.vault.adapter.read(
 				`${this.app.vault.configDir}/plugins/${this.manifest.id}/db-worker.browser.js`
 			);
+			browserWorkerUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
 		} catch { /* leave undefined → sync fallback */ }
 		this.store = new VectorStore(dataDir, browserWorkerUrl);
 		await this.store.init();
