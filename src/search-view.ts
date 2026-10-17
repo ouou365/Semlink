@@ -1770,14 +1770,18 @@ export class SemanticSearchView extends ItemView {
 				this.plugin.settings.language = lang;
 				void this.plugin.saveSettings();
 			};
-			langBtn.addEventListener("click", (evt) => {
+			langBtn.addEventListener("click", () => {
 				// All UI languages from the registry (native labels), not just
 				// zh/en — the guide must be reachable in every language.
 				const menu = new Menu();
 				for (const l of LANGUAGES) {
 					menu.addItem((item) => item.setTitle(l.label).onClick(() => switchLang(l.value)));
 				}
-				menu.showAtMouseEvent(evt);
+				// Anchor to the BUTTON (below its left edge), not the mouse —
+				// the menu must open at a fixed spot no matter where the click
+				// lands inside the button.
+				const rect = langBtn.getBoundingClientRect();
+				menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
 			});
 
 			// Modifier class: the guide fills the block top-down so the
