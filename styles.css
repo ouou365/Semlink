@@ -172,6 +172,20 @@
 }
 
 /* Settings tabs */
+.smart-vault-settings .setting-item-heading .semlink-settings-heading-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.smart-vault-settings .setting-item-heading .semlink-settings-lang {
+    margin-left: auto;
+}
+
+.smart-vault-settings .setting-item-heading .semlink-settings-lang select {
+    font-size: 13px;
+}
+
 .smart-vault-settings .setting-item-heading .semlink-settings-version {
     color: var(--text-muted);
     font-size: 13px;

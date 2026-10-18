@@ -2,7 +2,7 @@
 // Semlink - Settings Tab
 // ========================================
 
-import { App, ButtonComponent, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, ButtonComponent, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
 import * as QRCode from "qrcode";
 import type SmartVaultPlugin from "../main";
 import type { IndexProgress, ModelProvider, SmartVaultSettings } from "./types";
@@ -80,14 +80,31 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		containerEl.empty();
 		containerEl.addClass("smart-vault-settings");
 
-		// Title heading + version on the right.
-		const title = new Setting(containerEl).setName(t("settingsTitle")).setHeading();
-		// Version rides in the NAME element: heading-mode settings may hide
+		// Title heading row: brand text · version · language dropdown (right).
+		// Everything rides in the NAME element: heading-mode settings may hide
 		// the control area depending on host CSS — the name always renders.
+		const title = new Setting(containerEl).setName(t("settingsTitle")).setHeading();
+		title.nameEl.addClass("semlink-settings-heading-row");
+		title.nameEl.createSpan({ cls: "semlink-settings-heading-text", text: t("settingsTitle") });
 		title.nameEl.createSpan({
 			cls: "semlink-settings-version",
 			text: `v${this.plugin.manifest.version}`,
 		});
+		// Language switcher: saveSettings re-runs setLang and refreshes the
+		// language-dependent views; display() re-renders this panel so the
+		// settings UI itself follows the new language right away.
+		const langWrap = title.nameEl.createDiv({ cls: "semlink-settings-lang" });
+		new DropdownComponent(langWrap)
+			.addOptions({
+				auto: t("langAuto"),
+				...Object.fromEntries(LANGUAGES.map((l) => [l.value, l.label])),
+			})
+			.setValue(this.plugin.settings.language)
+			.onChange(async (value) => {
+				this.plugin.settings.language = value as SmartVaultSettings["language"];
+				await this.plugin.saveSettings();
+				rerenderSettingsTab(this);
+			});
 
 		// Tab navigation
 		this.renderTabNav(containerEl);
@@ -148,26 +165,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	private renderGeneralTab(containerEl: HTMLElement): void {
 		// ── Pro license status + entry (top of General) ──
 		this.renderLicenseSection(containerEl);
-
-		// Language switcher: saveSettings re-runs setLang and refreshes the
-		// language-dependent views; display() re-renders this panel so the
-		// settings UI itself follows the new language right away.
-		new Setting(containerEl)
-			.setName(t("language"))
-			.setDesc(t("languageDesc"))
-			.addDropdown((dropdown) => {
-				// Native names (never translated) + the "auto" option in UI language.
-				const options: Record<string, string> = { auto: t("langAuto") };
-				for (const l of LANGUAGES) options[l.value] = l.label;
-				return dropdown
-					.addOptions(options)
-					.setValue(this.plugin.settings.language)
-					.onChange(async (value) => {
-						this.plugin.settings.language = value as SmartVaultSettings["language"];
-						await this.plugin.saveSettings();
-						rerenderSettingsTab(this);
-					});
-			});
 
 		// Open the semantic-search sidebar panel.
 		new Setting(containerEl)
