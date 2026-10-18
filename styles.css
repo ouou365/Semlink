@@ -2667,9 +2667,11 @@ body .semlink-msg-user::selection {
 }
 
 /* Language menu: the active language is marked with the accent color
-   (purple by default) instead of a checkmark. */
-.semlink-lang-active {
-    color: var(--interactive-accent) !important;
+   (purple by default) instead of a checkmark. Specificity (0,3,0) beats
+   Obsidian's own .menu-item-title color rule — no !important needed
+   (community review flags it). */
+.menu .menu-item .menu-item-title.semlink-lang-active {
+    color: var(--interactive-accent);
     font-weight: 600;
 }
 
