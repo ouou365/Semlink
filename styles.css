@@ -189,8 +189,13 @@
 
 .smart-vault-settings .semlink-settings-tab {
     background: transparent;
+    /* Flat in every state: kill Obsidian's button shadow, which some themes
+       render as a faint line that reads like an underline on INACTIVE tabs.
+       The 2px transparent border only reserves space for the active one. */
     border: none;
     border-bottom: 2px solid transparent;
+    box-shadow: none;
+    filter: none;
     color: var(--text-muted);
     cursor: pointer;
     font-size: 14px;
@@ -200,6 +205,8 @@
 }
 
 .smart-vault-settings .semlink-settings-tab:hover {
+    background: transparent;
+    box-shadow: none;
     color: var(--text-normal);
 }
 
