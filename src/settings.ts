@@ -369,8 +369,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	// Tab: MCP — service port, access key, status & client config
 	// ══════════════════════════════════════
 	private renderMcpTab(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName(t("sectionMcp")).setHeading();
-
 		new Setting(containerEl)
 			.setName(t("mcpPort"))
 			.setDesc(t("mcpPortDesc"))
