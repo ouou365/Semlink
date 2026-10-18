@@ -193,6 +193,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 		const card = containerEl.createDiv({ cls: "semlink-license-card" });
 		const head = card.createDiv({ cls: "semlink-license-card-head" });
+		const logo = head.createSpan({ cls: "semlink-license-card-logo" });
+		setIcon(logo, "semlink-logo");
 		head.createSpan({ cls: "semlink-license-card-title", text: "Semlink Pro" });
 		if (pro) {
 			head.createSpan({ cls: "semlink-license-card-pro-pill", text: `✓ ${t("licenseProActive")}` });
