@@ -203,7 +203,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		if (pro) {
 			// Pro state, Eagle-style: big congrats + thanks, one quiet footer
 			// row (device slots · masked key · deactivate as a subtle action).
-			head.createSpan({ cls: "semlink-license-card-pro-pill", text: `✓ ${t("licenseProActive")}` });
 			card.createDiv({ cls: "semlink-license-card-headline", text: t("licenseProHeadline") });
 			card.createDiv({ cls: "semlink-license-card-freeline", text: t("licenseProPerks") });
 
