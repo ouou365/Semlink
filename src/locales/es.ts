@@ -446,6 +446,8 @@ const t: Record<keyof typeof en, string> = {
 	licenseActivate: "Activar",
 	licenseActivated: "Pro activado 🎉",
 	licenseDeactivate: "Desactivar este dispositivo",
+	licenseDeactivateConfirmTitle: "¿Desactivar este dispositivo?",
+	licenseDeactivateConfirmBody: "Este dispositivo perderá el acceso Pro de inmediato. La clave de licencia sigue siendo válida y puede activarse de nuevo aquí o en otro dispositivo en cualquier momento.",
 	licenseDeactivated: "Licencia desactivada — el cupo queda libre para otro dispositivo",
 	licenseNotConfigured: "Las licencias aún no están disponibles — permanece atento",
 	licenseInvalidKey: "Clave de licencia no válida",

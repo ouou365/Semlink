@@ -444,6 +444,8 @@ const t: Record<keyof typeof en, string> = {
 	licenseActivate: "啟用",
 	licenseActivated: "Pro 已啟用 🎉",
 	licenseDeactivate: "停用此裝置",
+	licenseDeactivateConfirmTitle: "停用此裝置？",
+	licenseDeactivateConfirmBody: "停用後此裝置立即失去 Pro 權益。金鑰仍然有效，可隨時在本機或其他裝置重新啟用。",
 	licenseDeactivated: "授權已停用，可在其他裝置重新啟用",
 	licenseNotConfigured: "授權服務尚未上線，敬請期待",
 	licenseInvalidKey: "授權碼無效",

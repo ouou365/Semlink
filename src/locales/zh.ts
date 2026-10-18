@@ -445,6 +445,8 @@ const zh: Record<keyof typeof en, string> = {
 	licenseActivate: "激活",
 	licenseActivated: "Pro 已激活 🎉",
 	licenseDeactivate: "停用此设备",
+	licenseDeactivateConfirmTitle: "停用此设备？",
+	licenseDeactivateConfirmBody: "停用后此设备立即失去 Pro 权益。密钥仍然有效，可随时在本机或其他设备重新激活。",
 	licenseDeactivated: "许可已停用，可在其他设备重新激活",
 	licenseNotConfigured: "许可服务尚未上线，敬请期待",
 	licenseInvalidKey: "许可密钥无效",

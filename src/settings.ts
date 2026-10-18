@@ -2,7 +2,7 @@
 // Semlink - Settings Tab
 // ========================================
 
-import { App, ButtonComponent, DropdownComponent, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, ButtonComponent, DropdownComponent, Notice, PluginSettingTab, Setting, setIcon } from "obsidian";
 import * as QRCode from "qrcode";
 import type SmartVaultPlugin from "../main";
 import type { IndexProgress, ModelProvider, SmartVaultSettings } from "./types";
@@ -217,26 +217,38 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				dots.createSpan({ cls: i < used ? "is-used" : "" });
 			}
 			foot.createSpan({ cls: "semlink-license-card-devcount", text: `${used}/${total}` });
-			foot.createSpan({
-				cls: "semlink-license-card-key",
-				text: t("licenseKeyMasked").replace("{key}", lic.key?.slice(0, 10) + "…"),
+			const fullKey = lic.key ?? "";
+			const maskedKey = t("licenseKeyMasked").replace("{key}", fullKey.slice(0, 10) + "…");
+			const keySpan = foot.createSpan({ cls: "semlink-license-card-key", text: maskedKey });
+			// Eye toggle — reveal the full key only on demand.
+			const eye = foot.createEl("span", { cls: "semlink-license-card-eye" });
+			setIcon(eye, "eye");
+			let revealed = false;
+			eye.addEventListener("click", () => {
+				revealed = !revealed;
+				keySpan.setText(revealed ? fullKey : maskedKey);
+				setIcon(eye, revealed ? "eye-off" : "eye");
 			});
+
 			const de = foot.createEl("button", { cls: "semlink-license-card-deactivate", text: t("licenseDeactivate") });
-			de.addEventListener("click", () => void (async () => {
-				if (de.dataset.busy === "1") return;
-				de.dataset.busy = "1";
-				de.setAttr("disabled", "true");
-				try {
-					await lm.deactivate();
-					new Notice(t("licenseDeactivated"));
-					rerenderSettingsTab(this);
-				} catch (e) {
-					new Notice(licenseErrorMessage(e));
-				} finally {
-					de.dataset.busy = "";
-					de.removeAttribute("disabled");
-				}
-			})());
+			de.addEventListener("click", () => {
+				// Deactivate kicks the device out of Pro immediately — confirm first.
+				new ConfirmModal(this.app, t("licenseDeactivate"), t("licenseDeactivateConfirmBody"), () => void (async () => {
+					if (de.dataset.busy === "1") return;
+					de.dataset.busy = "1";
+					de.setAttr("disabled", "true");
+					try {
+						await lm.deactivate();
+						new Notice(t("licenseDeactivated"));
+						rerenderSettingsTab(this);
+					} catch (e) {
+						new Notice(licenseErrorMessage(e));
+					} finally {
+						de.dataset.busy = "";
+						de.removeAttribute("disabled");
+					}
+				})()).open();
+			});
 			return;
 		}
 

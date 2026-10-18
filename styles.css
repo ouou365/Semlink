@@ -232,6 +232,22 @@
     font-size: 12.5px;
 }
 
+.smart-vault-settings .semlink-license-card-eye {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-license-card-eye:hover {
+    color: var(--text-normal);
+}
+
+.smart-vault-settings .semlink-license-card-eye .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
 .smart-vault-settings .semlink-license-card-deactivate {
     margin-left: auto;
     background: none;

@@ -443,6 +443,8 @@ const en = {
 	licenseActivate: "Activate",
 	licenseActivated: "Pro activated 🎉",
 	licenseDeactivate: "Deactivate this device",
+	licenseDeactivateConfirmTitle: "Deactivate this device?",
+	licenseDeactivateConfirmBody: "This device will immediately lose Pro access. The license key stays valid and can be activated again here or on another device anytime.",
 	licenseDeactivated: "License deactivated — the slot is free for another device",
 	licenseNotConfigured: "Licensing is not yet available — stay tuned",
 	licenseInvalidKey: "Invalid license key",
