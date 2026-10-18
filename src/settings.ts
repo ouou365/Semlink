@@ -178,6 +178,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			.setDesc(t("openSidebarDesc"))
 			.addButton((btn) =>
 				btn.setButtonText(t("open")).onClick(() => {
+					// Close the settings pane first — the sidebar opens into
+					// the workspace the user returns to.
+					(this.app as unknown as { setting: { close(): void } }).setting.close();
 					void this.plugin.activateSearchView();
 				})
 			);
