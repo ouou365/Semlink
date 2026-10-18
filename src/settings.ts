@@ -184,33 +184,36 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 	}
 
-	/** License card (tinted panel): title, benefits blurb, inner price card
-	 *  with checkout, and a key row (Apply on Free / Deactivate on Pro). */
+	/** License card, conversion-first: badge + headline + one-line free
+	 *  reassurance, price anchor card ($3 vs struck $19.9, lifetime), and a
+	 *  quiet key row. No prose — the price does the talking. */
 	private renderLicenseSection(containerEl: HTMLElement): void {
 		const lm = this.plugin.licenseManager;
 		const pro = lm.isPro();
 
 		const card = containerEl.createDiv({ cls: "semlink-license-card" });
-		card.createDiv({ cls: "semlink-license-card-title", text: t("licenseCardTitle") });
+		const head = card.createDiv({ cls: "semlink-license-card-head" });
+		head.createSpan({ cls: "semlink-license-card-title", text: pro ? "Semlink Pro" : "Semlink Pro" });
+		if (!pro) head.createSpan({ cls: "semlink-license-card-badge", text: t("licenseBadge") });
 
-		// Benefits blurb — the perks run is bolded, lead/tail plain.
-		const desc = card.createDiv({ cls: "semlink-license-card-desc" });
-		desc.createSpan({ text: t("licenseCardDescLead") });
-		desc.createSpan({ cls: "semlink-license-card-strong", text: t("licenseCardPerks") });
-		desc.createSpan({ text: t("licenseCardDescTail") });
-
-		// Inner price card: tagline (price anchor / current status) + checkout.
-		const inner = card.createDiv({ cls: "semlink-license-card-inner" });
-		inner.createDiv({
-			cls: "semlink-license-card-tagline",
-			text: pro ? lm.statusLine() : t("upgradePriceAnchor"),
+		card.createDiv({
+			cls: "semlink-license-card-headline",
+			text: pro ? lm.statusLine() : t("licenseCardHeadline"),
 		});
+		card.createDiv({ cls: "semlink-license-card-freeline", text: t("licenseCardFreeLine") });
+
 		if (!pro) {
+			const inner = card.createDiv({ cls: "semlink-license-card-inner" });
+			const priceRow = inner.createDiv({ cls: "semlink-license-card-pricerow" });
+			priceRow.createSpan({ cls: "semlink-license-card-price", text: "$3" });
+			priceRow.createSpan({ cls: "semlink-license-card-was", text: "$19.9" });
+			priceRow.createSpan({ cls: "semlink-license-card-lifetime", text: t("licenseCardLifetime") });
+
 			const actions = inner.createDiv({ cls: "semlink-license-card-actions" });
 			if (!lm.configured) {
 				actions.createSpan({ cls: "semlink-license-card-note", text: t("licenseNotConfigured") });
 			} else {
-				const buyBtn = actions.createEl("button", { cls: "semlink-license-card-apply mod-cta", text: t("upgradeBuyEarly") });
+				const buyBtn = actions.createEl("button", { cls: "semlink-license-card-apply mod-cta", text: t("licenseCardCta") });
 				buyBtn.addEventListener("click", () => void (async () => {
 					if (buyBtn.dataset.busy === "1") return;
 					buyBtn.dataset.busy = "1";
@@ -222,23 +225,17 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 						buyBtn.dataset.busy = "";
 					}
 				})());
-				// Full benefit list / long-form license management stays in the modal.
-				const manage = actions.createEl("a", { cls: "semlink-license-card-link", text: t("licenseManage") });
-				manage.addEventListener("click", (e) => {
-					e.preventDefault();
-					new LicenseModal(this.app, this.plugin).open();
-				});
 			}
 		}
 
-		// Key row: Apply (Free) / masked key + Deactivate (Pro).
+		// Quiet key row: Apply (Free) / masked key + Deactivate (Pro).
 		const keyRow = card.createDiv({ cls: "semlink-license-card-keyrow" });
 		if (!pro) {
 			const input = keyRow.createEl("input", {
 				cls: "semlink-license-card-input",
 				attr: { type: "text", placeholder: t("licenseKeyPlaceholder"), spellcheck: "false" },
 			});
-			const apply = keyRow.createEl("button", { cls: "semlink-license-card-apply mod-cta", text: t("licenseActivate") });
+			const apply = keyRow.createEl("button", { cls: "semlink-license-card-apply", text: t("licenseActivate") });
 			const activate = () => void (async () => {
 				const key = input.value.trim();
 				if (!key || apply.dataset.busy === "1") return;

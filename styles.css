@@ -172,9 +172,9 @@
 }
 
 /* Settings tabs */
-/* License card (settings General tab) — tinted panel with a clear edge,
-   inner white price card, key row. Accent tint via color-mix with a
-   secondary-surface fallback for older hosts. */
+/* License card (settings General tab) — conversion-first: badge + big
+   headline, one-line free reassurance, price anchor card with a large $3
+   and struck regular price, quiet key row. */
 .smart-vault-settings .semlink-license-card {
     background: var(--background-secondary);
     background: color-mix(in srgb, var(--interactive-accent) 11%, transparent);
@@ -184,22 +184,41 @@
     margin-bottom: 18px;
 }
 
+.smart-vault-settings .semlink-license-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
 .smart-vault-settings .semlink-license-card-title {
-    font-size: 18px;
+    font-size: 15px;
     font-weight: 700;
     color: var(--text-normal);
-    margin-bottom: 10px;
 }
 
-.smart-vault-settings .semlink-license-card-desc {
-    font-size: 14px;
-    line-height: 1.6;
+.smart-vault-settings .semlink-license-card-badge {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 2px 10px;
+    letter-spacing: 0.02em;
+}
+
+.smart-vault-settings .semlink-license-card-headline {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.3;
     color: var(--text-normal);
+    margin-bottom: 4px;
+}
+
+.smart-vault-settings .semlink-license-card-freeline {
+    font-size: 13px;
+    color: var(--text-muted);
     margin-bottom: 14px;
-}
-
-.smart-vault-settings .semlink-license-card-strong {
-    font-weight: 700;
 }
 
 .smart-vault-settings .semlink-license-card-inner {
@@ -208,10 +227,29 @@
     padding: 14px 16px;
 }
 
-.smart-vault-settings .semlink-license-card-tagline {
-    font-size: 14px;
-    color: var(--text-normal);
+.smart-vault-settings .semlink-license-card-pricerow {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
     margin-bottom: 12px;
+}
+
+.smart-vault-settings .semlink-license-card-price {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-normal);
+    line-height: 1;
+}
+
+.smart-vault-settings .semlink-license-card-was {
+    font-size: 14px;
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+
+.smart-vault-settings .semlink-license-card-lifetime {
+    font-size: 12.5px;
+    color: var(--text-muted);
 }
 
 .smart-vault-settings .semlink-license-card-actions {
@@ -223,11 +261,6 @@
 .smart-vault-settings .semlink-license-card-note {
     color: var(--text-muted);
     font-size: 13px;
-}
-
-.smart-vault-settings .semlink-license-card-link {
-    color: var(--interactive-accent);
-    cursor: pointer;
 }
 
 .smart-vault-settings .semlink-license-card-keyrow {
@@ -243,6 +276,7 @@
     padding: 8px 14px;
     background: var(--background-primary);
     border: 1px solid var(--background-modifier-border);
+    font-size: 13px;
 }
 
 .smart-vault-settings .semlink-license-card-apply {
@@ -250,6 +284,7 @@
     padding: 8px 18px;
     font-weight: 600;
     white-space: nowrap;
+    font-size: 13px;
 }
 
 .smart-vault-settings .semlink-license-card-key {
