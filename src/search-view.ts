@@ -3254,7 +3254,10 @@ export class SemanticSearchView extends ItemView {
 				});
 				const logoEl = row.createSpan({ cls: "semlink-search-model-popup-logo" });
 				setSvgIcon(logoEl, brandLogoOf(group.providerName).svg || llmIconSvg);
-				row.createSpan({ cls: "semlink-search-model-popup-name", text: shortName(m.id) });
+				// Full model id in the list (org/model) — more complete than
+				// the toolbar's short name, disambiguates same-name models
+				// from different orgs on multi-provider hosts.
+				row.createSpan({ cls: "semlink-search-model-popup-name", text: m.id });
 				if (m.contextWindow > 0) {
 					row.createSpan({ cls: "semlink-search-model-popup-ctx", text: formatContextWindow(m.contextWindow) });
 				}
