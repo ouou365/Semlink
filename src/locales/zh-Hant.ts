@@ -424,6 +424,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseStatusPro: "Semlink Pro",
 	licenseCardTitle: "Semlink 授權",
 	licenseProActive: "已啟用",
+	licenseProHeadline: "恭喜你成功啟用 Semlink Pro，感謝你的支持！",
 	licenseProPerks: "無限對話歷史 · 歷史管理 · 全部未來更新",
 	licenseDevices: "裝置",
 	licenseBadge: "限時早鳥",

@@ -223,6 +223,30 @@
     letter-spacing: 0.02em;
 }
 
+.smart-vault-settings .semlink-license-card-footrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    color: var(--text-muted);
+    font-size: 12.5px;
+}
+
+.smart-vault-settings .semlink-license-card-deactivate {
+    margin-left: auto;
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12.5px;
+}
+
+.smart-vault-settings .semlink-license-card-deactivate:hover {
+    color: var(--text-error);
+}
+
 .smart-vault-settings .semlink-license-card-devrow {
     display: flex;
     align-items: center;

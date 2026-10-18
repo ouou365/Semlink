@@ -201,27 +201,27 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		}
 
 		if (pro) {
-			// Pro state: perks headline + device-slot dots + quiet key row.
-			card.createDiv({ cls: "semlink-license-card-headline", text: t("licenseProPerks") });
+			// Pro state, Eagle-style: big congrats + thanks, one quiet footer
+			// row (device slots · masked key · deactivate as a subtle action).
+			head.createSpan({ cls: "semlink-license-card-pro-pill", text: `✓ ${t("licenseProActive")}` });
+			card.createDiv({ cls: "semlink-license-card-headline", text: t("licenseProHeadline") });
+			card.createDiv({ cls: "semlink-license-card-freeline", text: t("licenseProPerks") });
 
-			const inner = card.createDiv({ cls: "semlink-license-card-inner" });
 			const lic = this.plugin.settings.license ?? {};
 			const used = lic.activation ?? 1;
 			const total = lic.activationLimit ?? Math.max(used, 3);
-			const devRow = inner.createDiv({ cls: "semlink-license-card-devrow" });
-			devRow.createSpan({ cls: "semlink-license-card-devlabel", text: t("licenseDevices") });
-			const dots = devRow.createSpan({ cls: "semlink-license-card-dots" });
+			const foot = card.createDiv({ cls: "semlink-license-card-footrow" });
+			foot.createSpan({ cls: "semlink-license-card-devlabel", text: t("licenseDevices") });
+			const dots = foot.createSpan({ cls: "semlink-license-card-dots" });
 			for (let i = 0; i < Math.max(total, used); i++) {
 				dots.createSpan({ cls: i < used ? "is-used" : "" });
 			}
-			devRow.createSpan({ cls: "semlink-license-card-devcount", text: `${used}/${total}` });
-
-			const keyRow = card.createDiv({ cls: "semlink-license-card-keyrow" });
-			keyRow.createSpan({
+			foot.createSpan({ cls: "semlink-license-card-devcount", text: `${used}/${total}` });
+			foot.createSpan({
 				cls: "semlink-license-card-key",
 				text: t("licenseKeyMasked").replace("{key}", lic.key?.slice(0, 10) + "…"),
 			});
-			const de = keyRow.createEl("button", { cls: "semlink-license-card-apply", text: t("licenseDeactivate") });
+			const de = foot.createEl("button", { cls: "semlink-license-card-deactivate", text: t("licenseDeactivate") });
 			de.addEventListener("click", () => void (async () => {
 				if (de.dataset.busy === "1") return;
 				de.dataset.busy = "1";

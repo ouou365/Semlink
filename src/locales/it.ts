@@ -426,6 +426,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseStatusPro: "Semlink Pro",
 	licenseCardTitle: "Licenza Semlink",
 	licenseProActive: "Attiva",
+	licenseProHeadline: "Semlink Pro attivato con successo. Grazie per il tuo supporto!",
 	licenseProPerks: "Cronologia illimitata · gestione · tutti gli aggiornamenti futuri",
 	licenseDevices: "Dispositivi",
 	licenseBadge: "Offerta inaugurale",
