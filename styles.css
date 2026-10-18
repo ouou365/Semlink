@@ -233,6 +233,8 @@
 .smart-vault-settings .semlink-license-card-logo {
     display: flex;
     align-items: center;
+    /* Logo strokes use currentColor — accent makes it the brand purple. */
+    color: var(--interactive-accent);
 }
 
 .smart-vault-settings .semlink-license-card-logo .svg-icon {
