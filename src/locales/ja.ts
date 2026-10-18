@@ -48,7 +48,7 @@ const t: Record<keyof typeof en, string> = {
 	botDisconnected: "ボットが切断されました",
 	botPrereq: "フロー：QR スキャンでアプリを作成（権限と im.message.receive_v1 は事前適用済み）→ ボットに /bind <code> を送信して完了。Feishu 管理画面での手動設定は不要です",
 	openSidebar: "クイックスタート",
-	openSidebarDesc: "AI のための高機能チャット UI。すべてのモデルを一箇所に。プライベートでローカル。",
+	openSidebarDesc: "ヴォールトとチャットし、ノートをドラッグして根拠のある回答を。",
 	open: "開く",
 	provider: "埋め込みプロバイダー",
 	providerDesc: "埋め込みベクトルの生成サービスを選択します",
