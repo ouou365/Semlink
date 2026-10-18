@@ -256,8 +256,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			return;
 		}
 
-		head.createSpan({ cls: "semlink-license-card-badge", text: t("licenseBadge") });
-
 		card.createDiv({
 			cls: "semlink-license-card-headline",
 			text: t("licenseCardHeadline"),
