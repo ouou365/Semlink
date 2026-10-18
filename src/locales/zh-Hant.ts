@@ -427,6 +427,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseProHeadline: "最好的 Obsidian AI 智能體",
 	licenseProPerks: "無限對話歷史 · 歷史管理 · 全部未來更新",
 	licenseDevices: "裝置",
+	licenseLifetime: "永久授權",
 	licenseBadge: "限時早鳥",
 	licenseCardHeadline: "解鎖無限對話歷史",
 	licenseCardFreeLine: "為 AI 打造的高級聊天介面。所有模型，一處管理。私有且本地。",

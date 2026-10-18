@@ -427,6 +427,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseProHeadline: "Le meilleur agent IA pour Obsidian",
 	licenseProPerks: "Historique illimité · gestion · toutes les futures mises à jour",
 	licenseDevices: "Appareils",
+	licenseLifetime: "Licence à vie",
 	licenseBadge: "Offre de lancement",
 	licenseCardHeadline: "Débloquez l’historique illimité",
 	licenseCardFreeLine: "Interface de chat avancée pour l’IA. Tous les modèles au même endroit. Privé et local.",

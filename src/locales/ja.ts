@@ -427,6 +427,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseProHeadline: "最高の Obsidian AI エージェント",
 	licenseProPerks: "無制限のチャット履歴 · 履歴管理 · 今後のアップデート全部",
 	licenseDevices: "デバイス",
+	licenseLifetime: "永久ライセンス",
 	licenseBadge: "アーリーバード",
 	licenseCardHeadline: "無制限のチャット履歴を解放",
 	licenseCardFreeLine: "AI のための高機能チャット UI。すべてのモデルを一箇所に。プライベートでローカル。",

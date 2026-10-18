@@ -427,6 +427,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseProHeadline: "Der beste Obsidian-KI-Agent",
 	licenseProPerks: "Unbegrenzter Chatverlauf · Verwaltung · alle künftigen Updates",
 	licenseDevices: "Geräte",
+	licenseLifetime: "Dauerlizenz",
 	licenseBadge: "Frühbucher",
 	licenseCardHeadline: "Unbegrenzten Chatverlauf freischalten",
 	licenseCardFreeLine: "Fortschrittliche Chat-Oberfläche für KI. Alle Modelle an einem Ort. Privat und lokal.",

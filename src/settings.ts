@@ -215,6 +215,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				dots.createSpan({ cls: i < used ? "is-used" : "" });
 			}
 			foot.createSpan({ cls: "semlink-license-card-devcount", text: `${used}/${total}` });
+			foot.createSpan({ cls: "semlink-license-card-lifetime", text: t("licenseLifetime") });
 
 			const de = foot.createEl("button", { cls: "semlink-license-card-deactivate", text: t("licenseDeactivate") });
 			de.addEventListener("click", () => {

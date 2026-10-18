@@ -428,6 +428,7 @@ const zh: Record<keyof typeof en, string> = {
 	licenseProHeadline: "最好的 Obsidian AI 智能体",
 	licenseProPerks: "无限对话历史 · 历史管理 · 全部未来更新",
 	licenseDevices: "设备",
+	licenseLifetime: "永久授权",
 	licenseBadge: "限时早鸟",
 	licenseCardHeadline: "解锁无限对话历史",
 	licenseCardFreeLine: "为 AI 打造的高级聊天界面。所有模型，一处管理。私有且本地。",

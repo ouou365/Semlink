@@ -426,6 +426,7 @@ const en = {
 	licenseProHeadline: "The best Obsidian AI agent",
 	licenseProPerks: "Unlimited chat history · history management · all future updates",
 	licenseDevices: "Devices",
+	licenseLifetime: "Lifetime license",
 	licenseBadge: "Early bird",
 	licenseCardHeadline: "Unlock unlimited chat history",
 	licenseCardFreeLine: "Advanced chat UI for AI. All models in one place. Private and local.",
