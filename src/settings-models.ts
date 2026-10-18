@@ -1977,8 +1977,6 @@ export function renderModelsTab(
 	state: ModelsTabState,
 	refresh: () => void,
 ): void {
-	new Setting(containerEl).setName(t("sectionModel")).setHeading();
-
 	// One unified provider list — embedding and chat are not distinct
 	// provider kinds; drag-reordering works across the whole list.
 	const providers = plugin.settings.providers;
