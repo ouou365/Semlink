@@ -11,6 +11,7 @@ import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
 import { LicenseModal } from "./license-modal";
+import { licenseErrorMessage } from "./license";
 import { LANGUAGES, t } from "./i18n";
 import { ConfirmModal } from "./confirm-modal";
 import { markDestructive, rerenderSettingsTab, showSliderValue } from "./ui-compat";
@@ -178,18 +179,106 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 	}
 
-	/** Pro license status row + upgrade entry at the top of the General tab. */
+	/** License card (tinted panel): title, benefits blurb, inner price card
+	 *  with checkout, and a key row (Apply on Free / Deactivate on Pro). */
 	private renderLicenseSection(containerEl: HTMLElement): void {
 		const lm = this.plugin.licenseManager;
 		const pro = lm.isPro();
-		new Setting(containerEl)
-			.setName(pro ? t("licenseStatusPro") : t("licenseStatusFree"))
-			.setDesc(pro ? lm.statusLine() : t("licenseFreeDesc"))
-			.addButton((btn) =>
-				btn.setButtonText(pro ? t("licenseManage") : t("upgradeProBtn")).onClick(() => {
+
+		const card = containerEl.createDiv({ cls: "semlink-license-card" });
+		card.createDiv({ cls: "semlink-license-card-title", text: t("licenseCardTitle") });
+
+		// Benefits blurb — the perks run is bolded, lead/tail plain.
+		const desc = card.createDiv({ cls: "semlink-license-card-desc" });
+		desc.createSpan({ text: t("licenseCardDescLead") });
+		desc.createSpan({ cls: "semlink-license-card-strong", text: t("licenseCardPerks") });
+		desc.createSpan({ text: t("licenseCardDescTail") });
+
+		// Inner price card: tagline (price anchor / current status) + checkout.
+		const inner = card.createDiv({ cls: "semlink-license-card-inner" });
+		inner.createDiv({
+			cls: "semlink-license-card-tagline",
+			text: pro ? lm.statusLine() : t("upgradePriceAnchor"),
+		});
+		if (!pro) {
+			const actions = inner.createDiv({ cls: "semlink-license-card-actions" });
+			if (!lm.configured) {
+				actions.createSpan({ cls: "semlink-license-card-note", text: t("licenseNotConfigured") });
+			} else {
+				const buyBtn = actions.createEl("button", { cls: "semlink-license-card-apply mod-cta", text: t("upgradeBuyEarly") });
+				buyBtn.addEventListener("click", () => void (async () => {
+					if (buyBtn.dataset.busy === "1") return;
+					buyBtn.dataset.busy = "1";
+					try {
+						window.open(await lm.openCheckout(), "_blank");
+					} catch {
+						new Notice(t("upgradeCheckoutUnavailable"));
+					} finally {
+						buyBtn.dataset.busy = "";
+					}
+				})());
+				// Full benefit list / long-form license management stays in the modal.
+				const manage = actions.createEl("a", { cls: "semlink-license-card-link", text: t("licenseManage") });
+				manage.addEventListener("click", (e) => {
+					e.preventDefault();
 					new LicenseModal(this.app, this.plugin).open();
-				})
-			);
+				});
+			}
+		}
+
+		// Key row: Apply (Free) / masked key + Deactivate (Pro).
+		const keyRow = card.createDiv({ cls: "semlink-license-card-keyrow" });
+		if (!pro) {
+			const input = keyRow.createEl("input", {
+				cls: "semlink-license-card-input",
+				attr: { type: "text", placeholder: t("licenseKeyPlaceholder"), spellcheck: "false" },
+			});
+			const apply = keyRow.createEl("button", { cls: "semlink-license-card-apply mod-cta", text: t("licenseActivate") });
+			const activate = () => void (async () => {
+				const key = input.value.trim();
+				if (!key || apply.dataset.busy === "1") return;
+				apply.dataset.busy = "1";
+				apply.setAttr("disabled", "true");
+				try {
+					await lm.activate(key);
+					new Notice(t("licenseActivated"));
+					rerenderSettingsTab(this);
+				} catch (e) {
+					new Notice(licenseErrorMessage(e));
+				} finally {
+					apply.dataset.busy = "";
+					apply.removeAttribute("disabled");
+				}
+			})();
+			apply.addEventListener("click", activate);
+			input.addEventListener("keydown", (e) => {
+				if (e.key === "Enter") {
+					e.preventDefault();
+					activate();
+				}
+			});
+		} else {
+			keyRow.createSpan({
+				cls: "semlink-license-card-key",
+				text: t("licenseKeyMasked").replace("{key}", this.plugin.settings.license?.key?.slice(0, 10) + "…"),
+			});
+			const de = keyRow.createEl("button", { cls: "semlink-license-card-apply", text: t("licenseDeactivate") });
+			de.addEventListener("click", () => void (async () => {
+				if (de.dataset.busy === "1") return;
+				de.dataset.busy = "1";
+				de.setAttr("disabled", "true");
+				try {
+					await lm.deactivate();
+					new Notice(t("licenseDeactivated"));
+					rerenderSettingsTab(this);
+				} catch (e) {
+					new Notice(licenseErrorMessage(e));
+				} finally {
+					de.dataset.busy = "";
+					de.removeAttribute("disabled");
+				}
+			})());
+		}
 	}
 
 	// ══════════════════════════════════════

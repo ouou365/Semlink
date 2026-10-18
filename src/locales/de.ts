@@ -421,6 +421,10 @@ const t: Record<keyof typeof en, string> = {
 // ──── Pro / license (docs/freemium-design.md v3) ────
 	licenseStatusFree: "Semlink Free",
 	licenseStatusPro: "Semlink Pro",
+	licenseCardTitle: "Semlink-Lizenz",
+	licenseCardDescLead: "Suche, Chat, Indexierung und MCP sind in Semlink Free komplett kostenlos — ",
+	licenseCardPerks: "Semlink Pro schaltet den vollen Chatverlauf und dessen Verwaltung frei",
+	licenseCardDescTail: ".",
 	licenseFreeDesc: "Suche, Chat, Indexierung und MCP sind vollständig kostenlos; Pro schaltet den vollständigen Chat-Verlauf frei",
 	licenseManage: "Lizenz verwalten",
 	licenseKeyTitle: "Lizenzschlüssel",

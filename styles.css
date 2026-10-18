@@ -172,6 +172,87 @@
 }
 
 /* Settings tabs */
+/* License card (settings General tab) — tinted panel, inner price card,
+   key row. Accent-tinted via color-mix with a secondary-surface fallback. */
+.smart-vault-settings .semlink-license-card {
+    background: var(--background-secondary);
+    background: color-mix(in srgb, var(--interactive-accent) 7%, transparent);
+    border-radius: 12px;
+    padding: 14px 16px 16px;
+    margin-bottom: 18px;
+}
+
+.smart-vault-settings .semlink-license-card-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-normal);
+    margin-bottom: 8px;
+}
+
+.smart-vault-settings .semlink-license-card-desc {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-normal);
+}
+
+.smart-vault-settings .semlink-license-card-strong {
+    font-weight: 700;
+}
+
+.smart-vault-settings .semlink-license-card-inner {
+    background: var(--background-primary);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-top: 12px;
+}
+
+.smart-vault-settings .semlink-license-card-tagline {
+    font-size: 13.5px;
+    color: var(--text-normal);
+    margin-bottom: 10px;
+}
+
+.smart-vault-settings .semlink-license-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.smart-vault-settings .semlink-license-card-note {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.smart-vault-settings .semlink-license-card-link {
+    color: var(--interactive-accent);
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-license-card-keyrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.smart-vault-settings .semlink-license-card-input {
+    flex: 1 1 auto;
+    border-radius: 8px;
+    padding: 7px 12px;
+    background: var(--background-primary);
+}
+
+.smart-vault-settings .semlink-license-card-apply {
+    border-radius: 8px;
+    padding: 7px 16px;
+    white-space: nowrap;
+}
+
+.smart-vault-settings .semlink-license-card-key {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
 .smart-vault-settings .setting-item-heading .semlink-settings-heading-row {
     display: flex;
     align-items: center;

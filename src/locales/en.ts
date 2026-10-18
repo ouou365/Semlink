@@ -420,6 +420,10 @@ const en = {
 // ──── Pro / license (docs/freemium-design.md v3) ────
 	licenseStatusFree: "Semlink Free",
 	licenseStatusPro: "Semlink Pro",
+	licenseCardTitle: "Semlink License",
+	licenseCardDescLead: "Semlink Pro adds ",
+	licenseCardPerks: "unlimited chat history and history management",
+	licenseCardDescTail: " on top of the fully free search, chat, indexing and MCP.",
 	licenseFreeDesc: "Search, chat, indexing and MCP are fully free; Pro unlocks the full chat history",
 	licenseManage: "Manage license",
 	licenseKeyTitle: "License key",

@@ -422,6 +422,10 @@ const zh: Record<keyof typeof en, string> = {
 // ──── Pro / license (docs/freemium-design.md v3) ────
 	licenseStatusFree: "Semlink 免费版",
 	licenseStatusPro: "Semlink Pro",
+	licenseCardTitle: "Semlink 许可",
+	licenseCardDescLead: "Semlink Free 的检索、对话、索引与 MCP 完全免费，",
+	licenseCardPerks: "Semlink Pro 解锁无限对话历史与历史管理",
+	licenseCardDescTail: "。",
 	licenseFreeDesc: "搜索、问答、索引与 MCP 完整免费；Pro 解锁完整对话历史",
 	licenseManage: "管理许可",
 	licenseKeyTitle: "许可密钥",

@@ -422,6 +422,10 @@ const t: Record<keyof typeof en, string> = {
 // ──── Pro / license (docs/freemium-design.md v3) ────
 	licenseStatusFree: "Semlink Free",
 	licenseStatusPro: "Semlink Pro",
+	licenseCardTitle: "Лицензия Semlink",
+	licenseCardDescLead: "Поиск, чат, индексация и MCP полностью бесплатны в Semlink Free — ",
+	licenseCardPerks: "Semlink Pro открывает безлимитную историю и управление ею",
+	licenseCardDescTail: ".",
 	licenseFreeDesc: "Поиск, чат, индексация и MCP полностью бесплатны; Pro открывает полную историю чатов",
 	licenseManage: "Управление лицензией",
 	licenseKeyTitle: "Лицензионный ключ",
