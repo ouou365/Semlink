@@ -191,6 +191,29 @@
 /* License card (settings General tab) — conversion-first: badge + big
    headline, one-line free reassurance, price anchor card with a large $3
    and struck regular price, quiet key row. */
+.smart-vault-settings .semlink-settings-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 20px;
+    color: var(--text-muted);
+    font-size: 12.5px;
+}
+
+.smart-vault-settings .semlink-settings-footer-link {
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.smart-vault-settings .semlink-settings-footer-link:hover {
+    color: var(--interactive-accent);
+}
+
+.smart-vault-settings .semlink-settings-footer-sep {
+    color: var(--text-faint);
+}
+
 .smart-vault-settings .semlink-license-card {
     background: var(--background-secondary);
     background: color-mix(in srgb, var(--interactive-accent) 11%, transparent);

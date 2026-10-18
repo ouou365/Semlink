@@ -182,6 +182,21 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				})
 			);
 
+		// Footer: site links (quiet, centered).
+		const site = "https://getsemlink.com";
+		const footer = containerEl.createDiv({ cls: "semlink-settings-footer" });
+		const links: Array<[string, string]> = [
+			[t("footerWebsite"), site],
+			[t("footerSupport"), "mailto:support@getsemlink.com"],
+			[t("footerTerms"), `${site}/terms`],
+			[t("footerPrivacy"), `${site}/privacy`],
+		];
+		links.forEach(([label, href], i) => {
+			if (i > 0) footer.createSpan({ cls: "semlink-settings-footer-sep", text: "·" });
+			const a = footer.createEl("a", { cls: "semlink-settings-footer-link", text: label, href });
+			if (href.startsWith("http")) a.setAttr("target", "_blank");
+		});
+
 	}
 
 	/** License card, conversion-first: badge + headline + one-line free
