@@ -172,27 +172,30 @@
 }
 
 /* Settings tabs */
-/* License card (settings General tab) — tinted panel, inner price card,
-   key row. Accent-tinted via color-mix with a secondary-surface fallback. */
+/* License card (settings General tab) — tinted panel with a clear edge,
+   inner white price card, key row. Accent tint via color-mix with a
+   secondary-surface fallback for older hosts. */
 .smart-vault-settings .semlink-license-card {
     background: var(--background-secondary);
-    background: color-mix(in srgb, var(--interactive-accent) 7%, transparent);
-    border-radius: 12px;
-    padding: 14px 16px 16px;
+    background: color-mix(in srgb, var(--interactive-accent) 11%, transparent);
+    border: 1px solid color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+    border-radius: 14px;
+    padding: 18px 20px;
     margin-bottom: 18px;
 }
 
 .smart-vault-settings .semlink-license-card-title {
-    font-size: 17px;
+    font-size: 18px;
     font-weight: 700;
     color: var(--text-normal);
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
 
 .smart-vault-settings .semlink-license-card-desc {
-    font-size: 13.5px;
-    line-height: 1.55;
+    font-size: 14px;
+    line-height: 1.6;
     color: var(--text-normal);
+    margin-bottom: 14px;
 }
 
 .smart-vault-settings .semlink-license-card-strong {
@@ -202,14 +205,13 @@
 .smart-vault-settings .semlink-license-card-inner {
     background: var(--background-primary);
     border-radius: 10px;
-    padding: 12px 14px;
-    margin-top: 12px;
+    padding: 14px 16px;
 }
 
 .smart-vault-settings .semlink-license-card-tagline {
-    font-size: 13.5px;
+    font-size: 14px;
     color: var(--text-normal);
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 
 .smart-vault-settings .semlink-license-card-actions {
@@ -230,27 +232,30 @@
 
 .smart-vault-settings .semlink-license-card-keyrow {
     display: flex;
-    align-items: center;
+    align-items: stretch;
     gap: 10px;
     margin-top: 12px;
 }
 
 .smart-vault-settings .semlink-license-card-input {
     flex: 1 1 auto;
-    border-radius: 8px;
-    padding: 7px 12px;
+    border-radius: 10px;
+    padding: 8px 14px;
     background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
 }
 
 .smart-vault-settings .semlink-license-card-apply {
-    border-radius: 8px;
-    padding: 7px 16px;
+    border-radius: 10px;
+    padding: 8px 18px;
+    font-weight: 600;
     white-space: nowrap;
 }
 
 .smart-vault-settings .semlink-license-card-key {
     color: var(--text-muted);
     font-size: 13px;
+    align-self: center;
 }
 
 .smart-vault-settings .setting-item-heading .semlink-settings-heading-row {
