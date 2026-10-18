@@ -172,6 +172,22 @@
 }
 
 /* Settings tabs */
+/* Flex children must be allowed to shrink below their content size —
+   inputs and long nowrap spans otherwise force the settings panel into
+   horizontal scrolling (min-width:auto is the classic culprit). */
+.smart-vault-settings .setting-item,
+.smart-vault-settings .setting-item-info,
+.smart-vault-settings .setting-item-name,
+.smart-vault-settings .setting-item-control,
+.smart-vault-settings .semlink-license-card,
+.smart-vault-settings .semlink-license-card-inner,
+.smart-vault-settings .semlink-license-card-keyrow,
+.smart-vault-settings .semlink-license-card-input,
+.smart-vault-settings .semlink-settings-heading-row,
+.smart-vault-settings .semlink-settings-heading-left {
+    min-width: 0;
+}
+
 /* License card (settings General tab) — conversion-first: badge + big
    headline, one-line free reassurance, price anchor card with a large $3
    and struck regular price, quiet key row. */
