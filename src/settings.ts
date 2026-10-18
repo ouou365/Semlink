@@ -12,7 +12,6 @@ import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
 import { LicenseModal } from "./license-modal";
 import { LANGUAGES, t } from "./i18n";
-import { setDebugLogging } from "./log";
 import { ConfirmModal } from "./confirm-modal";
 import { markDestructive, rerenderSettingsTab, showSliderValue } from "./ui-compat";
 
@@ -180,29 +179,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				})
 			);
 
-		// Debug logging (support diagnostics)
-		new Setting(containerEl)
-			.setName(t("debugLogging"))
-			.setDesc(t("debugLoggingDesc"))
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.debugLogging ?? false).onChange((value) => {
-					this.plugin.settings.debugLogging = value;
-					setDebugLogging(value);
-					void this.plugin.saveSettings();
-				})
-			);
-
-		// Report Bug
-		new Setting(containerEl)
-			.setName(t("reportBug"))
-			.setDesc(t("reportBugDesc"))
-			.addButton((btn) =>
-				btn
-					.setButtonText(t("reportBugButton"))
-					.onClick(() => {
-						window.location.href = "mailto:support@getsemlink.com?subject=Semlink Bug Report";
-					})
-			);
 	}
 
 	/** Pro license status row + upgrade entry at the top of the General tab. */
