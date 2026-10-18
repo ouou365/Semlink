@@ -425,7 +425,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseCardTitle: "Semlink 라이선스",
 	licenseBadge: "얼리버드",
 	licenseCardHeadline: "무제한 대화 기록 잠금 해제",
-	licenseCardFreeLine: "검색·채팅·인덱싱·MCP는 영구 무료",
+	licenseCardFreeLine: "AI를 위한 고급 채팅 UI. 모든 모델을 한곳에서. 비공개 및 로컬.",
 	licenseCardCta: "$3로 잠금 해제",
 	licenseCardLifetime: "평생 이용 · 구독 없음",
 	licenseCardDescLead: "Semlink Free의 검색·채팅·인덱싱·MCP는 완전 무료입니다. ",

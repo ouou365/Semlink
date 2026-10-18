@@ -426,7 +426,7 @@ const zh: Record<keyof typeof en, string> = {
 	licenseCardTitle: "Semlink 许可",
 	licenseBadge: "限时早鸟",
 	licenseCardHeadline: "解锁无限对话历史",
-	licenseCardFreeLine: "检索、对话、索引与 MCP 永久免费",
+	licenseCardFreeLine: "为 AI 打造的高级聊天界面。所有模型，一处管理。私有且本地。",
 	licenseCardCta: "$3 立即解锁",
 	licenseCardLifetime: "终身买断 · 无订阅",
 	licenseCardDescLead: "Semlink Free 的检索、对话、索引与 MCP 完全免费，",

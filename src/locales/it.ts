@@ -427,7 +427,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseCardTitle: "Licenza Semlink",
 	licenseBadge: "Offerta inaugurale",
 	licenseCardHeadline: "Sblocca la cronologia illimitata",
-	licenseCardFreeLine: "Ricerca, chat, indicizzazione e MCP restano gratuiti",
+	licenseCardFreeLine: "Interfaccia di chat avanzata per l’IA. Tutti i modelli in un unico posto. Privato e locale.",
 	licenseCardCta: "Sblocca per 3 $",
 	licenseCardLifetime: "a vita · nessun abbonamento",
 	licenseCardDescLead: "Ricerca, chat, indicizzazione e MCP sono completamente gratuiti in Semlink Free — ",

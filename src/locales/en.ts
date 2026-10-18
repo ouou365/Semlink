@@ -424,7 +424,7 @@ const en = {
 	licenseCardTitle: "Semlink License",
 	licenseBadge: "Early bird",
 	licenseCardHeadline: "Unlock unlimited chat history",
-	licenseCardFreeLine: "Search, chat, indexing and MCP stay free forever",
+	licenseCardFreeLine: "Advanced chat UI for AI. All models in one place. Private and local.",
 	licenseCardCta: "Unlock for $3",
 	licenseCardLifetime: "lifetime · no subscription",
 	licenseCardDescLead: "Semlink Pro adds ",

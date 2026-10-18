@@ -425,7 +425,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseCardTitle: "Semlink 授權",
 	licenseBadge: "限時早鳥",
 	licenseCardHeadline: "解鎖無限對話歷史",
-	licenseCardFreeLine: "檢索、對話、索引與 MCP 永久免費",
+	licenseCardFreeLine: "為 AI 打造的高級聊天介面。所有模型，一處管理。私有且本地。",
 	licenseCardCta: "$3 立即解鎖",
 	licenseCardLifetime: "終身買斷 · 無訂閱",
 	licenseCardDescLead: "Semlink Free 的檢索、對話、索引與 MCP 完全免費，",
