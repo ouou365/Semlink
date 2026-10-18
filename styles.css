@@ -309,7 +309,24 @@
     align-self: center;
 }
 
-.smart-vault-settings .setting-item-heading .semlink-settings-heading-row {
+/* The heading setting must be allowed to SHRINK: Obsidian's
+   .setting-item-info flex shorthand carries flex-shrink:0, so the row
+   couldn't narrow and forced horizontal scrolling. The tagline ellipsizes
+   instead of pushing width; the language dropdown never gets squashed. */
+.smart-vault-settings .setting-item-heading .setting-item-info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.smart-vault-settings .setting-item-heading .setting-item-name {
+    min-width: 0;
+}
+
+.smart-vault-settings .setting-item-heading .semlink-settings-lang {
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-settings-heading-row {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -334,6 +351,9 @@
     font-size: 12px;
     font-weight: 400;
     white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .smart-vault-settings .semlink-settings-tabs {
