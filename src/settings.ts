@@ -16,7 +16,7 @@ import { setDebugLogging } from "./log";
 import { ConfirmModal } from "./confirm-modal";
 import { markDestructive, rerenderSettingsTab, showSliderValue } from "./ui-compat";
 
-type SettingsTab = "general" | "mcp" | "bot";
+type SettingsTab = "general" | "model" | "mcp" | "index" | "embedding" | "bot";
 
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
@@ -28,10 +28,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	/** Provider-list state (models management, embedded in the General tab):
 	 *  which provider's editor is expanded / which add card is open. */
 	private modelsState: ModelsTabState = { ...EMPTY_MODELS_TAB_STATE };
-	/** Whether the collapsible embedding-params section is expanded. */
-	private embeddingParamsOpen = false;
-	/** Whether the collapsible index-management section is expanded. */
-	private indexOpen = false;
 	private feishuScanHandle: FeishuScanHandle | null = null;
 
 	constructor(app: App, plugin: SmartVaultPlugin) {
@@ -85,8 +81,14 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		containerEl.empty();
 		containerEl.addClass("smart-vault-settings");
 
-		// Title heading
-		new Setting(containerEl).setName(t("settingsTitle")).setHeading();
+		// Title heading + version on the right.
+		const title = new Setting(containerEl).setName(t("settingsTitle")).setHeading();
+		// Version rides in the NAME element: heading-mode settings may hide
+		// the control area depending on host CSS — the name always renders.
+		title.nameEl.createSpan({
+			cls: "semlink-settings-version",
+			text: `v${this.plugin.manifest.version}`,
+		});
 
 		// Tab navigation
 		this.renderTabNav(containerEl);
@@ -97,8 +99,17 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			case "general":
 				this.renderGeneralTab(panelEl);
 				break;
+			case "model":
+				renderModelsTab(this.plugin, panelEl, this.modelsState, () => this.refreshPreservingScroll());
+				break;
 			case "mcp":
 				this.renderMcpTab(panelEl);
+				break;
+			case "index":
+				this.renderIndexTab(panelEl);
+				break;
+			case "embedding":
+				this.renderEmbeddingTab(panelEl);
 				break;
 			case "bot":
 				this.renderBotTab(panelEl);
@@ -110,7 +121,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const navEl = containerEl.createDiv({ cls: "semlink-settings-tabs" });
 		const tabs: Array<{ id: SettingsTab; label: string }> = [
 			{ id: "general", label: t("tabGeneral") },
+			{ id: "model", label: t("tabModel") },
 			{ id: "mcp", label: t("tabMcp") },
+			{ id: "index", label: t("tabIndex") },
+			{ id: "embedding", label: t("tabEmbedding") },
 			// Bot tab deliberately not listed: the Feishu bot is unpublished
 			// (freemium-design v3.6). renderBotTab stays available for re-enable.
 		];
@@ -130,7 +144,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	}
 
 	// ══════════════════════════════════════
-	// Tab: General — sidebar, embedding, index management & support
+	// Tab: General — license, language, sidebar entry, support
 	// ══════════════════════════════════════
 	private renderGeneralTab(containerEl: HTMLElement): void {
 		// ── Pro license status + entry (top of General) ──
@@ -165,17 +179,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					void this.plugin.activateSearchView();
 				})
 			);
-
-		// ── Provider management: embedding + chat providers, add/edit/remove,
-		// fetch. The active chat model is picked in the sidebar's model
-		// switcher (persisted); the embedding model lives in Embedding params.
-		renderModelsTab(this.plugin, containerEl, this.modelsState, () => this.refreshPreservingScroll());
-
-		// ── Index Management (collapsible, like the embedding parameters) ──
-		this.renderIndexManagementSection(containerEl);
-
-		// ── Secondary: embedding parameters (click to expand) ──
-		this.renderEmbeddingParamsSection(containerEl);
 
 		// Debug logging (support diagnostics)
 		new Setting(containerEl)
@@ -216,19 +219,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			);
 	}
 
-	/** Former "Index Management" heading, collapsed like the embedding
-	 *  parameters: exclude paths, auto-index and the full reindex action. */
-	private renderIndexManagementSection(containerEl: HTMLElement): void {
-		const details = containerEl.createEl("details", { cls: "semlink-collapsible" });
-		details.open = this.indexOpen;
-		details.addEventListener("toggle", () => {
-			this.indexOpen = details.open;
-		});
-		const summary = details.createEl("summary", { cls: "semlink-collapsible-summary" });
-		summary.createSpan({ text: t("sectionIndex") });
-		const body = details.createDiv({ cls: "semlink-collapsible-body" });
-
-		new Setting(body)
+	// ══════════════════════════════════════
+	// Tab: Index — exclude paths, auto-index, full reindex
+	// ══════════════════════════════════════
+	private renderIndexTab(containerEl: HTMLElement): void {
+		new Setting(containerEl)
 			.setName(t("excludePaths"))
 			.setDesc(t("excludePathsDesc"))
 			.addTextArea((text) =>
@@ -244,7 +239,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				(setting.controlEl.querySelector("textarea") as HTMLTextAreaElement).rows = 4;
 			});
 
-		new Setting(body)
+		new Setting(containerEl)
 			.setName(t("autoIndex"))
 			.setDesc(t("autoIndexDesc"))
 			.addToggle((toggle) =>
@@ -256,7 +251,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(body)
+		new Setting(containerEl)
 			.setName(t("fullReindex"))
 			.setDesc(t("fullReindexDesc"))
 			.addButton((btn) => {
@@ -271,21 +266,14 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			});
 	}
 
-	/** Former "Embedding" tab, demoted to a collapsible secondary section. */
-	private renderEmbeddingParamsSection(containerEl: HTMLElement): void {
-		const details = containerEl.createEl("details", { cls: "semlink-collapsible" });
-		details.open = this.embeddingParamsOpen;
-		details.addEventListener("toggle", () => {
-			this.embeddingParamsOpen = details.open;
-		});
-		const summary = details.createEl("summary", { cls: "semlink-collapsible-summary" });
-		summary.createSpan({ text: t("sectionEmbedding") });
-		const body = details.createDiv({ cls: "semlink-collapsible-body" });
-
+	// ══════════════════════════════════════
+	// Tab: Embedding — model, chunking params, rebuild
+	// ══════════════════════════════════════
+	private renderEmbeddingTab(containerEl: HTMLElement): void {
 		// Embedding model — one dropdown entry per (provider, model) combo,
 		// e.g. "SiliconFlow/BAAI/bge-m3"; picking one sets the active
 		// embedding model key.
-		new Setting(body)
+		new Setting(containerEl)
 			.setName(t("embeddingModel"))
 			.addDropdown((dropdown) => {
 				const options = embeddingModelComboOptions(this.plugin.settings);
@@ -307,7 +295,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(body)
+		new Setting(containerEl)
 			.setName(t("chunkSize"))
 			.setDesc(t("chunkSizeDesc"))
 			.addSlider((slider) => {
@@ -318,7 +306,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(body)
+		new Setting(containerEl)
 			.setName(t("chunkOverlap"))
 			.setDesc(t("chunkOverlapDesc"))
 			.addSlider((slider) => {
@@ -329,7 +317,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(body)
+		new Setting(containerEl)
 			.setName(t("batchSize"))
 			.setDesc(t("batchSizeDesc"))
 			.addSlider((slider) => {
@@ -340,7 +328,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(body)
+		new Setting(containerEl)
 			.setName(t("requestDelay"))
 			.setDesc(t("requestDelayDesc"))
 			.addSlider((slider) => {
@@ -351,7 +339,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(body)
+		new Setting(containerEl)
 			.setName(t("embedConcurrency"))
 			.setDesc(t("embedConcurrencyDesc"))
 			.addSlider((slider) => {
@@ -363,7 +351,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			});
 
 		// ── Re-embed (force full rebuild) ──
-		new Setting(body)
+		new Setting(containerEl)
 			.setName(t("rebuildIndex"))
 			.setDesc(t("rebuildIndexDesc"))
 			.addButton((btn) => {

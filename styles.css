@@ -172,6 +172,15 @@
 }
 
 /* Settings tabs */
+.smart-vault-settings .setting-item-heading .semlink-settings-version {
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 400;
+    margin-left: 10px;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
 .smart-vault-settings .semlink-settings-tabs {
     display: flex;
     gap: 4px;
