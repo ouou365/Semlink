@@ -47,7 +47,7 @@ const t: Record<keyof typeof en, string> = {
 	botConnected: "Bot connecté",
 	botDisconnected: "Bot déconnecté",
 	botPrereq: "Flux : scan pour créer l'app (permissions + im.message.receive_v1 pré-appliquées) → envoyez /bind <code> au bot pour terminer. Aucune configuration admin Feishu manuelle nécessaire",
-	openSidebar: "Start",
+	openSidebar: "Chat",
 	openSidebarDesc: "Interface de chat avancée pour l’IA. Tous les modèles au même endroit. Privé et local.",
 	open: "Ouvrir",
 	provider: "Fournisseur d'embeddings",

@@ -48,7 +48,7 @@ const t: Record<keyof typeof en, string> = {
 	botConnected: "Бот подключён",
 	botDisconnected: "Бот отключён",
 	botPrereq: "Порядок: отсканируйте QR-код для создания приложения (права доступа и im.message.receive_v1 уже включены) → отправьте боту /bind <code> для завершения. Ручная настройка в админке Feishu не нужна",
-	openSidebar: "Start",
+	openSidebar: "Chat",
 	openSidebarDesc: "Продвинутый чат-интерфейс для ИИ. Все модели в одном месте. Приватно и локально.",
 	open: "Открыть",
 	provider: "Провайдер эмбеддингов",

@@ -46,7 +46,7 @@ const en = {
 	botConnected: "Bot connected",
 	botDisconnected: "Bot disconnected",
 	botPrereq: "Flow: scan to create the app (permissions + im.message.receive_v1 pre-applied) → send /bind <code> to the bot to finish. No manual Feishu admin config needed",
-	openSidebar: "Start",
+	openSidebar: "Chat",
 	openSidebarDesc: "Advanced chat UI for AI. All models in one place. Private and local.",
 	open: "Open",
 	provider: "Embedding Provider",

@@ -47,7 +47,7 @@ const t: Record<keyof typeof en, string> = {
 	botConnected: "봇이 연결되었습니다",
 	botDisconnected: "봇 연결이 끊겼습니다",
 	botPrereq: "절차: QR 스캔으로 앱 생성(권한 + im.message.receive_v1 사전 적용) → 봇에게 /bind <code> 를 보내 바인딩 완료. Feishu 관리자 콘솔에서 수동 설정할 필요가 없습니다",
-	openSidebar: "Start",
+	openSidebar: "Chat",
 	openSidebarDesc: "AI를 위한 고급 채팅 UI. 모든 모델을 한곳에서. 비공개 및 로컬.",
 	open: "열기",
 	provider: "임베딩 제공자",
