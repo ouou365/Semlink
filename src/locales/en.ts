@@ -423,7 +423,7 @@ const en = {
 	licenseStatusPro: "Semlink Pro",
 	licenseCardTitle: "Semlink License",
 	licenseProActive: "Active",
-	licenseProHeadline: "Congratulations on activating Semlink Pro — thank you for your support!",
+	licenseProHeadline: "The best Obsidian AI agent",
 	licenseProPerks: "Unlimited chat history · history management · all future updates",
 	licenseDevices: "Devices",
 	licenseBadge: "Early bird",

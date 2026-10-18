@@ -424,7 +424,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseStatusPro: "Semlink Pro",
 	licenseCardTitle: "Semlink ライセンス",
 	licenseProActive: "アクティブ",
-	licenseProHeadline: "Semlink Pro のアクティベーションが完了しました。ご支援ありがとうございます！",
+	licenseProHeadline: "最高の Obsidian AI エージェント",
 	licenseProPerks: "無制限のチャット履歴 · 履歴管理 · 今後のアップデート全部",
 	licenseDevices: "デバイス",
 	licenseBadge: "アーリーバード",

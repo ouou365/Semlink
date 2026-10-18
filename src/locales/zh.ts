@@ -425,7 +425,7 @@ const zh: Record<keyof typeof en, string> = {
 	licenseStatusPro: "Semlink Pro",
 	licenseCardTitle: "Semlink 许可",
 	licenseProActive: "已激活",
-	licenseProHeadline: "恭喜你成功激活 Semlink Pro，感谢你的支持！",
+	licenseProHeadline: "最好的 Obsidian AI 智能体",
 	licenseProPerks: "无限对话历史 · 历史管理 · 全部未来更新",
 	licenseDevices: "设备",
 	licenseBadge: "限时早鸟",
