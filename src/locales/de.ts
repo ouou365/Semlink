@@ -48,7 +48,7 @@ const t: Record<keyof typeof en, string> = {
 	botDisconnected: "Bot getrennt",
 	botPrereq: "Ablauf: App per Scan erstellen (Berechtigungen + im.message.receive_v1 vorab gesetzt) → /bind <code> an den Bot senden, um die Kopplung abzuschließen. Keine manuelle Feishu-Admin-Konfiguration nötig",
 	openSidebar: "Start",
-	openSidebarDesc: "Semantische Suchleiste öffnen",
+	openSidebarDesc: "Fortschrittliche Chat-Oberfläche für KI. Alle Modelle an einem Ort. Privat und lokal.",
 	open: "Öffnen",
 	provider: "Embedding-Anbieter",
 	providerDesc: "Wähle den Dienst zur Erzeugung der Embedding-Vektoren",

@@ -175,7 +175,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// Open the semantic-search sidebar panel.
 		new Setting(containerEl)
 			.setName(t("openSidebar"))
-			.setDesc(t("licenseCardFreeLine"))
+			.setDesc(t("openSidebarDesc"))
 			.addButton((btn) =>
 				btn.setButtonText(t("open")).onClick(() => {
 					void this.plugin.activateSearchView();

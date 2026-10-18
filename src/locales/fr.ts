@@ -48,7 +48,7 @@ const t: Record<keyof typeof en, string> = {
 	botDisconnected: "Bot déconnecté",
 	botPrereq: "Flux : scan pour créer l'app (permissions + im.message.receive_v1 pré-appliquées) → envoyez /bind <code> au bot pour terminer. Aucune configuration admin Feishu manuelle nécessaire",
 	openSidebar: "Start",
-	openSidebarDesc: "Ouvrir le panneau de recherche sémantique",
+	openSidebarDesc: "Interface de chat avancée pour l’IA. Tous les modèles au même endroit. Privé et local.",
 	open: "Ouvrir",
 	provider: "Fournisseur d'embeddings",
 	providerDesc: "Choisissez le service de génération de vecteurs d'embedding",

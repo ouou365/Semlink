@@ -48,7 +48,7 @@ const t: Record<keyof typeof en, string> = {
 	botDisconnected: "機器人已中斷連線",
 	botPrereq: "流程：掃碼建立應用程式（自動預置權限與 im.message.receive_v1 事件訂閱）→ 在飛書裡給機器人傳送 /bind 驗證碼完成綁定，無需在開放平台後台手動設定",
 	openSidebar: "Start",
-	openSidebarDesc: "開啟語義搜尋面板",
+	openSidebarDesc: "為 AI 打造的高級聊天介面。所有模型，一處管理。私有且本地。",
 	open: "開啟",
 	provider: "嵌入服務",
 	providerDesc: "選擇嵌入向量產生服務",
