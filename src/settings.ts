@@ -210,24 +210,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			const used = lic.activation ?? 1;
 			const total = lic.activationLimit ?? Math.max(used, 3);
 			const foot = card.createDiv({ cls: "semlink-license-card-footrow" });
-			foot.createSpan({ cls: "semlink-license-card-devlabel", text: t("licenseDevices") });
 			const dots = foot.createSpan({ cls: "semlink-license-card-dots" });
 			for (let i = 0; i < Math.max(total, used); i++) {
 				dots.createSpan({ cls: i < used ? "is-used" : "" });
 			}
 			foot.createSpan({ cls: "semlink-license-card-devcount", text: `${used}/${total}` });
-			const fullKey = lic.key ?? "";
-			const maskedKey = t("licenseKeyMasked").replace("{key}", fullKey.slice(0, 10) + "…");
-			const keySpan = foot.createSpan({ cls: "semlink-license-card-key", text: maskedKey });
-			// Eye toggle — reveal the full key only on demand.
-			const eye = foot.createEl("span", { cls: "semlink-license-card-eye" });
-			setIcon(eye, "eye");
-			let revealed = false;
-			eye.addEventListener("click", () => {
-				revealed = !revealed;
-				keySpan.setText(revealed ? fullKey : maskedKey);
-				setIcon(eye, revealed ? "eye-off" : "eye");
-			});
 
 			const de = foot.createEl("button", { cls: "semlink-license-card-deactivate", text: t("licenseDeactivate") });
 			de.addEventListener("click", () => {
