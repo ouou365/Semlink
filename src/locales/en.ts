@@ -8,6 +8,7 @@
 const en = {
 // ──── Settings Tab ────
 	settingsTitle: "Semlink Settings",
+	settingsTagline: "Turn your Obsidian notes into a second brain",
 	tabGeneral: "General",
 	language: "Language",
 	languageDesc: "UI language for Semlink",

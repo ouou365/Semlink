@@ -273,7 +273,7 @@
     gap: 2px;
 }
 
-.smart-vault-settings .setting-item-heading .semlink-settings-version {
+.smart-vault-settings .setting-item-heading .semlink-settings-tagline {
     color: var(--text-muted);
     font-size: 12px;
     font-weight: 400;

@@ -92,10 +92,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		title.nameEl.empty();
 		const titleLeft = title.nameEl.createDiv({ cls: "semlink-settings-heading-left" });
 		titleLeft.createSpan({ cls: "semlink-settings-heading-text", text: t("settingsTitle") });
-		titleLeft.createSpan({
-			cls: "semlink-settings-version",
-			text: `v${this.plugin.manifest.version}`,
-		});
+		titleLeft.createSpan({ cls: "semlink-settings-tagline", text: t("settingsTagline") });
 		// Language switcher: saveSettings re-runs setLang and refreshes the
 		// language-dependent views; display() re-renders this panel so the
 		// settings UI itself follows the new language right away.
