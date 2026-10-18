@@ -193,16 +193,62 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 		const card = containerEl.createDiv({ cls: "semlink-license-card" });
 		const head = card.createDiv({ cls: "semlink-license-card-head" });
-		head.createSpan({ cls: "semlink-license-card-title", text: pro ? "Semlink Pro" : "Semlink Pro" });
-		if (!pro) head.createSpan({ cls: "semlink-license-card-badge", text: t("licenseBadge") });
+		head.createSpan({ cls: "semlink-license-card-title", text: "Semlink Pro" });
+		if (pro) {
+			head.createSpan({ cls: "semlink-license-card-pro-pill", text: `✓ ${t("licenseProActive")}` });
+		} else {
+			head.createSpan({ cls: "semlink-license-card-badge", text: t("licenseBadge") });
+		}
+
+		if (pro) {
+			// Pro state: perks headline + device-slot dots + quiet key row.
+			card.createDiv({ cls: "semlink-license-card-headline", text: t("licenseProPerks") });
+
+			const inner = card.createDiv({ cls: "semlink-license-card-inner" });
+			const lic = this.plugin.settings.license ?? {};
+			const used = lic.activation ?? 1;
+			const total = lic.activationLimit ?? Math.max(used, 3);
+			const devRow = inner.createDiv({ cls: "semlink-license-card-devrow" });
+			devRow.createSpan({ cls: "semlink-license-card-devlabel", text: t("licenseDevices") });
+			const dots = devRow.createSpan({ cls: "semlink-license-card-dots" });
+			for (let i = 0; i < Math.max(total, used); i++) {
+				dots.createSpan({ cls: i < used ? "is-used" : "" });
+			}
+			devRow.createSpan({ cls: "semlink-license-card-devcount", text: `${used}/${total}` });
+
+			const keyRow = card.createDiv({ cls: "semlink-license-card-keyrow" });
+			keyRow.createSpan({
+				cls: "semlink-license-card-key",
+				text: t("licenseKeyMasked").replace("{key}", lic.key?.slice(0, 10) + "…"),
+			});
+			const de = keyRow.createEl("button", { cls: "semlink-license-card-apply", text: t("licenseDeactivate") });
+			de.addEventListener("click", () => void (async () => {
+				if (de.dataset.busy === "1") return;
+				de.dataset.busy = "1";
+				de.setAttr("disabled", "true");
+				try {
+					await lm.deactivate();
+					new Notice(t("licenseDeactivated"));
+					rerenderSettingsTab(this);
+				} catch (e) {
+					new Notice(licenseErrorMessage(e));
+				} finally {
+					de.dataset.busy = "";
+					de.removeAttribute("disabled");
+				}
+			})());
+			return;
+		}
+
+		head.createSpan({ cls: "semlink-license-card-badge", text: t("licenseBadge") });
 
 		card.createDiv({
 			cls: "semlink-license-card-headline",
-			text: pro ? lm.statusLine() : t("licenseCardHeadline"),
+			text: t("licenseCardHeadline"),
 		});
 		card.createDiv({ cls: "semlink-license-card-freeline", text: t("licenseCardFreeLine") });
 
-		if (!pro) {
+		{
 			const inner = card.createDiv({ cls: "semlink-license-card-inner" });
 			const priceRow = inner.createDiv({ cls: "semlink-license-card-pricerow" });
 			priceRow.createSpan({ cls: "semlink-license-card-price", text: "$3" });
@@ -228,9 +274,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			}
 		}
 
-		// Quiet key row: Apply (Free) / masked key + Deactivate (Pro).
+		// Quiet key row (Free): paste key + Activate.
 		const keyRow = card.createDiv({ cls: "semlink-license-card-keyrow" });
-		if (!pro) {
+		{
 			const input = keyRow.createEl("input", {
 				cls: "semlink-license-card-input",
 				attr: { type: "text", placeholder: t("licenseKeyPlaceholder"), spellcheck: "false" },
@@ -259,27 +305,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					activate();
 				}
 			});
-		} else {
-			keyRow.createSpan({
-				cls: "semlink-license-card-key",
-				text: t("licenseKeyMasked").replace("{key}", this.plugin.settings.license?.key?.slice(0, 10) + "…"),
-			});
-			const de = keyRow.createEl("button", { cls: "semlink-license-card-apply", text: t("licenseDeactivate") });
-			de.addEventListener("click", () => void (async () => {
-				if (de.dataset.busy === "1") return;
-				de.dataset.busy = "1";
-				de.setAttr("disabled", "true");
-				try {
-					await lm.deactivate();
-					new Notice(t("licenseDeactivated"));
-					rerenderSettingsTab(this);
-				} catch (e) {
-					new Notice(licenseErrorMessage(e));
-				} finally {
-					de.dataset.busy = "";
-					de.removeAttribute("disabled");
-				}
-			})());
 		}
 	}
 

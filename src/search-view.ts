@@ -381,7 +381,7 @@ export class SemanticSearchView extends ItemView {
 		// dragging. The overlay guides the user; the drop reuses the same
 		// handleFileDrop path (dedup makes double-handling safe).
 		this.dragOverlayEl = contentEl.createDiv({ cls: "semlink-drag-overlay semlink-hidden" });
-		this.dragOverlayEl.createSpan({ text: t("dragOverlayHint") });
+		this.dragOverlayEl.createSpan({ cls: "semlink-drag-overlay-text", text: t("dragOverlayHint") });
 
 		let panelDragDepth = 0;
 		const isSessionDrag = (e: DragEvent): boolean => !!e.dataTransfer?.types.includes("text/semlink-session");
@@ -2075,6 +2075,10 @@ export class SemanticSearchView extends ItemView {
 			this.newChatPillEl.setAttr("aria-label", t("searchNewChat"));
 			this.newChatPillEl.querySelector(".semlink-search-newchat-label")?.setText(t("searchNewChat"));
 		}
+		// Input hint (visible while expanded) + drag overlay hint: same
+		// once-at-construction staleness as the pill — refresh here too.
+		this.inputHintEl?.setText(t("searchInputHint"));
+		this.dragOverlayEl?.querySelector(".semlink-drag-overlay-text")?.setText(t("dragOverlayHint"));
 		// State-dependent tooltips (expand/collapse, send/stop).
 		this.applyInputExpanded();
 		this.setSendButtonState(this.isGenerating ? "stop" : "idle");

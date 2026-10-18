@@ -213,6 +213,52 @@
     color: var(--text-normal);
 }
 
+.smart-vault-settings .semlink-license-card-pro-pill {
+    background: linear-gradient(135deg, var(--interactive-accent), var(--text-accent));
+    color: var(--text-on-accent);
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 3px 12px;
+    letter-spacing: 0.02em;
+}
+
+.smart-vault-settings .semlink-license-card-devrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.smart-vault-settings .semlink-license-card-devlabel {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.smart-vault-settings .semlink-license-card-dots {
+    display: flex;
+    gap: 6px;
+}
+
+.smart-vault-settings .semlink-license-card-dots span {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: transparent;
+    border: 1.5px solid var(--background-modifier-border);
+}
+
+.smart-vault-settings .semlink-license-card-dots span.is-used {
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+}
+
+.smart-vault-settings .semlink-license-card-devcount {
+    color: var(--text-muted);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+}
+
 .smart-vault-settings .semlink-license-card-badge {
     background: var(--interactive-accent);
     color: var(--text-on-accent);
