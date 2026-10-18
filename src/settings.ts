@@ -219,6 +219,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					if (de.dataset.busy === "1") return;
 					de.dataset.busy = "1";
 					de.setAttr("disabled", "true");
+					de.addClass("is-busy");
 					try {
 						await lm.deactivate();
 						new Notice(t("licenseDeactivated"));
@@ -227,6 +228,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 						new Notice(licenseErrorMessage(e));
 					} finally {
 						de.dataset.busy = "";
+						de.removeClass("is-busy");
 						de.removeAttribute("disabled");
 					}
 				})()).open();
@@ -279,6 +281,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				if (!key || apply.dataset.busy === "1") return;
 				apply.dataset.busy = "1";
 				apply.setAttr("disabled", "true");
+				apply.addClass("is-busy");
 				try {
 					await lm.activate(key);
 					new Notice(t("licenseActivated"));
@@ -287,6 +290,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					new Notice(licenseErrorMessage(e));
 				} finally {
 					apply.dataset.busy = "";
+					apply.removeClass("is-busy");
 					apply.removeAttribute("disabled");
 				}
 			})();

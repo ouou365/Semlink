@@ -393,6 +393,27 @@
     font-size: 13px;
 }
 
+/* Busy state: inline spinner so the network wait (up to ~24s across
+   retries) reads as progress instead of a dead button. */
+.smart-vault-settings .semlink-license-card-apply.is-busy::before {
+    content: "";
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-right: 8px;
+    vertical-align: -2px;
+    border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: semlink-spin 0.8s linear infinite;
+}
+
+@keyframes semlink-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .smart-vault-settings .semlink-license-card-apply {
     border-radius: 10px;
     padding: 8px 18px;
