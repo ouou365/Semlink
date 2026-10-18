@@ -105,7 +105,7 @@ const zh: Record<keyof typeof en, string> = {
 	restartService: "重启服务",
 	startService: "启动服务",
 	fullReindex: "重建全部向量",
-	fullReindexDesc: "换嵌入模型或分片参数后使用：清空现有索引并重新嵌入全部笔记（耗时较长）。日常更新交给自动索引即可。",
+	fullReindexDesc: "清空索引并重新嵌入全部笔记。仅在更换嵌入模型或分片参数后需要。",
 	startFullIndex: "▶ 开始索引",
 	clientConfig: "客户端配置",
 	claudeDesktopConfig: "Claude Desktop / Cursor 配置",

@@ -103,7 +103,7 @@ const en = {
 	restartService: "Restart",
 	startService: "Start",
 	fullReindex: "Rebuild All Vectors",
-	fullReindexDesc: "Use after changing the embedding model or chunking params: clears the existing index and re-embeds every note (may take a while). Day-to-day updates are handled by Auto Index.",
+	fullReindexDesc: "Clears the index and re-embeds every note. Only needed after changing the embedding model or chunk size.",
 	startFullIndex: "▶ Start Index",
 	clientConfig: "Client Configuration",
 	claudeDesktopConfig: "Claude Desktop / Cursor Config",

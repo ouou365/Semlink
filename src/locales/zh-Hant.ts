@@ -104,7 +104,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "重新啟動服務",
 	startService: "啟動服務",
 	fullReindex: "重建全部向量",
-	fullReindexDesc: "換嵌入模型或分片參數後使用：清空現有索引並重新嵌入全部筆記（耗時較長）。日常更新交給自動索引即可。",
+	fullReindexDesc: "清空索引並重新嵌入全部筆記。僅在更換嵌入模型或分片參數後需要。",
 	startFullIndex: "▶ 開始索引",
 	clientConfig: "用戶端設定",
 	claudeDesktopConfig: "Claude Desktop / Cursor 設定",

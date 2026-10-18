@@ -104,7 +104,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "再起動",
 	startService: "開始",
 	fullReindex: "全ベクトルを再生成",
-	fullReindexDesc: "埋め込みモデルやチャンク設定を変更した後に使用：既存のインデックスを消去し、全ノートを再埋め込みします（時間がかかります）。日々の更新は自動インデックスが処理します。",
+	fullReindexDesc: "インデックスを消去して全ノートを再埋め込みします。モデルやチャンク設定変更後にのみ使用してください。",
 	startFullIndex: "▶ インデックス開始",
 	clientConfig: "クライアント設定",
 	claudeDesktopConfig: "Claude Desktop / Cursor 設定",

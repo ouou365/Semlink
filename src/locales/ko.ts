@@ -104,7 +104,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "재시작",
 	startService: "시작",
 	fullReindex: "전체 벡터 재구축",
-	fullReindexDesc: "임베딩 모델이나 청크 설정 변경 후 사용: 기존 인덱스를 지우고 모든 노트를 다시 임베딩합니다(시간이 걸림). 일상 업데이트는 자동 인덱스가 처리합니다.",
+	fullReindexDesc: "인덱스를 지우고 모든 노트를 다시 임베딩합니다. 임베딩 모델이나 청크 설정 변경 후에만 필요합니다.",
 	startFullIndex: "▶ 인덱싱 시작",
 	clientConfig: "클라이언트 설정",
 	claudeDesktopConfig: "Claude Desktop / Cursor 설정",

@@ -106,7 +106,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "Reiniciar",
 	startService: "Iniciar",
 	fullReindex: "Reconstruir todos os vetores",
-	fullReindexDesc: "Use após alterar o modelo de embedding ou os parâmetros de chunking: limpa o índice existente e reincorpora todas as notas (pode demorar). Atualizações do dia a dia ficam com o índice automático.",
+	fullReindexDesc: "Limpa o índice e reincorpora todas as notas. Apenas após alterar o modelo de embedding ou o tamanho dos chunks.",
 	startFullIndex: "▶ Iniciar indexação",
 	clientConfig: "Configuração de clientes",
 	claudeDesktopConfig: "Config do Claude Desktop / Cursor",

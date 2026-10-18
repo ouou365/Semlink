@@ -104,7 +104,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "Neustart",
 	startService: "Starten",
 	fullReindex: "Alle Vektoren neu erstellen",
-	fullReindexDesc: "Nach Wechsel des Embedding-Modells oder der Chunking-Parameter verwenden: löscht den bestehenden Index und bettet jede Notiz neu ein (dauert länger). Tägliche Updates übernimmt Auto Index.",
+	fullReindexDesc: "Leert den Index und bettet alle Notizen neu ein. Nur nach Wechsel von Embedding-Modell oder Chunk-Größe nötig.",
 	startFullIndex: "▶ Index starten",
 	clientConfig: "Client-Konfiguration",
 	claudeDesktopConfig: "Claude Desktop / Cursor-Konfiguration",
