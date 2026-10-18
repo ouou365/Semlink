@@ -1071,7 +1071,7 @@ export class SemanticSearchView extends ItemView {
 							turnAttachments.map((p) => ({ chunkId: "", notePath: p, heading: "", contentPreview: "", score: -1 })),
 							usedNotes,
 						)
-						: this.buildUsedSources(sourceContext, sourcePaths);
+						: this.buildOrderedSources(sourceContext, sourcePaths);
 					this.renderSources(loadingEl, usedSources, false);
 
 					// Persist this turn into chat history (incl. context usage so
@@ -1173,6 +1173,18 @@ export class SemanticSearchView extends ItemView {
 			if (matched && !out.includes(matched)) out.push(matched);
 		}
 		return out;
+	}
+
+	/** Build the sources card ordered by `sourcePaths` (declaration order —
+	 *  the model's inline [n] markers follow this same order, so card numbers
+	 *  match the body citations). Metadata comes from `contextResults` when
+	 *  available; paths without context data get placeholder entries. */
+	private buildOrderedSources(contextResults: SearchResult[], sourcePaths: string[]): SearchResult[] {
+		const byPath = new Map<string, SearchResult>();
+		for (const r of contextResults) {
+			byPath.set(r.notePath, r);
+		}
+		return sourcePaths.map((p) => byPath.get(p) ?? { chunkId: "", notePath: p, heading: "", contentPreview: "", score: -1 });
 	}
 
 	private buildUsedSources(contextResults: SearchResult[], usedPaths: string[]): SearchResult[] {
