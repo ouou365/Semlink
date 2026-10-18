@@ -480,6 +480,9 @@ export interface HistoryMessage {
 	segments?: HistorySegment[];
 	thinking?: HistoryThinkingStep[];
 	sources?: string[];
+	/** True citation number per entry of `sources` (per-turn registry
+	 *  numbers the model cited) — restored cards keep the real [n]. */
+	sourceNumbers?: number[];
 	elapsedSec?: number;
 	/** Context usage of this turn, so the ring + tooltip can be restored
 	 * when the session is re-opened from history. */

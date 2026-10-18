@@ -29,6 +29,20 @@ export class SemlinkTools {
 	/** Upper bound on a single tool result; adjustable per search depth. */
 	maxResultChars = 4000;
 
+	/** Per-turn citation numberer, injected by chat-client before the rounds
+	 *  start. When set, search hits carry their global `n`, and opened notes
+	 *  announce theirs in a header line — one numbering space across the
+	 *  initial context, tool results, thinking, and the final answer. */
+	citeNumberer: ((path: string) => number) | null = null;
+
+	/** `[n] path` header line for an opened note's content (empty when no
+	 *  numberer is active). Registering on OPEN too means a note the model
+	 *  reads without ever searching still gets a stable citation number. */
+	private citeHeader(path: string): string {
+		const n = this.citeNumberer?.(path);
+		return n ? `[${n}] ${path}\n\n` : "";
+	}
+
 	constructor(store: VectorStore, client: EmbeddingClient, vault: Vault, getActiveNote: () => string | null = () => null) {
 		this.store = store;
 		this.client = client;
@@ -188,6 +202,7 @@ export class SemlinkTools {
 					query,
 					totalResults: results.length,
 					results: results.map((r) => ({
+						n: this.citeNumberer?.(r.notePath),
 						path: r.notePath,
 						heading: r.heading,
 						preview: r.contentPreview,
@@ -204,7 +219,7 @@ export class SemlinkTools {
 		const file = this.vault.getAbstractFileByPath(path);
 		if (!file) return `Error: file not found: ${path}`;
 		const content = await this.vault.read(file);
-		return this.truncate(content);
+		return this.truncate(this.citeHeader(path) + content);
 	}
 
 	/** The note currently open in Obsidian — path only (content via get_note). */
@@ -213,7 +228,8 @@ export class SemlinkTools {
 		if (!path) {
 			return "Error: 当前没有打开的笔记。请让用户先打开一篇笔记，或改用 search_notes / grep_notes 检索知识库。";
 		}
-		return `当前打开的笔记：${path}`;
+		const n = this.citeNumberer?.(path);
+		return `当前打开的笔记：${n ? `[${n}] ` : ""}${path}`;
 	}
 
 	private async toolGetSection(path: string, heading: string, maxDepth?: number): Promise<string> {
@@ -224,7 +240,7 @@ export class SemlinkTools {
 		if (!section) {
 			return `Error: heading not found: ${heading}\n\nAvailable headings:\n${extractHeadings(content).join("\n")}`;
 		}
-		return this.truncate(section);
+		return this.truncate(this.citeHeader(path) + section);
 	}
 
 	private async toolGetSimilarNotes(path: string, limit = 10, threshold = 0.2): Promise<string> {
@@ -239,6 +255,7 @@ export class SemlinkTools {
 					sourcePath: path,
 					totalResults: results.length,
 					results: results.map((r) => ({
+						n: this.citeNumberer?.(r.notePath),
 						path: r.notePath,
 						heading: r.heading,
 						preview: r.contentPreview,
@@ -345,6 +362,10 @@ export class SemlinkTools {
 			try {
 				const dbHits = await this.store.textSearch(pattern, 200, pathFilter);
 				if (dbHits.length > 0) {
+					// Register every surfaced path — grep hits must carry the
+					// same global [n] as search hits, or the model invents its
+					// own numbers for them and the source cards can't resolve.
+					for (const h of dbHits) this.citeNumberer?.(h.path);
 					return this.truncate(
 						JSON.stringify(
 							{
@@ -356,6 +377,7 @@ export class SemlinkTools {
 								completeList: dbHits.length <= 200,
 								paths: dbHits.map((h) => h.path),
 								results: dbHits.slice(0, Math.min(Math.max(1, limit), 30)).map((h) => ({
+									n: this.citeNumberer?.(h.path),
 									path: h.path,
 									matchCount: h.matchCount,
 									lines: h.preview ? [`L? : ${h.preview.trim().slice(0, 150)}`] : [],
@@ -439,6 +461,10 @@ export class SemlinkTools {
 			}
 		}
 
+		// Register every surfaced path (same contract as search_notes: any
+		// path the model can see carries a stable global citation number).
+		for (const p of allPaths) this.citeNumberer?.(p);
+
 		return this.truncate(
 			JSON.stringify(
 				{
@@ -449,7 +475,7 @@ export class SemlinkTools {
 					// true = totalFiles ≤ MAX_PATHS，paths 即完整文件清单。
 					completeList: totalFiles <= MAX_PATHS,
 					paths: allPaths,
-					results: detailed,
+					results: detailed.map((r) => ({ n: this.citeNumberer?.(r.path), ...r })),
 				},
 				null,
 				2,

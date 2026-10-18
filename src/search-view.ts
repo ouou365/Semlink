@@ -12,6 +12,7 @@ import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
 import { inferAgentDepth, buildNoteContext } from "./chat-client";
+import { buildCitedCards } from "./cite-cards";
 import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
 import { ChatHistoryStore } from "./chat-history";
 import { brandLogoOf, formatContextWindow } from "./settings-models";
@@ -678,6 +679,13 @@ export class SemanticSearchView extends ItemView {
 
 		// Append a loading placeholder for the assistant's reply.
 		const loadingEl = this.appendAssistantMessage(t("searchSearching"));
+		// Pin the view to the new exchange NOW that the placeholder is in the
+		// DOM. The keydown/send-button handlers scroll right after
+		// `void runSearch()` — which only covers the user bubble, because the
+		// placeholder (and later the auto-expanded thinking preview) land in
+		// async continuations and push content below the fold. Sending always
+		// jumps to bottom, like every chat surface.
+		this.scrollToBottom();
 
 		// "思考了 X 秒（搜索中）" ticking during the search phase (embed +
 		// vector search). The timer self-cleans once the placeholder line is
@@ -758,11 +766,14 @@ export class SemanticSearchView extends ItemView {
 					try {
 						if (streamEl.isConnected) {
 							// Sticky scroll, sampled BEFORE the re-render: the render
-							// itself grows the content, so a tall block (>80px) landing
-							// on an at-bottom viewport would otherwise read as "user
-							// scrolled up" and permanently break following.
+							// itself grows the content, so a tall block landing on an
+							// at-bottom viewport would otherwise read as "user
+							// scrolled up" and permanently break following. 120px
+							// matches the wasNearBottom sampling used on the final
+							// swap (the auto-expanded thinking preview can jump
+							// taller than 80px between two renders).
 							const m = this.messagesEl;
-							const nearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 80;
+							const nearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 120;
 							streamInner.empty();
 							await MarkdownRenderer.render(this.app, protectHyphens(shownText), streamInner, "", this);
 							if (nearBottom) this.scrollToBottom();
@@ -890,15 +901,20 @@ export class SemanticSearchView extends ItemView {
 				let renderedSteps = 0;
 				const refreshLiveBody = (): void => {
 					if (liveBody.hasClass("semlink-hidden")) return;
-					// Sticky scroll: follow the newest step only while the user
-					// is already at the bottom — scrolling up to read earlier
-					// steps must not be fought.
+					// Sticky scroll on BOTH scrollers: the outer conversation
+					// (each new step pushes the loading line/answer further
+					// down) and the live body itself. Sampled BEFORE appending,
+					// and only while the user is already at the bottom —
+					// scrolling up to read earlier content must not be fought.
+					const m = this.messagesEl;
+					const outerNearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 120;
 					const nearBottom = liveBody.scrollHeight - liveBody.scrollTop - liveBody.clientHeight < 40;
 					while (renderedSteps < liveSteps.length) {
 						this.renderThinkingSteps(liveBody, [liveSteps[renderedSteps]]);
 						renderedSteps++;
 					}
 					if (nearBottom) liveBody.scrollTop = liveBody.scrollHeight;
+					if (outerNearBottom) this.scrollToBottom();
 				};
 				refreshLiveBody();
 				loadingTextEl.addClass("is-open");
@@ -990,6 +1006,13 @@ export class SemanticSearchView extends ItemView {
 							loadingDotsSpan.textContent = "";
 						},
 							controller.signal,
+							"proactive",
+							// Seed the per-turn citation registry with the initial
+							// context order — context block [n] = registry [n];
+							// tool results and opened notes continue from there,
+							// so thinking, answer, and source cards all share ONE
+							// numbering space.
+							results.map((r) => r.notePath),
 						);
 						const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
 						stopAnswerAnim();
@@ -1023,10 +1046,56 @@ export class SemanticSearchView extends ItemView {
 							}
 						}
 						if (best >= 0) {
-							answer = (thinking[best] as Extract<ThinkingStep, { type: "thought" }>).text;
+						answer = (thinking[best] as Extract<ThinkingStep, { type: "thought" }>).text;
 							thinking = thinking.filter((_, j) => j !== best);
 						}
 					}
+					// Sources are computed BEFORE the answer renders. ONE
+					// numbering system: the model cites the per-turn registry
+					// numbers it saw (context blocks, tool-result `n` fields,
+					// opened-note headers). Cards carry those TRUE numbers —
+					// sorted ascending, gaps allowed (uncited notes simply
+					// don't get a card) — so card [4] IS the note the model
+					// cited as [4]. Renumbering here would break the contract.
+					const knownPaths = new Set<string>([
+						...turnAttachments,
+						...initialResults.map((r) => r.notePath),
+						...result.usedNotes,
+					]);
+					const readNotes = result.readNotes || [];
+					const citeRegistry = result.citeRegistry || [];
+					const citeEntries = hasAttachments
+						? []
+						: buildCitedCards(answer, citeRegistry, readNotes);
+					// Fallback (no registry — e.g. surfaces that don't seed it):
+					// the legacy declared-sources pipeline.
+					const declared = this.matchDeclaredSources(result.declaredSources || [], knownPaths);
+					const usedNotes = [...result.usedNotes];
+					for (const p of declared) {
+						if (!usedNotes.includes(p)) usedNotes.push(p);
+					}
+					let sourceContext = initialResults;
+					let sourcePaths: string[];
+					let citeNumbers: number[] | undefined;
+					if (citeEntries.length > 0) {
+						sourcePaths = citeEntries.map((e) => e.path);
+						citeNumbers = citeEntries.map((e) => e.n);
+						const citedSet = new Set<string>(sourcePaths);
+						sourceContext = initialResults.filter((r) => citedSet.has(r.notePath));
+					} else if (!hasAttachments && (declared.length > 0 || readNotes.length > 0)) {
+						const keep = new Set<string>(declared);
+						for (const p of readNotes) keep.add(p);
+						sourceContext = initialResults.filter((r) => keep.has(r.notePath));
+						sourcePaths = [...keep];
+					} else {
+						sourcePaths = usedNotes;
+					}
+					const usedSources = hasAttachments
+						? this.buildUsedSources(
+							turnAttachments.map((p) => ({ chunkId: "", notePath: p, heading: "", contentPreview: "", score: -1 })),
+							usedNotes,
+						)
+						: this.buildOrderedSources(sourceContext, sourcePaths);
 					this.renderThinking(loadingEl, [firstStep, ...thinking], elapsedSec);
 					this.updateContextInfo(result.contextTokens, result.contextBreakdown, result.cacheHitRate);
 					// Render the answer as markdown (Obsidian's renderer handles
@@ -1047,32 +1116,7 @@ export class SemanticSearchView extends ItemView {
 					// the model never used are dropped. Only a turn answered
 					// purely from snippets (nothing declared, nothing opened)
 					// keeps the full retrieval floor.
-					const knownPaths = new Set<string>([
-						...turnAttachments,
-						...initialResults.map((r) => r.notePath),
-						...result.usedNotes,
-					]);
-					const declared = this.matchDeclaredSources(result.declaredSources || [], knownPaths);
-					const usedNotes = [...result.usedNotes];
-					for (const p of declared) {
-						if (!usedNotes.includes(p)) usedNotes.push(p);
-					}
-					const readNotes = result.readNotes || [];
-					let sourceContext = initialResults;
-					let sourcePaths = usedNotes;
-					if (!hasAttachments && (declared.length > 0 || readNotes.length > 0)) {
-						const keep = new Set<string>(declared);
-						for (const p of readNotes) keep.add(p);
-						sourceContext = initialResults.filter((r) => keep.has(r.notePath));
-						sourcePaths = [...keep];
-					}
-					const usedSources = hasAttachments
-						? this.buildUsedSources(
-							turnAttachments.map((p) => ({ chunkId: "", notePath: p, heading: "", contentPreview: "", score: -1 })),
-							usedNotes,
-						)
-						: this.buildOrderedSources(sourceContext, sourcePaths);
-					this.renderSources(loadingEl, usedSources, false);
+					this.renderSources(loadingEl, usedSources, false, citeNumbers);
 
 					// Persist this turn into chat history (incl. context usage so
 					// the ring + tooltip can be restored when re-opening). The
@@ -1083,6 +1127,7 @@ export class SemanticSearchView extends ItemView {
 						[firstStep, ...thinking],
 						sourcePaths,
 						elapsedSec,
+						citeNumbers,
 						result.contextTokens,
 						result.contextBreakdown,
 						result.cacheHitRate,
@@ -1157,23 +1202,27 @@ export class SemanticSearchView extends ItemView {
 	 *  whole-segment prefix/suffix matches remap to the known path; anything
 	 *  else is a hallucination and gets dropped. */
 	private matchDeclaredSources(declared: string[], known: Set<string>): string[] {
-		const norm = (p: string): string => p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").toLowerCase();
 		const out: string[] = [];
 		for (const d of declared) {
-			const nd = norm(d);
-			if (!nd) continue;
-			let matched = "";
-			for (const k of known) {
-				const nk = norm(k);
-				if (nk === nd || nk.endsWith("/" + nd) || nd.endsWith("/" + nk)) {
-					matched = k;
-					break;
-				}
-			}
+			const matched = this.matchDeclaredSource(d, known);
 			if (matched && !out.includes(matched)) out.push(matched);
 		}
 		return out;
 	}
+
+	/** Match ONE declared path against the known set (same rules as
+	 *  matchDeclaredSources) — returns the canonical known path or "". */
+	private matchDeclaredSource(declared: string, known: Set<string>): string {
+		const norm = (p: string): string => p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").toLowerCase();
+		const nd = norm(declared);
+		if (!nd) return "";
+		for (const k of known) {
+			const nk = norm(k);
+			if (nk === nd || nk.endsWith("/" + nd) || nd.endsWith("/" + nk)) return k;
+		}
+		return "";
+	}
+
 
 	/** Build the sources card ordered by `sourcePaths` (declaration order —
 	 *  the model's inline [n] markers follow this same order, so card numbers
@@ -1200,8 +1249,11 @@ export class SemanticSearchView extends ItemView {
 		return Array.from(byPath.values());
 	}
 
-	/** Render a collapsible "reference sources" section inside an assistant bubble. */
-	private renderSources(container: HTMLElement, results: SearchResult[], open: boolean): void {
+	/** Render a collapsible "reference sources" section inside an assistant bubble.
+	 *  `numbers` carries each row's TRUE citation number (the per-turn registry
+	 *  number the model cited) — omitted rows fall back to position numbering
+	 *  for the legacy/result-list paths. */
+	private renderSources(container: HTMLElement, results: SearchResult[], open: boolean, numbers?: number[]): void {
 		// No sources → no card (e.g. the chat failed before any retrieval).
 		if (results.length === 0) return;
 		// The sources card is its own card OUTSIDE the assistant bubble (the
@@ -1217,14 +1269,16 @@ export class SemanticSearchView extends ItemView {
 		});
 
 		const list = details.createDiv({ cls: "semlink-search-sources-list" });
-		this.renderSourceRows(list, results);
+		this.renderSourceRows(list, results, numbers);
 	}
 
-	/** One-line source rows (title + path), numbered like paper references. */
-	private renderSourceRows(container: HTMLElement, results: SearchResult[]): void {
+	/** One-line source rows (title + path), numbered like paper references.
+	 *  With `numbers`, row [n] is the model's own citation number — gaps are
+	 *  honest (uncited notes have no card). */
+	private renderSourceRows(container: HTMLElement, results: SearchResult[], numbers?: number[]): void {
 		for (const [i, r] of results.entries()) {
 			const row = container.createDiv({ cls: "semlink-search-source-row" });
-			row.createSpan({ cls: "semlink-search-source-index", text: `[${i + 1}]` });
+			row.createSpan({ cls: "semlink-search-source-index", text: `[${numbers ? numbers[i] : i + 1}]` });
 			const title = r.heading || this.basename(r.notePath);
 			row.createSpan({ cls: "semlink-search-source-title", text: title });
 			row.createSpan({ cls: "semlink-search-source-path", text: r.notePath });
@@ -2015,6 +2069,12 @@ export class SemanticSearchView extends ItemView {
 			this.upgradeBtnEl.setAttr("aria-label", t("upgradeProBtn"));
 			this.upgradeBtnEl.setAttr("title", t("upgradeProBtn"));
 		}
+		// New-chat pill: label + aria-label were set once at construction, so
+		// they would keep the old language after a switch — refresh them here.
+		if (this.newChatPillEl) {
+			this.newChatPillEl.setAttr("aria-label", t("searchNewChat"));
+			this.newChatPillEl.querySelector(".semlink-search-newchat-label")?.setText(t("searchNewChat"));
+		}
 		// State-dependent tooltips (expand/collapse, send/stop).
 		this.applyInputExpanded();
 		this.setSendButtonState(this.isGenerating ? "stop" : "idle");
@@ -2123,6 +2183,7 @@ export class SemanticSearchView extends ItemView {
 		thinking?: ThinkingStep[],
 		sources?: string[],
 		elapsedSec?: number,
+		sourceNumbers?: number[],
 		contextTokens?: number,
 		contextBreakdown?: ContextBreakdown,
 		cacheHitRate?: number | null,
@@ -2140,6 +2201,7 @@ export class SemanticSearchView extends ItemView {
 				result: s.type === "tool" ? s.result : undefined,
 			})),
 			sources,
+			sourceNumbers,
 			elapsedSec,
 			contextTokens,
 			contextBreakdown,
@@ -2193,7 +2255,7 @@ export class SemanticSearchView extends ItemView {
 					await MarkdownRenderer.render(this.app, protectHyphens(msg.content), answerEl, "", this);
 					if (msg.sources && msg.sources.length > 0) {
 						const usedSources = msg.sources.map((p) => ({ notePath: p, heading: "", contentPreview: "" }));
-						this.renderSources(bubble, usedSources as SearchResult[], false);
+						this.renderSources(bubble, usedSources as SearchResult[], false, msg.sourceNumbers);
 					}
 					// Copy / save actions for history answers too.
 					this.appendActions(bubble, msg.content, lastUserQuery);

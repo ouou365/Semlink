@@ -13,3 +13,6 @@ node_modules/
 # ZCode 内部工作文件
 .zcode/
 *.zip
+
+# 引用编号测试脚手架（本地）
+.cite-test/

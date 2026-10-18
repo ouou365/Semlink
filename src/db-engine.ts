@@ -322,10 +322,22 @@ export class DbEngine {
 	rollbackTransaction(): void {
 		if (this.txDepth === 0) return;
 		this.txDepth--;
-		if (this.txDepth === 0) this.db!.run("ROLLBACK");
-		else {
-			this.db!.run(`ROLLBACK TO SAVEPOINT tx_${this.txDepth}`);
-			this.db!.run(`RELEASE SAVEPOINT tx_${this.txDepth}`);
+		try {
+			if (this.txDepth === 0) this.db!.run("ROLLBACK");
+			else {
+				this.db!.run(`ROLLBACK TO SAVEPOINT tx_${this.txDepth}`);
+				this.db!.run(`RELEASE SAVEPOINT tx_${this.txDepth}`);
+			}
+		} catch (e) {
+			// SQLite auto-rolls-back the WHOLE transaction on OOM/FULL-class
+			// errors, and a savepoint can vanish after an interleaved release —
+			// either way the state is no longer trackable. Reset the depth so
+			// the next begin opens a fresh transaction instead of stacking
+			// savepoints onto an unknown one. Swallowed: the ORIGINAL failure
+			// (already en route to the caller) must not be masked by a
+			// "cannot rollback - no transaction is active" from here.
+			this.txDepth = 0;
+			debugLog("[Semlink] rollbackTransaction fell back to fresh state:", e);
 		}
 	}
 

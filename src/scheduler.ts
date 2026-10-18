@@ -38,6 +38,14 @@ export class Scheduler {
 	private processedSinceSave = 0;
 	/** Guards backfillDocVectors against concurrent runs (onload + manual index). */
 	private backfilling = false;
+	/** Serializes the per-note DB transaction section. Concurrent notes interleave
+	 *  their BEGIN/COMMIT messages on the shared engine otherwise — the savepoint
+	 *  depth counter then releases the WRONG note's savepoint, a failure rollback
+	 *  wipes OTHER notes' writes, and a full rollback by one note leaves the rest
+	 *  committing into autocommit mode ("cannot commit - no transaction is active").
+	 *  Only the fast DB writes are serialized; the network embedding calls stay
+	 *  parallel (they run before the transaction opens). */
+	private txLock: Promise<void> = Promise.resolve();
 	/** Note-count baseline for the current run. 0 = full scan (increment each
 	 *  note); >0 = incremental run (only "add" actions raise the real total,
 	 *  "update"/"delete" keep the status-bar count steady to avoid flicker). */
@@ -263,6 +271,20 @@ export class Scheduler {
 		}
 	}
 
+	/** Run `fn` while holding the transaction lock. Chains onto the previous
+	 *  holder, so exactly one note's BEGIN..COMMIT is ever open at a time. */
+	private async withTxLock<T>(fn: () => Promise<T>): Promise<T> {
+		const prev = this.txLock;
+		let release!: () => void;
+		this.txLock = new Promise<void>((resolve) => (release = resolve));
+		await prev;
+		try {
+			return await fn();
+		} finally {
+			release();
+		}
+	}
+
 	/** Process a single note's queue items. Returns true if chunks were actually indexed. */
 	private async processNote(notePath: string, items: QueueItem[]): Promise<boolean> {
 		const file = this.vault.getAbstractFileByPath(notePath);
@@ -324,47 +346,50 @@ export class Scheduler {
 			}
 		}
 
-		// Wrap all DB writes for this note in a single transaction
-		// IMPORTANT: do NOT yield before DB writes — if close() fires during yield,
-		// the in-memory DB won't contain this note's data and it will be lost.
-		await this.store.beginTransaction();
-		try {
-			// Insert chunk metadata first (so UPDATE in saveEmbeddings can find them)
-			const now = Date.now();
-			for (let i = 0; i < chunks.length; i++) {
-				await this.store.insertChunk({
-					id: chunks[i].id,
-					notePath,
-					heading: chunks[i].heading,
-					content: chunks[i].content,
-					contentPreview: makePreview(chunks[i].content),
-					mtime,
-					status: "active",
-					embedding: null, // stored in binary file
-					createdAt: now,
-				});
+		// Wrap all DB writes for this note in a single transaction, serialized
+		// across concurrent notes (see txLock). IMPORTANT: do NOT yield before
+		// DB writes — if close() fires during yield, the in-memory DB won't
+		// contain this note's data and it will be lost.
+		await this.withTxLock(async () => {
+			await this.store.beginTransaction();
+			try {
+				// Insert chunk metadata first (so UPDATE in saveEmbeddings can find them)
+				const now = Date.now();
+				for (let i = 0; i < chunks.length; i++) {
+					await this.store.insertChunk({
+						id: chunks[i].id,
+						notePath,
+						heading: chunks[i].heading,
+						content: chunks[i].content,
+						contentPreview: makePreview(chunks[i].content),
+						mtime,
+						status: "active",
+						embedding: null, // stored in binary file
+						createdAt: now,
+					});
+				}
+
+				// Save embeddings (UPDATE chunks SET vector = ... WHERE id = ?).
+				// Only embeddable chunks get a vector; sparse chunks stay active/NULL
+				// (excluded from search by the `vector IS NOT NULL` filter).
+				await this.store.saveEmbeddings(embeddableChunks.map((c) => c.id), allEmbeddings);
+
+				// Save the document-level (heading) vector in the same transaction.
+				if (docEmbedding) {
+					await this.store.saveDocEmbedding(notePath, docEmbedding, mtime, docHeadingText);
+				}
+
+				// Delete stale chunks for this note (if update)
+				if (action === "update") {
+					await this.store.deleteStaleChunks(notePath);
+				}
+
+				await this.store.commitTransaction();
+			} catch (e) {
+				await this.store.rollbackTransaction();
+				throw e;
 			}
-
-			// Save embeddings (UPDATE chunks SET vector = ... WHERE id = ?).
-			// Only embeddable chunks get a vector; sparse chunks stay active/NULL
-			// (excluded from search by the `vector IS NOT NULL` filter).
-			await this.store.saveEmbeddings(embeddableChunks.map((c) => c.id), allEmbeddings);
-
-			// Save the document-level (heading) vector in the same transaction.
-			if (docEmbedding) {
-				await this.store.saveDocEmbedding(notePath, docEmbedding, mtime, docHeadingText);
-			}
-
-			// Delete stale chunks for this note (if update)
-			if (action === "update") {
-				await this.store.deleteStaleChunks(notePath);
-			}
-
-			await this.store.commitTransaction();
-		} catch (e) {
-			await this.store.rollbackTransaction();
-			throw e;
-		}
+		});
 
 		// Yield AFTER DB writes — data is now in the in-memory DB,
 		// so close()/save() will capture it even if Obsidian exits during yield

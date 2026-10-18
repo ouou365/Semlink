@@ -11,6 +11,7 @@
 import type { SmartVaultSettings, ChatProvider, ChatModel, ContextBreakdown, HistoryMessage } from "./types";
 import { debugLog } from "./log";
 import type { SemlinkTools } from "./chat-tools";
+import { createCiteRegistry } from "./cite-cards";
 import { t } from "./i18n";
 
 /** Maximum tool-calling rounds before giving up on a final answer. */
@@ -205,8 +206,11 @@ const SUBMIT_TOOL_DESCRIPTION =
 	"the complete, user-facing response — the actual content only. Never put " +
 	"process narration (reading notes, gathering information, announcing the " +
 	"answer) inside `answer`; any commentary belongs in regular text before " +
-	"the call. In `sources`, optionally list the vault note paths the answer " +
-	"actually drew on (only paths that appear in the provided context).";
+	"the call. In `sources`, list the vault paths of the notes you cited " +
+	"inline, ordered by their assigned [n] numbers (context blocks, search " +
+	"results' `n` fields, and opened-note headers all share the same " +
+	"numbering). Never repeat or append that list inside the answer text — " +
+	"the interface renders it from this argument.";
 
 /** Live-forward threshold for tool-attached rounds: content growing past
  *  this size with NO tool-call delta yet is overwhelmingly the final answer
@@ -319,6 +323,10 @@ export interface ChatResult {
 	/** Note paths the model declared in submit_answer's `sources` argument —
 	 *  raw and unvalidated; the caller matches them against known paths. */
 	declaredSources: string[];
+	/** Per-turn citation registry: index n-1 is the path the model saw as [n]
+	 *  (context blocks first, then tool-result hits and opened notes). The
+	 *  answer's inline [n] markers reference exactly these entries. */
+	citeRegistry: string[];
 	/** Context tokens used by this turn (usage from the API, or an estimate). */
 	contextTokens: number;
 	/** Per-category context breakdown for the usage tooltip. */
@@ -532,6 +540,11 @@ export class ChatClient {
 		onRetry?: (attempt: number, total: number) => void,
 		signal?: AbortSignal,
 		agentMode: AgentMode = "proactive",
+		/** Initial retrieval results' paths in context-block order — seeds the
+		 *  per-turn citation registry so context block [n] = registry [n] and
+		 *  tool results continue from N+1. ONE numbering space for thinking,
+		 *  the final answer, and the rendered source cards. */
+		contextNotePaths: string[] = [],
 	): Promise<ChatResult> {
 		// Use the SELECTED model (and its owning provider) — the model switcher
 		// may pick any model from any configured provider.
@@ -543,8 +556,14 @@ export class ChatClient {
 		const systemPrompt = this.buildSystemPrompt(agentMode, depthHint, context);
 
 		// Per-depth cap on a single tool result (enhanced reads full notes).
+		// Plus: inject this turn's citation numberer — search results carry
+		// their global [n], opened notes announce theirs.
+		const citeReg = createCiteRegistry();
+		const citeRegistry = citeReg.paths;
+		for (const p of contextNotePaths) citeReg.register(p);
 		if (this.tools) {
 			this.tools.maxResultChars = depth === "enhanced" ? 8000 : 4000;
+			this.tools.citeNumberer = citeReg.register;
 		}
 
 		const thinking: ThinkingStep[] = [];
@@ -572,8 +591,8 @@ export class ChatClient {
 		};
 		const dispatch = (): Promise<ChatResult> =>
 			provider.apiFormat === "anthropic"
-				? this.chatAnthropic(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, onStream, onRoundStart, onThinking, onRoundSuccess, signal)
-				: this.chatOpenAI(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, onStream, onRoundStart, onThinking, onRoundSuccess, signal);
+				? this.chatAnthropic(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, citeRegistry, onStream, onRoundStart, onThinking, onRoundSuccess, signal)
+				: this.chatOpenAI(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, citeRegistry, onStream, onRoundStart, onThinking, onRoundSuccess, signal);
 
 		for (;;) {
 			totalAttempts++;
@@ -907,6 +926,7 @@ export class ChatClient {
 		onToolCall?: (toolName: string, args: unknown) => void,
 		thinking: ThinkingStep[] = [],
 		usedNotes: string[] = [],
+		citeRegistry: string[] = [],
 		onStream?: (text: string) => void,
 		onRoundStart?: () => void,
 		onThinking?: (step: ThinkingStep) => void,
@@ -975,6 +995,7 @@ export class ChatClient {
 				// Sources the model declared in submit_answer — transported
 				// raw; the caller validates them against known paths.
 				declaredSources: declaredSources ?? [],
+				citeRegistry,
 				contextTokens: breakdown.used,
 				contextBreakdown: breakdown,
 				cacheHitRate,
@@ -1355,6 +1376,7 @@ export class ChatClient {
 		onToolCall?: (toolName: string, args: unknown) => void,
 		thinking: ThinkingStep[] = [],
 		usedNotes: string[] = [],
+		citeRegistry: string[] = [],
 		onStream?: (text: string) => void,
 		onRoundStart?: () => void,
 		onThinking?: (step: ThinkingStep) => void,
@@ -1418,6 +1440,7 @@ export class ChatClient {
 				// Sources the model declared in submit_answer — transported
 				// raw; the caller validates them against known paths.
 				declaredSources: declaredSources ?? [],
+				citeRegistry,
 				contextTokens: breakdown.used,
 				contextBreakdown: breakdown,
 				cacheHitRate,
@@ -2012,16 +2035,32 @@ export class ChatClient {
 		let paths: string[] = [];
 		if ((name === "get_note" || name === "get_section") && typeof args?.path === "string") {
 			paths = [args.path];
-		} else if (name === "search_notes" || name === "get_similar_notes") {
+		} else if (name === "search_notes" || name === "get_similar_notes" || name === "grep_notes") {
 			try {
-				const parsed = JSON.parse(result) as { results?: Array<{ path?: string }> };
+				const parsed = JSON.parse(result) as { results?: Array<{ path?: string }>; paths?: unknown };
 				if (Array.isArray(parsed?.results)) {
 					paths = parsed.results
 						.filter((r) => typeof r?.path === "string")
 						.map((r) => String(r.path));
 				}
+				// grep_notes also returns a bare `paths` list (files beyond the
+				// detailed results) — those are conversation-visible too.
+				if (Array.isArray(parsed?.paths)) {
+					for (const p of parsed.paths as unknown[]) {
+						if (typeof p === "string" && !paths.includes(p)) paths.push(p);
+					}
+				}
 			} catch {
-				// Unparseable result — ignore.
+				// Long results are cut off by the size cap → the JSON no longer
+				// parses. Salvage the path fields that survived the cut instead
+				// of dropping ALL of them: declarations citing snippet-only
+				// notes must still validate against the known-path set, or the
+				// cards end short of the inline [n] citations.
+				const re = /"path"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+				let m: RegExpExecArray | null;
+				while ((m = re.exec(result)) !== null) {
+					paths.push(m[1].replace(/\\(["\\/])/g, "$1"));
+				}
 			}
 		}
 		for (const p of paths) {

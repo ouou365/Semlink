@@ -2488,7 +2488,11 @@ body .semlink-msg-user::selection {
     animation: semlink-shimmer 1.4s linear infinite;
 }
 
-/* Dark themes: a near-white highlight reads well on the dark panel. */
+/* Dark themes: a near-white highlight reads well on the dark panel.
+   Must re-declare background-clip here: the `background` shorthand resets
+   background-clip to border-box, and this higher-specificity rule would
+   override the base rule's `text` clip — painting the gradient as a solid
+   light block with the (transparent) text invisible. */
 .theme-dark .semlink-msg-loading-text {
     background: linear-gradient(
         90deg,
@@ -2498,6 +2502,8 @@ body .semlink-msg-user::selection {
         var(--text-muted) 60%,
         var(--text-muted) 100%
     );
+    -webkit-background-clip: text;
+    background-clip: text;
 }
 
 @keyframes semlink-shimmer {
@@ -2680,7 +2686,6 @@ body .semlink-msg-user::selection {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    border: 1px solid var(--background-modifier-border);
     border-radius: 8px;
     background: var(--background-primary);
     padding: 6px;
@@ -2737,7 +2742,7 @@ body .semlink-msg-user::selection {
 
 .semlink-search-input {
 	flex: 1 1 0;
-	min-height: 70px;
+	min-height: 60px;
 	max-height: 160px;
 	overflow-x: hidden;
 	overflow-y: auto;

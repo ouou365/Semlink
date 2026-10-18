@@ -451,6 +451,14 @@ export default class SmartVaultPlugin extends Plugin {
 				onToolCall,
 				inferAgentDepth(question),
 				onToken,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				// Seed the citation registry with the context order — same
+				// single numbering system as the sidebar chat.
+				results.slice(0, 5).map((r) => r.notePath),
 			);
 			// Honor an abort signal by rejecting (the bot treats this as stopped).
 			if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
