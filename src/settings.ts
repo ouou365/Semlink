@@ -219,19 +219,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 		if (pro) {
 			// Pro state, Eagle-style: big congrats + thanks, one quiet footer
-			// row (device slots · masked key · deactivate as a subtle action).
+			// row (lifetime note · deactivate as a subtle action).
 			card.createDiv({ cls: "semlink-license-card-headline", text: t("licenseProHeadline") });
 			card.createDiv({ cls: "semlink-license-card-freeline", text: t("openSidebarDesc") });
 
-			const lic = this.plugin.settings.license ?? {};
-			const used = lic.activation ?? 1;
-			const total = lic.activationLimit ?? Math.max(used, 3);
 			const foot = card.createDiv({ cls: "semlink-license-card-footrow" });
-			const dots = foot.createSpan({ cls: "semlink-license-card-dots" });
-			for (let i = 0; i < Math.max(total, used); i++) {
-				dots.createSpan({ cls: i < used ? "is-used" : "" });
-			}
-			foot.createSpan({ cls: "semlink-license-card-devcount", text: `${used}/${total}` });
 			foot.createSpan({ cls: "semlink-license-card-lifetime", text: t("licenseLifetime") });
 
 			const de = foot.createEl("button", { cls: "semlink-license-card-deactivate", text: t("licenseDeactivate") });
