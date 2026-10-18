@@ -99,7 +99,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// Language switcher: saveSettings re-runs setLang and refreshes the
 		// language-dependent views; display() re-renders this panel so the
 		// settings UI itself follows the new language right away.
-		const langWrap = title.nameEl.createDiv({ cls: "semlink-settings-lang" });
+		// Lang switcher lives as a DIRECT child of the setting-item root
+		// (sibling of .setting-item-info) — the root is already a flex row,
+		// so margin-left:auto right-aligns it without fighting name widths.
+		const langWrap = title.settingEl.createDiv({ cls: "semlink-settings-lang" });
 		new DropdownComponent(langWrap)
 			.addOptions({
 				auto: t("langAuto"),
