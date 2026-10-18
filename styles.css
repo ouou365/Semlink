@@ -288,30 +288,30 @@
 
 .smart-vault-settings .semlink-settings-tab {
     background: transparent;
-    /* Flat in every state: kill Obsidian's button shadow, which some themes
-       render as a faint line that reads like an underline on INACTIVE tabs.
-       The 2px transparent border only reserves space for the active one. */
-    border: none;
-    border-bottom: 2px solid transparent;
+    /* Bordered chip tabs: every tab shows a hairline border; the ACTIVE one
+       swaps it to the accent color (no underline mechanism). Button shadow
+       stays killed so themes can't paint a faint line under inactive tabs. */
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
     box-shadow: none;
     filter: none;
     color: var(--text-muted);
     cursor: pointer;
     font-size: 14px;
-    padding: 6px 14px;
-    margin-bottom: -1px;
+    padding: 5px 14px;
     transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .smart-vault-settings .semlink-settings-tab:hover {
     background: transparent;
+    border-color: var(--text-faint);
     box-shadow: none;
     color: var(--text-normal);
 }
 
 .smart-vault-settings .semlink-settings-tab.is-active {
     color: var(--interactive-accent);
-    border-bottom-color: var(--interactive-accent);
+    border-color: var(--interactive-accent);
     font-weight: 600;
 }
 
