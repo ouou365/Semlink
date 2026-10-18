@@ -87,10 +87,12 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const title = new Setting(containerEl).setName(t("settingsTitle")).setHeading();
 		title.nameEl.addClass("semlink-settings-heading-row");
 		// setName already wrote the text into nameEl — clear it before adding
-		// the structured children, or the title renders twice.
+		// the structured children, or the title renders twice. Layout: title
+		// with the version stacked under it (left), language far right.
 		title.nameEl.empty();
-		title.nameEl.createSpan({ cls: "semlink-settings-heading-text", text: t("settingsTitle") });
-		title.nameEl.createSpan({
+		const titleLeft = title.nameEl.createDiv({ cls: "semlink-settings-heading-left" });
+		titleLeft.createSpan({ cls: "semlink-settings-heading-text", text: t("settingsTitle") });
+		titleLeft.createSpan({
 			cls: "semlink-settings-version",
 			text: `v${this.plugin.manifest.version}`,
 		});

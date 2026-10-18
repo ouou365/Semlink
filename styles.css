@@ -267,12 +267,16 @@
     font-size: 13px;
 }
 
+.smart-vault-settings .setting-item-heading .semlink-settings-heading-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
 .smart-vault-settings .setting-item-heading .semlink-settings-version {
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 400;
-    margin-left: 10px;
-    vertical-align: middle;
     white-space: nowrap;
 }
 
