@@ -3122,9 +3122,6 @@ function renderCustomCard(
 
 // ──── Main render ────
 
-// ──── Model tab：系列分组 + 文件夹树 + 右侧模型开关 ────
-
-/** 同系列供应商自动归入同一文件夹（按目录名前缀/家族映射）。 */
 const SERIES_FOLDER: Record<string, string> = {
 	"MiniMax": "MiniMax",
 	"MiniMax CN": "MiniMax",
@@ -3252,7 +3249,7 @@ export function renderModelsTab(
 		name: string;
 		live: ModelProvider | null;
 		models: ChatModel[];
-		/** 归属文件夹（内置系列自动归组或用户拖入）。 */
+		/** 归属文件夹键（用户文件夹 / 内置系列 / 相同 logo 组）。 */
 		folder: string;
 		rank: number;
 	};
@@ -3265,7 +3262,7 @@ export function renderModelsTab(
 			name,
 			live,
 			models: live?.models ?? c.models,
-			folder: SERIES_FOLDER[name] ?? "",
+			folder: "",
 			rank: MARKET_RANK[name] ?? 9999,
 		});
 	}
@@ -3276,24 +3273,63 @@ export function renderModelsTab(
 			name: p.name,
 			live: p,
 			models: p.models,
-			folder: p.folder ?? "",
+			folder: "",
 			rank: 9999,
 		});
 	}
+
+	// 分组归属：用户文件夹 > 内置系列 > 相同 logo。
+	// logo 组以渲染用的 SVG 字符串为键——同图标即同组，天然覆盖改名的家族。
+	const folderOf = (r: Row): string => {
+		if (r.live?.folder) return r.live.folder;
+		if (SERIES_FOLDER[r.name]) return `series:${SERIES_FOLDER[r.name]}`;
+		const svg = brandLogoOf(r.name).svg;
+		return svg ? `logo:${svg}` : "";
+	};
+	for (const r of rows) r.folder = folderOf(r);
+
 	rows.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
 
-	// 文件夹清单：内置系列 + 用户自建 + 供应商已归属的，按成员最优排名排序
-	const folderNames: string[] = [];
-	const addFolder = (f: string): void => {
-		if (f && !folderNames.includes(f)) folderNames.push(f);
+	// ── 文件夹节点 ──
+	type FolderNode = {
+		key: string;
+		name: string;
+		isUser: boolean;
+		members: Row[];
+		rank: number;
 	};
-	for (const r of rows) addFolder(r.folder);
-	for (const f of userFolders) addFolder(f);
-	folderNames.sort((a, b) => {
-		const ra = Math.min(...rows.filter((r) => r.folder === a).map((r) => r.rank), 9999);
-		const rb = Math.min(...rows.filter((r) => r.folder === b).map((r) => r.rank), 9999);
-		return ra - rb || a.localeCompare(b);
-	});
+	const nodeMap = new Map<string, FolderNode>();
+	const nodeOrder: string[] = [];
+	const nodeOf = (key: string): FolderNode => {
+		let node = nodeMap.get(key);
+		if (!node) {
+			node = { key, name: "", isUser: key.startsWith("user:"), members: [], rank: 9999 };
+			nodeMap.set(key, node);
+			nodeOrder.push(key);
+		}
+		return node;
+	};
+	// 用户自建文件夹（可能暂时为空）
+	for (const f of userFolders) nodeOf(`user:${f}`);
+	// 按归属填充成员
+	for (const r of rows) {
+		if (!r.folder) continue;
+		nodeOf(r.folder).members.push(r);
+	}
+	const nodes = nodeOrder.map((k) => nodeMap.get(k)!);
+	for (const node of nodes) {
+		// 组名：内置系列/用户文件夹用键内名称；logo 组取成员中最短的名称
+		if (node.key.startsWith("series:")) {
+			node.name = node.key.slice(7);
+		} else if (node.isUser) {
+			node.name = node.key.slice(5);
+		} else if (node.key.startsWith("logo:")) {
+			const named = [...node.members].sort((a, b) => a.name.length - b.name.length)[0];
+			node.name = named ? named.name : node.key.slice(5, 25);
+		}
+		node.rank = node.members.length ? Math.min(...node.members.map((m) => m.rank)) : 9999;
+	}
+	nodes.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
 
 	if (!st.selected || !rows.some((r) => r.key === st.selected)) {
 		st.selected = rows[0]?.key ?? "";
@@ -3408,11 +3444,11 @@ export function renderModelsTab(
 		}
 	};
 
-	const renderFolderHeader = (folder: string, memberCount: number, isUserFolder: boolean): void => {
-		const collapsed = !!st.collapsed?.[folder];
+	const renderFolderHeader = (node: FolderNode): void => {
+		const collapsed = !!st.collapsed?.[node.key];
 		const headRow = list.createDiv({
-			cls: "semlink-mt-folder" + (isUserFolder ? " is-user" : ""),
-			attr: { "data-folder": folder },
+			cls: "semlink-mt-folder" + (node.isUser ? " is-user" : ""),
+			attr: { "data-folder": node.key },
 		});
 		headRow.addEventListener("dragover", (e) => {
 			e.preventDefault();
@@ -3426,39 +3462,38 @@ export function renderModelsTab(
 			if (!name) return;
 			const p = providers.find((x) => x.name === name);
 			if (!p) return;
-			p.folder = folder;
+			p.folder = node.key;
 			void plugin.saveSettings().then(() => refresh());
 		});
 		const chevron = headRow.createDiv({ cls: "semlink-mt-folder-chevron" });
 		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
-		headRow.createDiv({ cls: "semlink-mt-folder-name", text: folder });
-		headRow.createDiv({ cls: "semlink-mt-folder-count", text: String(memberCount) });
-		if (isUserFolder) {
+		headRow.createDiv({ cls: "semlink-mt-folder-name", text: node.name });
+		headRow.createDiv({ cls: "semlink-mt-folder-count", text: String(node.members.length) });
+		if (node.isUser) {
 			const del = headRow.createDiv({ cls: "semlink-mt-folder-del" });
 			setIcon(del, "x");
 			del.addEventListener("click", (e) => {
 				e.stopPropagation();
 				// 删除文件夹：成员回到顶层（供应商本体不受影响）
-				plugin.settings.providerFolders = userFolders.filter((f) => f !== folder);
+				plugin.settings.providerFolders = userFolders.filter((f) => `user:${f}` !== node.key);
 				for (const p of providers) {
-					if (p.folder === folder) p.folder = undefined;
+					if (p.folder === node.key) p.folder = undefined;
 				}
-				if (st.collapsed) delete st.collapsed[folder];
+				if (st.collapsed) delete st.collapsed[node.key];
 				void plugin.saveSettings().then(() => refresh());
 			});
 		}
 		headRow.addEventListener("click", () => {
-			st.collapsed = { ...(st.collapsed ?? {}), [folder]: !collapsed };
+			st.collapsed = { ...(st.collapsed ?? {}), [node.key]: !collapsed };
 			refresh();
 		});
 	};
 
-	for (const folder of folderNames) {
-		const members = rows.filter((r) => r.folder === folder);
-		const isUserFolder = userFolders.includes(folder);
-		renderFolderHeader(folder, members.length, isUserFolder);
-		if (st.collapsed?.[folder]) continue;
-		for (const r of members) renderProviderRow(list, r, true);
+	// 文件夹节点在前（按成员最优排名），其后是顶层厂商
+	for (const node of nodes) {
+		renderFolderHeader(node);
+		if (st.collapsed?.[node.key]) continue;
+		for (const r of node.members) renderProviderRow(list, r, true);
 	}
 	for (const r of rows.filter((x) => !x.folder)) {
 		renderProviderRow(list, r, false);
