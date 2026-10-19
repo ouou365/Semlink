@@ -3536,6 +3536,9 @@ export function renderModelsTab(
 		showingEl.setText(
 			t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)),
 		);
+		// 保留滚动位置：empty() 的瞬间内容高度清零，浏览器会把 scrollTop
+		// 钳制到 0，重建后就会“自动滚回顶部”。
+		const keepScroll = rowsHost.scrollTop;
 		rowsHost.empty();
 		const configured = isConfigured(sel);
 		for (const m of shown) {
@@ -3567,6 +3570,7 @@ export function renderModelsTab(
 				});
 			}
 		}
+		rowsHost.scrollTop = keepScroll;
 		if (!configured) {
 			const hint = rowsHost.createDiv({ cls: "semlink-mt-unconfigured" });
 			hint.createSpan({ text: t("mtNeedsKey") });
