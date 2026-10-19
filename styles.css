@@ -733,8 +733,9 @@
     min-width: 0;
 }
 
-.smart-vault-settings .semlink-mt-model:hover {
-    background: var(--background-modifier-hover);
+.smart-vault-settings .semlink-mt-model:hover,
+.smart-vault-settings .semlink-mt-model.is-selected {
+    background: #eeeeee;
 }
 
 .smart-vault-settings .semlink-mt-model-logo .semlink-mt-logo-svg,
