@@ -18,6 +18,7 @@ const t: Record<keyof typeof en, string> = {
 	langEn: "English",
 	tabMcp: "MCP",
 	tabModel: "모델",
+	mtProvidersTitle: "공급자",
 	tabIndex: "인덱스",
 	tabEmbedding: "RAG",
 	tabBot: "봇",

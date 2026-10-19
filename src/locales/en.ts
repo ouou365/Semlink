@@ -17,6 +17,7 @@ const en = {
 	langEn: "English",
 	tabMcp: "MCP",
 	tabModel: "Model",
+	mtProvidersTitle: "Providers",
 	tabIndex: "Index",
 	tabEmbedding: "RAG",
 	tabBot: "Bot",

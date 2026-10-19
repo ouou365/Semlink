@@ -3360,7 +3360,7 @@ export function renderModelsTab(
 	// ── 左栏：文件夹树 + 顶层厂商 ──
 	const left = wrap.createDiv({ cls: "semlink-mt-providers" });
 	const leftHead = left.createDiv({ cls: "semlink-mt-providers-head" });
-	leftHead.createSpan({ cls: "semlink-mt-providers-title", text: t("tabModel") });
+	leftHead.createSpan({ cls: "semlink-mt-providers-title", text: t("mtProvidersTitle") });
 	const headBtns = leftHead.createDiv({ cls: "semlink-mt-head-actions" });
 	const addFolderBtn = headBtns.createEl("button", {
 		cls: "semlink-mt-add",

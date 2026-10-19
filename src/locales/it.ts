@@ -20,6 +20,7 @@ const t: Record<keyof typeof en, string> = {
 	langEn: "Inglese",
 	tabMcp: "MCP",
 	tabModel: "Modello",
+	mtProvidersTitle: "Fornitori",
 	tabIndex: "Indice",
 	tabEmbedding: "RAG",
 	tabBot: "Bot",

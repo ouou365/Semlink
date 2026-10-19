@@ -19,6 +19,7 @@ const zh: Record<keyof typeof en, string> = {
 	langEn: "English",
 	tabMcp: "MCP",
 	tabModel: "模型",
+	mtProvidersTitle: "供应商",
 	tabIndex: "索引",
 	tabEmbedding: "RAG",
 	tabBot: "机器人",
