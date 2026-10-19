@@ -3571,6 +3571,11 @@ export function renderModelsTab(
 	searchInput.value = st.search ?? "";
 
 	const showingEl = right.createDiv({ cls: "semlink-mt-showing" });
+	// 未配置 Key：在"显示 X / Y 个模型"下方给一行提示（此时代码开关不可用，
+	// 点行内齿轮图标去配置）
+	if (!isConfigured(sel)) {
+		right.createDiv({ cls: "semlink-mt-keyhint", text: t("mtNeedsKey") });
+	}
 	const rowsHost = right.createDiv({ cls: "semlink-mt-rows" });
 
 	// 整页 refresh 会重建这两个内层滚动列表——先把它们的滚动位置存进
@@ -3644,12 +3649,6 @@ export function renderModelsTab(
 			}
 		}
 		rowsHost.scrollTop = keepScroll;
-		if (!configured) {
-			const hint = rowsHost.createDiv({ cls: "semlink-mt-unconfigured" });
-			hint.createSpan({ text: t("mtNeedsKey") });
-			const cfgBtn = hint.createEl("button", { cls: "semlink-mt-config-btn", text: t("mtConfigure") });
-			cfgBtn.addEventListener("click", () => openEditor(sel));
-		}
 	};
 	renderRows();
 	list.scrollTop = st.providerScroll ?? 0;
