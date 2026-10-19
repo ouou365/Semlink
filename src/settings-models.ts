@@ -3325,7 +3325,19 @@ export function renderModelsTab(
 		if (!r.folder) continue;
 		nodeOf(r.folder).members.push(r);
 	}
-	const nodes = nodeOrder.map((k) => nodeMap.get(k)!);
+	// 自动分组（内置系列/相同 logo）凑不满两个成员时不套文件夹——
+	// 只有一项的"文件夹"只是多一层展开，成员直接回到顶层。
+	// 用户自建文件夹除外（哪怕空着也保留，那是用户明确建的）。
+	for (const key of nodeOrder) {
+		const node = nodeMap.get(key)!;
+		if (!node.isUser && node.members.length < 2) {
+			for (const m of node.members) m.folder = "";
+			node.members = [];
+		}
+	}
+	const nodes = nodeOrder
+		.map((k) => nodeMap.get(k)!)
+		.filter((n) => n.isUser || n.members.length > 0);
 	for (const node of nodes) {
 		// 组名：内置系列/用户文件夹用键内名称；logo 组取成员中最短的名称
 		if (node.key.startsWith("series:")) {
