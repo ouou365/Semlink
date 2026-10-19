@@ -2669,10 +2669,26 @@ export function brandLogoOf(name: string): BrandLogo {
 
 /** Safely mount a brand-logo SVG string into an element (checker-safe,
  *  no innerHTML assignment). */
+/** Parsed SVG roots by source string: the right pane renders the same
+ *  provider logo on every model row (a catalog can carry 2000+ rows), and
+ *  re-running DOMParser per row made provider switching lag. Parse once,
+ *  clone per mount — the cached root must stay pristine. */
+const svgRootCache = new Map<string, Element | null>();
+
+function cachedSvgRoot(svg: string): Element | null {
+	let root = svgRootCache.get(svg);
+	if (root === undefined) {
+		const parsed = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
+		root = parsed && parsed.tagName !== "parsererror" ? parsed : null;
+		svgRootCache.set(svg, root);
+	}
+	return root;
+}
+
 export function setSvgIcon(el: HTMLElement, svg: string): void {
 	el.empty();
-	const root = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
-	if (root && root.tagName !== "parsererror") el.appendChild(root);
+	const root = cachedSvgRoot(svg);
+	if (root) el.appendChild(root.cloneNode(true));
 }
 
 function appendProviderLogo(target: HTMLElement, name: string, logoCls: string): void {
@@ -3352,7 +3368,6 @@ export function renderModelsTab(
 	if (!st.selected || !rows.some((r) => r.key === st.selected)) {
 		st.selected = rows[0]?.key ?? "";
 	}
-	const sel = rows.find((r) => r.key === st.selected) ?? null;
 
 	const enabledCount = (models: ChatModel[]): number =>
 		models.filter((m) => m.enabled === true).length;
@@ -3450,10 +3465,14 @@ export function renderModelsTab(
 			});
 		}
 		row.addEventListener("click", () => {
+			if (st.selected === r.key) return;
 			st.selected = r.key;
 			st.search = "";
 			st.modelSel = "";
-			refreshKeepInner();
+			// 左栏就地切选中态，只重建右栏（整页重建大目录会卡）
+			list.querySelectorAll(".semlink-mt-provider.is-active").forEach((el) => el.removeClass("is-active"));
+			row.addClass("is-active");
+			renderRight(false);
 		});
 		// 文件夹内的供应商不重复显示图标（文件夹行已带最热门成员的 logo）
 		if (!nested) {
@@ -3562,36 +3581,14 @@ export function renderModelsTab(
 	}
 
 	// ── 右栏：所选厂商的模型（搜索 · 计数 · 开关行）──
-	const right = wrap.createDiv({ cls: "semlink-mt-models" });
-	if (!sel) {
-		right.createDiv({ cls: "semlink-mt-empty", text: t("addProvider") });
-		return;
-	}
+	// 点供应商只重建右栏：大目录动辄上千个模型行，整页刷新（连左栏一起重建）
+	// 会明显卡顿；左栏仅就地切换 is-active。整页 refresh 仍走 refreshKeepInner。
+	const rightHost = wrap.createDiv({ cls: "semlink-mt-models" });
+	let rowsHost: HTMLElement | null = null;
 
-	const searchRow = right.createDiv({ cls: "semlink-mt-search" });
-	const searchInput = searchRow.createEl("input", {
-		cls: "semlink-mt-search-input",
-		attr: { type: "text", placeholder: t("guideSearchModel"), spellcheck: "false" },
-	});
-	searchInput.value = st.search ?? "";
-
-	const showingEl = right.createDiv({ cls: "semlink-mt-showing" });
-	// 未配置 Key：这行整体换成"配置 API Key 后可启用模型"，右侧给配置按钮
-	// （renderRows 里只在已配置时才写回计数文案，避免搜索时覆盖本行）
-	if (!isConfigured(sel)) {
-		showingEl.addClass("is-keyhint");
-		showingEl.setText(t("mtNeedsKey"));
-		showingEl
-			.createEl("button", { cls: "semlink-btn semlink-btn-cta semlink-mt-keyhint-btn", text: t("mtConfigure") })
-			.addEventListener("click", () => openEditor(sel));
-	}
-	const rowsHost = right.createDiv({ cls: "semlink-mt-rows" });
-
-	// 整页 refresh 会重建这两个内层滚动列表——先把它们的滚动位置存进
-	// state，渲染完成后恢复，避免“点一下供应商列表跳回顶部”。
 	const refreshKeepInner = (): void => {
 		st.providerScroll = list.scrollTop;
-		st.rowsScroll = rowsHost.scrollTop;
+		if (rowsHost) st.rowsScroll = rowsHost.scrollTop;
 		refresh();
 	};
 
@@ -3602,73 +3599,106 @@ export function renderModelsTab(
 		return String(n);
 	};
 
-	const updateCount = (): void => {
-		const rowEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-provider-count`);
-		if (rowEl) rowEl.textContent = `${enabledCount(sel.models)} / ${sel.models.length} ${t("mtEnabled")}`;
-		const dotEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-dot`);
-		if (dotEl) dotEl.className = `semlink-mt-dot${dotState(sel)}`;
-		// 所在文件夹的模型汇总行 + 状态点同步更新（避免整页刷新）
-		const folderNode = nodes.find((n) => n.key === sel.folder);
-		if (folderNode) {
-			const sumEnabled = folderNode.members.reduce((s, m) => s + enabledCount(m.models), 0);
-			const sumTotal = folderNode.members.reduce((s, m) => s + m.models.length, 0);
-			const folderEl = list.querySelector(`[data-folder="${folderNode.key}"] .semlink-mt-folder-count`);
-			if (folderEl) folderEl.textContent = `${sumEnabled} / ${sumTotal} ${t("mtEnabled")}`;
-			const folderDotEl = list.querySelector(`[data-folder="${folderNode.key}"] .semlink-mt-dot`);
-			if (folderDotEl) folderDotEl.className = `semlink-mt-dot${folderDotState(folderNode)}`;
+	const renderRight = (restoreScroll: boolean): void => {
+		const sel = rows.find((r) => r.key === st.selected) ?? null;
+		rightHost.empty();
+		rowsHost = null;
+		if (!sel) {
+			rightHost.createDiv({ cls: "semlink-mt-empty", text: t("addProvider") });
+			return;
 		}
-	};
 
-	const renderRows = (): void => {
-		const q = (st.search ?? "").toLowerCase();
-		const shown = sel.models.filter((m) => !q || m.id.toLowerCase().includes(q));
-		// 未配置 Key 时这一行被"配置 API Key 后可启用模型 + 配置按钮"占用
-		if (isConfigured(sel)) {
-			showingEl.setText(
-				t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)),
-			);
+		const searchRow = rightHost.createDiv({ cls: "semlink-mt-search" });
+		const searchInput = searchRow.createEl("input", {
+			cls: "semlink-mt-search-input",
+			attr: { type: "text", placeholder: t("guideSearchModel"), spellcheck: "false" },
+		});
+		searchInput.value = st.search ?? "";
+
+		const showingEl = rightHost.createDiv({ cls: "semlink-mt-showing" });
+		// 未配置 Key：这行整体换成"配置 API Key 后可启用模型"，右侧给配置按钮
+		// （renderRows 里只在已配置时才写回计数文案，避免搜索时覆盖本行）
+		if (!isConfigured(sel)) {
+			showingEl.addClass("is-keyhint");
+			showingEl.setText(t("mtNeedsKey"));
+			showingEl
+				.createEl("button", { cls: "semlink-btn semlink-btn-cta semlink-mt-keyhint-btn", text: t("mtConfigure") })
+				.addEventListener("click", () => openEditor(sel));
 		}
-		// 保留滚动位置：empty() 的瞬间内容高度清零，浏览器会把 scrollTop
-		// 钳制到 0，重建后就会“自动滚回顶部”。
-		const keepScroll = rowsHost.scrollTop;
-		rowsHost.empty();
-		const configured = isConfigured(sel);
-		for (const m of shown) {
-			const isSelected = st.modelSel === m.id;
-			const row = rowsHost.createDiv({
-				cls: "semlink-mt-model" + (isSelected ? " is-selected" : ""),
-			});
-			// 点击行切换选中态；开关区域的点击不参与（避免联动选行）
-			row.addEventListener("click", (e) => {
-				if ((e.target as HTMLElement).closest(".semlink-mt-model-toggle")) return;
-				st.modelSel = isSelected ? "" : m.id;
-				renderRows();
-			});
-			const logo = row.createDiv({ cls: "semlink-mt-model-logo" });
-			appendProviderLogo(logo, sel.name, "semlink-mt-logo-svg");
-			const info = row.createDiv({ cls: "semlink-mt-model-info" });
-			info.createDiv({ cls: "semlink-mt-model-name", text: m.id });
-			const ctx = info.createDiv({ cls: "semlink-mt-model-ctx", text: fmtCtx(m.contextWindow) });
-			if (!m.contextWindow || m.contextWindow <= 0) ctx.addClass("semlink-hidden");
-			const toggleWrap = row.createDiv({ cls: "semlink-mt-model-toggle" });
-			const toggle = new ToggleComponent(toggleWrap).setValue(m.enabled === true);
-			if (!configured) {
-				toggle.setDisabled(true);
-			} else {
-				toggle.onChange((v) => {
-					m.enabled = v;
-					void plugin.saveSettings();
-					updateCount();
-				});
+		const rh = rightHost.createDiv({ cls: "semlink-mt-rows" });
+		rowsHost = rh;
+
+		const updateCount = (): void => {
+			const rowEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-provider-count`);
+			if (rowEl) rowEl.textContent = `${enabledCount(sel.models)} / ${sel.models.length} ${t("mtEnabled")}`;
+			const dotEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-dot`);
+			if (dotEl) dotEl.className = `semlink-mt-dot${dotState(sel)}`;
+			// 所在文件夹的模型汇总行 + 状态点同步更新（避免整页刷新）
+			const folderNode = nodes.find((n) => n.key === sel.folder);
+			if (folderNode) {
+				const sumEnabled = folderNode.members.reduce((s, m) => s + enabledCount(m.models), 0);
+				const sumTotal = folderNode.members.reduce((s, m) => s + m.models.length, 0);
+				const folderEl = list.querySelector(`[data-folder="${folderNode.key}"] .semlink-mt-folder-count`);
+				if (folderEl) folderEl.textContent = `${sumEnabled} / ${sumTotal} ${t("mtEnabled")}`;
+				const folderDotEl = list.querySelector(`[data-folder="${folderNode.key}"] .semlink-mt-dot`);
+				if (folderDotEl) folderDotEl.className = `semlink-mt-dot${folderDotState(folderNode)}`;
 			}
-		}
-		rowsHost.scrollTop = keepScroll;
-	};
-	renderRows();
-	list.scrollTop = st.providerScroll ?? 0;
-	rowsHost.scrollTop = st.rowsScroll ?? 0;
-	searchInput.addEventListener("input", () => {
-		st.search = searchInput.value;
+		};
+
+		const renderRows = (): void => {
+			const q = (st.search ?? "").toLowerCase();
+			const shown = sel.models.filter((m) => !q || m.id.toLowerCase().includes(q));
+			// 未配置 Key 时这一行被"配置 API Key 后可启用模型 + 配置按钮"占用
+			if (isConfigured(sel)) {
+				showingEl.setText(
+					t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)),
+				);
+			}
+			// 保留滚动位置：empty() 的瞬间内容高度清零，浏览器会把 scrollTop
+			// 钳制到 0，重建后就会“自动滚回顶部”。
+			const keepScroll = rh.scrollTop;
+			rh.empty();
+			const configured = isConfigured(sel);
+			for (const m of shown) {
+				const isSelected = st.modelSel === m.id;
+				const row = rh.createDiv({
+					cls: "semlink-mt-model" + (isSelected ? " is-selected" : ""),
+				});
+				// 点击行切换选中态：就地搬 is-selected，不重建全部行；开关
+				// 区域的点击不参与（避免联动选行）
+				row.addEventListener("click", (e) => {
+					if ((e.target as HTMLElement).closest(".semlink-mt-model-toggle")) return;
+					st.modelSel = isSelected ? "" : m.id;
+					rh.querySelector(".semlink-mt-model.is-selected")?.removeClass("is-selected");
+					if (st.modelSel) row.addClass("is-selected");
+				});
+				const logo = row.createDiv({ cls: "semlink-mt-model-logo" });
+				appendProviderLogo(logo, sel.name, "semlink-mt-logo-svg");
+				const info = row.createDiv({ cls: "semlink-mt-model-info" });
+				info.createDiv({ cls: "semlink-mt-model-name", text: m.id });
+				const ctx = info.createDiv({ cls: "semlink-mt-model-ctx", text: fmtCtx(m.contextWindow) });
+				if (!m.contextWindow || m.contextWindow <= 0) ctx.addClass("semlink-hidden");
+				const toggleWrap = row.createDiv({ cls: "semlink-mt-model-toggle" });
+				const toggle = new ToggleComponent(toggleWrap).setValue(m.enabled === true);
+				if (!configured) {
+					toggle.setDisabled(true);
+				} else {
+					toggle.onChange((v) => {
+						m.enabled = v;
+						void plugin.saveSettings();
+						updateCount();
+					});
+				}
+			}
+			rh.scrollTop = keepScroll;
+		};
 		renderRows();
-	});
+		rh.scrollTop = restoreScroll ? (st.rowsScroll ?? 0) : 0;
+		searchInput.addEventListener("input", () => {
+			st.search = searchInput.value;
+			renderRows();
+		});
+	};
+	renderRight(true);
+	list.scrollTop = st.providerScroll ?? 0;
 }
