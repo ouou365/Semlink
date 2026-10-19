@@ -591,21 +591,19 @@
 /* 文件夹行复用 .semlink-mt-provider 的布局（图标 = 成员中最热门供应商），
    这里只补文件夹特有的部分：名称右侧的下拉箭头、名称下的成员数、
    拖拽落点虚线。 */
-.smart-vault-settings .semlink-mt-provider.is-folder.is-droptarget {
-    outline: 1.5px dashed var(--interactive-accent);
+.smart-vault-settings .semlink-mt-provider.is-nested {
+    margin-left: 20px;
 }
 
-.smart-vault-settings .semlink-mt-folder-nameline {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    min-width: 0;
+.smart-vault-settings .semlink-mt-provider.is-folder.is-droptarget {
+    outline: 1.5px dashed var(--interactive-accent);
 }
 
 .smart-vault-settings .semlink-mt-folder-chevron {
     display: flex;
     align-items: center;
     flex-shrink: 0;
+    margin-left: 2px;
     color: var(--text-muted);
 }
 
@@ -617,10 +615,6 @@
 .smart-vault-settings .semlink-mt-folder-count {
     color: var(--text-muted);
     font-size: 12px;
-}
-
-.smart-vault-settings .semlink-mt-provider.is-foldered .semlink-mt-provider-name {
-    font-weight: 500;
 }
 
 .smart-vault-settings .semlink-mt-provider-list {

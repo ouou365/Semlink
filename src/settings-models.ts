@@ -3495,12 +3495,11 @@ export function renderModelsTab(
 			appendProviderLogo(logo, hottest.name, "semlink-mt-logo-svg");
 		}
 		const info = headRow.createDiv({ cls: "semlink-mt-provider-info" });
-		const nameLine = info.createDiv({ cls: "semlink-mt-folder-nameline" });
-		nameLine.createDiv({ cls: "semlink-mt-provider-name", text: node.name });
-		// 名称右侧的下拉图标——普通供应商行没有这一项
-		const chevron = nameLine.createDiv({ cls: "semlink-mt-folder-chevron" });
-		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
+		info.createDiv({ cls: "semlink-mt-provider-name", text: node.name });
 		info.createDiv({ cls: "semlink-mt-folder-count", text: String(node.members.length) });
+		// 下拉图标放行最右侧
+		const chevron = headRow.createDiv({ cls: "semlink-mt-folder-chevron" });
+		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
 		if (node.isUser) {
 			const del = headRow.createDiv({ cls: "semlink-mt-provider-del" });
 			setIcon(del, "x");
