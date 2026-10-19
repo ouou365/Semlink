@@ -516,8 +516,6 @@ export default class SmartVaultPlugin extends Plugin {
 		await this.rebuildAll();
 		(this.app as unknown as { setting: { close(): void } }).setting.close();
 		await this.activateSearchView();
-		const leaf = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
-		(leaf.view as SemanticSearchView).openIndexGuide();
 	}
 
 	async showProgressModal() {
