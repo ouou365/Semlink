@@ -2878,8 +2878,23 @@ function renderProviderEditor(
 		probe: () => ({ baseUrl: draft.apiBase, apiKey: draft.apiKey, apiFormat: draft.apiFormat ?? "openai" }),
 	});
 
-	// Footer: commit the staged draft on 确定, discard it on 取消.
+	// Footer: 删除在左（列表行不再放删除图标，入口收进编辑弹窗，二次确认），
+	// 取消/确定在右；确定提交暂存的 draft，取消丢弃。
 	const footer = slot.createDiv({ cls: "semlink-editor-footer" });
+	footer.createEl("button", { cls: "semlink-btn semlink-btn-danger", text: t("deleteProvider") })
+		.addEventListener("click", () => {
+			const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
+			new DeleteProviderModal(plugin.app, p.name, () => {
+				plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== p.id);
+				if (activePid === p.id) {
+					plugin.settings.embeddingModelKey = "";
+				}
+				void plugin.saveSettings().then(() => {
+					refresh();
+					close();
+				});
+			}).open();
+		});
 	footer.createEl("button", { cls: "semlink-btn", text: t("cancel") })
 		.addEventListener("click", close);
 	footer.createEl("button", { cls: "semlink-btn semlink-btn-cta", text: t("confirm") })
@@ -3452,24 +3467,6 @@ export function renderModelsTab(
 			e.stopPropagation();
 			openEditor(r);
 		});
-		if (r.live) {
-			const del = row.createDiv({ cls: "semlink-mt-provider-del", attr: { "aria-label": t("deleteProvider") } });
-			setIcon(del, "trash-2");
-			del.addEventListener("click", (e) => {
-				e.stopPropagation();
-				const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
-				new DeleteProviderModal(plugin.app, r.name, () => {
-					plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== r.live!.id);
-					if (activePid === r.live!.id) {
-						plugin.settings.embeddingModelKey = "";
-					}
-					if (st.selected === r.key) {
-						st.selected = rows.find((x) => x.key !== r.key)?.key ?? "";
-					}
-					void plugin.saveSettings().then(() => refreshKeepInner());
-				}).open();
-			});
-		}
 	};
 
 	const renderFolderHeader = (node: FolderNode): void => {
