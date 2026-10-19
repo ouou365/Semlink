@@ -145,8 +145,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			{ id: "general", label: t("tabGeneral") },
 			{ id: "model", label: t("tabModel") },
 			{ id: "mcp", label: t("tabMcp") },
-			{ id: "index", label: t("tabIndex") },
 			{ id: "embedding", label: t("tabEmbedding") },
+			{ id: "index", label: t("tabIndex") },
 			// Bot tab deliberately not listed: the Feishu bot is unpublished
 			// (freemium-design v3.6). renderBotTab stays available for re-enable.
 		];
