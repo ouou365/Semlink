@@ -3467,8 +3467,12 @@ export function renderModelsTab(
 
 	const renderFolderHeader = (node: FolderNode): void => {
 		const collapsed = !!st.collapsed?.[node.key];
+		// 与普通供应商行同款布局；图标取成员中最热门（排名最优）的供应商
+		const hottest = [...node.members].sort(
+			(a, b) => a.rank - b.rank || a.name.localeCompare(b.name),
+		)[0];
 		const headRow = list.createDiv({
-			cls: "semlink-mt-folder" + (node.isUser ? " is-user" : ""),
+			cls: "semlink-mt-provider is-folder",
 			attr: { "data-folder": node.key },
 		});
 		headRow.addEventListener("dragover", (e) => {
@@ -3486,12 +3490,19 @@ export function renderModelsTab(
 			p.folder = node.key;
 			void plugin.saveSettings().then(() => refreshKeepInner());
 		});
-		const chevron = headRow.createDiv({ cls: "semlink-mt-folder-chevron" });
+		if (hottest) {
+			const logo = headRow.createDiv({ cls: "semlink-mt-provider-logo" });
+			appendProviderLogo(logo, hottest.name, "semlink-mt-logo-svg");
+		}
+		const info = headRow.createDiv({ cls: "semlink-mt-provider-info" });
+		const nameLine = info.createDiv({ cls: "semlink-mt-folder-nameline" });
+		nameLine.createDiv({ cls: "semlink-mt-provider-name", text: node.name });
+		// 名称右侧的下拉图标——普通供应商行没有这一项
+		const chevron = nameLine.createDiv({ cls: "semlink-mt-folder-chevron" });
 		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
-		headRow.createDiv({ cls: "semlink-mt-folder-name", text: node.name });
-		headRow.createDiv({ cls: "semlink-mt-folder-count", text: String(node.members.length) });
+		info.createDiv({ cls: "semlink-mt-folder-count", text: String(node.members.length) });
 		if (node.isUser) {
-			const del = headRow.createDiv({ cls: "semlink-mt-folder-del" });
+			const del = headRow.createDiv({ cls: "semlink-mt-provider-del" });
 			setIcon(del, "x");
 			del.addEventListener("click", (e) => {
 				e.stopPropagation();

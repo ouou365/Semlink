@@ -588,54 +588,35 @@
     gap: 6px;
 }
 
-.smart-vault-settings .semlink-mt-folder {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    border-radius: 8px;
-    cursor: pointer;
-    color: var(--text-muted);
-    font-weight: 600;
-    font-size: 13px;
-    min-width: 0;
-}
-
-.smart-vault-settings .semlink-mt-folder:hover,
-.smart-vault-settings .semlink-mt-folder.is-droptarget {
-    background: var(--background-modifier-hover);
-}
-
-.smart-vault-settings .semlink-mt-folder.is-droptarget {
+/* 文件夹行复用 .semlink-mt-provider 的布局（图标 = 成员中最热门供应商），
+   这里只补文件夹特有的部分：名称右侧的下拉箭头、名称下的成员数、
+   拖拽落点虚线。 */
+.smart-vault-settings .semlink-mt-provider.is-folder.is-droptarget {
     outline: 1.5px dashed var(--interactive-accent);
 }
 
-.smart-vault-settings .semlink-mt-folder-chevron,
-.smart-vault-settings .semlink-mt-folder-del {
+.smart-vault-settings .semlink-mt-folder-nameline {
     display: flex;
     align-items: center;
+    gap: 4px;
+    min-width: 0;
 }
 
-.smart-vault-settings .semlink-mt-folder-chevron .svg-icon,
-.smart-vault-settings .semlink-mt-folder-del .svg-icon {
-    width: 13px;
-    height: 13px;
+.smart-vault-settings .semlink-mt-folder-chevron {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
 }
 
-.smart-vault-settings .semlink-mt-folder-del {
-    margin-left: 2px;
-    color: var(--text-faint);
-    cursor: pointer;
-}
-
-.smart-vault-settings .semlink-mt-folder-del:hover {
-    color: var(--text-error);
+.smart-vault-settings .semlink-mt-folder-chevron .svg-icon {
+    width: 14px;
+    height: 14px;
 }
 
 .smart-vault-settings .semlink-mt-folder-count {
-    margin-left: auto;
-    color: var(--text-faint);
-    font-size: 11.5px;
+    color: var(--text-muted);
+    font-size: 12px;
 }
 
 .smart-vault-settings .semlink-mt-provider.is-foldered .semlink-mt-provider-name {
