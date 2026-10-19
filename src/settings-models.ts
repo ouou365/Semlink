@@ -18,7 +18,7 @@ import { markDestructive } from "./ui-compat";
 /** Model-tab UI state: which provider is selected + model search text.
  *  Editing happens in a modal, so there is no expanded row state to keep
  *  across re-renders. */
-export type ModelsTabState = { selected?: string; search?: string };
+export type ModelsTabState = { selected?: string; search?: string; modelSel?: string };
 
 export const EMPTY_MODELS_TAB_STATE: ModelsTabState = {};
 
@@ -3333,7 +3333,16 @@ export function renderModelsTab(
 		rowsHost.empty();
 		const configured = isConfigured(sel);
 		for (const m of shown) {
-			const row = rowsHost.createDiv({ cls: "semlink-mt-model" });
+			const isSelected = st.modelSel === m.id;
+			const row = rowsHost.createDiv({
+				cls: "semlink-mt-model" + (isSelected ? " is-selected" : ""),
+			});
+			// 点击行切换选中态；开关区域的点击不参与（避免联动选行）
+			row.addEventListener("click", (e) => {
+				if ((e.target as HTMLElement).closest(".semlink-mt-model-toggle")) return;
+				st.modelSel = isSelected ? "" : m.id;
+				renderRows();
+			});
 			const logo = row.createDiv({ cls: "semlink-mt-model-logo" });
 			appendProviderLogo(logo, sel.name, "semlink-mt-logo-svg");
 			const info = row.createDiv({ cls: "semlink-mt-model-info" });
