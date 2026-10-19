@@ -437,6 +437,21 @@
     min-width: 0;
 }
 
+/* 语言切换行：测量用 is-measuring select 摘出布局流（visibility 保持可测量
+   但不占宽度），标题行自身裁剪横向溢出——兜底保证不出现横向滚动条。 */
+.smart-vault-settings .semlink-settings-lang select.is-measuring {
+    position: absolute;
+    visibility: hidden;
+}
+
+.smart-vault-settings .setting-item-heading {
+    overflow-x: clip;
+}
+
+.smart-vault-settings .semlink-settings-lang select.dropdown {
+    max-width: 160px;
+}
+
 .smart-vault-settings .setting-item-heading .setting-item-name {
     min-width: 0;
 }
