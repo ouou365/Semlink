@@ -285,7 +285,6 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		baseUrl: "https://api.deepseek.com",
 		apiFormat: "openai",
 		models: [
-			{ id: "deepseek-flash", contextWindow: 1000000, priceIn: 150.0, priceOut: 600.0 },
 			{ id: "deepseek-v4-pro", contextWindow: 1000000, priceIn: 1320.0, priceOut: 3960.0 },
 			{ id: "deepseek-v4-flash", contextWindow: 1000000, priceIn: 300.0, priceOut: 1200.0 },
 			{ id: "deepseek-v4-flash-vision-exp", contextWindow: 1000000, priceIn: 300.0, priceOut: 1200.0 },
