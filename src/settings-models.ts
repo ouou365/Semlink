@@ -3175,6 +3175,12 @@ export function renderModelsTab(
 
 	const enabledCount = (r: Row): number => r.models.filter((m) => m.enabled !== false).length;
 	const isConfigured = (r: Row): boolean => !!r.live?.apiKey?.trim();
+	// 状态点三态：仅统计已添加实例的模型——目录预览（未添加）一律算未启用
+	const dotState = (r: Row): string => {
+		const hasKey = !!r.live?.apiKey?.trim();
+		const hasEnabled = !!r.live && r.models.some((m) => m.enabled !== false);
+		return hasEnabled ? (hasKey ? " is-green" : " is-orange") : "";
+	};
 
 	const wrap = containerEl.createDiv({ cls: "semlink-mt" });
 
@@ -3221,7 +3227,7 @@ export function renderModelsTab(
 			cls: "semlink-mt-provider-count",
 			text: `${enabledCount(r)} / ${r.models.length} ${t("mtEnabled")}`,
 		});
-		row.createDiv({ cls: `semlink-mt-dot${configured ? " is-on" : ""}` });
+		row.createDiv({ cls: `semlink-mt-dot${dotState(r)}` });
 		const gear = row.createDiv({ cls: "semlink-mt-provider-gear", attr: { "aria-label": t("editProvider") } });
 		setIcon(gear, "settings");
 		gear.addEventListener("click", (e) => {
@@ -3277,6 +3283,8 @@ export function renderModelsTab(
 	const updateCount = (): void => {
 		const rowEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-provider-count`);
 		if (rowEl) rowEl.textContent = `${enabledCount(sel)} / ${sel.models.length} ${t("mtEnabled")}`;
+		const dotEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-dot`);
+		if (dotEl) dotEl.className = `semlink-mt-dot${dotState(sel)}`;
 	};
 
 	const renderRows = (): void => {

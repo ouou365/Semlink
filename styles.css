@@ -619,8 +619,12 @@
     flex-shrink: 0;
 }
 
-.smart-vault-settings .semlink-mt-dot.is-on {
-    background: var(--interactive-accent);
+.smart-vault-settings .semlink-mt-dot.is-green {
+    background: #10b981;
+}
+
+.smart-vault-settings .semlink-mt-dot.is-orange {
+    background: #f59e0b;
 }
 
 .smart-vault-settings .semlink-mt-provider-gear {
