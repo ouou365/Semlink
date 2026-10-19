@@ -582,7 +582,7 @@
 }
 
 .smart-vault-settings .semlink-mt-provider.is-active {
-    background: var(--background-modifier-active-hover);
+    background: #fafafa;
 }
 
 .smart-vault-settings .semlink-mt-provider-logo .semlink-mt-logo-svg,
