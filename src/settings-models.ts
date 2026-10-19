@@ -3481,7 +3481,14 @@ export function renderModelsTab(
 		}
 		const info = headRow.createDiv({ cls: "semlink-mt-provider-info" });
 		info.createDiv({ cls: "semlink-mt-provider-name", text: node.name });
-		info.createDiv({ cls: "semlink-mt-folder-count", text: String(node.members.length) });
+		// 成员数下的汇总行：文件夹内所有供应商的模型启用情况合计，
+		// 格式与普通供应商行的"已启用"计数一致
+		const sumEnabled = node.members.reduce((s, m) => s + enabledCount(m.models), 0);
+		const sumTotal = node.members.reduce((s, m) => s + m.models.length, 0);
+		info.createDiv({
+			cls: "semlink-mt-folder-count",
+			text: `${sumEnabled} / ${sumTotal} ${t("mtEnabled")}`,
+		});
 		// 下拉图标放行最右侧
 		const chevron = headRow.createDiv({ cls: "semlink-mt-folder-chevron" });
 		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
@@ -3562,6 +3569,14 @@ export function renderModelsTab(
 		if (rowEl) rowEl.textContent = `${enabledCount(sel.models)} / ${sel.models.length} ${t("mtEnabled")}`;
 		const dotEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-dot`);
 		if (dotEl) dotEl.className = `semlink-mt-dot${dotState(sel)}`;
+		// 所在文件夹的模型汇总行同步更新（避免整页刷新）
+		const folderNode = nodes.find((n) => n.key === sel.folder);
+		if (folderNode) {
+			const sumEnabled = folderNode.members.reduce((s, m) => s + enabledCount(m.models), 0);
+			const sumTotal = folderNode.members.reduce((s, m) => s + m.models.length, 0);
+			const folderEl = list.querySelector(`[data-folder="${folderNode.key}"] .semlink-mt-folder-count`);
+			if (folderEl) folderEl.textContent = `${sumEnabled} / ${sumTotal} ${t("mtEnabled")}`;
+		}
 	};
 
 	const renderRows = (): void => {
