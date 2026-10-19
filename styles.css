@@ -510,6 +510,228 @@
     font-weight: 600;
 }
 
+/* Models tab: TypingMind-style two panes — provider list (left) + the
+   selected provider's models with enable toggles (right). */
+.smart-vault-settings .semlink-mt {
+    display: flex;
+    gap: 16px;
+    align-items: stretch;
+    min-height: 460px;
+    min-width: 0;
+}
+
+.smart-vault-settings .semlink-mt-providers {
+    width: 292px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-right: 1px solid var(--background-modifier-border);
+    padding-right: 10px;
+    min-width: 0;
+}
+
+.smart-vault-settings .semlink-mt-providers-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 4px;
+}
+
+.smart-vault-settings .semlink-mt-providers-title {
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.smart-vault-settings .semlink-mt-add {
+    background: transparent;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 2px 8px;
+}
+
+.smart-vault-settings .semlink-mt-add:hover {
+    color: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+}
+
+.smart-vault-settings .semlink-mt-provider-list {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+}
+
+.smart-vault-settings .semlink-mt-provider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.smart-vault-settings .semlink-mt-provider:hover {
+    background: var(--background-modifier-hover);
+}
+
+.smart-vault-settings .semlink-mt-provider.is-active {
+    background: var(--background-modifier-active-hover);
+}
+
+.smart-vault-settings .semlink-mt-provider-logo .semlink-mt-logo-svg,
+.smart-vault-settings .semlink-mt-provider-logo svg,
+.smart-vault-settings .semlink-mt-provider-logo .semlink-provider-fallback {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+}
+
+.smart-vault-settings .semlink-mt-provider-info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.smart-vault-settings .semlink-mt-provider-name {
+    font-weight: 600;
+    color: var(--text-normal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.smart-vault-settings .semlink-mt-provider-count {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.smart-vault-settings .semlink-mt-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-faint);
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-mt-dot.is-on {
+    background: var(--interactive-accent);
+}
+
+.smart-vault-settings .semlink-mt-provider-gear,
+.smart-vault-settings .semlink-mt-provider-del {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.smart-vault-settings .semlink-mt-provider-gear .svg-icon,
+.smart-vault-settings .semlink-mt-provider-del .svg-icon {
+    width: 15px;
+    height: 15px;
+}
+
+.smart-vault-settings .semlink-mt-provider:hover .semlink-mt-provider-gear,
+.smart-vault-settings .semlink-mt-provider:hover .semlink-mt-provider-del {
+    opacity: 1;
+}
+
+.smart-vault-settings .semlink-mt-provider-gear:hover {
+    color: var(--text-normal);
+}
+
+.smart-vault-settings .semlink-mt-provider-del:hover {
+    color: var(--text-error);
+}
+
+.smart-vault-settings .semlink-mt-models {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.smart-vault-settings .semlink-mt-search-input {
+    width: 100%;
+    border-radius: 10px;
+    padding: 9px 14px;
+    font-size: 14px;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+}
+
+.smart-vault-settings .semlink-mt-showing {
+    color: var(--text-muted);
+    font-size: 12.5px;
+    padding: 0 4px;
+}
+
+.smart-vault-settings .semlink-mt-rows {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+}
+
+.smart-vault-settings .semlink-mt-model {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    min-width: 0;
+}
+
+.smart-vault-settings .semlink-mt-model:hover {
+    background: var(--background-modifier-hover);
+}
+
+.smart-vault-settings .semlink-mt-model-logo .semlink-mt-logo-svg,
+.smart-vault-settings .semlink-mt-model-logo svg,
+.smart-vault-settings .semlink-mt-model-logo .semlink-provider-fallback {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+}
+
+.smart-vault-settings .semlink-mt-model-info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.smart-vault-settings .semlink-mt-model-name {
+    font-weight: 600;
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.smart-vault-settings .semlink-mt-model-ctx {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.smart-vault-settings .semlink-mt-model-toggle {
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-mt-empty {
+    color: var(--text-muted);
+    padding: 20px;
+    text-align: center;
+}
+
 /* Models tab: DSH-style provider list */
 .smart-vault-settings .semlink-provider-rows {
     display: flex;

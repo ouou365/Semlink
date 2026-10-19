@@ -7,7 +7,7 @@
 // provider" (catalog) and "Add a custom provider" flows. Providers support
 // fetching the model list from their own endpoint.
 
-import { App, Modal, Setting, requestUrl, setIcon } from "obsidian";
+import { App, Modal, Setting, ToggleComponent, requestUrl, setIcon } from "obsidian";
 import type SmartVaultPlugin from "../main";
 import type { ChatApiFormat, ChatModel, ChatModelKind, EmbeddingProvider, ModelProvider, SmartVaultSettings } from "./types";
 import { t } from "./i18n";
@@ -15,9 +15,10 @@ import { markDestructive } from "./ui-compat";
 
 // ──── Tab state (owned by SmartVaultSettingTab, survives re-renders) ────
 
-/** Provider-list state. Editing happens in a modal, so there is no expanded
- *  row state to keep across re-renders. */
-export type ModelsTabState = object;
+/** Model-tab UI state: which provider is selected + model search text.
+ *  Editing happens in a modal, so there is no expanded row state to keep
+ *  across re-renders. */
+export type ModelsTabState = { selected?: string; search?: string };
 
 export const EMPTY_MODELS_TAB_STATE: ModelsTabState = {};
 
@@ -3127,64 +3128,133 @@ export function renderModelsTab(
 	state: ModelsTabState,
 	refresh: () => void,
 ): void {
-	// One unified provider list — embedding and chat are not distinct
-	// provider kinds; drag-reordering works across the whole list.
 	const providers = plugin.settings.providers;
+	const st = state;
+	if (!st.selected || !providers.some((p) => p.id === st.selected)) {
+		st.selected = providers[0]?.id ?? "";
+	}
+	const sel = providers.find((p) => p.id === st.selected) ?? null;
 
-	/** Move the row at `from` to `to` and persist. */
-	const handleDrop = (from: number, to: number): void => {
-		if (from < 0 || from >= providers.length || to < 0 || to >= providers.length || from === to) return;
-		const [moved] = providers.splice(from, 1);
-		// After removing `from`, every index above it shifts down by one —
-		// inserting "before the row that was at `to`" lands at to-1 downward.
-		const insertAt = to > from ? to - 1 : to;
-		providers.splice(insertAt, 0, moved);
-		void plugin.saveSettings().then(() => refresh());
-	};
+	const enabledCount = (p: ModelProvider): number =>
+		p.models.filter((m) => m.enabled !== false).length;
 
-	const listEl = containerEl.createDiv({ cls: "semlink-provider-rows" });
+	const wrap = containerEl.createDiv({ cls: "semlink-mt" });
 
-		for (let i = 0; i < providers.length; i++) {
-			const p = providers[i];
-			// Used by the delete handler below: if the deleted provider hosts
-			// the active embedding model, clear that selection.
+	// ── 左栏：厂商列表（logo · 名称 · 启用计数 · 状态点 · 编辑/删除）──
+	const left = wrap.createDiv({ cls: "semlink-mt-providers" });
+	const leftHead = left.createDiv({ cls: "semlink-mt-providers-head" });
+	leftHead.createSpan({ cls: "semlink-mt-providers-title", text: t("tabModel") });
+	const addBtn = leftHead.createEl("button", {
+		cls: "semlink-mt-add",
+		text: "＋",
+		attr: { "aria-label": t("addProvider") },
+	});
+	addBtn.addEventListener("click", () => {
+		new AddProviderModal(plugin.app, plugin, "catalog", () => refresh()).open();
+	});
+
+	const list = left.createDiv({ cls: "semlink-mt-provider-list" });
+	for (const p of providers) {
+		const row = list.createDiv({
+			cls: "semlink-mt-provider" + (p.id === st.selected ? " is-active" : ""),
+			attr: { "data-pid": p.id },
+		});
+		row.addEventListener("click", () => {
+			st.selected = p.id;
+			st.search = "";
+			refresh();
+		});
+		const logo = row.createDiv({ cls: "semlink-mt-provider-logo" });
+		appendProviderLogo(logo, p.name, "semlink-mt-logo-svg");
+		const info = row.createDiv({ cls: "semlink-mt-provider-info" });
+		info.createDiv({ cls: "semlink-mt-provider-name", text: p.name });
+		info.createDiv({
+			cls: "semlink-mt-provider-count",
+			text: `${enabledCount(p)} / ${p.models.length} ${t("mtEnabled")}`,
+		});
+		row.createDiv({ cls: `semlink-mt-dot${p.apiKey ? " is-on" : ""}` });
+		const gear = row.createDiv({ cls: "semlink-mt-provider-gear", attr: { "aria-label": t("editProvider") } });
+		setIcon(gear, "settings");
+		gear.addEventListener("click", (e) => {
+			e.stopPropagation();
+			new ProviderEditorModal(plugin.app, plugin, p, refresh).open();
+		});
+		const del = row.createDiv({ cls: "semlink-mt-provider-del", attr: { "aria-label": t("deleteProvider") } });
+		setIcon(del, "trash-2");
+		del.addEventListener("click", (e) => {
+			e.stopPropagation();
 			const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
-			createProviderRow(listEl, {
-				name: p.name,
-				dot: p.apiKey ? "configured" : "missing",
-				index: i,
-			onEdit: () => {
-				new ProviderEditorModal(plugin.app, plugin, p, refresh).open();
-			},
-			onDrop: handleDrop,
-			onDelete: () => {
-				new DeleteProviderModal(plugin.app, p.name, () => {
-					plugin.settings.providers = plugin.settings.providers.filter(
-						(x) => x.id !== p.id,
-					);
-					// If the removed provider hosted the active embedding
-					// model, fall back to the first provider (the runtime
-					// resolves a missing key to its default).
-					if (activePid === p.id) {
-						plugin.settings.embeddingModelKey = "";
-					}
-					void plugin.saveSettings().then(() => refresh());
-				}).open();
-			},
+			new DeleteProviderModal(plugin.app, p.name, () => {
+				plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== p.id);
+				// 被删厂商若承载当前嵌入模型，清空选择（运行时回退默认）
+				if (activePid === p.id) {
+					plugin.settings.embeddingModelKey = "";
+				}
+				if (st.selected === p.id) {
+					st.selected = plugin.settings.providers[0]?.id ?? "";
+				}
+				void plugin.saveSettings().then(() => refresh());
+			}).open();
 		});
 	}
 
-		// ── Add actions (open the create modal) ──
-		const addBlock = containerEl.createDiv({ cls: "semlink-provider-add" });
-		const actions = addBlock.createDiv({ cls: "semlink-provider-add-actions" });
-		actions.createEl("button", { cls: "semlink-btn semlink-btn-cta", text: `＋ ${t("addProvider")}` })
-			.addEventListener("click", () => {
-				new AddProviderModal(plugin.app, plugin, "catalog", () => {
-					// No second step: the picked provider is appended to the
-					// list as a new row; edit it later via the row's 编辑 button.
-					// The trailing "custom" chip inside the catalog grid opens
-					// the custom-provider form and reuses this same callback.
-					refresh();
-				}).open();
-			});
+	// ── 右栏：所选厂商的模型（搜索 · 计数 · 开关行）──
+	const right = wrap.createDiv({ cls: "semlink-mt-models" });
+	if (!sel) {
+		right.createDiv({ cls: "semlink-mt-empty", text: t("addProvider") });
+		return;
 	}
+
+	const searchRow = right.createDiv({ cls: "semlink-mt-search" });
+	const searchInput = searchRow.createEl("input", {
+		cls: "semlink-mt-search-input",
+		attr: { type: "text", placeholder: t("guideSearchModel"), spellcheck: "false" },
+	});
+	searchInput.value = st.search ?? "";
+
+	const showingEl = right.createDiv({ cls: "semlink-mt-showing" });
+	const rowsHost = right.createDiv({ cls: "semlink-mt-rows" });
+
+	const fmtCtx = (n?: number): string => {
+		if (!n || n <= 0) return "";
+		if (n >= 1000000) return `${Math.round((n / 1000000) * 10) / 10}M`;
+		if (n >= 1000) return `${Math.round(n / 1000)}K`;
+		return String(n);
+	};
+
+	const updateCount = (): void => {
+		const rowEl = list.querySelector(`[data-pid="${sel.id}"] .semlink-mt-provider-count`);
+		if (rowEl) rowEl.textContent = `${enabledCount(sel)} / ${sel.models.length} ${t("mtEnabled")}`;
+	};
+
+	const renderRows = (): void => {
+		const q = (st.search ?? "").toLowerCase();
+		const shown = sel.models.filter((m) => !q || m.id.toLowerCase().includes(q));
+		showingEl.setText(
+			t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)),
+		);
+		rowsHost.empty();
+		for (const m of shown) {
+			const row = rowsHost.createDiv({ cls: "semlink-mt-model" });
+			const logo = row.createDiv({ cls: "semlink-mt-model-logo" });
+			appendProviderLogo(logo, sel.name, "semlink-mt-logo-svg");
+			const info = row.createDiv({ cls: "semlink-mt-model-info" });
+			info.createDiv({ cls: "semlink-mt-model-name", text: m.id });
+			const ctx = info.createDiv({ cls: "semlink-mt-model-ctx", text: fmtCtx(m.contextWindow) });
+			if (!m.contextWindow || m.contextWindow <= 0) ctx.addClass("semlink-hidden");
+			const toggleWrap = row.createDiv({ cls: "semlink-mt-model-toggle" });
+			new ToggleComponent(toggleWrap)
+				.setValue(m.enabled !== false)
+				.onChange((v) => {
+					m.enabled = v;
+					void plugin.saveSettings();
+					updateCount();
+				});
+		}
+	};
+	renderRows();
+	searchInput.addEventListener("input", () => {
+		st.search = searchInput.value;
+		renderRows();
+	});
+}
