@@ -255,6 +255,7 @@ const t: Record<keyof typeof en, string> = {
 	searchError: "검색 실패:",
 	searchScoreLabel: "유사도",
 	searchNeedApiKey: "설정에서 API Key를 구성하고 먼저 인덱싱을 실행하세요",
+	searchNeedChatProvider: "설정에서 채팅 공급자를 구성하고 대화를 시작하세요",
 	searchThinking: "노트를 바탕으로 생각 중…",
 // No closing paren — the UI appends "）".
 	searchThinkingElapsed: "{seconds}초 생각 중 ({status}",
@@ -383,9 +384,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── First-run onboarding guide (search welcome screen) ────
 	guideTitle: "시작하기",
-	guideStep1: "임베딩",
-	guideStep2: "인덱스 데이터",
-	guideStep3: "채팅 모델",
+	guideStep1: "공급자",
+	guideStep2: "키",
+	guideStep3: "모델",
 	guideIntroTitle: "👋 환영합니다",
 	guideIntroSub: "세 단계면 채팅을 시작할 수 있어요",
 	guideKeyPlaceholder: "API key 붙여넣기 (sk-…)",

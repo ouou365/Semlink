@@ -256,6 +256,7 @@ const t: Record<keyof typeof en, string> = {
 	searchError: "Ошибка поиска:",
 	searchScoreLabel: "Сходство",
 	searchNeedApiKey: "Настройте API-ключ в настройках и сначала запустите индексацию",
+	searchNeedChatProvider: "Настройте чат-провайдера в параметрах и начните общение",
 	searchThinking: "Размышляю на основе ваших заметок…",
 // No closing paren — the UI appends "）".
 	searchThinkingElapsed: "Размышляю {seconds} с ({status}",
@@ -384,9 +385,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── First-run onboarding guide (search welcome screen) ────
 	guideTitle: "Начало работы",
-	guideStep1: "Эмбеддинги",
-	guideStep2: "Индексация",
-	guideStep3: "Чат-модель",
+	guideStep1: "Провайдер",
+	guideStep2: "Ключ",
+	guideStep3: "Модель",
 	guideIntroTitle: "👋 Добро пожаловать!",
 	guideIntroSub: "Три быстрых шага до чата",
 	guideKeyPlaceholder: "Вставьте API-ключ (sk-…)",

@@ -257,6 +257,7 @@ const t: Record<keyof typeof en, string> = {
 	searchError: "Error en la búsqueda:",
 	searchScoreLabel: "Similitud",
 	searchNeedApiKey: "Configura una API Key en los Ajustes y ejecuta antes un indexado",
+	searchNeedChatProvider: "Configura un proveedor de chat en Ajustes para empezar a conversar",
 	searchThinking: "Pensando a partir de tus notas…",
 // No closing paren — the UI appends "）".
 	searchThinkingElapsed: "Lleva {seconds}s pensando ({status}",
@@ -385,9 +386,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── First-run onboarding guide (search welcome screen) ────
 	guideTitle: "Empieza",
-	guideStep1: "Embedding",
-	guideStep2: "Indexar datos",
-	guideStep3: "Modelo de chat",
+	guideStep1: "Proveedor",
+	guideStep2: "Clave",
+	guideStep3: "Modelo",
 	guideIntroTitle: "👋 Te damos la bienvenida",
 	guideIntroSub: "Tres pasos rápidos para empezar a conversar",
 	guideKeyPlaceholder: "Pega la API key (sk-…)",

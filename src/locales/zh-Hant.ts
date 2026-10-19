@@ -255,6 +255,7 @@ const t: Record<keyof typeof en, string> = {
 	searchError: "搜尋失敗：",
 	searchScoreLabel: "相似度",
 	searchNeedApiKey: "請先在外掛設定中設定 API Key 並完成索引",
+	searchNeedChatProvider: "請在插件設定中配置對話供應商後開始提問",
 	searchThinking: "正在根據筆記內容回答…",
 // No closing paren — the UI appends "）".
 	searchThinkingElapsed: "思考了 {seconds} 秒（{status}",
@@ -383,9 +384,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── First-run onboarding guide (search welcome screen) ────
 	guideTitle: "開始使用",
-	guideStep1: "嵌入模型",
-	guideStep2: "資料索引",
-	guideStep3: "對話模型",
+	guideStep1: "供應商",
+	guideStep2: "密鑰",
+	guideStep3: "模型",
 	guideIntroTitle: "👋 歡迎使用",
 	guideIntroSub: "三步驟完成設定，即可開始問答",
 	guideKeyPlaceholder: "貼上 API Key（sk-…）",

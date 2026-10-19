@@ -254,6 +254,7 @@ const en = {
 	searchError: "Search failed:",
 	searchScoreLabel: "Similarity",
 	searchNeedApiKey: "Configure an API Key in Settings and run an index first",
+	searchNeedChatProvider: "Configure a chat provider in Settings to start chatting",
 	searchThinking: "Thinking based on your notes…",
 // No closing paren — the UI appends "）".
 	searchThinkingElapsed: "Thought {seconds}s ({status}",
@@ -382,9 +383,9 @@ const en = {
 
 // ──── First-run onboarding guide (search welcome screen) ────
 	guideTitle: "Get started",
-	guideStep1: "Embedding",
-	guideStep2: "Index data",
-	guideStep3: "Chat model",
+	guideStep1: "Provider",
+	guideStep2: "Key",
+	guideStep3: "Model",
 	guideIntroTitle: "👋 Welcome",
 	guideIntroSub: "Three quick steps to chat",
 	guideKeyPlaceholder: "Paste API key (sk-…)",

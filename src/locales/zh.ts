@@ -256,6 +256,7 @@ const zh: Record<keyof typeof en, string> = {
 	searchError: "搜索失败：",
 	searchScoreLabel: "相似度",
 	searchNeedApiKey: "请先在插件设置中配置 API Key 并完成索引",
+	searchNeedChatProvider: "请在插件设置中配置对话供应商后开始提问",
 	searchThinking: "正在根据笔记内容回答…",
 // No closing paren — the UI appends "）".
 	searchThinkingElapsed: "思考了 {seconds}秒（{status}",
@@ -384,9 +385,9 @@ const zh: Record<keyof typeof en, string> = {
 
 // ──── First-run onboarding guide (search welcome screen) ────
 	guideTitle: "开始使用",
-	guideStep1: "嵌入模型",
-	guideStep2: "数据索引",
-	guideStep3: "对话模型",
+	guideStep1: "供应商",
+	guideStep2: "密钥",
+	guideStep3: "模型",
 	guideIntroTitle: "👋 欢迎使用",
 	guideIntroSub: "三步完成配置，即可开始问答",
 	guideKeyPlaceholder: "粘贴 API Key（sk-…）",

@@ -19,7 +19,6 @@ import { brandLogoOf, formatContextWindow } from "./settings-models";
 import { LicenseModal } from "./license-modal";
 import { UsageModal } from "./usage-modal";
 import { guideInProgress, onboardingActive, renderOnboarding } from "./onboarding";
-import type { IndexStatsView } from "./onboarding";
 import type SmartVaultPlugin from "../main";
 import { SaveNoteModal } from "./save-note-modal";
 import { ConfirmModal } from "./confirm-modal";
@@ -579,7 +578,7 @@ export class SemanticSearchView extends ItemView {
 		// The onboarding guide already tells unconfigured users what to do —
 		// only show the bare status hint when the guide is not up.
 		if (!this.hasApiKey() && !onboardingActive(this.plugin)) {
-			this.statusEl.textContent = t("searchNeedApiKey");
+			this.statusEl.textContent = t("searchNeedChatProvider");
 		}
 	}
 
@@ -595,8 +594,11 @@ export class SemanticSearchView extends ItemView {
 		this.contentEl.empty();
 	}
 
+	/** Chat-key check — the AGENT is the core surface and must work without
+	 *  the embedding extension (retrieval degrades gracefully; grep/get-note
+	 *  tools need no vectors). */
 	private hasApiKey(): boolean {
-		return !!(this.client as unknown as { apiKey?: unknown }).apiKey;
+		return this.chatClient.isConfigured();
 	}
 
 	/** Send-button state machine: "idle"(arrow-up) | "stop"(solid square, aborts the run). */
@@ -712,12 +714,21 @@ export class SemanticSearchView extends ItemView {
 			const attachCtx = hasAttachments ? await this.buildAttachmentContext(turnAttachments) : "";
 			let results: SearchResult[] = [];
 			if (!hasAttachments) {
-				const embedResult = await this.client.embed([query]);
-				results = await this.store.search(
-					embedResult.embeddings[0],
-					DEFAULT_LIMIT,
-					DEFAULT_THRESHOLD,
-				);
+				// Retrieval is OPTIONAL — the embedding extension may be
+				// unconfigured or its endpoint unreachable. The chat still
+				// runs context-free, and grep_notes/get_note ground the agent
+				// without needing any vectors.
+				try {
+					const embedResult = await this.client.embed([query]);
+					results = await this.store.search(
+						embedResult.embeddings[0],
+						DEFAULT_LIMIT,
+						DEFAULT_THRESHOLD,
+					);
+				} catch (e) {
+					console.debug("[Semlink] retrieval skipped (embedding unavailable):", e);
+					results = [];
+				}
 			}
 
 			loadingEl.empty();
@@ -1750,21 +1761,6 @@ export class SemanticSearchView extends ItemView {
 		this.updateCompactHeader();
 	}
 
-	/** 设置页"重新嵌入"入口：打开引导并直接落到数据索引环节（步骤③）。
-	 *  jumpToIndex 让步骤推导跳过 ①②，索引引擎已由调用方启动。 */
-	public openIndexGuide(): void {
-		this.guideRequested = true;
-		this.guideDismissed = false;
-		const ob = this.plugin.settings.onboarding ?? {};
-		this.plugin.settings.onboarding = { ...ob, done: false, jumpToIndex: true };
-		void this.plugin.saveSettings();
-		this.startNewSession();
-		this.messagesEl.empty();
-		this.statusEl.textContent = "";
-		this.renderWelcome();
-		this.updateCompactHeader();
-	}
-
 	/** Whether the first-run guide currently owns the welcome screen. */
 	private guideModeActive(): boolean {
 		// No API key anywhere → the guide is the default landing page. A skip
@@ -1865,16 +1861,7 @@ export class SemanticSearchView extends ItemView {
 			// Modifier class: the guide fills the block top-down so the
 			// stepper can pin to the top while step content scrolls.
 			const guide = this.messagesEl.createDiv({ cls: "semlink-search-welcome semlink-search-welcome-guide" });
-			renderOnboarding(guide, this.plugin, {
-				setGuideChrome: (active) => this.setGuideChrome(active),
-				getIndexEstimate: () => this.getIndexEstimate(),
-				isIndexing: () => this.isIndexing(),
-				isIndexPaused: () => this.isIndexPaused(),
-				startIndexing: (onProgress, onDone) => this.startIndexing(onProgress, onDone),
-				watchIndexing: (onProgress, onDone) => this.watchIndexing(onProgress, onDone),
-				pauseIndexing: () => this.plugin.scheduler?.pause(),
-				resumeIndexing: () => this.plugin.scheduler?.resume(),
-			}, () => {
+			renderOnboarding(guide, this.plugin, () => {
 				// Guide skipped/dismissed: end any help-triggered run and
 				// swap it for the plain welcome. Empty the whole slot — the
 				// corners strip lives outside the guide block and would
@@ -1929,74 +1916,6 @@ export class SemanticSearchView extends ItemView {
 	/** Rough full-index estimate for the guide's final step: markdown notes
 	 *  (minus excludes) × an average ~2.4k chars per note, chunked and
 	 *  batched with per-request latency + throttle delay. */
-	private getIndexEstimate(): { notes: number; seconds: number } {
-		const excludes = (this.plugin.settings.excludePaths || "")
-			.split("\n").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean);
-		const files = this.vault.getMarkdownFiles().filter((f) =>
-			!excludes.some((x) => x.length > 0 && f.path.startsWith(x)));
-		const notes = files.length;
-		const chunkSize = Math.max(100, this.plugin.settings.chunkSize || 800);
-		const batchSize = Math.max(1, this.plugin.settings.batchSize || 64);
-		const estChunks = notes * Math.ceil(2400 / chunkSize);
-		const requests = Math.ceil(estChunks / batchSize);
-		const seconds = Math.max(3, Math.round(requests * (0.5 + (this.plugin.settings.requestDelayMs || 200) / 1000)));
-		return { notes, seconds };
-	}
-
-	/** Whether an index run is currently in flight. */
-	private isIndexing(): boolean {
-		const p = this.plugin.progress?.current;
-		return !!p && p.phase !== "idle" && p.phase !== "completed";
-	}
-
-	/** Whether the in-flight run is paused by the user (guide's 暂停 state). */
-	private isIndexPaused(): boolean {
-		return !!this.plugin.progress?.current?.isPaused;
-	}
-
-	/** Start a full index and stream live stats to the guide. */
-	private startIndexing(onProgress: (stats: IndexStatsView) => void, onDone: () => void): void {
-		this.plugin.startFullIndex();
-		this.attachIndexProgress(onProgress, onDone);
-	}
-
-	/** Attach progress reporting to an already-running index. */
-	private watchIndexing(onProgress: (stats: IndexStatsView) => void, onDone: () => void): void {
-		this.attachIndexProgress(onProgress, onDone);
-	}
-
-	private attachIndexProgress(onProgress: (stats: IndexStatsView) => void, onDone: () => void): void {
-		const tracker = this.plugin.progress;
-		if (!tracker) return;
-		const map = (p: import("./types").IndexProgress): IndexStatsView => ({
-			processed: p.processedNotes,
-			total: p.totalNotes,
-			embeddedChunks: p.embeddedChunks,
-			failedChunks: p.failedChunks,
-			skippedChunks: p.skippedChunks,
-			totalChunks: p.totalChunks,
-			currentFile: p.currentFile,
-			activeFiles: p.activeFiles,
-			avgResponseMs: p.avgResponseMs,
-			fileChunkProgress: p.fileChunkProgress,
-			estimatedRemainingSec: p.estimatedRemainingSec,
-		});
-		const un = tracker.onProgress((evt) => {
-			const p = (evt as { progress?: import("./types").IndexProgress }).progress ?? tracker.current;
-			onProgress(map(p));
-			if (p.phase === "completed") {
-				un();
-				onDone();
-			}
-		});
-		// Already completed before we attached — fire straight through.
-		if (tracker.current.phase === "completed") {
-			un();
-			onProgress(map(tracker.current));
-			onDone();
-		}
-	}
-
 	/** Fixed question cards: follow the active document when one is open,
 	 *  otherwise three random examples from the static pool. */
 	private renderFallbackCards(sugRow: HTMLElement): void {
@@ -2018,8 +1937,6 @@ export class SemanticSearchView extends ItemView {
 		}
 	}
 
-	/** Best-effort welcome extras: index stats as a small muted line.
-	 *  Never fails the welcome. */
 	private async renderWelcomeStats(welcome: HTMLElement): Promise<void> {
 		let indexedNotes = 0;
 		let activeChunks = 0;

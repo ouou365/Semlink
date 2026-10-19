@@ -1,14 +1,15 @@
 // ========================================
 // Semlink - First-run onboarding guide
 // ========================================
-// Conversational setup guide rendered on the search welcome screen for users
-// who have not configured any provider yet. Three steps, chat-first:
-//   ① 对话模型 — pick a chat host → validate key → pick a chat model
-//   ② 嵌入模型 — pick an embedding host → validate key → pick the model
-//   ③ 数据索引 — estimated time → start → live progress bar
-// Each key is validated by fetching the provider's model list before the
-// model picker shows. All state lives in `settings.onboarding`, so the guide
-// survives re-renders (time-slot refresh, language switch) and restarts.
+// Conversational setup guide rendered on the search welcome screen.
+// CHAT-FIRST and embedding-free: a single screen walks the user through
+// Provider → Key → Model (the stepper mirrors that sub-progress). Embedding
+// and data indexing are an EXTENSION, configured later in Settings when
+// needed — the agent answers without vectors and can ground itself via
+// grep_notes/get_note, which need no embeddings. Each key is validated by
+// fetching the provider's model list before the model picker shows. All
+// state lives in `settings.onboarding`, so the guide survives re-renders
+// (time-slot refresh, language switch) and restarts.
 
 import { Modal } from "obsidian";
 import { mountCoffeeCanvas, mountTicketDeck } from "./coffee-canvas";
@@ -16,7 +17,6 @@ import { AddProviderModal, brandLogoOf, CHAT_CATALOG, fetchAvailableModels, fetc
 import type { FetchedModel } from "./settings-models";
 import { t } from "./i18n";
 import type SmartVaultPlugin from "../main";
-import { activeEmbeddingProvider } from "./types";
 import type { ChatApiFormat, ChatModel, ChatModelKind, ModelProvider } from "./types";
 
 /** Live index stats for the guide's final step (mapped from IndexProgress). */
@@ -37,19 +37,6 @@ export interface IndexStatsView {
 export interface OnboardingViewHost {
 	/** Show/hide the composer while the guide owns the welcome screen. */
 	setGuideChrome(active: boolean): void;
-	/** Rough full-index estimate for the final step. */
-	getIndexEstimate(): { notes: number; seconds: number };
-	/** Whether an index run is currently in flight. */
-	isIndexing(): boolean;
-	/** Whether the in-flight run is currently paused by the user. */
-	isIndexPaused(): boolean;
-	/** Start a full index and stream live stats. */
-	startIndexing(onProgress: (stats: IndexStatsView) => void, onDone: () => void): void;
-	/** Attach to an already-running index without starting a new one. */
-	watchIndexing(onProgress: (stats: IndexStatsView) => void, onDone: () => void): void;
-	/** Pause / resume the in-flight run. */
-	pauseIndexing(): void;
-	resumeIndexing(): void;
 }
 
 /** Curated provider names for the chat-model step — all present in
@@ -66,10 +53,6 @@ const CHAT_PROVIDERS = [
 	"SiliconFlow",
 	"Z.AI Coding CN",
 ];
-
-/** Curated providers whose endpoints serve BAAI/BGE embedding models — the
- *  embedding step only offers these (plus the custom escapes below). */
-const EMBED_PROVIDERS = ["SiliconFlow", "OpenRouter"];
 
 /** Console URLs where each curated provider's API key can be created. */
 const PROVIDER_CONSOLE: Record<string, string> = {
@@ -210,22 +193,15 @@ export function guideInProgress(plugin: SmartVaultPlugin): boolean {
 export function renderOnboarding(
 	container: HTMLElement,
 	plugin: SmartVaultPlugin,
-	host: OnboardingViewHost,
 	onFinish: () => void,
 ): void {
 	const root = container.createDiv({ cls: "semlink-guide" });
-
-	// Cross-step back navigation: returning to an earlier step that is already
-	// complete (e.g. step 2 → step 1 to re-pick the chat model). Cleared when
-	// a step advances forward again.
-	let stepOverride: 1 | 2 | 3 | null = null;
 
 	const ob = (): NonNullable<SmartVaultPlugin["settings"]["onboarding"]> => plugin.settings.onboarding ?? {};
 	const byId = (id?: string): ModelProvider | undefined =>
 		id ? plugin.settings.providers.find((p) => p.id === id) : undefined;
 
 	const onRestart = (): void => {
-		stepOverride = null;
 		plugin.settings.onboarding = { done: false };
 		void plugin.saveSettings();
 		rerender();
@@ -236,132 +212,61 @@ export function renderOnboarding(
 
 		renderIntro(root);
 
-		// Current step: ① until an embedding model is picked, then ② the
-		// data index — ③ only via the index step's 下一步 (stepOverride) or
-		// navigating back. 设置页"重新嵌入"直接跳到数据索引环节（jumpToIndex 优先）。
-		const step: 1 | 2 | 3 = ob().jumpToIndex
-			? 2
-			: stepOverride
-				?? (!ob().embedModelPicked ? 1 : 2);
-		// Steps ①/②: stepper + models block share one sticky wrapper so the
-		// whole unit pins to the top without overlapping each other.
+		// ONE step, chat-first: the model screen walks Provider → Key →
+		// Model. The stepper mirrors that sub-progress from state. Embedding
+		// and data indexing are intentionally not part of the guide — the
+		// Embedding tab configures them and Auto Index keeps it fresh.
+		const providerPicked = !!ob().providerId;
+		const active: 1 | 2 | 3 = !providerPicked ? 1 : !ob().chatReady ? 2 : 3;
 		const sticky = root.createDiv({ cls: "semlink-guide-sticky-top" });
-		renderStepper(
-			sticky,
-			step,
-			false,
-			(target) => {
-				// Tap a passed step in the stepper → jump back to that node.
-				stepOverride = target;
-				rerender();
-			},
-			(target) => target === 1 || (target === 2 && !!ob().embedModelPicked),
-		);
+		renderStepper(sticky, active, false);
 		const modelsHost = sticky.createDiv({ cls: "semlink-guide-models" });
 
-		if (step === 1) {
-			// ── ① 嵌入模型 ──
-			renderModelStep(root, plugin, {
-				kind: "embed",
-				names: EMBED_PROVIDERS,
-				providerId: ob().embedProviderId,
-				ready: ob().embedReady,
-				modelsHost,
-				onPickProvider: (p) => {
-					// An already-keyed provider jumps straight to the model
-					// picker — no need to re-enter the key.
-					const ready = !!p.apiKey.trim();
-					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), embedProviderId: p.id, embedReady: ready };
-					void plugin.saveSettings();
-					rerender();
-				},
-				onValidated: () => {
-					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), embedReady: true };
-					void plugin.saveSettings();
-					rerender();
-				},
-				onModelPicked: (p, models) => {
-					stepOverride = null;
-					const m = models[0];
-					m.enabled = true;
-					plugin.settings.embeddingModelKey = `${p.id}::${m.id}`;
-					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), embedModelPicked: true };
-					void plugin.saveSettings();
-					rerender();
-				},
-				onReselect: () => {
-					const p = byId(ob().embedProviderId);
-					if (p && !p.apiKey.trim()) {
-						plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== p.id);
-					}
-					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), embedProviderId: undefined, embedReady: false };
-					void plugin.saveSettings();
-					rerender();
-				},
-				onRestart,
-			});
-		} else if (step === 2) {
-			// ── ② 数据索引 ── 下一步 advances to ③; the run keeps going in
-			// the background (the scheduler is independent of this view).
-			renderIndexStep(root, plugin, host,
-				() => { // 下一步 → ③ 对话模型
-					// 清掉 jumpToIndex：它的优先级高于 stepOverride，
-					// 不清除会把推导永久锁在②（点下一步无效）。
-					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), jumpToIndex: false };
-					void plugin.saveSettings();
-					stepOverride = 3;
-					rerender();
-				},
-				() => { // 上一步 → ① 嵌入模型
-					stepOverride = 1;
-					rerender();
-				},
-				onRestart);
-		} else {
-			// ── ③ 对话模型（最后一步）── picking completes the guide.
-			renderModelStep(root, plugin, {
-				kind: "chat",
-				names: CHAT_PROVIDERS,
-				providerId: ob().providerId,
-				ready: ob().chatReady,
-				modelsHost,
-				onPickProvider: (p) => {
-					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), providerId: p.id };
-					void plugin.saveSettings();
-					rerender();
-				},
-				onValidated: () => {
-					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), chatReady: true };
-					void plugin.saveSettings();
-					rerender();
-				},
-				onModelPicked: (p, models) => {
-					stepOverride = null;
-					// Curate: the picked models stay enabled, every other chat
-					// model of this provider is disabled; the first picked is
-					// the default chat model. Picking completes the guide.
-					const pickedIds = new Set(models.map((m) => m.id));
-					for (const m of p.models) {
-						if ((m.kind ?? "chat") !== "chat") continue;
-						m.enabled = pickedIds.has(m.id);
-					}
-					plugin.settings.activeChatModel = `${p.id}/${models[0].id}`;
-					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), chatModelPicked: true, done: true };
-					void plugin.saveSettings();
-					onFinish();
-				},
-				onReselect: () => {
-					const p = byId(ob().providerId);
-					if (p && !p.apiKey.trim()) {
-						plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== p.id);
-					}
-					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), providerId: undefined, chatReady: false };
-					void plugin.saveSettings();
-					rerender();
-				},
-				onRestart,
-			});
-		}
+		// ── 对话模型（唯一步骤）── picking completes the guide.
+		renderModelStep(root, plugin, {
+			kind: "chat",
+			names: CHAT_PROVIDERS,
+			providerId: ob().providerId,
+			ready: ob().chatReady,
+			modelsHost,
+			onPickProvider: (p) => {
+				// An already-keyed provider jumps straight to the model
+				// picker — no need to re-enter the key.
+				const ready = !!p.apiKey.trim();
+				plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), providerId: p.id, chatReady: ready };
+				void plugin.saveSettings();
+				rerender();
+			},
+			onValidated: () => {
+				plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), chatReady: true };
+				void plugin.saveSettings();
+				rerender();
+			},
+			onModelPicked: (p, models) => {
+				// Curate: the picked models stay enabled, every other chat
+				// model of this provider is disabled; the first picked is
+				// the default chat model. Picking completes the guide.
+				const pickedIds = new Set(models.map((m) => m.id));
+				for (const m of p.models) {
+					if ((m.kind ?? "chat") !== "chat") continue;
+					m.enabled = pickedIds.has(m.id);
+				}
+				plugin.settings.activeChatModel = `${p.id}/${models[0].id}`;
+				plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), chatModelPicked: true, done: true };
+				void plugin.saveSettings();
+				onFinish();
+			},
+			onReselect: () => {
+				const p = byId(ob().providerId);
+				if (p && !p.apiKey.trim()) {
+					plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== p.id);
+				}
+				plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), providerId: undefined, chatReady: false };
+				void plugin.saveSettings();
+				rerender();
+			},
+			onRestart,
+		});
 
 	};
 
@@ -845,235 +750,6 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 
 		redraw();
 	}
-
-// ──── Step 3: data index (estimate → start → progress bar) ────
-
-function renderIndexStep(
-	root: HTMLElement,
-	plugin: SmartVaultPlugin,
-	host: OnboardingViewHost,
-	onNext: () => void,
-	onBack: () => void,
-	onRestart: () => void,
-): void {
-	// Panel: hero estimate card, progress bar + live counters, then the
-	// provider→model recipe pills at the bottom — all inside one bordered card.
-	const active = activeEmbeddingProvider(plugin.settings);
-	const est = host.getIndexEstimate();
-
-	const panel = root.createDiv({ cls: "semlink-guide-indexstats" });
-
-	// Coffee-break hero: the WHOLE coffee scene is one canvas — cup, liquid
-	// with waves/bubbles, the model's latte-art chip, the pour stream with
-	// the file-name tag, steam. The readout stays DOM.
-	const hero = panel.createDiv({ cls: "semlink-guide-index-hero" });
-	const coffee = hero.createDiv({ cls: "semlink-guide-index-coffee" });
-	const coffeeFx = mountCoffeeCanvas(coffee, {
-		modelLogoSvg: modelBrand(active.model),
-		modelName: active.model,
-	});
-	// Barista status line — driven by applyButton: idle/paused/stopped =
-	// preparing, running = extracting, done = served.
-	const stamp = coffee.createDiv({ cls: "semlink-guide-index-stamp", text: t("guideStampPreparing") });
-
-	const readout = hero.createDiv({ cls: "semlink-guide-index-readout" });
-	const heroNum = readout.createDiv({ cls: "semlink-guide-index-statnum", text: String(est.notes) });
-	// Sub-label: what the number refers to — "笔记总数" while idle, "共 n 篇"
-	// once the run starts (kept in sync in applyStats).
-	const heroSub = readout.createDiv({ cls: "semlink-guide-index-statlabel", text: t("guideStatTotalNotes") });
-	// Which provider + model this extraction uses — a quiet capsule under
-	// the readout.
-	const recipe = hero.createDiv({ cls: "semlink-guide-index-recipe" });
-	const providerSvg = providerLogo(active.name);
-	if (providerSvg) {
-		const providerIconEl = recipe.createSpan({ cls: "semlink-guide-index-recipe-icon" });
-		setSvgIcon(providerIconEl, providerSvg);
-	}
-	recipe.createSpan({ cls: "semlink-guide-index-recipe-name", text: active.name });
-	recipe.createSpan({ cls: "semlink-guide-index-recipe-sep", text: "·" });
-	const modelSvg = modelBrand(active.model);
-	if (modelSvg) {
-		const modelIconEl = recipe.createSpan({ cls: "semlink-guide-index-recipe-icon" });
-		setSvgIcon(modelIconEl, modelSvg);
-	}
-	recipe.createSpan({ cls: "semlink-guide-index-recipe-model", text: active.model });
-
-	// Order-ticket deck: the receipt stack hangs right under the printer,
-	// EXACTLY as wide as the recipe capsule (measured, any sidebar width).
-	const deckHost = hero.createDiv({ cls: "semlink-guide-index-ticketdeck" });
-	const deckWidth = Math.max(60, Math.min((recipe.clientWidth || 184) + 16, 200));
-	deckHost.style.width = `${deckWidth}px`;
-	const deckFx = mountTicketDeck(deckHost, deckWidth);
-
-	// Remaining-time line.
-	const timerow = panel.createDiv({ cls: "semlink-guide-index-timerow semlink-hidden" });
-	const vEta = timerow.createSpan({ cls: "semlink-guide-index-timeitem" });
-
-	// Footer: just the run control (开始 ▶ primary → ⏸️ 暂停 ⇄ ▶️ 继续,
-	// secondary while running). 下一步 to the chat-model step only appears
-	// once the run completes.
-	const footer = root.createDiv({ cls: "semlink-guide-footer semlink-guide-footer-index" });
-	const startBtn = footer.createEl("button", { cls: "semlink-guide-save semlink-guide-primary", text: t("guideStartIndex") });
-	const nextBtn = footer.createEl("button", { cls: "semlink-guide-save semlink-guide-secondary semlink-hidden", text: t("guideNext") });
-	nextBtn.addEventListener("click", () => onNext());
-
-	let running = host.isIndexing();
-	let paused = host.isIndexPaused();
-	let done = false;
-	let prevActive = new Set<string>(); // concurrently brewing notes
-	let prevProgress = ""; // last chunk-batch label (pour bursts on change)
-	let lastTotal = 0; // last seen total note count (kept on the label when done)
-
-	const applyStamp = (): void => {
-		if (done) stamp.setText(t("guideCoffeeReady"));
-		else stamp.setText(t(running && !paused ? "guideStampExtract" : "guideStampPreparing"));
-	};
-
-	const applyButton = (): void => {
-		if (done) {
-			startBtn.addClass("semlink-hidden");
-			nextBtn.removeClass("semlink-hidden");
-			nextBtn.addClass("semlink-guide-primary");
-		} else if (paused) {
-			startBtn.setText(`▶️ ${t("guideResumeIndex")}`);
-			startBtn.removeClass("semlink-guide-primary");
-		} else if (running) {
-			startBtn.setText(`⏸️ ${t("guidePauseIndex")}`);
-			startBtn.removeClass("semlink-guide-primary");
-		} else {
-			startBtn.setText(`▶️ ${t("guideStartIndex")}`);
-			startBtn.addClass("semlink-guide-primary");
-		}
-		applyStamp();
-	};
-
-	startBtn.addEventListener("click", () => {
-		if (!running) {
-			host.startIndexing(applyStats, onDone);
-			running = true;
-			paused = false;
-		} else if (!paused) {
-			host.pauseIndexing();
-			paused = true;
-			coffeeFx.setBrewing(false);
-		} else {
-			host.resumeIndexing();
-			paused = false;
-			coffeeFx.setBrewing(true);
-		}
-		applyButton();
-	});
-
-	// Live progress handlers (referenced by the button handlers below).
-	const durText = (sec: number): string => {
-		if (!sec || sec <= 0) return "";
-		if (sec < 60) return t("guideDurSec").replace("{s}", String(Math.round(sec)));
-		const m = Math.floor(sec / 60);
-		const s = Math.round(sec % 60);
-		if (m < 60) return t("guideDurMinSec").replace("{m}", String(m)).replace("{s}", String(s));
-		return t("guideDurHourMin").replace("{h}", String(Math.floor(m / 60))).replace("{m}", String(m % 60));
-	};
-	// DOM writes only when the text actually changed — progress events can
-	// fire far faster than the eye needs, and redundant writes force layout.
-	const setIfChanged = (el: HTMLElement, text: string): void => {
-		if (el.textContent !== text) el.setText(text);
-	};
-	const setHidden = (el: HTMLElement, hidden: boolean): void => {
-		el.toggleClass("semlink-hidden", hidden);
-	};
-
-	const applyStatsRaw = (s: IndexStatsView): void => {
-		panel.addClass("is-running");
-		timerow.removeClass("semlink-hidden");
-		const pct = s.total > 0 ? (s.processed / s.total) * 100 : 0;
-		// The hero readout morphs into the live percentage…
-		setIfChanged(heroNum, `${pct.toFixed(1)}%`);
-		setIfChanged(heroSub, `${s.processed}/${s.total}`);
-		lastTotal = s.total;
-		coffeeFx.setLevel(pct, true);
-		// Concurrent indexing: every in-flight note (with its own chunk
-		// progress) goes to the cup; a newcomer triggers the pour splash.
-		for (const f of s.activeFiles) {
-			if (!prevActive.has(f.path)) {
-				coffeeFx.pour(f.path.split("/").pop() || f.path);
-			}
-		}
-		prevActive = new Set(s.activeFiles.map((f) => f.path));
-		deckFx.setFiles(s.activeFiles.map((f) => ({
-			name: f.path.split("/").pop() || f.path,
-			progress: f.progress,
-		})));
-		// A fresh chunk batch (1/4 → 2/4 …) fires a pour-stream burst.
-		if (s.fileChunkProgress && s.fileChunkProgress !== prevProgress) {
-			prevProgress = s.fileChunkProgress;
-			const newest = s.activeFiles[s.activeFiles.length - 1];
-			coffeeFx.pour(newest ? newest.path.split("/").pop() || newest.path : "");
-		}
-		const eta = durText(s.estimatedRemainingSec);
-		setIfChanged(vEta, eta ? t("guideEta").replace("{dur}", eta) : "");
-		setHidden(vEta, !eta);
-	};
-
-	// Throttle the view to ~5 fps: the scheduler can emit progress far more
-	// often; the eye (and the canvas) needs a fraction of that.
-	const APPLY_MIN_MS = 200;
-	let lastApply = 0;
-	let pendingStats: IndexStatsView | null = null;
-	let applyTimer = 0;
-	const applyStats = (s: IndexStatsView): void => {
-		pendingStats = s;
-		const now = Date.now();
-		const wait = APPLY_MIN_MS - (now - lastApply);
-		if (wait <= 0) {
-			lastApply = now;
-			if (applyTimer) {
-				window.clearTimeout(applyTimer);
-				applyTimer = 0;
-			}
-			applyStatsRaw(s);
-		} else if (!applyTimer) {
-			applyTimer = window.setTimeout(() => {
-				applyTimer = 0;
-				lastApply = Date.now();
-				if (pendingStats) applyStatsRaw(pendingStats);
-			}, wait);
-		}
-	};
-	const onDone = (): void => {
-		// Flush any throttled stats so the finals reflect the true end state.
-		if (applyTimer) {
-			window.clearTimeout(applyTimer);
-			applyTimer = 0;
-		}
-		if (pendingStats) applyStatsRaw(pendingStats);
-		// The brew is served — stop the barista chatter (applyStamp sets it).
-		panel.removeClass("is-running");
-		panel.addClass("is-done");
-		coffeeFx.setLevel(100, true);
-		coffeeFx.celebrate();
-		coffeeFx.setBrewing(false);
-		heroNum.setText("100%");
-		// The sub-label keeps the note count (not a slogan) — the stamp is
-		// where "你的知识特调已备好" lives once the run is done.
-		heroSub.setText(t("guideNotesTotal").replace("{n}", String(lastTotal || est.notes)));
-		timerow.addClass("semlink-hidden");
-		running = false;
-		paused = false;
-		done = true;
-		applyButton();
-	};
-
-	// Already indexing (autoIndex kicked in) → attach live, show the pause state.
-	if (running) {
-		host.watchIndexing(applyStats, onDone);
-	}
-	applyButton();
-}
-
-
-
-
-// ──── Manual model-ID entry dialog ────
 
 /** "添加模型" dialog: enter a model ID, it is validated against the
  *  provider endpoint (chat or embedding probe) before being added and

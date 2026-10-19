@@ -255,6 +255,7 @@ const t: Record<keyof typeof en, string> = {
 	searchError: "検索に失敗しました:",
 	searchScoreLabel: "類似度",
 	searchNeedApiKey: "設定で APIキーを構成し、先にインデックスを作成してください",
+	searchNeedChatProvider: "設定でチャットプロバイダーを構成して会話を始めましょう",
 	searchThinking: "ノートをもとに考えています…",
 // No closing paren — the UI appends "）".
 	searchThinkingElapsed: "{seconds} 秒考えました（{status}",
@@ -383,9 +384,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── First-run onboarding guide (search welcome screen) ────
 	guideTitle: "はじめに",
-	guideStep1: "埋め込み",
-	guideStep2: "インデックス作成",
-	guideStep3: "チャットモデル",
+	guideStep1: "プロバイダー",
+	guideStep2: "キー",
+	guideStep3: "モデル",
 	guideIntroTitle: "👋 ようこそ",
 	guideIntroSub: "3 ステップでチャットを開始",
 	guideKeyPlaceholder: "APIキーを貼り付け (sk-…)",
