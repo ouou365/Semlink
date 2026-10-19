@@ -582,6 +582,70 @@
     border-color: var(--interactive-accent);
 }
 
+.smart-vault-settings .semlink-mt-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.smart-vault-settings .semlink-mt-folder {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 13px;
+    min-width: 0;
+}
+
+.smart-vault-settings .semlink-mt-folder:hover,
+.smart-vault-settings .semlink-mt-folder.is-droptarget {
+    background: var(--background-modifier-hover);
+}
+
+.smart-vault-settings .semlink-mt-folder.is-droptarget {
+    outline: 1.5px dashed var(--interactive-accent);
+}
+
+.smart-vault-settings .semlink-mt-folder-chevron,
+.smart-vault-settings .semlink-mt-folder-del {
+    display: flex;
+    align-items: center;
+}
+
+.smart-vault-settings .semlink-mt-folder-chevron .svg-icon,
+.smart-vault-settings .semlink-mt-folder-del .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+.smart-vault-settings .semlink-mt-folder-del {
+    margin-left: 2px;
+    color: var(--text-faint);
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-mt-folder-del:hover {
+    color: var(--text-error);
+}
+
+.smart-vault-settings .semlink-mt-folder-count {
+    margin-left: auto;
+    color: var(--text-faint);
+    font-size: 11.5px;
+}
+
+.smart-vault-settings .semlink-mt-provider.is-nested {
+    margin-left: 22px;
+}
+
+.smart-vault-settings .semlink-mt-provider.is-foldered .semlink-mt-provider-name {
+    font-weight: 500;
+}
+
 .smart-vault-settings .semlink-mt-provider-list {
     overflow-y: auto;
     display: flex;

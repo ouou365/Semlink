@@ -338,6 +338,8 @@ const zh: Record<keyof typeof en, string> = {
 	mtNeedsKey: "配置 API Key 后可启用模型",
 	mtConfigure: "配置",
 	mtShowing: "显示 {shown} / {total} 个模型",
+	mtNewFolder: "新建文件夹",
+	mtCreate: "创建",
 	deleteProvider: "删除供应商",
 	remove: "删除",
 	addProvider: "添加供应商",

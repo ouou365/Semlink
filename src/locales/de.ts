@@ -337,6 +337,8 @@ const t: Record<keyof typeof en, string> = {
 	mtNeedsKey: "API-Key konfigurieren, um Modelle zu aktivieren",
 	mtConfigure: "Konfigurieren",
 	mtShowing: "{shown} von {total} Modellen werden angezeigt",
+	mtNewFolder: "Neuer Ordner",
+	mtCreate: "Erstellen",
 	deleteProvider: "Anbieter löschen",
 	remove: "Entfernen",
 	addProvider: "Anbieter hinzufügen",

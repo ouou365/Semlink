@@ -338,6 +338,8 @@ const t: Record<keyof typeof en, string> = {
 	mtNeedsKey: "Настройте API-ключ, чтобы включить модели",
 	mtConfigure: "Настроить",
 	mtShowing: "Показано {shown} из {total} моделей",
+	mtNewFolder: "Новая папка",
+	mtCreate: "Создать",
 	deleteProvider: "Удалить провайдера",
 	remove: "Удалить",
 	addProvider: "Добавить провайдера",

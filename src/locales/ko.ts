@@ -337,6 +337,8 @@ const t: Record<keyof typeof en, string> = {
 	mtNeedsKey: "API 키를 설정하면 모델을 활성화할 수 있습니다",
 	mtConfigure: "설정",
 	mtShowing: "{shown} / {total}개 모델 표시",
+	mtNewFolder: "새 폴더",
+	mtCreate: "만들기",
 	deleteProvider: "공급자 삭제",
 	remove: "제거",
 	addProvider: "제공자 추가",

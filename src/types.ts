@@ -30,6 +30,9 @@ export interface ModelProvider {
 	wirePath?: string;
 	/** Kind-tagged model list (embedding / chat / …). */
 	models: ChatModel[];
+	/** Model-tab folder this provider is filed under (user-created folders;
+	 *  built-in series folders are name-derived and need no field). */
+	folder?: string;
 	/** Set once the model list was edited in settings (editor confirmed /
 	 *  create card submitted). The onboarding guide then no longer auto-
 	 *  fetches the endpoint's full model list for this provider — refetching
@@ -252,6 +255,8 @@ export interface SmartVaultSettings {
 	 *  `chatReady`/`embedReady` mark "key validated + models fetched",
 	 *  `chatModelPicked`/`embedModelPicked` mark the model selection done
 	 *  (they drive the current step), `done` suppresses the guide. */
+	/** Model-tab user folders（内置系列分组之外的用户自建文件夹）。 */
+	providerFolders?: string[];
 	onboarding?: {
 		done?: boolean;
 		providerId?: string;

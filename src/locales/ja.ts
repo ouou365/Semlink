@@ -337,6 +337,8 @@ const t: Record<keyof typeof en, string> = {
 	mtNeedsKey: "API キーを設定するとモデルを有効化できます",
 	mtConfigure: "設定",
 	mtShowing: "{shown} / {total} モデルを表示",
+	mtNewFolder: "新しいフォルダ",
+	mtCreate: "作成",
 	deleteProvider: "プロバイダーを削除",
 	remove: "削除",
 	addProvider: "プロバイダーを追加",

@@ -3122,6 +3122,95 @@ function renderCustomCard(
 
 // ──── Main render ────
 
+// ──── Model tab：系列分组 + 文件夹树 + 右侧模型开关 ────
+
+/** 同系列供应商自动归入同一文件夹（按目录名前缀/家族映射）。 */
+const SERIES_FOLDER: Record<string, string> = {
+	"MiniMax": "MiniMax",
+	"MiniMax CN": "MiniMax",
+	"Moonshot AI": "Moonshot",
+	"Moonshot AI CN": "Moonshot",
+	"Kimi For Coding": "Moonshot",
+	"Xiaomi": "Xiaomi",
+	"Xiaomi Token Plan AMS": "Xiaomi",
+	"Xiaomi Token Plan CN": "Xiaomi",
+	"Xiaomi Token Plan SGP": "Xiaomi",
+	"Z.AI": "Z.AI",
+	"Z.AI CN": "Z.AI",
+	"Z.AI Coding": "Z.AI",
+	"Z.AI Coding CN": "Z.AI",
+	"Qwen Token Plan": "Qwen",
+	"Qwen Token Plan CN": "Qwen",
+	"Qwen Token Plan Individual": "Qwen",
+	"Google": "Google",
+	"Google Vertex": "Google",
+	"Cloudflare AI Gateway": "Cloudflare",
+	"Cloudflare Workers AI": "Cloudflare",
+};
+
+/** 市场占有率排名（未排名厂商按名称殿后，自定义供应商最后）。 */
+const MARKET_RANK: Record<string, number> = {
+	"OpenAI": 1,
+	"Anthropic": 2,
+	"Google": 3,
+	"OpenRouter": 4,
+	"DeepSeek": 5,
+	"Moonshot AI": 6,
+	"Z.AI": 7,
+	"Mistral": 8,
+	"Groq": 9,
+	"xAI": 10,
+	"MiniMax": 11,
+	"Xiaomi": 12,
+	"Fireworks": 13,
+	"Together": 14,
+	"Baseten": 15,
+	"Cerebras": 16,
+	"NVIDIA": 17,
+	"Hugging Face": 18,
+	"Amazon Bedrock": 19,
+	"Azure OpenAI": 20,
+	"Google Vertex": 21,
+	"Kimi For Coding": 22,
+	"Cloudflare AI Gateway": 23,
+	"Cloudflare Workers AI": 24,
+};
+
+class NewFolderModal extends Modal {
+	constructor(app: App, private onOk: (name: string) => void) {
+		super(app);
+	}
+
+	onOpen(): void {
+		let name = "";
+		new Setting(this.contentEl)
+			.setName(t("mtNewFolder"))
+			.addText((tx) => {
+				tx.setPlaceholder(t("mtNewFolder")).onChange((v) => {
+					name = v.trim();
+				});
+				tx.inputEl.addEventListener("keydown", (e) => {
+					if (e.key === "Enter" && name) {
+						this.onOk(name);
+						this.close();
+					}
+				});
+			})
+			.addButton((b) =>
+				b.setButtonText(t("mtCreate")).setCta().onClick(() => {
+					if (name) {
+						this.onOk(name);
+						this.close();
+					}
+				}),
+			);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 export function renderModelsTab(
 	plugin: SmartVaultPlugin,
 	containerEl: HTMLElement,
@@ -3129,7 +3218,14 @@ export function renderModelsTab(
 	refresh: () => void,
 ): void {
 	const providers = plugin.settings.providers;
-	const st = state;
+	const userFolders = plugin.settings.providerFolders ?? (plugin.settings.providerFolders = []);
+	const st = state as {
+		selected?: string;
+		search?: string;
+		modelSel?: string;
+		collapsed?: Record<string, boolean>;
+	};
+	st.collapsed = st.collapsed ?? {};
 
 	/** 目录条目 → settings.providers 实例（按 name 幂等）。 */
 	const ensureCatalogProvider = (name: string): ModelProvider | undefined => {
@@ -3150,59 +3246,53 @@ export function renderModelsTab(
 		return provider;
 	};
 
-	// 合并视图：全部内置目录条目（未配置的也显示）+ 用户自定义供应商
+	// ── 合并视图：全部内置目录条目 + 自定义供应商 ──
 	type Row = {
 		key: string;
 		name: string;
-		/** 已添加到 settings.providers 的实例；目录里还没添加的为 null。 */
 		live: ModelProvider | null;
 		models: ChatModel[];
+		/** 归属文件夹（内置系列自动归组或用户拖入）。 */
+		folder: string;
+		rank: number;
 	};
 	const rows: Row[] = [];
 	for (const c of CHAT_CATALOG) {
 		const live = providers.find((p) => p.name === c.name) ?? null;
-		rows.push({ key: `cat:${c.name}`, name: c.name, live, models: live?.models ?? c.models });
+		const name = c.name;
+		rows.push({
+			key: `cat:${name}`,
+			name,
+			live,
+			models: live?.models ?? c.models,
+			folder: SERIES_FOLDER[name] ?? "",
+			rank: MARKET_RANK[name] ?? 9999,
+		});
 	}
 	for (const p of providers) {
 		if (rows.some((r) => r.name === p.name)) continue;
-		rows.push({ key: `custom:${p.id}`, name: p.name, live: p, models: p.models });
+		rows.push({
+			key: `custom:${p.id}`,
+			name: p.name,
+			live: p,
+			models: p.models,
+			folder: p.folder ?? "",
+			rank: 9999,
+		});
 	}
+	rows.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
 
-	// 默认排序：市场占有率排名（OpenAI/Anthropic/Google 领先，聚合与推理
-	// 商次之）；未排名厂商按名称跟在后面，自定义供应商排最后。
-	const MARKET_RANK: Record<string, number> = {
-		"OpenAI": 1,
-		"Anthropic": 2,
-		"Google": 3,
-		"OpenRouter": 4,
-		"DeepSeek": 5,
-		"Moonshot AI": 6,
-		"Z.AI": 7,
-		"Mistral": 8,
-		"Groq": 9,
-		"xAI": 10,
-		"MiniMax": 11,
-		"Xiaomi": 12,
-		"Fireworks": 13,
-		"Together": 14,
-		"Baseten": 15,
-		"Cerebras": 16,
-		"NVIDIA": 17,
-		"Hugging Face": 18,
-		"Amazon Bedrock": 19,
-		"Azure OpenAI": 20,
-		"Google Vertex": 21,
-		"Kimi For Coding": 22,
-		"Cloudflare AI Gateway": 23,
-		"Cloudflare Workers AI": 24,
+	// 文件夹清单：内置系列 + 用户自建 + 供应商已归属的，按成员最优排名排序
+	const folderNames: string[] = [];
+	const addFolder = (f: string): void => {
+		if (f && !folderNames.includes(f)) folderNames.push(f);
 	};
-	rows.sort((a, b) => {
-		const ra = MARKET_RANK[a.name];
-		const rb = MARKET_RANK[b.name];
-		if (ra !== undefined && rb !== undefined) return ra - rb;
-		if (ra !== undefined) return -1;
-		if (rb !== undefined) return 1;
-		return a.name.localeCompare(b.name);
+	for (const r of rows) addFolder(r.folder);
+	for (const f of userFolders) addFolder(f);
+	folderNames.sort((a, b) => {
+		const ra = Math.min(...rows.filter((r) => r.folder === a).map((r) => r.rank), 9999);
+		const rb = Math.min(...rows.filter((r) => r.folder === b).map((r) => r.rank), 9999);
+		return ra - rb || a.localeCompare(b);
 	});
 
 	if (!st.selected || !rows.some((r) => r.key === st.selected)) {
@@ -3210,9 +3300,9 @@ export function renderModelsTab(
 	}
 	const sel = rows.find((r) => r.key === st.selected) ?? null;
 
-	const enabledCount = (r: Row): number => r.models.filter((m) => m.enabled !== false).length;
+	const enabledCount = (models: ChatModel[]): number =>
+		models.filter((m) => m.enabled !== false).length;
 	const isConfigured = (r: Row): boolean => !!r.live?.apiKey?.trim();
-	// 状态点三态：仅统计已添加实例的模型——目录预览（未添加）一律算未启用
 	const dotState = (r: Row): string => {
 		const hasKey = !!r.live?.apiKey?.trim();
 		const hasEnabled = !!r.live && r.models.some((m) => m.enabled !== false);
@@ -3231,11 +3321,24 @@ export function renderModelsTab(
 		new ProviderEditorModal(plugin.app, plugin, r.live, refresh).open();
 	};
 
-	// ── 左栏：厂商列表（logo · 名称 · 启用计数 · 状态点 · 编辑/删除）──
+	// ── 左栏：文件夹树 + 顶层厂商 ──
 	const left = wrap.createDiv({ cls: "semlink-mt-providers" });
 	const leftHead = left.createDiv({ cls: "semlink-mt-providers-head" });
 	leftHead.createSpan({ cls: "semlink-mt-providers-title", text: t("tabModel") });
-	const addBtn = leftHead.createEl("button", {
+	const headBtns = leftHead.createDiv({ cls: "semlink-mt-head-actions" });
+	const addFolderBtn = headBtns.createEl("button", {
+		cls: "semlink-mt-add",
+		attr: { "aria-label": t("mtNewFolder") },
+	});
+	setIcon(addFolderBtn, "folder-plus");
+	addFolderBtn.addEventListener("click", () => {
+		new NewFolderModal(plugin.app, (name) => {
+			if (!userFolders.includes(name)) userFolders.push(name);
+			void plugin.saveSettings();
+			refresh();
+		}).open();
+	});
+	const addBtn = headBtns.createEl("button", {
 		cls: "semlink-mt-add",
 		text: "＋",
 		attr: { "aria-label": t("addProvider") },
@@ -3245,15 +3348,29 @@ export function renderModelsTab(
 	});
 
 	const list = left.createDiv({ cls: "semlink-mt-provider-list" });
-	for (const r of rows) {
+
+	const renderProviderRow = (parent: HTMLElement, r: Row, nested: boolean): void => {
 		const configured = isConfigured(r);
-		const row = list.createDiv({
-			cls: "semlink-mt-provider" + (r.key === st.selected ? " is-active" : ""),
+		const isSelected = st.selected === r.key;
+		const row = parent.createDiv({
+			cls:
+				"semlink-mt-provider" +
+				(nested ? " is-nested" : "") +
+				(isSelected ? " is-active" : ""),
 			attr: { "data-key": r.key },
 		});
+		// 仅已添加实例可拖入文件夹（目录预览行不参与）
+		if (r.live) {
+			row.draggable = true;
+			row.addEventListener("dragstart", (e) => {
+				e.dataTransfer?.setData("text/semlink-provider", r.name);
+				if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+			});
+		}
 		row.addEventListener("click", () => {
 			st.selected = r.key;
 			st.search = "";
+			st.modelSel = "";
 			refresh();
 		});
 		const logo = row.createDiv({ cls: "semlink-mt-provider-logo" });
@@ -3262,7 +3379,7 @@ export function renderModelsTab(
 		info.createDiv({ cls: "semlink-mt-provider-name", text: r.name });
 		info.createDiv({
 			cls: "semlink-mt-provider-count",
-			text: `${enabledCount(r)} / ${r.models.length} ${t("mtEnabled")}`,
+			text: `${enabledCount(r.models)} / ${r.models.length} ${t("mtEnabled")}`,
 		});
 		row.createDiv({ cls: `semlink-mt-dot${dotState(r)}` });
 		const gear = row.createDiv({ cls: "semlink-mt-provider-gear", attr: { "aria-label": t("editProvider") } });
@@ -3271,7 +3388,6 @@ export function renderModelsTab(
 			e.stopPropagation();
 			openEditor(r);
 		});
-		// 只有已添加到 settings.providers 的条目才可删除
 		if (r.live) {
 			const del = row.createDiv({ cls: "semlink-mt-provider-del", attr: { "aria-label": t("deleteProvider") } });
 			setIcon(del, "trash-2");
@@ -3280,7 +3396,6 @@ export function renderModelsTab(
 				const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
 				new DeleteProviderModal(plugin.app, r.name, () => {
 					plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== r.live!.id);
-					// 被删厂商若承载当前嵌入模型，清空选择（运行时回退默认）
 					if (activePid === r.live!.id) {
 						plugin.settings.embeddingModelKey = "";
 					}
@@ -3291,6 +3406,62 @@ export function renderModelsTab(
 				}).open();
 			});
 		}
+	};
+
+	const renderFolderHeader = (folder: string, memberCount: number, isUserFolder: boolean): void => {
+		const collapsed = !!st.collapsed?.[folder];
+		const headRow = list.createDiv({
+			cls: "semlink-mt-folder" + (isUserFolder ? " is-user" : ""),
+			attr: { "data-folder": folder },
+		});
+		headRow.addEventListener("dragover", (e) => {
+			e.preventDefault();
+			headRow.addClass("is-droptarget");
+		});
+		headRow.addEventListener("dragleave", () => headRow.removeClass("is-droptarget"));
+		headRow.addEventListener("drop", (e) => {
+			e.preventDefault();
+			headRow.removeClass("is-droptarget");
+			const name = e.dataTransfer?.getData("text/semlink-provider");
+			if (!name) return;
+			const p = providers.find((x) => x.name === name);
+			if (!p) return;
+			p.folder = folder;
+			void plugin.saveSettings().then(() => refresh());
+		});
+		const chevron = headRow.createDiv({ cls: "semlink-mt-folder-chevron" });
+		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
+		headRow.createDiv({ cls: "semlink-mt-folder-name", text: folder });
+		headRow.createDiv({ cls: "semlink-mt-folder-count", text: String(memberCount) });
+		if (isUserFolder) {
+			const del = headRow.createDiv({ cls: "semlink-mt-folder-del" });
+			setIcon(del, "x");
+			del.addEventListener("click", (e) => {
+				e.stopPropagation();
+				// 删除文件夹：成员回到顶层（供应商本体不受影响）
+				plugin.settings.providerFolders = userFolders.filter((f) => f !== folder);
+				for (const p of providers) {
+					if (p.folder === folder) p.folder = undefined;
+				}
+				if (st.collapsed) delete st.collapsed[folder];
+				void plugin.saveSettings().then(() => refresh());
+			});
+		}
+		headRow.addEventListener("click", () => {
+			st.collapsed = { ...(st.collapsed ?? {}), [folder]: !collapsed };
+			refresh();
+		});
+	};
+
+	for (const folder of folderNames) {
+		const members = rows.filter((r) => r.folder === folder);
+		const isUserFolder = userFolders.includes(folder);
+		renderFolderHeader(folder, members.length, isUserFolder);
+		if (st.collapsed?.[folder]) continue;
+		for (const r of members) renderProviderRow(list, r, true);
+	}
+	for (const r of rows.filter((x) => !x.folder)) {
+		renderProviderRow(list, r, false);
 	}
 
 	// ── 右栏：所选厂商的模型（搜索 · 计数 · 开关行）──
@@ -3319,7 +3490,7 @@ export function renderModelsTab(
 
 	const updateCount = (): void => {
 		const rowEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-provider-count`);
-		if (rowEl) rowEl.textContent = `${enabledCount(sel)} / ${sel.models.length} ${t("mtEnabled")}`;
+		if (rowEl) rowEl.textContent = `${enabledCount(sel.models)} / ${sel.models.length} ${t("mtEnabled")}`;
 		const dotEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-dot`);
 		if (dotEl) dotEl.className = `semlink-mt-dot${dotState(sel)}`;
 	};
@@ -3352,7 +3523,6 @@ export function renderModelsTab(
 			const toggleWrap = row.createDiv({ cls: "semlink-mt-model-toggle" });
 			const toggle = new ToggleComponent(toggleWrap).setValue(m.enabled !== false);
 			if (!configured) {
-				// 未配置 API Key 的厂商：开关可见但不可用
 				toggle.setDisabled(true);
 			} else {
 				toggle.onChange((v) => {

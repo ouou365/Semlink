@@ -337,6 +337,8 @@ const t: Record<keyof typeof en, string> = {
 	mtNeedsKey: "配置 API Key 後可啟用模型",
 	mtConfigure: "配置",
 	mtShowing: "顯示 {shown} / {total} 個模型",
+	mtNewFolder: "新增資料夾",
+	mtCreate: "建立",
 	deleteProvider: "刪除供應商",
 	remove: "移除",
 	addProvider: "新增供應商",

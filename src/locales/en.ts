@@ -336,6 +336,8 @@ const en = {
 	mtNeedsKey: "Configure an API key to enable models",
 	mtConfigure: "Configure",
 	mtShowing: "Showing {shown} of {total} models",
+	mtNewFolder: "New folder",
+	mtCreate: "Create",
 	deleteProvider: "Delete provider",
 	remove: "Remove",
 	addProvider: "Add provider",
