@@ -3466,7 +3466,9 @@ export function renderModelsTab(
 	};
 
 	const renderFolderHeader = (node: FolderNode): void => {
-		const collapsed = !!st.collapsed?.[node.key];
+		// 默认收起；只有显式存过 false（用户展开过）才算展开。
+		// 旧数据语义兼容：true 始终是收起，false 始终是展开。
+		const collapsed = st.collapsed?.[node.key] !== false;
 		// 与普通供应商行同款布局；图标取成员中最热门（排名最优）的供应商
 		const hottest = [...node.members].sort(
 			(a, b) => a.rank - b.rank || a.name.localeCompare(b.name),
@@ -3533,7 +3535,7 @@ export function renderModelsTab(
 	for (const item of items) {
 		if (item.node) {
 			renderFolderHeader(item.node);
-			if (st.collapsed?.[item.node.key]) continue;
+			if (st.collapsed?.[item.node.key] !== false) continue;
 			for (const r of item.node.members) renderProviderRow(list, r, true);
 		} else if (item.row) {
 			renderProviderRow(list, item.row, false);
