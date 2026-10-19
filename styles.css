@@ -638,10 +638,6 @@
     font-size: 11.5px;
 }
 
-.smart-vault-settings .semlink-mt-provider.is-nested {
-    margin-left: 22px;
-}
-
 .smart-vault-settings .semlink-mt-provider.is-foldered .semlink-mt-provider-name {
     font-weight: 500;
 }
