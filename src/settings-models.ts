@@ -3413,8 +3413,11 @@ export function renderModelsTab(
 			st.modelSel = "";
 			refreshKeepInner();
 		});
-		const logo = row.createDiv({ cls: "semlink-mt-provider-logo" });
-		appendProviderLogo(logo, r.name, "semlink-mt-logo-svg");
+		// 文件夹内的供应商不重复显示图标（文件夹行已带最热门成员的 logo）
+		if (!nested) {
+			const logo = row.createDiv({ cls: "semlink-mt-provider-logo" });
+			appendProviderLogo(logo, r.name, "semlink-mt-logo-svg");
+		}
 		const info = row.createDiv({ cls: "semlink-mt-provider-info" });
 		info.createDiv({ cls: "semlink-mt-provider-name", text: r.name });
 		info.createDiv({
