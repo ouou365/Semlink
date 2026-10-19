@@ -3119,7 +3119,6 @@ const SERIES_FOLDER: Record<string, string> = {
 	"MiniMax CN": "MiniMax",
 	"Moonshot AI": "Moonshot",
 	"Moonshot AI CN": "Moonshot",
-	"Kimi For Coding": "Moonshot",
 	"Xiaomi": "Xiaomi",
 	"Xiaomi Token Plan AMS": "Xiaomi",
 	"Xiaomi Token Plan CN": "Xiaomi",
