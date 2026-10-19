@@ -3168,6 +3168,43 @@ export function renderModelsTab(
 		rows.push({ key: `custom:${p.id}`, name: p.name, live: p, models: p.models });
 	}
 
+	// 默认排序：市场占有率排名（OpenAI/Anthropic/Google 领先，聚合与推理
+	// 商次之）；未排名厂商按名称跟在后面，自定义供应商排最后。
+	const MARKET_RANK: Record<string, number> = {
+		"OpenAI": 1,
+		"Anthropic": 2,
+		"Google": 3,
+		"OpenRouter": 4,
+		"DeepSeek": 5,
+		"Moonshot AI": 6,
+		"Z.AI": 7,
+		"Mistral": 8,
+		"Groq": 9,
+		"xAI": 10,
+		"MiniMax": 11,
+		"Xiaomi": 12,
+		"Fireworks": 13,
+		"Together": 14,
+		"Baseten": 15,
+		"Cerebras": 16,
+		"NVIDIA": 17,
+		"Hugging Face": 18,
+		"Amazon Bedrock": 19,
+		"Azure OpenAI": 20,
+		"Google Vertex": 21,
+		"Kimi For Coding": 22,
+		"Cloudflare AI Gateway": 23,
+		"Cloudflare Workers AI": 24,
+	};
+	rows.sort((a, b) => {
+		const ra = MARKET_RANK[a.name];
+		const rb = MARKET_RANK[b.name];
+		if (ra !== undefined && rb !== undefined) return ra - rb;
+		if (ra !== undefined) return -1;
+		if (rb !== undefined) return 1;
+		return a.name.localeCompare(b.name);
+	});
+
 	if (!st.selected || !rows.some((r) => r.key === st.selected)) {
 		st.selected = rows[0]?.key ?? "";
 	}
