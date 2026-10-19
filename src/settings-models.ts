@@ -18,7 +18,14 @@ import { markDestructive } from "./ui-compat";
 /** Model-tab UI state: which provider is selected + model search text.
  *  Editing happens in a modal, so there is no expanded row state to keep
  *  across re-renders. */
-export type ModelsTabState = { selected?: string; search?: string; modelSel?: string };
+export type ModelsTabState = {
+	selected?: string;
+	search?: string;
+	modelSel?: string;
+	/** 内层两个滚动列表的位置，整页刷新后恢复。 */
+	providerScroll?: number;
+	rowsScroll?: number;
+};
 
 export const EMPTY_MODELS_TAB_STATE: ModelsTabState = {};
 
@@ -3221,6 +3228,8 @@ export function renderModelsTab(
 		search?: string;
 		modelSel?: string;
 		collapsed?: Record<string, boolean>;
+		providerScroll?: number;
+		rowsScroll?: number;
 	};
 	st.collapsed = st.collapsed ?? {};
 
@@ -3371,7 +3380,7 @@ export function renderModelsTab(
 		new NewFolderModal(plugin.app, (name) => {
 			if (!userFolders.includes(name)) userFolders.push(name);
 			void plugin.saveSettings();
-			refresh();
+			refreshKeepInner();
 		}).open();
 	});
 	const addBtn = headBtns.createEl("button", {
@@ -3380,7 +3389,7 @@ export function renderModelsTab(
 		attr: { "aria-label": t("addProvider") },
 	});
 	addBtn.addEventListener("click", () => {
-		new AddProviderModal(plugin.app, plugin, "catalog", () => refresh()).open();
+		new AddProviderModal(plugin.app, plugin, "catalog", () => refreshKeepInner()).open();
 	});
 
 	const list = left.createDiv({ cls: "semlink-mt-provider-list" });
@@ -3407,7 +3416,7 @@ export function renderModelsTab(
 			st.selected = r.key;
 			st.search = "";
 			st.modelSel = "";
-			refresh();
+			refreshKeepInner();
 		});
 		const logo = row.createDiv({ cls: "semlink-mt-provider-logo" });
 		appendProviderLogo(logo, r.name, "semlink-mt-logo-svg");
@@ -3438,7 +3447,7 @@ export function renderModelsTab(
 					if (st.selected === r.key) {
 						st.selected = rows.find((x) => x.key !== r.key)?.key ?? "";
 					}
-					void plugin.saveSettings().then(() => refresh());
+					void plugin.saveSettings().then(() => refreshKeepInner());
 				}).open();
 			});
 		}
@@ -3463,7 +3472,7 @@ export function renderModelsTab(
 			const p = providers.find((x) => x.name === name);
 			if (!p) return;
 			p.folder = node.key;
-			void plugin.saveSettings().then(() => refresh());
+			void plugin.saveSettings().then(() => refreshKeepInner());
 		});
 		const chevron = headRow.createDiv({ cls: "semlink-mt-folder-chevron" });
 		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
@@ -3480,12 +3489,12 @@ export function renderModelsTab(
 					if (p.folder === node.key) p.folder = undefined;
 				}
 				if (st.collapsed) delete st.collapsed[node.key];
-				void plugin.saveSettings().then(() => refresh());
+				void plugin.saveSettings().then(() => refreshKeepInner());
 			});
 		}
 		headRow.addEventListener("click", () => {
 			st.collapsed = { ...(st.collapsed ?? {}), [node.key]: !collapsed };
-			refresh();
+			refreshKeepInner();
 		});
 	};
 
@@ -3515,6 +3524,14 @@ export function renderModelsTab(
 
 	const showingEl = right.createDiv({ cls: "semlink-mt-showing" });
 	const rowsHost = right.createDiv({ cls: "semlink-mt-rows" });
+
+	// 整页 refresh 会重建这两个内层滚动列表——先把它们的滚动位置存进
+	// state，渲染完成后恢复，避免“点一下供应商列表跳回顶部”。
+	const refreshKeepInner = (): void => {
+		st.providerScroll = list.scrollTop;
+		st.rowsScroll = rowsHost.scrollTop;
+		refresh();
+	};
 
 	const fmtCtx = (n?: number): string => {
 		if (!n || n <= 0) return "";
@@ -3579,6 +3596,8 @@ export function renderModelsTab(
 		}
 	};
 	renderRows();
+	list.scrollTop = st.providerScroll ?? 0;
+	rowsHost.scrollTop = st.rowsScroll ?? 0;
 	searchInput.addEventListener("input", () => {
 		st.search = searchInput.value;
 		renderRows();
