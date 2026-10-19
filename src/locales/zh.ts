@@ -20,7 +20,7 @@ const zh: Record<keyof typeof en, string> = {
 	tabMcp: "MCP",
 	tabModel: "模型",
 	tabIndex: "索引",
-	tabEmbedding: "嵌入",
+	tabEmbedding: "RAG",
 	tabBot: "机器人",
 	botSection: "飞书机器人",
 	botEmpty: "尚未添加飞书机器人",

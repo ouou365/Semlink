@@ -19,7 +19,7 @@ const t: Record<keyof typeof en, string> = {
 	tabMcp: "MCP",
 	tabModel: "モデル",
 	tabIndex: "インデックス",
-	tabEmbedding: "埋め込み",
+	tabEmbedding: "RAG",
 	tabBot: "ボット",
 	botSection: "Feishu ボット",
 	botEmpty: "まだ Feishu ボットが追加されていません",

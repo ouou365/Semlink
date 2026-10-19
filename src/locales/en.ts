@@ -18,7 +18,7 @@ const en = {
 	tabMcp: "MCP",
 	tabModel: "Model",
 	tabIndex: "Index",
-	tabEmbedding: "Embedding",
+	tabEmbedding: "RAG",
 	tabBot: "Bot",
 	botSection: "Feishu Bot",
 	botEmpty: "No Feishu bot added yet",

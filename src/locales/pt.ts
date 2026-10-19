@@ -21,7 +21,7 @@ const t: Record<keyof typeof en, string> = {
 	tabMcp: "MCP",
 	tabModel: "Modelo",
 	tabIndex: "Índice",
-	tabEmbedding: "Embedding",
+	tabEmbedding: "RAG",
 	tabBot: "Bot",
 	botSection: "Bot do Feishu",
 	botEmpty: "Nenhum bot do Feishu adicionado ainda",
