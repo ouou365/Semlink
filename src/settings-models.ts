@@ -3362,6 +3362,13 @@ export function renderModelsTab(
 		const hasEnabled = !!r.live && r.models.some((m) => m.enabled === true);
 		return hasEnabled ? (hasKey ? " is-green" : " is-orange") : "";
 	};
+	// 文件夹状态点 = 成员状态聚合：有一个绿就是绿，否则有一个橙就是橙，全灰才灰
+	const folderDotState = (node: FolderNode): string => {
+		const states = node.members.map((m) => dotState(m).trim());
+		if (states.includes("is-green")) return " is-green";
+		if (states.includes("is-orange")) return " is-orange";
+		return "";
+	};
 
 	const wrap = containerEl.createDiv({ cls: "semlink-mt" });
 
@@ -3509,6 +3516,8 @@ export function renderModelsTab(
 			cls: "semlink-mt-folder-count",
 			text: `${sumEnabled} / ${sumTotal} ${t("mtEnabled")}`,
 		});
+		// 状态点与普通供应商行同位置（名称行右侧）
+		headRow.createDiv({ cls: `semlink-mt-dot${folderDotState(node)}` });
 		// 下拉图标放行最右侧
 		const chevron = headRow.createDiv({ cls: "semlink-mt-folder-chevron" });
 		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
@@ -3598,13 +3607,15 @@ export function renderModelsTab(
 		if (rowEl) rowEl.textContent = `${enabledCount(sel.models)} / ${sel.models.length} ${t("mtEnabled")}`;
 		const dotEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-dot`);
 		if (dotEl) dotEl.className = `semlink-mt-dot${dotState(sel)}`;
-		// 所在文件夹的模型汇总行同步更新（避免整页刷新）
+		// 所在文件夹的模型汇总行 + 状态点同步更新（避免整页刷新）
 		const folderNode = nodes.find((n) => n.key === sel.folder);
 		if (folderNode) {
 			const sumEnabled = folderNode.members.reduce((s, m) => s + enabledCount(m.models), 0);
 			const sumTotal = folderNode.members.reduce((s, m) => s + m.models.length, 0);
 			const folderEl = list.querySelector(`[data-folder="${folderNode.key}"] .semlink-mt-folder-count`);
 			if (folderEl) folderEl.textContent = `${sumEnabled} / ${sumTotal} ${t("mtEnabled")}`;
+			const folderDotEl = list.querySelector(`[data-folder="${folderNode.key}"] .semlink-mt-dot`);
+			if (folderDotEl) folderDotEl.className = `semlink-mt-dot${folderDotState(folderNode)}`;
 		}
 	};
 
