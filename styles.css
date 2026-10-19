@@ -1138,6 +1138,21 @@
 }
 
 /* Provider editor footer: 取消 / 确定 actions */
+/* 编辑供应商弹窗：内容区自身限高滚动，模型行区域单独限高滚动。
+   没有这两条时，字段 + 模型列表 + footer 一旦超过 Obsidian 弹窗的
+   最大高度，超出部分（正是模型列表和 footer）会被直接裁掉、不可滚
+   动——看起来就是"编辑界面不显示模型列表"。 */
+.semlink-provider-editor-modal .modal-content {
+    max-height: min(82vh, 820px);
+    overflow-y: auto;
+}
+
+.smart-vault-settings .semlink-provider-editor-modal .semlink-model-rows {
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
 .smart-vault-settings .semlink-editor-footer {
     display: flex;
     justify-content: flex-end;
