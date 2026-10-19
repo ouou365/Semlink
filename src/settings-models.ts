@@ -2425,7 +2425,7 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 		countEl.setText(`(${String(models.length)})`);
 		rowsEl.empty();
 		models.forEach((model, mi) => {
-			const rowEl = rowsEl.createDiv({ cls: `semlink-model-row${model.enabled === false ? " is-disabled" : ""}` });
+			const rowEl = rowsEl.createDiv({ cls: `semlink-model-row${model.enabled === true ? "" : " is-disabled"}` });
 			// Drag handle (leftmost): the ONLY element that starts a drag.
 			const grip = rowEl.createEl("button", {
 				cls: "semlink-icon-btn semlink-model-grip",
@@ -2437,7 +2437,7 @@ function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): Mode
 				cls: "semlink-model-enabled",
 				attr: { type: "checkbox", title: t("modelEnabled"), "aria-label": t("modelEnabled") },
 			});
-			enabledBox.checked = model.enabled !== false;
+			enabledBox.checked = model.enabled === true;
 			enabledBox.addEventListener("change", () => {
 				model.enabled = enabledBox.checked;
 				rowEl.toggleClass("is-disabled", !enabledBox.checked);
@@ -3340,11 +3340,11 @@ export function renderModelsTab(
 	const sel = rows.find((r) => r.key === st.selected) ?? null;
 
 	const enabledCount = (models: ChatModel[]): number =>
-		models.filter((m) => m.enabled !== false).length;
+		models.filter((m) => m.enabled === true).length;
 	const isConfigured = (r: Row): boolean => !!r.live?.apiKey?.trim();
 	const dotState = (r: Row): string => {
 		const hasKey = !!r.live?.apiKey?.trim();
-		const hasEnabled = !!r.live && r.models.some((m) => m.enabled !== false);
+		const hasEnabled = !!r.live && r.models.some((m) => m.enabled === true);
 		return hasEnabled ? (hasKey ? " is-green" : " is-orange") : "";
 	};
 
@@ -3610,7 +3610,7 @@ export function renderModelsTab(
 			const ctx = info.createDiv({ cls: "semlink-mt-model-ctx", text: fmtCtx(m.contextWindow) });
 			if (!m.contextWindow || m.contextWindow <= 0) ctx.addClass("semlink-hidden");
 			const toggleWrap = row.createDiv({ cls: "semlink-mt-model-toggle" });
-			const toggle = new ToggleComponent(toggleWrap).setValue(m.enabled !== false);
+			const toggle = new ToggleComponent(toggleWrap).setValue(m.enabled === true);
 			if (!configured) {
 				toggle.setDisabled(true);
 			} else {

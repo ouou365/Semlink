@@ -740,7 +740,7 @@ function embeddingModelComboOptions(settings: SmartVaultSettings): Record<string
  *  "embedding" entries that are enabled. */
 function embeddingModelsOf(p: ModelProvider): string[] {
 	return (p.models ?? [])
-		.filter((m) => (m.kind ?? "chat") === "embedding" && m.enabled !== false)
+		.filter((m) => (m.kind ?? "chat") === "embedding" && m.enabled === true)
 		.map((m) => m.id)
 		.filter((id) => id.length > 0);
 }

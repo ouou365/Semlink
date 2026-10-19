@@ -602,7 +602,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 
 		const wanted = (m: ChatModel): boolean => {
 			const kind = m.kind ?? "chat";
-			if (m.enabled === false || (isChat ? kind !== "chat" : kind !== "embedding")) return false;
+			if (m.enabled !== true || (isChat ? kind !== "chat" : kind !== "embedding")) return false;
 			if (filter && !m.id.toLowerCase().includes(filter)) return false;
 			return true;
 		};

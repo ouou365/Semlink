@@ -96,11 +96,11 @@ export function activeEmbeddingProvider(s: SmartVaultSettings): ModelProvider & 
 	let model = mid;
 	if (model) {
 		const target = p?.models.find((m) => m.id === mid);
-		if (!target || target.enabled === false) model = "";
+		if (!target || target.enabled !== true) model = "";
 	}
 	if (!model) {
-		model = p?.models.find((m) => m.enabled !== false && (m.kind ?? "chat") === "embedding")?.id
-			?? p?.models.find((m) => m.enabled !== false)?.id
+		model = p?.models.find((m) => m.enabled === true && (m.kind ?? "chat") === "embedding")?.id
+			?? p?.models.find((m) => m.enabled === true)?.id
 			?? "";
 	}
 	return { ...p, model };

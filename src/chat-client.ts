@@ -398,7 +398,7 @@ export class ChatClient {
 				apiKey: p.apiKey,
 				apiFormat: p.apiFormat ?? "openai",
 				wirePath: p.wirePath,
-				models: p.models.filter((m) => (m.kind ?? "chat") === "chat" && m.enabled !== false),
+				models: p.models.filter((m) => (m.kind ?? "chat") === "chat" && m.enabled === true),
 			}))
 			.filter((p) => p.apiKey && p.apiKey.trim() !== "" && p.baseUrl && p.baseUrl.trim() !== "")
 			.filter((p) => p.models.length > 0);
