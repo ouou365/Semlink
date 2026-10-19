@@ -3510,14 +3510,24 @@ export function renderModelsTab(
 		});
 	};
 
-	// 文件夹节点在前（按成员最优排名），其后是顶层厂商
+	// 文件夹与顶层厂商混排：文件夹以成员中排名最优（调用量最大）的
+	// 供应商作为排序依据，热门在上；未排名的按名称殿后。
+	const items: { rank: number; name: string; node?: FolderNode; row?: Row }[] = [];
 	for (const node of nodes) {
-		renderFolderHeader(node);
-		if (st.collapsed?.[node.key]) continue;
-		for (const r of node.members) renderProviderRow(list, r, true);
+		items.push({ rank: node.rank, name: node.name, node });
 	}
 	for (const r of rows.filter((x) => !x.folder)) {
-		renderProviderRow(list, r, false);
+		items.push({ rank: r.rank, name: r.name, row: r });
+	}
+	items.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+	for (const item of items) {
+		if (item.node) {
+			renderFolderHeader(item.node);
+			if (st.collapsed?.[item.node.key]) continue;
+			for (const r of item.node.members) renderProviderRow(list, r, true);
+		} else if (item.row) {
+			renderProviderRow(list, item.row, false);
+		}
 	}
 
 	// ── 右栏：所选厂商的模型（搜索 · 计数 · 开关行）──
