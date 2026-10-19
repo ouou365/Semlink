@@ -733,12 +733,23 @@ export class SemanticSearchView extends ItemView {
 
 			loadingEl.empty();
 
-			if (!hasAttachments && results.length === 0) {
-				loadingEl.createDiv({ cls: "semlink-msg-empty", text: t("searchNoResults") });
-			} else if (this.chatClient.isConfigured()) {
+			// 没有对话服务：只能展示检索结果本身（或空提示）
+			if (!this.chatClient.isConfigured()) {
+				this.statusEl.textContent = t("searchNoChatProvider");
+				if (results.length === 0) {
+					loadingEl.createDiv({ cls: "semlink-msg-empty", text: t("searchNoResults") });
+				} else {
+					this.renderResultsIn(loadingEl, results);
+				}
+			} else {
 				// Answer mode: feed the retrieved notes to the chat model and
 				// show its answer, with the source cards folded underneath. The
 				// model may call Semlink's search/read tools to dig deeper.
+				if (!hasAttachments && results.length === 0) {
+					// 检索无结果 ≠ 结束：空上下文继续对话，Agent 会用
+					// grep_notes/get_note 等不需要向量的工具自行取证。
+					loadingEl.createDiv({ cls: "semlink-msg-empty", text: t("searchNoResults") });
+				}
 				// Loading line: animated status text + a "▸" marker on the LEFT
 				// (via ::before, same as the thinking summary). Clicking the
 				// whole line toggles the live thinking preview below. The
@@ -1174,13 +1185,6 @@ export class SemanticSearchView extends ItemView {
 						this.renderSources(loadingEl, results, true);
 					}
 				}
-			} else {
-				// No chat provider configured → show the plain result list.
-				// Empty the bubble first so the search-phase loading line (and
-				// its ticking counter) is removed.
-				this.statusEl.textContent = t("searchNoChatProvider");
-				loadingEl.empty();
-				this.renderResultsIn(loadingEl, results);
 			}
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
