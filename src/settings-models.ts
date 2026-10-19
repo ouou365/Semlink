@@ -3212,6 +3212,7 @@ export function renderModelsTab(
 		collapsed?: Record<string, boolean>;
 		providerScroll?: number;
 		rowsScroll?: number;
+		onResize?: () => void;
 	};
 	st.collapsed = st.collapsed ?? {};
 
@@ -3349,6 +3350,27 @@ export function renderModelsTab(
 	};
 
 	const wrap = containerEl.createDiv({ cls: "semlink-mt" });
+
+	// 面板高度跟随视口：不用固定的 "100vh - 230px" 估算（主题/缩放/字体都会
+	// 让估算失准，导致整页比可见区高出一截、Model 页出现滚动条），直接量
+	// 面板顶部到设置滚动区底部的真实距离，窗口缩放时重算。
+	const fitPaneHeight = (): void => {
+		if (!wrap.isConnected) return;
+		const scroller = wrap.closest(".vertical-tab-content, .modal-content");
+		let availBottom = window.innerHeight - 24;
+		let scrollComp = 0;
+		if (scroller) {
+			const padBottom = parseFloat(getComputedStyle(scroller).paddingBottom) || 0;
+			availBottom = scroller.getBoundingClientRect().bottom - padBottom;
+			scrollComp = scroller.scrollTop;
+		}
+		const top = wrap.getBoundingClientRect().top + scrollComp;
+		wrap.style.height = `${Math.max(420, Math.round(availBottom - top))}px`;
+	};
+	fitPaneHeight();
+	if (st.onResize) window.removeEventListener("resize", st.onResize);
+	st.onResize = fitPaneHeight;
+	window.addEventListener("resize", fitPaneHeight);
 
 	/** 打开编辑器；目录里还没添加的条目先落一个实例（模型清单已带）。 */
 	const openEditor = (r: Row): void => {
