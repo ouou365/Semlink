@@ -334,6 +334,8 @@ const t: Record<keyof typeof en, string> = {
 	edit: "편집",
 	editProvider: "제공자 편집",
 	mtEnabled: "활성화됨",
+	mtNeedsKey: "API 키를 설정하면 모델을 활성화할 수 있습니다",
+	mtConfigure: "설정",
 	mtShowing: "{shown} / {total}개 모델 표시",
 	deleteProvider: "공급자 삭제",
 	remove: "제거",

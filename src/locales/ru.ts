@@ -335,6 +335,8 @@ const t: Record<keyof typeof en, string> = {
 	edit: "Изменить",
 	editProvider: "Изменить провайдера",
 	mtEnabled: "включено",
+	mtNeedsKey: "Настройте API-ключ, чтобы включить модели",
+	mtConfigure: "Настроить",
 	mtShowing: "Показано {shown} из {total} моделей",
 	deleteProvider: "Удалить провайдера",
 	remove: "Удалить",

@@ -333,6 +333,8 @@ const en = {
 	edit: "Edit",
 	editProvider: "Edit provider",
 	mtEnabled: "enabled",
+	mtNeedsKey: "Configure an API key to enable models",
+	mtConfigure: "Configure",
 	mtShowing: "Showing {shown} of {total} models",
 	deleteProvider: "Delete provider",
 	remove: "Remove",

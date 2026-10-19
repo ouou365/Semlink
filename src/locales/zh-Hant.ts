@@ -334,6 +334,8 @@ const t: Record<keyof typeof en, string> = {
 	edit: "編輯",
 	editProvider: "編輯供應商",
 	mtEnabled: "已啟用",
+	mtNeedsKey: "配置 API Key 後可啟用模型",
+	mtConfigure: "配置",
 	mtShowing: "顯示 {shown} / {total} 個模型",
 	deleteProvider: "刪除供應商",
 	remove: "移除",

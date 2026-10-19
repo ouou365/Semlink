@@ -3130,15 +3130,63 @@ export function renderModelsTab(
 ): void {
 	const providers = plugin.settings.providers;
 	const st = state;
-	if (!st.selected || !providers.some((p) => p.id === st.selected)) {
-		st.selected = providers[0]?.id ?? "";
-	}
-	const sel = providers.find((p) => p.id === st.selected) ?? null;
 
-	const enabledCount = (p: ModelProvider): number =>
-		p.models.filter((m) => m.enabled !== false).length;
+	/** 目录条目 → settings.providers 实例（按 name 幂等）。 */
+	const ensureCatalogProvider = (name: string): ModelProvider | undefined => {
+		const existing = providers.find((p) => p.name === name);
+		if (existing) return existing;
+		const entry = CHAT_CATALOG.find((e) => e.name === name);
+		if (!entry) return undefined;
+		const provider: ModelProvider = {
+			id: `provider-${Date.now()}`,
+			name: entry.name,
+			apiBase: entry.baseUrl,
+			apiKey: "",
+			apiFormat: entry.apiFormat,
+			...(entry.wirePath ? { wirePath: entry.wirePath } : {}),
+			models: entry.models.map((m) => ({ ...m })),
+		};
+		providers.push(provider);
+		return provider;
+	};
+
+	// 合并视图：全部内置目录条目（未配置的也显示）+ 用户自定义供应商
+	type Row = {
+		key: string;
+		name: string;
+		/** 已添加到 settings.providers 的实例；目录里还没添加的为 null。 */
+		live: ModelProvider | null;
+		models: ChatModel[];
+	};
+	const rows: Row[] = [];
+	for (const c of CHAT_CATALOG) {
+		const live = providers.find((p) => p.name === c.name) ?? null;
+		rows.push({ key: `cat:${c.name}`, name: c.name, live, models: live?.models ?? c.models });
+	}
+	for (const p of providers) {
+		if (rows.some((r) => r.name === p.name)) continue;
+		rows.push({ key: `custom:${p.id}`, name: p.name, live: p, models: p.models });
+	}
+
+	if (!st.selected || !rows.some((r) => r.key === st.selected)) {
+		st.selected = rows[0]?.key ?? "";
+	}
+	const sel = rows.find((r) => r.key === st.selected) ?? null;
+
+	const enabledCount = (r: Row): number => r.models.filter((m) => m.enabled !== false).length;
+	const isConfigured = (r: Row): boolean => !!r.live?.apiKey?.trim();
 
 	const wrap = containerEl.createDiv({ cls: "semlink-mt" });
+
+	/** 打开编辑器；目录里还没添加的条目先落一个实例（模型清单已带）。 */
+	const openEditor = (r: Row): void => {
+		if (!r.live) {
+			const created = ensureCatalogProvider(r.name);
+			if (!created) return;
+			r.live = created;
+		}
+		new ProviderEditorModal(plugin.app, plugin, r.live, refresh).open();
+	};
 
 	// ── 左栏：厂商列表（logo · 名称 · 启用计数 · 状态点 · 编辑/删除）──
 	const left = wrap.createDiv({ cls: "semlink-mt-providers" });
@@ -3154,48 +3202,52 @@ export function renderModelsTab(
 	});
 
 	const list = left.createDiv({ cls: "semlink-mt-provider-list" });
-	for (const p of providers) {
+	for (const r of rows) {
+		const configured = isConfigured(r);
 		const row = list.createDiv({
-			cls: "semlink-mt-provider" + (p.id === st.selected ? " is-active" : ""),
-			attr: { "data-pid": p.id },
+			cls: "semlink-mt-provider" + (r.key === st.selected ? " is-active" : ""),
+			attr: { "data-key": r.key },
 		});
 		row.addEventListener("click", () => {
-			st.selected = p.id;
+			st.selected = r.key;
 			st.search = "";
 			refresh();
 		});
 		const logo = row.createDiv({ cls: "semlink-mt-provider-logo" });
-		appendProviderLogo(logo, p.name, "semlink-mt-logo-svg");
+		appendProviderLogo(logo, r.name, "semlink-mt-logo-svg");
 		const info = row.createDiv({ cls: "semlink-mt-provider-info" });
-		info.createDiv({ cls: "semlink-mt-provider-name", text: p.name });
+		info.createDiv({ cls: "semlink-mt-provider-name", text: r.name });
 		info.createDiv({
 			cls: "semlink-mt-provider-count",
-			text: `${enabledCount(p)} / ${p.models.length} ${t("mtEnabled")}`,
+			text: `${enabledCount(r)} / ${r.models.length} ${t("mtEnabled")}`,
 		});
-		row.createDiv({ cls: `semlink-mt-dot${p.apiKey ? " is-on" : ""}` });
+		row.createDiv({ cls: `semlink-mt-dot${configured ? " is-on" : ""}` });
 		const gear = row.createDiv({ cls: "semlink-mt-provider-gear", attr: { "aria-label": t("editProvider") } });
 		setIcon(gear, "settings");
 		gear.addEventListener("click", (e) => {
 			e.stopPropagation();
-			new ProviderEditorModal(plugin.app, plugin, p, refresh).open();
+			openEditor(r);
 		});
-		const del = row.createDiv({ cls: "semlink-mt-provider-del", attr: { "aria-label": t("deleteProvider") } });
-		setIcon(del, "trash-2");
-		del.addEventListener("click", (e) => {
-			e.stopPropagation();
-			const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
-			new DeleteProviderModal(plugin.app, p.name, () => {
-				plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== p.id);
-				// 被删厂商若承载当前嵌入模型，清空选择（运行时回退默认）
-				if (activePid === p.id) {
-					plugin.settings.embeddingModelKey = "";
-				}
-				if (st.selected === p.id) {
-					st.selected = plugin.settings.providers[0]?.id ?? "";
-				}
-				void plugin.saveSettings().then(() => refresh());
-			}).open();
-		});
+		// 只有已添加到 settings.providers 的条目才可删除
+		if (r.live) {
+			const del = row.createDiv({ cls: "semlink-mt-provider-del", attr: { "aria-label": t("deleteProvider") } });
+			setIcon(del, "trash-2");
+			del.addEventListener("click", (e) => {
+				e.stopPropagation();
+				const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
+				new DeleteProviderModal(plugin.app, r.name, () => {
+					plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== r.live!.id);
+					// 被删厂商若承载当前嵌入模型，清空选择（运行时回退默认）
+					if (activePid === r.live!.id) {
+						plugin.settings.embeddingModelKey = "";
+					}
+					if (st.selected === r.key) {
+						st.selected = rows.find((x) => x.key !== r.key)?.key ?? "";
+					}
+					void plugin.saveSettings().then(() => refresh());
+				}).open();
+			});
+		}
 	}
 
 	// ── 右栏：所选厂商的模型（搜索 · 计数 · 开关行）──
@@ -3223,7 +3275,7 @@ export function renderModelsTab(
 	};
 
 	const updateCount = (): void => {
-		const rowEl = list.querySelector(`[data-pid="${sel.id}"] .semlink-mt-provider-count`);
+		const rowEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-provider-count`);
 		if (rowEl) rowEl.textContent = `${enabledCount(sel)} / ${sel.models.length} ${t("mtEnabled")}`;
 	};
 
@@ -3234,6 +3286,7 @@ export function renderModelsTab(
 			t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)),
 		);
 		rowsHost.empty();
+		const configured = isConfigured(sel);
 		for (const m of shown) {
 			const row = rowsHost.createDiv({ cls: "semlink-mt-model" });
 			const logo = row.createDiv({ cls: "semlink-mt-model-logo" });
@@ -3243,13 +3296,23 @@ export function renderModelsTab(
 			const ctx = info.createDiv({ cls: "semlink-mt-model-ctx", text: fmtCtx(m.contextWindow) });
 			if (!m.contextWindow || m.contextWindow <= 0) ctx.addClass("semlink-hidden");
 			const toggleWrap = row.createDiv({ cls: "semlink-mt-model-toggle" });
-			new ToggleComponent(toggleWrap)
-				.setValue(m.enabled !== false)
-				.onChange((v) => {
+			const toggle = new ToggleComponent(toggleWrap).setValue(m.enabled !== false);
+			if (!configured) {
+				// 未配置 API Key 的厂商：开关可见但不可用
+				toggle.setDisabled(true);
+			} else {
+				toggle.onChange((v) => {
 					m.enabled = v;
 					void plugin.saveSettings();
 					updateCount();
 				});
+			}
+		}
+		if (!configured) {
+			const hint = rowsHost.createDiv({ cls: "semlink-mt-unconfigured" });
+			hint.createSpan({ text: t("mtNeedsKey") });
+			const cfgBtn = hint.createEl("button", { cls: "semlink-mt-config-btn", text: t("mtConfigure") });
+			cfgBtn.addEventListener("click", () => openEditor(sel));
 		}
 	};
 	renderRows();

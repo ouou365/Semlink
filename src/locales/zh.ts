@@ -335,6 +335,8 @@ const zh: Record<keyof typeof en, string> = {
 	edit: "编辑",
 	editProvider: "编辑供应商",
 	mtEnabled: "已启用",
+	mtNeedsKey: "配置 API Key 后可启用模型",
+	mtConfigure: "配置",
 	mtShowing: "显示 {shown} / {total} 个模型",
 	deleteProvider: "删除供应商",
 	remove: "删除",
