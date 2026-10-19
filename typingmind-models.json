@@ -1,8 +1,8 @@
 {
   "source": "typingmind.com/#models",
-  "scrapedAt": "2026-10-19T10:55:09",
-  "vendorCount": 22,
-  "modelCount": 1766,
+  "scrapedAt": "2026-10-19T13:04:57",
+  "vendorCount": 24,
+  "modelCount": 1794,
   "vendors": [
     {
       "vendor": "SpaceXAI",
@@ -31150,6 +31150,66 @@
           }
         },
         {
+          "id": "deepseek/deepseek-v4-pro",
+          "title": "DeepSeek V4 Pro",
+          "vendor": "Deepseek",
+          "providerID": "deepseek",
+          "modelID": "deepseek-v4-pro",
+          "contextLength": 1000000,
+          "maxOutputTokens": 393216,
+          "apiType": "openai",
+          "releaseDate": "2026-08-12",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": false,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.00132,
+            "completion": 0.00396,
+            "cache_read": 4.4e-05
+          }
+        },
+        {
+          "id": "deepseek/deepseek-v4-flash",
+          "title": "DeepSeek V4 Flash (Deprecated)",
+          "vendor": "Deepseek",
+          "providerID": "deepseek",
+          "modelID": "deepseek-v4-flash",
+          "contextLength": 1000000,
+          "maxOutputTokens": 393216,
+          "apiType": "openai",
+          "releaseDate": "2026-09-10",
+          "knowledgeCutoff": "2025-05",
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.0003,
+            "completion": 0.0012,
+            "cache_read": 6e-06
+          }
+        },
+        {
+          "id": "deepseek/deepseek-v4-flash-vision-exp",
+          "title": "DeepSeek V4 Flash Vision Exp (Deprecated)",
+          "vendor": "Deepseek",
+          "providerID": "deepseek",
+          "modelID": "deepseek-v4-flash-vision-exp",
+          "contextLength": 1000000,
+          "maxOutputTokens": 393216,
+          "apiType": "openai",
+          "releaseDate": "2026-09-10",
+          "knowledgeCutoff": "2025-05",
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.0003,
+            "completion": 0.0012,
+            "cache_read": 6e-06
+          }
+        },
+        {
           "id": "deepseek/deepseek-chat",
           "title": "DeepSeek Chat (Deprecated)",
           "vendor": "Deepseek",
@@ -31187,6 +31247,150 @@
             "prompt": 0.00014,
             "completion": 0.00028,
             "cache_read": 2.8e-06
+          }
+        }
+      ]
+    },
+    {
+      "vendor": "MiniMax",
+      "models": [
+        {
+          "id": "minimax/MiniMax-M3",
+          "title": "MiniMax-M3",
+          "vendor": "MiniMax",
+          "providerID": "minimax",
+          "modelID": "MiniMax-M3",
+          "contextLength": 1000000,
+          "maxOutputTokens": 512000,
+          "apiType": "openai",
+          "releaseDate": "2026-06-01",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.0003,
+            "completion": 0.0012,
+            "cache_read": 6e-05
+          }
+        },
+        {
+          "id": "minimax/MiniMax-M2.7",
+          "title": "MiniMax-M2.7",
+          "vendor": "MiniMax",
+          "providerID": "minimax",
+          "modelID": "MiniMax-M2.7",
+          "contextLength": 204800,
+          "maxOutputTokens": 131072,
+          "apiType": "openai",
+          "releaseDate": "2026-03-18",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": false,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.0003,
+            "completion": 0.0012,
+            "cache_read": 6e-05
+          }
+        },
+        {
+          "id": "minimax/MiniMax-M2.7-highspeed",
+          "title": "MiniMax-M2.7-highspeed",
+          "vendor": "MiniMax",
+          "providerID": "minimax",
+          "modelID": "MiniMax-M2.7-highspeed",
+          "contextLength": 204800,
+          "maxOutputTokens": 131072,
+          "apiType": "openai",
+          "releaseDate": "2026-03-18",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": false,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.0006,
+            "completion": 0.0024,
+            "cache_read": 6e-05
+          }
+        },
+        {
+          "id": "minimax/MiniMax-M2.5-highspeed",
+          "title": "MiniMax-M2.5-highspeed",
+          "vendor": "MiniMax",
+          "providerID": "minimax",
+          "modelID": "MiniMax-M2.5-highspeed",
+          "contextLength": 204800,
+          "maxOutputTokens": 131072,
+          "apiType": "openai",
+          "releaseDate": "2026-02-13",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": false,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.0006,
+            "completion": 0.0024,
+            "cache_read": 3e-05
+          }
+        },
+        {
+          "id": "minimax/MiniMax-M2.5",
+          "title": "MiniMax-M2.5",
+          "vendor": "MiniMax",
+          "providerID": "minimax",
+          "modelID": "MiniMax-M2.5",
+          "contextLength": 204800,
+          "maxOutputTokens": 131072,
+          "apiType": "openai",
+          "releaseDate": "2026-02-12",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": false,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.0003,
+            "completion": 0.0012,
+            "cache_read": 3e-05
+          }
+        },
+        {
+          "id": "minimax/MiniMax-M2.1",
+          "title": "MiniMax-M2.1",
+          "vendor": "MiniMax",
+          "providerID": "minimax",
+          "modelID": "MiniMax-M2.1",
+          "contextLength": 204800,
+          "maxOutputTokens": 131072,
+          "apiType": "openai",
+          "releaseDate": "2025-12-23",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": false,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.0003,
+            "completion": 0.0012,
+            "cache_read": 3e-05
+          }
+        },
+        {
+          "id": "minimax/MiniMax-M2",
+          "title": "MiniMax-M2",
+          "vendor": "MiniMax",
+          "providerID": "minimax",
+          "modelID": "MiniMax-M2",
+          "contextLength": 204800,
+          "maxOutputTokens": 131072,
+          "apiType": "openai",
+          "releaseDate": "2025-10-27",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": false,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.0003,
+            "completion": 0.0012
           }
         }
       ]
@@ -31232,6 +31436,46 @@
             "prompt": 0.000435,
             "completion": 0.00087,
             "cache_read": 3.6e-06
+          }
+        },
+        {
+          "id": "xiaomi/mimo-v2.6-pro-ultraspeed",
+          "title": "MiMo-V2.6-Pro-UltraSpeed",
+          "vendor": "Xiaomi",
+          "providerID": "xiaomi",
+          "modelID": "mimo-v2.6-pro-ultraspeed",
+          "contextLength": 1048576,
+          "maxOutputTokens": 131072,
+          "apiType": "openai",
+          "releaseDate": "2026-09-21",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.00435,
+            "completion": 0.0087,
+            "cache_read": 3.6e-05
+          }
+        },
+        {
+          "id": "xiaomi/mimo-v2.5-pro-ultraspeed",
+          "title": "MiMo-V2.5-Pro-UltraSpeed",
+          "vendor": "Xiaomi",
+          "providerID": "xiaomi",
+          "modelID": "mimo-v2.5-pro-ultraspeed",
+          "contextLength": 1048576,
+          "maxOutputTokens": 131072,
+          "apiType": "openai",
+          "releaseDate": "2026-06-08",
+          "knowledgeCutoff": "2024-12",
+          "description": "",
+          "vision": false,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.001305,
+            "completion": 0.00261,
+            "cache_read": 1.08e-05
           }
         },
         {
@@ -31337,8 +31581,233 @@
       ]
     },
     {
+      "vendor": "Moonshot",
+      "models": [
+        {
+          "id": "moonshotai/kimi-k3",
+          "title": "Kimi K3",
+          "vendor": "Moonshot",
+          "providerID": "moonshotai",
+          "modelID": "kimi-k3",
+          "contextLength": 1048576,
+          "maxOutputTokens": 1048576,
+          "apiType": "openai",
+          "releaseDate": "2026-07-16",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.003,
+            "completion": 0.015,
+            "cache_read": 0.0003
+          }
+        },
+        {
+          "id": "moonshotai/kimi-k2.7-code",
+          "title": "Kimi K2.7 Code",
+          "vendor": "Moonshot",
+          "providerID": "moonshotai",
+          "modelID": "kimi-k2.7-code",
+          "contextLength": 262144,
+          "maxOutputTokens": 262144,
+          "apiType": "openai",
+          "releaseDate": "2026-06-12",
+          "knowledgeCutoff": "2025-01",
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.00095,
+            "completion": 0.004,
+            "cache_read": 0.00019
+          }
+        },
+        {
+          "id": "moonshotai/kimi-k2.7-code-highspeed",
+          "title": "Kimi K2.7 Code HighSpeed",
+          "vendor": "Moonshot",
+          "providerID": "moonshotai",
+          "modelID": "kimi-k2.7-code-highspeed",
+          "contextLength": 262144,
+          "maxOutputTokens": 262144,
+          "apiType": "openai",
+          "releaseDate": "2026-06-12",
+          "knowledgeCutoff": "2025-01",
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.0019,
+            "completion": 0.008,
+            "cache_read": 0.00038
+          }
+        },
+        {
+          "id": "moonshotai/kimi-k2.6",
+          "title": "Kimi K2.6",
+          "vendor": "Moonshot",
+          "providerID": "moonshotai",
+          "modelID": "kimi-k2.6",
+          "contextLength": 262144,
+          "maxOutputTokens": 262144,
+          "apiType": "openai",
+          "releaseDate": "2026-04-21",
+          "knowledgeCutoff": "2025-01",
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.00095,
+            "completion": 0.004,
+            "cache_read": 0.00016
+          }
+        },
+        {
+          "id": "moonshotai/kimi-k2.5",
+          "title": "Kimi K2.5 (Deprecated)",
+          "vendor": "Moonshot",
+          "providerID": "moonshotai",
+          "modelID": "kimi-k2.5",
+          "contextLength": 262144,
+          "maxOutputTokens": 262144,
+          "apiType": "openai",
+          "releaseDate": "2026-01",
+          "knowledgeCutoff": "2025-01",
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.0006,
+            "completion": 0.003,
+            "cache_read": 0.0001
+          }
+        },
+        {
+          "id": "moonshotai/kimi-k2-thinking",
+          "title": "Kimi K2 Thinking (Deprecated)",
+          "vendor": "Moonshot",
+          "providerID": "moonshotai",
+          "modelID": "kimi-k2-thinking",
+          "contextLength": 262144,
+          "maxOutputTokens": 262144,
+          "apiType": "openai",
+          "releaseDate": "2025-11-06",
+          "knowledgeCutoff": "2024-08",
+          "description": "",
+          "vision": false,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.0006,
+            "completion": 0.0025,
+            "cache_read": 0.00015
+          }
+        },
+        {
+          "id": "moonshotai/kimi-k2-thinking-turbo",
+          "title": "Kimi K2 Thinking Turbo (Deprecated)",
+          "vendor": "Moonshot",
+          "providerID": "moonshotai",
+          "modelID": "kimi-k2-thinking-turbo",
+          "contextLength": 262144,
+          "maxOutputTokens": 262144,
+          "apiType": "openai",
+          "releaseDate": "2025-11-06",
+          "knowledgeCutoff": "2024-08",
+          "description": "",
+          "vision": false,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.00115,
+            "completion": 0.008,
+            "cache_read": 0.00015
+          }
+        },
+        {
+          "id": "moonshotai/kimi-k2-0905-preview",
+          "title": "Kimi K2 0905 (Deprecated)",
+          "vendor": "Moonshot",
+          "providerID": "moonshotai",
+          "modelID": "kimi-k2-0905-preview",
+          "contextLength": 262144,
+          "maxOutputTokens": 262144,
+          "apiType": "openai",
+          "releaseDate": "2025-09-05",
+          "knowledgeCutoff": "2024-10",
+          "description": "",
+          "vision": false,
+          "reasoning": false,
+          "cost": {
+            "prompt": 0.0006,
+            "completion": 0.0025,
+            "cache_read": 0.00015
+          }
+        },
+        {
+          "id": "moonshotai/kimi-k2-turbo-preview",
+          "title": "Kimi K2 Turbo (Deprecated)",
+          "vendor": "Moonshot",
+          "providerID": "moonshotai",
+          "modelID": "kimi-k2-turbo-preview",
+          "contextLength": 262144,
+          "maxOutputTokens": 262144,
+          "apiType": "openai",
+          "releaseDate": "2025-09-05",
+          "knowledgeCutoff": "2024-10",
+          "description": "",
+          "vision": false,
+          "reasoning": false,
+          "cost": {
+            "prompt": 0.0024,
+            "completion": 0.01,
+            "cache_read": 0.0006
+          }
+        },
+        {
+          "id": "moonshotai/kimi-k2-0711-preview",
+          "title": "Kimi K2 0711 (Deprecated)",
+          "vendor": "Moonshot",
+          "providerID": "moonshotai",
+          "modelID": "kimi-k2-0711-preview",
+          "contextLength": 131072,
+          "maxOutputTokens": 16384,
+          "apiType": "openai",
+          "releaseDate": "2025-07-14",
+          "knowledgeCutoff": "2024-10",
+          "description": "",
+          "vision": false,
+          "reasoning": false,
+          "cost": {
+            "prompt": 0.0006,
+            "completion": 0.0025,
+            "cache_read": 0.00015
+          }
+        }
+      ]
+    },
+    {
       "vendor": "Sakana AI",
       "models": [
+        {
+          "id": "sakana/sakana-namazu",
+          "title": "Sakana Namazu",
+          "vendor": "Sakana AI",
+          "providerID": "sakana",
+          "modelID": "sakana-namazu",
+          "contextLength": 262144,
+          "maxOutputTokens": 65536,
+          "apiType": "openai-response-api",
+          "releaseDate": "2026-08-03",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.00095,
+            "completion": 0.004,
+            "cache_read": 0.00015
+          }
+        },
         {
           "id": "sakana/fugu",
           "title": "Fugu",
@@ -31354,12 +31823,72 @@
           "vision": true,
           "reasoning": true,
           "cost": null
+        },
+        {
+          "id": "sakana/fugu-ultra",
+          "title": "Fugu Ultra",
+          "vendor": "Sakana AI",
+          "providerID": "sakana",
+          "modelID": "fugu-ultra",
+          "contextLength": 1000000,
+          "maxOutputTokens": 1000000,
+          "apiType": "openai-response-api",
+          "releaseDate": "2026-06-15",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.005,
+            "completion": 0.03,
+            "cache_read": 0.0005
+          }
         }
       ]
     },
     {
       "vendor": "Meta",
       "models": [
+        {
+          "id": "meta/muse-wonder-1.0",
+          "title": "Muse Wonder",
+          "vendor": "Meta",
+          "providerID": "meta",
+          "modelID": "muse-wonder-1.0",
+          "contextLength": 1048576,
+          "maxOutputTokens": 131072,
+          "apiType": "openai-response-api",
+          "releaseDate": "2026-10-12",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.004,
+            "completion": 0.02,
+            "cache_read": 0.0002
+          }
+        },
+        {
+          "id": "meta/muse-spark-1.3",
+          "title": "Muse Spark 1.3",
+          "vendor": "Meta",
+          "providerID": "meta",
+          "modelID": "muse-spark-1.3",
+          "contextLength": 1048576,
+          "maxOutputTokens": 131072,
+          "apiType": "openai-response-api",
+          "releaseDate": "2026-09-02",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.00125,
+            "completion": 0.00425,
+            "cache_read": 0.00015
+          }
+        },
         {
           "id": "meta/muse-spark-1.3-contributor",
           "title": "Muse Spark 1.3 Contributor",
@@ -31381,6 +31910,26 @@
           }
         },
         {
+          "id": "meta/muse-spark-1.2",
+          "title": "Muse Spark 1.2",
+          "vendor": "Meta",
+          "providerID": "meta",
+          "modelID": "muse-spark-1.2",
+          "contextLength": 1048576,
+          "maxOutputTokens": 131072,
+          "apiType": "openai-response-api",
+          "releaseDate": "2026-08-05",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.00125,
+            "completion": 0.00425,
+            "cache_read": 0.00015
+          }
+        },
+        {
           "id": "meta/muse-spark-1.2-contributor",
           "title": "Muse Spark 1.2 Contributor",
           "vendor": "Meta",
@@ -31398,6 +31947,26 @@
             "prompt": 0.0001,
             "completion": 0.0002,
             "cache_read": 2e-06
+          }
+        },
+        {
+          "id": "meta/muse-spark-1.1",
+          "title": "Muse Spark 1.1",
+          "vendor": "Meta",
+          "providerID": "meta",
+          "modelID": "muse-spark-1.1",
+          "contextLength": 1048576,
+          "maxOutputTokens": 131072,
+          "apiType": "openai-response-api",
+          "releaseDate": "2026-04-08",
+          "knowledgeCutoff": null,
+          "description": "",
+          "vision": true,
+          "reasoning": true,
+          "cost": {
+            "prompt": 0.00125,
+            "completion": 0.00425,
+            "cache_read": 0.00015
           }
         }
       ]
