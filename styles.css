@@ -722,9 +722,17 @@
     color: var(--text-error);
 }
 
-/* 未配置 Key 时"显示 X / Y 个模型"下方的一行提示 */
-.smart-vault-settings .semlink-mt-keyhint {
-    color: var(--text-muted);
+/* 未配置 Key 时，"显示 X / Y 个模型"这一行换成提示文案 + 右侧配置按钮 */
+.smart-vault-settings .semlink-mt-showing.is-keyhint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.smart-vault-settings .semlink-mt-keyhint-btn {
+    flex-shrink: 0;
+    padding: 2px 10px;
     font-size: 12px;
 }
 

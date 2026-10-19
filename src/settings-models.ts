@@ -3567,10 +3567,14 @@ export function renderModelsTab(
 	searchInput.value = st.search ?? "";
 
 	const showingEl = right.createDiv({ cls: "semlink-mt-showing" });
-	// 未配置 Key：在"显示 X / Y 个模型"下方给一行提示（此时代码开关不可用，
-	// 点行内齿轮图标去配置）
+	// 未配置 Key：这行整体换成"配置 API Key 后可启用模型"，右侧给配置按钮
+	// （renderRows 里只在已配置时才写回计数文案，避免搜索时覆盖本行）
 	if (!isConfigured(sel)) {
-		right.createDiv({ cls: "semlink-mt-keyhint", text: t("mtNeedsKey") });
+		showingEl.addClass("is-keyhint");
+		showingEl.setText(t("mtNeedsKey"));
+		showingEl
+			.createEl("button", { cls: "semlink-btn semlink-btn-cta semlink-mt-keyhint-btn", text: t("mtConfigure") })
+			.addEventListener("click", () => openEditor(sel));
 	}
 	const rowsHost = right.createDiv({ cls: "semlink-mt-rows" });
 
@@ -3607,9 +3611,12 @@ export function renderModelsTab(
 	const renderRows = (): void => {
 		const q = (st.search ?? "").toLowerCase();
 		const shown = sel.models.filter((m) => !q || m.id.toLowerCase().includes(q));
-		showingEl.setText(
-			t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)),
-		);
+		// 未配置 Key 时这一行被"配置 API Key 后可启用模型 + 配置按钮"占用
+		if (isConfigured(sel)) {
+			showingEl.setText(
+				t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)),
+			);
+		}
 		// 保留滚动位置：empty() 的瞬间内容高度清零，浏览器会把 scrollTop
 		// 钳制到 0，重建后就会“自动滚回顶部”。
 		const keepScroll = rowsHost.scrollTop;
