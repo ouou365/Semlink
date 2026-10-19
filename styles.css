@@ -531,8 +531,16 @@
     display: flex;
     gap: 16px;
     align-items: stretch;
-    min-height: 460px;
     min-width: 0;
+    /* 高度跟随视口：面板不超过当前窗口，窗口增大列表随之变高；
+       小窗口时保底 420px（此时整个设置弹窗自身滚动）。 */
+    height: calc(100vh - 230px);
+    min-height: 420px;
+}
+
+.smart-vault-settings .semlink-mt-providers,
+.smart-vault-settings .semlink-mt-models {
+    min-height: 0;
 }
 
 .smart-vault-settings .semlink-mt-providers {
