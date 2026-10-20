@@ -2966,11 +2966,11 @@ function renderProviderEditor(
 				setIcon(chev, open ? "chevron-right" : "chevron-down");
 				advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
 			});
+			advBody.createDiv({ cls: "semlink-editor-field-label", text: t("editorEndpoint") });
 			advBody.createDiv({
 				cls: "semlink-editor-adv-desc",
 				text: t("editorEndpointDesc").replace("{provider}", p.name),
 			});
-			advBody.createDiv({ cls: "semlink-editor-field-label", text: t("editorEndpoint") });
 			const epInput = advBody.createEl("input", {
 				cls: "semlink-editor-input",
 				attr: { type: "text", spellcheck: "false" },
