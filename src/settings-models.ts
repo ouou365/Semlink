@@ -1902,13 +1902,9 @@ function renderDraftEditor(
 	typeSel.value = draft.apiFormat;
 	typeSel.addEventListener("change", () => {
 		draft.apiFormat = typeSel.value as ChatApiFormat;
-		hintEl.setText(
-			t("mtEndpointHint").replace("{url}",
-				draft.apiFormat === "anthropic" ? "https://api.anthropic.com/v1/messages" : "https://api.openai.com/v1/chat/completions"),
-		);
 	});
 
-	// ── Endpoint URL*：整行输入 + 兼容性提示 ──
+	// ── Endpoint URL*：整行输入 ──
 	slot.createDiv({ cls: "semlink-editor-field-label", text: t("chatBaseUrl") });
 	const endpointInput = slot.createEl("input", {
 		cls: "semlink-editor-input",
@@ -1918,7 +1914,6 @@ function renderDraftEditor(
 	endpointInput.addEventListener("input", () => {
 		draft.baseUrl = endpointInput.value;
 	});
-	const hintEl = slot.createDiv({ cls: "semlink-editor-adv-desc" });
 
 	// ── Authentication Type：鉴权下拉（无鉴权时隐藏 Key 输入） ──
 	slot.createDiv({ cls: "semlink-editor-field-label", text: t("chatApiKey") });
@@ -1944,10 +1939,6 @@ function renderDraftEditor(
 		syncAuth();
 	});
 	syncAuth();
-	hintEl.setText(
-		t("mtEndpointHint").replace("{url}",
-			draft.apiFormat === "anthropic" ? "https://api.anthropic.com/v1/messages" : "https://api.openai.com/v1/chat/completions"),
-	);
 
 	new Setting(slot)
 		.addButton((btn) => btn.setButtonText(t("cancel")).onClick(() => opts.onCancel()))
