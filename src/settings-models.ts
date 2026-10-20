@@ -1838,12 +1838,14 @@ function renderDraftEditor(
 	errorEl.addClass("semlink-hidden");
 	let busy = false;
 
-	// ── 图标：下拉选择内置图标（同一 SVG 的别名键只保留排序靠前的代表键） ──
-	slot.createDiv({ cls: "semlink-editor-field-label", text: t("mtIcon") });
+	// ── 图标：左侧正方形图标块，点击展开内置图标面板（缺省 ollama） ──
+	// 同一 SVG 的别名键（如 spacexai ← xai）只保留排序靠前的代表键，避免重复
 	const iconWrap = slot.createDiv({ cls: "semlink-icon-select-wrap" });
-	const iconBtn = iconWrap.createEl("button", { cls: "semlink-icon-select", attr: { type: "button" } });
-	const faceEl = iconBtn.createSpan({ cls: "semlink-icon-select-face" });
-	const labelEl = iconBtn.createSpan({ cls: "semlink-icon-select-label" });
+	const iconBox = iconWrap.createEl("button", { cls: "semlink-icon-box", attr: { type: "button" } });
+	const faceEl = iconBox.createSpan({ cls: "semlink-icon-select-face" });
+	const infoEl = iconWrap.createDiv({ cls: "semlink-icon-field-info" });
+	infoEl.createSpan({ cls: "semlink-icon-field-name", text: t("mtIcon") });
+	const keyEl = infoEl.createSpan({ cls: "semlink-icon-field-key" });
 	const panelEl = iconWrap.createDiv({ cls: "semlink-icon-dropdown semlink-hidden" });
 	const iconGrid = panelEl.createDiv({ cls: "semlink-icon-picker" });
 	const seenSvgs = new Set<string>();
@@ -1856,21 +1858,15 @@ function renderDraftEditor(
 		setSvgIcon(swatch, svg);
 		swatches.set(key, swatch);
 		swatch.addEventListener("click", () => {
-			draft.icon = draft.icon === key ? "" : key;
+			draft.icon = key;
 			refreshFace();
 			setPanelOpen(false);
 		});
 	}
 	const refreshFace = (): void => {
-		const picked = swatches.get(draft.icon);
 		faceEl.empty();
-		if (picked) {
-			setSvgIcon(faceEl, PROVIDER_LOGOS[draft.icon]);
-			labelEl.setText(draft.icon);
-		} else {
-			labelEl.setText(t("mtIconDefault"));
-		}
-		iconBtn.toggleClass("has-icon", !!picked);
+		setSvgIcon(faceEl, PROVIDER_LOGOS[draft.icon] ?? PROVIDER_LOGOS.ollama);
+		keyEl.setText(draft.icon || "ollama");
 		for (const [key, swatch] of swatches) swatch.toggleClass("is-picked", key === draft.icon);
 	};
 	// 点击面板外收起（捕获阶段）；弹窗关闭时由 dispose 解绑
@@ -1885,7 +1881,7 @@ function renderDraftEditor(
 		else document.removeEventListener("pointerdown", onDocPoint, true);
 	};
 	refreshFace();
-	iconBtn.addEventListener("click", () => setPanelOpen(panelEl.hasClass("semlink-hidden")));
+	iconBox.addEventListener("click", () => setPanelOpen(panelEl.hasClass("semlink-hidden")));
 
 	// ── 名称 ──
 	slot.createDiv({ cls: "semlink-editor-field-label", text: t("chatProviderName") });
@@ -2058,7 +2054,8 @@ function renderCustomCard(
 
 	const draft: ChatProviderDraft = {
 		name: "",
-		icon: "",
+		// 缺省图标 = ollama；用户可换成库内其它图标
+		icon: "ollama",
 		baseUrl: "",
 		apiKey: "",
 		apiFormat: "openai",

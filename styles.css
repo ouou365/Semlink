@@ -1450,31 +1450,35 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     box-shadow: 0 0 0 1px var(--interactive-accent);
 }
 
-/* 图标下拉选择器：按钮与协议下拉同风格，点击展开内置图标网格 */
+/* 图标区域：左侧正方形图标块 + 右侧名称/键名，点击展开内置图标面板 */
 .smart-vault-settings .semlink-icon-select-wrap {
     position: relative;
-}
-
-.smart-vault-settings .semlink-icon-select {
     display: flex;
     align-items: center;
-    gap: 10px;
-    width: 100%;
+    gap: 12px;
     margin-bottom: 16px;
-    padding: 8px 44px 8px 14px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 10px;
-    font-size: 14px;
-    color: var(--text-normal);
-    text-align: left;
-    cursor: pointer;
-    appearance: none;
-    -webkit-appearance: none;
-    background: var(--background-primary) url(data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2716%27 height=%2716%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23999%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E) no-repeat right 14px center;
 }
 
-.smart-vault-settings .semlink-icon-select:focus,
-.smart-vault-settings .semlink-icon-select:focus-visible {
+.smart-vault-settings .semlink-icon-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    flex: none;
+    padding: 0;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    cursor: pointer;
+    background: var(--background-primary);
+}
+
+.smart-vault-settings .semlink-icon-box:hover {
+    border-color: var(--interactive-accent);
+}
+
+.smart-vault-settings .semlink-icon-box:focus,
+.smart-vault-settings .semlink-icon-box:focus-visible {
     box-shadow: none;
     outline: none;
 }
@@ -1483,24 +1487,31 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
-    flex: none;
 }
 
 .smart-vault-settings .semlink-icon-select-face svg {
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
 }
 
-.smart-vault-settings .semlink-icon-select-label {
+.smart-vault-settings .semlink-icon-field-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.smart-vault-settings .semlink-icon-field-name {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.smart-vault-settings .semlink-icon-field-key {
+    font-size: 12px;
+    color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.smart-vault-settings .semlink-icon-select:not(.has-icon) .semlink-icon-select-label {
-    color: var(--text-muted);
 }
 
 /* 下拉面板：浮在后续字段之上，内部复用图标网格的滚动 */
