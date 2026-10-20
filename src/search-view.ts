@@ -3221,6 +3221,25 @@ export class SemanticSearchView extends ItemView {
 			this.modelPopupEl = document.body.createDiv({ cls: "semlink-search-depth-popup semlink-search-model-popup semlink-hidden" });
 		}
 		const popup = this.modelPopupEl;
+		this.renderModelPopupContent(popup);
+
+		// Position ABOVE the trigger (bottom edge of the window is tight).
+		const rect = this.modelTriggerEl.getBoundingClientRect();
+		popup.style.left = rect.left + "px";
+		popup.style.bottom = (window.innerHeight - rect.top + 4) + "px";
+		popup.removeClass("semlink-hidden");
+
+		// Keep it inside the viewport.
+		const vw = window.innerWidth;
+		if (rect.left + popup.offsetWidth > vw - 8) {
+			popup.style.left = Math.max(8, vw - popup.offsetWidth - 8) + "px";
+		}
+	}
+
+	/** Popup content: active-model header card + flat model rows (no provider
+	 *  group headers) + a "Manage models" footer. Rebuilt in place after a
+	 *  drag reorder while the popup stays open. */
+	private renderModelPopupContent(popup: HTMLElement): void {
 		popup.empty();
 
 		const active = this.chatClient.getActiveModel();
@@ -3244,42 +3263,87 @@ export class SemanticSearchView extends ItemView {
 			}
 		}
 
-		for (const group of this.chatClient.getModelOptions()) {
-			popup.createDiv({ cls: "semlink-search-model-popup-group", text: group.providerName.toUpperCase() });
-			for (const m of group.models) {
-				const isActive = active !== null && active.provider.id === group.providerId && active.model.id === m.id;
-				const row = popup.createDiv({
-					cls: "semlink-search-model-popup-row" + (isActive ? " is-active" : ""),
-				});
-				const logoEl = row.createSpan({ cls: "semlink-search-model-popup-logo" });
-				setSvgIcon(logoEl, brandLogoOf(group.providerName).svg || llmIconSvg);
-				// Full model id in the list (org/model) — more complete than
-				// the toolbar's short name, disambiguates same-name models
-				// from different orgs on multi-provider hosts.
-				row.createSpan({ cls: "semlink-search-model-popup-name", text: m.id });
-				if (m.contextWindow > 0) {
-					row.createSpan({ cls: "semlink-search-model-popup-ctx", text: formatContextWindow(m.contextWindow) });
-				}
-				row.addEventListener("click", () => {
-					if (this.chatClient.setActiveModel(group.providerId, m.id)) {
-						this.updateModelLabel();
-						this.hideModelPopup();
-					}
-				});
+		// Flat model rows (provider groups removed) — the order mirrors each
+		// provider's real models array; dragging reorders that array.
+		const flat = this.chatClient.getModelOptions().flatMap((g) =>
+			g.models.map((m) => ({ providerId: g.providerId, providerName: g.providerName, model: m })),
+		);
+		flat.forEach((opt, index) => {
+			const isActive = active !== null && active.provider.id === opt.providerId && active.model.id === opt.model.id;
+			const row = popup.createDiv({
+				cls: "semlink-search-model-popup-row" + (isActive ? " is-active" : ""),
+			});
+			// 左侧移动滑块：拖动调整顺序（写入真实 provider.models 并落盘；
+			// 跨供应商拖放不排序——顺序归属各自供应商的数组）
+			const grip = row.createDiv({ cls: "semlink-search-model-popup-grip" });
+			setIcon(grip, "grip-vertical");
+			grip.addEventListener("click", (e) => e.stopPropagation());
+			row.draggable = true;
+			row.addEventListener("dragstart", (e) => {
+				e.dataTransfer?.setData("text/semlink-model-option", String(index));
+				if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+			});
+			row.addEventListener("dragover", (e) => {
+				e.preventDefault();
+				if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+			});
+			row.addEventListener("drop", (e) => {
+				e.preventDefault();
+				const raw = e.dataTransfer?.getData("text/semlink-model-option");
+				const from = raw === undefined ? -1 : parseInt(raw, 10);
+				if (!Number.isFinite(from) || from === index || !flat[from]) return;
+				const src = flat[from];
+				if (src.providerId !== opt.providerId) return;
+				const provider = this.plugin.settings.providers.find((p) => p.id === src.providerId);
+				if (!provider) return;
+				const srcIdx = provider.models.indexOf(src.model);
+				if (srcIdx === -1) return;
+				provider.models.splice(srcIdx, 1);
+				provider.models.splice(provider.models.indexOf(opt.model), 0, src.model);
+				void this.plugin.saveSettings();
+				this.renderModelPopupContent(popup);
+			});
+
+			const logoEl = row.createSpan({ cls: "semlink-search-model-popup-logo" });
+			setSvgIcon(logoEl, brandLogoOf(opt.providerName).svg || llmIconSvg);
+			// Full model id in the list (org/model) — more complete than
+			// the toolbar's short name, disambiguates same-name models
+			// from different orgs on multi-provider hosts.
+			row.createSpan({ cls: "semlink-search-model-popup-name", text: opt.model.id });
+			if (opt.model.contextWindow > 0) {
+				row.createSpan({ cls: "semlink-search-model-popup-ctx", text: formatContextWindow(opt.model.contextWindow) });
 			}
-		}
+			row.addEventListener("click", () => {
+				if (this.chatClient.setActiveModel(opt.providerId, opt.model.id)) {
+					this.updateModelLabel();
+					this.hideModelPopup();
+				}
+			});
+		});
 
-		// Position ABOVE the trigger (bottom edge of the window is tight).
-		const rect = this.modelTriggerEl.getBoundingClientRect();
-		popup.style.left = rect.left + "px";
-		popup.style.bottom = (window.innerHeight - rect.top + 4) + "px";
-		popup.removeClass("semlink-hidden");
+		// 管理模型入口：打开设置页并定位到 Model 标签
+		const manageRow = popup.createDiv({ cls: "semlink-search-model-popup-manage" });
+		const manageIcon = manageRow.createSpan({ cls: "semlink-search-model-popup-manage-icon" });
+		setIcon(manageIcon, "settings");
+		manageRow.createSpan({ cls: "semlink-search-model-popup-manage-label", text: t("manageModels") });
+		manageRow.addEventListener("click", () => {
+			this.hideModelPopup();
+			this.openModelSettings();
+		});
+	}
 
-		// Keep it inside the viewport.
-		const vw = window.innerWidth;
-		if (rect.left + popup.offsetWidth > vw - 8) {
-			popup.style.left = Math.max(8, vw - popup.offsetWidth - 8) + "px";
-		}
+	/** Open the plugin settings with the Model tab active ("Manage models"). */
+	private openModelSettings(): void {
+		const app = this.app as unknown as {
+			setting: {
+				open(): void;
+				openTabById(id: string): void;
+				activeTab?: { openModelTab?: () => void };
+			};
+		};
+		app.setting.open();
+		app.setting.openTabById("semlink");
+		app.setting.activeTab?.openModelTab?.();
 	}
 
 	private hideModelPopup(): void {

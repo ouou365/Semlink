@@ -35,6 +35,13 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
+	/** Deep-link from the chat view's "Manage models" popup entry: reveal the
+	 *  settings with the Model tab active. */
+	openModelTab(): void {
+		this.activeTab = "model";
+		this.display();
+	}
+
 	/** Re-render the current tab while keeping the scroll position — row
 	 *  expand/collapse, provider create/delete and model add/remove/reorder
 	 *  all re-render the whole page, which would otherwise jump back to the

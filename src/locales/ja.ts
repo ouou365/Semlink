@@ -360,6 +360,7 @@ const t: Record<keyof typeof en, string> = {
 	mtNeedsKey: "APIを設定すると利用できます",
 	mtConfigure: "設定",
 	mtShowing: "モデル{total}個",
+	manageModels: "モデルを管理",
 	mtNewFolder: "新しいフォルダ",
 	mtCreate: "作成",
 	deleteProvider: "プロバイダーを削除",

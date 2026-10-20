@@ -360,6 +360,7 @@ const t: Record<keyof typeof en, string> = {
 	mtNeedsKey: "API를 설정하면 사용할 수 있습니다",
 	mtConfigure: "설정",
 	mtShowing: "모델 {total}개",
+	manageModels: "모델 관리",
 	mtNewFolder: "새 폴더",
 	mtCreate: "만들기",
 	deleteProvider: "공급자 삭제",

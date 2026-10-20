@@ -361,6 +361,7 @@ const zh: Record<keyof typeof en, string> = {
 	mtNeedsKey: "配置API后可使用",
 	mtConfigure: "配置",
 	mtShowing: "{total} 个模型",
+	manageModels: "管理模型",
 	mtNewFolder: "新建文件夹",
 	mtCreate: "创建",
 	deleteProvider: "删除供应商",

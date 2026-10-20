@@ -362,6 +362,7 @@ const t: Record<keyof typeof en, string> = {
 	mtNeedsKey: "Configura la API para usar los modelos",
 	mtConfigure: "Configurar",
 	mtShowing: "{total} modelos",
+	manageModels: "Administrar modelos",
 	mtNewFolder: "Nueva carpeta",
 	mtCreate: "Crear",
 	deleteProvider: "Eliminar proveedor",

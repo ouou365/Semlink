@@ -4584,8 +4584,9 @@ body .semlink-msg-user::selection {
     font-weight: 600;
 }
 
-/* Model-switcher popup: reuses the depth popup, adds group headers and a
-   wider min-width so model ids don't wrap. */
+/* Model-switcher popup: reuses the depth popup with a wider min-width so
+   model ids don't wrap. Flat model list (no group headers) with drag
+   handles and a "Manage models" footer. */
 .semlink-search-model-popup {
     min-width: 300px;
     max-width: 360px;
@@ -4636,14 +4637,6 @@ body .semlink-msg-user::selection {
     color: var(--text-faint);
 }
 
-.semlink-search-model-popup-group {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    color: var(--text-faint);
-    padding: 8px 12px 3px;
-}
-
 .semlink-search-model-popup-row {
     display: flex;
     align-items: center;
@@ -4651,6 +4644,57 @@ body .semlink-msg-user::selection {
     padding: 6px 12px;
     border-radius: 6px;
     cursor: pointer;
+}
+
+/* 左侧移动滑块：拖动调整模型顺序 */
+.semlink-search-model-popup-grip {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--text-faint);
+    cursor: grab;
+}
+
+.semlink-search-model-popup-grip:hover {
+    color: var(--text-muted);
+}
+
+.semlink-search-model-popup-grip:active {
+    cursor: grabbing;
+}
+
+.semlink-search-model-popup-grip .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+/* 底部"管理模型"入口：齿轮 + 文案，点击打开设置的 Model 标签 */
+.semlink-search-model-popup-manage {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--background-modifier-border);
+    border-radius: 0 0 6px 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-normal);
+}
+
+.semlink-search-model-popup-manage:hover {
+    background: var(--background-modifier-hover);
+}
+
+.semlink-search-model-popup-manage-icon {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+}
+
+.semlink-search-model-popup-manage-icon .svg-icon {
+    width: 15px;
+    height: 15px;
 }
 
 .semlink-search-model-popup-row:hover {
