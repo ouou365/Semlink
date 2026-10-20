@@ -2287,7 +2287,18 @@ function renderProviderEditor(
 				setIcon(chev, open ? "chevron-right" : "chevron-down");
 				advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
 			});
-			advBody.createDiv({ cls: "semlink-editor-field-label", text: t("editorEndpoint") });
+			// 协议类型：不同协议的 Base URL 不同（如 Z.AI Coding CN 提供三种协议），
+		// 切换后随 Test & Save 一并保存
+		advBody.createDiv({ cls: "semlink-editor-field-label", text: t("chatApiFormat") });
+		const fmtSel = advBody.createEl("select", { cls: "semlink-editor-select" });
+		fmtSel.createEl("option", { value: "openai", text: t("mtApiTypeOpenAI") });
+		fmtSel.createEl("option", { value: "anthropic", text: t("mtApiTypeAnthropic") });
+		fmtSel.value = p.apiFormat ?? "openai";
+		fmtSel.addEventListener("change", () => {
+			p.apiFormat = fmtSel.value as ChatApiFormat;
+		});
+
+		advBody.createDiv({ cls: "semlink-editor-field-label", text: t("editorEndpoint") });
 			advBody.createDiv({
 				cls: "semlink-editor-adv-desc",
 				text: t("editorEndpointDesc").replace("{provider}", p.name),
