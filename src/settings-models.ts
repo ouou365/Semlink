@@ -1053,6 +1053,52 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		],
 	},
 	{
+		name: "Z.AI CN",
+		// 智谱 BigModel standard pay-as-you-go endpoint on the mainland host:
+		// full chat URL is …/api/paas/v4/chat/completions.
+		baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+		keysUrl: "https://open.bigmodel.cn/usercenter/apikeys",
+		wirePath: "/chat/completions",
+		apiFormat: "openai",
+		models: [
+			{ id: "glm-5.2", contextWindow: 1000000 },
+			{ id: "glm-5-turbo", contextWindow: 200000 },
+			{ id: "glm-4.7", contextWindow: 204800 },
+		],
+	},
+	{
+		name: "Z.AI Coding",
+		// GLM Coding Plan (international) endpoint: full chat URL is
+		// …/api/coding/paas/v4/chat/completions. Only Coding Plan keys work
+		// here — a standard API key gets 401 (use the Z.AI entry instead).
+		baseUrl: "https://api.z.ai/api/coding/paas/v4",
+		wirePath: "/chat/completions",
+		apiFormat: "openai",
+		models: [
+			{ id: "glm-5.2", contextWindow: 1000000 },
+			{ id: "glm-5-turbo", contextWindow: 200000 },
+			{ id: "glm-4.7", contextWindow: 204800 },
+		],
+	},
+	{
+		name: "Z.AI Coding CN",
+		// GLM Coding Plan endpoint on the mainland host (智谱), OpenAI wire
+		// format: full chat URL is …/api/coding/paas/v4/chat/completions.
+		// Coding Plan keys only. Deliberately NOT the /api/anthropic host
+		// from the Claude Code docs — that route skips CORS preflight
+		// headers, so the renderer's fetch can never call it from inside
+		// Obsidian (curl works, the app doesn't). Coding Plan keys also
+		// authorize here (verified live).
+		baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+		wirePath: "/chat/completions",
+		apiFormat: "openai",
+		models: [
+			{ id: "glm-5.2", contextWindow: 1000000 },
+			{ id: "glm-5-turbo", contextWindow: 200000 },
+			{ id: "glm-4.7", contextWindow: 204800 },
+		],
+	},
+	{
 		name: "MiniMax",
 		baseUrl: "https://api.minimax.io/anthropic",
 		keysUrl: "https://platform.minimax.io/user-center/user/api-key",
@@ -2657,6 +2703,11 @@ function renderCustomCard(
 const SERIES_FOLDER: Record<string, string> = {
 	"MiniMax": "MiniMax",
 	"MiniMax CN": "MiniMax",
+	"Z.AI": "Z.AI",
+	"Z.AI CN": "Z.AI",
+	"Z.AI Coding": "Z.AI",
+	"Z.AI Coding CN": "Z.AI",
+	"Xiaomi": "Xiaomi",
 	"Xiaomi Token Plan AMS": "Xiaomi",
 	"Xiaomi Token Plan CN": "Xiaomi",
 	"Xiaomi Token Plan SGP": "Xiaomi",
