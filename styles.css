@@ -1379,12 +1379,9 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 /* 新增供应商表单：协议/鉴权下拉与整行输入框同宽同风格 */
 .smart-vault-settings .semlink-editor-select {
     width: 100%;
-    height: 46px;
-    min-height: 46px;
-    line-height: 24px;
     margin-bottom: 16px;
-    padding: 0 14px;
-    border: 1px solid var(--background-modifier-border);
+    /* padding: 11px 14px; */
+    /* border: 1px solid var(--background-modifier-border); */
     border-radius: 10px;
     background: var(--background-primary);
     font-size: 14px;
