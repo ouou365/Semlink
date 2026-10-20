@@ -833,15 +833,6 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     background: rgba(255, 255, 255, 0.09);
 }
 
-.smart-vault-settings .semlink-mt-model-logo .semlink-mt-logo-svg,
-.smart-vault-settings .semlink-mt-model-logo svg,
-.smart-vault-settings .semlink-mt-model-logo .semlink-provider-fallback {
-    width: 30px;
-    height: 30px;
-    /* 正方形 + 小圆角：50% 的圆形会把 logo 四边裁掉 */
-    border-radius: 6px;
-}
-
 .smart-vault-settings .semlink-mt-model-info {
     flex: 1 1 auto;
     min-width: 0;
@@ -853,6 +844,17 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* 名称过长（JS 标记 is-overflow）：悬停跑马灯滚动展示全名 */
+.smart-vault-settings .semlink-mt-model-name.is-overflow:hover {
+    text-overflow: clip;
+    animation: semlink-marquee var(--marquee-dur, 6s) linear infinite alternate;
+}
+
+@keyframes semlink-marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(calc(-1 * var(--marquee-shift, 0px))); }
 }
 
 .smart-vault-settings .semlink-mt-model-ctx {

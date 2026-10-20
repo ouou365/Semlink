@@ -2626,10 +2626,9 @@ export function renderModelsTab(
 						rh.querySelectorAll(".is-droptarget-row").forEach((el) => el.removeClass("is-droptarget-row"));
 					});
 				}
-				const logo = row.createDiv({ cls: "semlink-mt-model-logo" });
-				appendProviderLogo(logo, sel.name, "semlink-mt-logo-svg");
 				const info = row.createDiv({ cls: "semlink-mt-model-info" });
-				info.createDiv({ cls: "semlink-mt-model-name", text: m.id });
+				const nameEl = info.createDiv({ cls: "semlink-mt-model-name" });
+				nameEl.createSpan({ cls: "semlink-mt-model-name-text", text: m.id });
 				const ctx = info.createDiv({ cls: "semlink-mt-model-ctx", text: fmtCtx(m.contextWindow) });
 				if (!m.contextWindow || m.contextWindow <= 0) ctx.addClass("semlink-hidden");
 				const toggleWrap = row.createDiv({ cls: "semlink-mt-model-toggle" });
@@ -2641,6 +2640,18 @@ export function renderModelsTab(
 					updateCount();
 				});
 			}
+			// 名称溢出的行打跑马灯标记：悬停时按量好的位移/时长滚动展示全名
+			requestAnimationFrame(() => {
+				rh.querySelectorAll(".semlink-mt-model-name").forEach((el) => {
+					const name = el as HTMLElement;
+					const shift = name.scrollWidth - name.clientWidth;
+					if (shift > 2) {
+						name.addClass("is-overflow");
+						name.style.setProperty("--marquee-shift", `${shift}px`);
+						name.style.setProperty("--marquee-dur", `${Math.min(12, Math.max(3, shift / 25))}s`);
+					}
+				});
+			});
 			rh.scrollTop = keepScroll;
 		};
 		renderRows();
