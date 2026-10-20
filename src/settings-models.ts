@@ -3844,8 +3844,10 @@ export function renderModelsTab(
 					rh.querySelector(".semlink-mt-model.is-selected")?.removeClass("is-selected");
 					if (st.modelSel) row.addClass("is-selected");
 				});
-				// 左侧移动滑块：拖动调整模型顺序（仅已添加实例可持久化）
-				if (sel.live) {
+				// 左侧移动滑块：拖动调整模型顺序。目录预览（还没添加实例的）
+				// 供应商也能拖——首次拖动时自动落一个实例（与齿轮行为一致），
+				// 顺序才有地方持久化。
+				{
 					const grip = row.createDiv({
 						cls: "semlink-mt-provider-grip",
 						attr: { "aria-label": t("modelDrag"), title: t("modelDrag") },
@@ -3870,6 +3872,12 @@ export function renderModelsTab(
 						row.removeClass("is-droptarget-row");
 						const from = parseInt(e.dataTransfer?.getData("text/semlink-model") ?? "-1", 10);
 						if (isNaN(from) || from < 0 || from === i) return;
+						if (!sel.live) {
+							const created = ensureCatalogProvider(sel.name);
+							if (!created) return;
+							sel.live = created;
+							sel.models = created.models;
+						}
 						const arr = sel.models;
 						if (from >= arr.length || i >= arr.length) return;
 						const [moved] = arr.splice(from, 1);
