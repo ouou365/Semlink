@@ -1338,8 +1338,8 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    background: var(--text-normal);
-    color: var(--background-primary);
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
     border: none;
     border-radius: 10px;
     padding: 10px 20px;
@@ -1363,9 +1363,9 @@
 }
 
 .smart-vault-settings .semlink-editor-close-btn {
-    background: var(--text-normal);
-    color: var(--background-primary);
-    border: none;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    border: 1px solid var(--background-modifier-border);
     border-radius: 10px;
     padding: 10px 24px;
     font-weight: 600;
@@ -1374,7 +1374,7 @@
 }
 
 .smart-vault-settings .semlink-editor-close-btn:hover {
-    opacity: 0.88;
+    background: var(--background-modifier-hover);
 }
 
 .smart-vault-settings .semlink-editor-footer {
