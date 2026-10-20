@@ -3226,6 +3226,7 @@ export function renderModelsTab(
 		collapsed?: Record<string, boolean>;
 		providerScroll?: number;
 		rowsScroll?: number;
+		paneObservers?: ResizeObserver[];
 	};
 	st.collapsed = st.collapsed ?? {};
 
@@ -3383,6 +3384,38 @@ export function renderModelsTab(
 	};
 
 	const wrap = containerEl.createDiv({ cls: "semlink-mt" });
+
+	// 高度自适应：CSS 侧已用 min-height:100% + flex 让面板撑满容器，但个别
+	// Obsidian 版本的百分比高度链不完整（容器高度不定），flex 撑不开——
+	// 这里用 ResizeObserver 兜底：观察滚动容器与标题行，窗口最大化、字体
+	// 就位、标题行高度变化都会触发重算，量出可用高度写成行内 height。
+	// 行内 height 只作为 flex-basis 参与：flex 链可用时 grow/shrink 仍把它
+	// 修正为正好填满，链路不通时它就是实际高度；min-height:500px 兜底不变。
+	const fitPaneHeight = (): void => {
+		if (!wrap.isConnected) return;
+		const scroller = wrap.closest(
+			".vertical-tab-content, .vertical-tab-content-container, .modal-content",
+		);
+		if (!scroller) return;
+		const padBottom = parseFloat(getComputedStyle(scroller).paddingBottom) || 0;
+		const bottom = scroller.getBoundingClientRect().bottom - padBottom;
+		const top = wrap.getBoundingClientRect().top + scroller.scrollTop;
+		const h = Math.round(bottom - top);
+		if (h > 0) wrap.style.height = `${h}px`;
+	};
+	fitPaneHeight();
+	st.paneObservers?.forEach((o) => o.disconnect());
+	st.paneObservers = [];
+	if (typeof ResizeObserver !== "undefined") {
+		const ro = new ResizeObserver(() => fitPaneHeight());
+		const scroller = wrap.closest(
+			".vertical-tab-content, .vertical-tab-content-container, .modal-content",
+		);
+		const heading = containerEl.querySelector(".setting-item-heading");
+		if (scroller) ro.observe(scroller);
+		if (heading) ro.observe(heading);
+		st.paneObservers.push(ro);
+	}
 
 	/** 打开编辑器；目录里还没添加的条目先落一个实例（模型清单已带）。 */
 	const openEditor = (r: Row): void => {
