@@ -360,7 +360,7 @@ const t: Record<keyof typeof en, string> = {
 	mtEnabled: "включено",
 	mtNeedsKey: "Настройте API, чтобы использовать модели",
 	mtConfigure: "Настроить",
-	mtShowing: "Показано {shown} из {total} моделей",
+	mtShowing: "{total} моделей",
 	mtNewFolder: "Новая папка",
 	mtCreate: "Создать",
 	deleteProvider: "Удалить провайдера",

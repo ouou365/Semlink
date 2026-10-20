@@ -359,7 +359,7 @@ const t: Record<keyof typeof en, string> = {
 	mtEnabled: "활성화됨",
 	mtNeedsKey: "API를 설정하면 사용할 수 있습니다",
 	mtConfigure: "설정",
-	mtShowing: "{shown} / {total}개 모델 표시",
+	mtShowing: "모델 {total}개",
 	mtNewFolder: "새 폴더",
 	mtCreate: "만들기",
 	deleteProvider: "공급자 삭제",

@@ -2612,8 +2612,8 @@ export function renderModelsTab(
 
 		const showingEl = rightHost.createDiv({ cls: "semlink-mt-showing" });
 		// showing 行随状态整体重建：还没配置 Key（且非"无鉴权"的自定义
-		// 供应商）→ 引导语 + 紫色"配置"按钮；已配置 → 计数 + "＋ 添加模型"
-		const renderShowing = (shown: number): void => {
+		// 供应商）→ 引导语 + 紫色"配置"按钮；已配置 → 模型数 + "＋ 添加模型"
+		const renderShowing = (): void => {
 			showingEl.empty();
 			const unconfigured = !sel.live?.apiKey?.trim() && !sel.live?.noAuth;
 			if (unconfigured) {
@@ -2633,9 +2633,10 @@ export function renderModelsTab(
 				});
 				return;
 			}
+			// 只统计模型数量（不再区分搜索过滤前后的 shown/total）
 			showingEl.createSpan({
 				cls: "semlink-mt-showing-count",
-				text: t("mtShowing").replace("{shown}", String(shown)).replace("{total}", String(sel.models.length)),
+				text: t("mtShowing").replace("{total}", String(sel.models.length)),
 			});
 			// 右侧添加模型按钮：手动录入目录里没有的模型
 			showingEl.createEl("button", {
@@ -2686,7 +2687,7 @@ export function renderModelsTab(
 			const shown = sel.models
 				.map((m, i) => ({ m, i }))
 				.filter(({ m }) => !q || m.id.toLowerCase().includes(q));
-			renderShowing(shown.length);
+			renderShowing();
 			// 保留滚动位置：empty() 的瞬间内容高度清零，浏览器会把 scrollTop
 			// 钳制到 0，重建后就会“自动滚回顶部”。
 			const keepScroll = rh.scrollTop;

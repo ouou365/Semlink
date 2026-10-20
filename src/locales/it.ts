@@ -361,7 +361,7 @@ const t: Record<keyof typeof en, string> = {
 	mtEnabled: "attivati",
 	mtNeedsKey: "Configura l'API per usare i modelli",
 	mtConfigure: "Configura",
-	mtShowing: "Visualizzazione di {shown} di {total} modelli",
+	mtShowing: "{total} modelli",
 	mtNewFolder: "Nuova cartella",
 	mtCreate: "Crea",
 	deleteProvider: "Elimina provider",

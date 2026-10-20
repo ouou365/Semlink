@@ -360,7 +360,7 @@ const zh: Record<keyof typeof en, string> = {
 	mtEnabled: "已启用",
 	mtNeedsKey: "配置API后可使用",
 	mtConfigure: "配置",
-	mtShowing: "显示 {shown} / {total} 个模型",
+	mtShowing: "{total} 个模型",
 	mtNewFolder: "新建文件夹",
 	mtCreate: "创建",
 	deleteProvider: "删除供应商",
