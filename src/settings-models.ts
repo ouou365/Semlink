@@ -2655,6 +2655,7 @@ function renderCustomCard(
 // ──── Main render ────
 
 const SERIES_FOLDER: Record<string, string> = {
+	"MiniMax": "MiniMax",
 	"MiniMax CN": "MiniMax",
 	"Xiaomi Token Plan AMS": "Xiaomi",
 	"Xiaomi Token Plan CN": "Xiaomi",
