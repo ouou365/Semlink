@@ -216,10 +216,10 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		keysUrl: "https://dev.meta.ai",
 		apiFormat: "openai",
 		models: [
-			{ id: "muse-spark-1.3", contextWindow: 0 },
-			{ id: "muse-spark-1.2", contextWindow: 0 },
-			{ id: "muse-wonder", contextWindow: 0 },
-			{ id: "muse-glimmer-30b", contextWindow: 0 },
+			{ id: "muse-spark-1.3", contextWindow: 1048576 },
+			{ id: "muse-spark-1.2", contextWindow: 1048576 },
+			{ id: "muse-wonder", contextWindow: 1048576 },
+			{ id: "muse-glimmer-30b", contextWindow: 1048576 },
 		],
 	},
 	{
