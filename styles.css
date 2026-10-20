@@ -527,14 +527,35 @@
 
 /* Models tab: TypingMind-style two panes — provider list (left) + the
    selected provider's models with enable toggles (right). */
+/* Tab 内容容器（.vertical-tab-content）自身 height:100% + overflow:auto，
+   上 padding 48px / 下 padding 64px。面板高度因此不靠估算：设置根节点
+   min-height:100% 撑满容器并做 flex 纵列，面板 flex:1 正好填到容器底部
+   ——空间足够时无整页滚动条，窗口小时 500px 保底、容器正常滚动。 */
+.smart-vault-settings {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+}
+
+.smart-vault-settings .setting-item-heading,
+.smart-vault-settings .semlink-settings-tabs {
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-settings-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .smart-vault-settings .semlink-mt {
     display: flex;
     gap: 16px;
     align-items: stretch;
     min-width: 0;
-    /* 固定 500px：标题行 + Tab 栏 + 面板总高远小于可视区，设置页不出现
-       整页滚动条；双栏列表各自内部滚动。 */
-    height: 500px;
+    flex: 1 1 auto;
+    min-height: 500px;
 }
 
 .smart-vault-settings .semlink-mt-providers,
