@@ -1068,6 +1068,16 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		],
 	},
 	{
+		name: "MiniMax CN",
+		baseUrl: "https://api.minimaxi.com/anthropic",
+		keysUrl: "https://platform.minimaxi.com/user-center/user/api-key",
+		apiFormat: "anthropic",
+		models: [
+			{ id: "MiniMax-M3", contextWindow: 1000000 },
+			{ id: "MiniMax-M2.7", contextWindow: 204800 },
+		],
+	},
+	{
 		name: "Moonshot",
 		baseUrl: "https://api.moonshot.cn",
 		keysUrl: "https://platform.moonshot.cn/console/api-keys",
@@ -1104,6 +1114,33 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 			{ id: "mimo-v2-omni", contextWindow: 262144, priceIn: 140.0, priceOut: 280.0 },
 			{ id: "mimo-v2-pro", contextWindow: 1048576, priceIn: 435.0, priceOut: 870.0 },
 			{ id: "mimo-v2-flash", contextWindow: 262144, priceIn: 140.0, priceOut: 280.0 },
+		],
+	},
+	{
+		name: "Xiaomi Token Plan AMS",
+		baseUrl: "https://token-plan-ams.xiaomimimo.com",
+		apiFormat: "openai",
+		models: [
+			{ id: "mimo-v2-pro", contextWindow: 1048576 },
+			{ id: "mimo-v2.5", contextWindow: 1048576 },
+		],
+	},
+	{
+		name: "Xiaomi Token Plan CN",
+		baseUrl: "https://token-plan-cn.xiaomimimo.com",
+		apiFormat: "openai",
+		models: [
+			{ id: "mimo-v2-pro", contextWindow: 1048576 },
+			{ id: "mimo-v2.5", contextWindow: 1048576 },
+		],
+	},
+	{
+		name: "Xiaomi Token Plan SGP",
+		baseUrl: "https://token-plan-sgp.xiaomimimo.com",
+		apiFormat: "openai",
+		models: [
+			{ id: "mimo-v2-pro", contextWindow: 1048576 },
+			{ id: "mimo-v2.5", contextWindow: 1048576 },
 		],
 	},
 ];
@@ -2618,8 +2655,10 @@ function renderCustomCard(
 // ──── Main render ────
 
 const SERIES_FOLDER: Record<string, string> = {
-	// 目录已精简为 15 家一级供应商（每家一个条目），不再有系列分组；
-	// 保留该映射结构以兼容用户文件夹 / logo 分组的兜底逻辑。
+	"MiniMax CN": "MiniMax",
+	"Xiaomi Token Plan AMS": "Xiaomi",
+	"Xiaomi Token Plan CN": "Xiaomi",
+	"Xiaomi Token Plan SGP": "Xiaomi",
 };
 
 /** 市场占有率排名（未排名厂商按名称殿后，自定义供应商最后）。 */
