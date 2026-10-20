@@ -842,7 +842,8 @@
 .smart-vault-settings .semlink-mt-model-logo .semlink-provider-fallback {
     width: 34px;
     height: 34px;
-    border-radius: 50%;
+    /* 正方形 + 小圆角：50% 的圆形会把 logo 四边裁掉 */
+    border-radius: 6px;
 }
 
 .smart-vault-settings .semlink-mt-model-info {
