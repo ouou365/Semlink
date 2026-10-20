@@ -532,9 +532,9 @@
     gap: 16px;
     align-items: stretch;
     min-width: 0;
-    /* 高度由 renderModelsTab 运行时实测（fitPaneHeight）：面板顶到设置
-       滚动区底的真实距离，窗口 resize 时重算；这里只保留小窗口保底。 */
-    min-height: 420px;
+    /* 固定 500px：标题行 + Tab 栏 + 面板总高远小于可视区，设置页不出现
+       整页滚动条；双栏列表各自内部滚动。 */
+    height: 500px;
 }
 
 .smart-vault-settings .semlink-mt-providers,
