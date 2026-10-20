@@ -348,6 +348,7 @@ const t: Record<keyof typeof en, string> = {
 	editorTestOk: "Connessione riuscita",
 	editorTestFailed: "Connessione non riuscita: controlla chiave ed endpoint",
 	editorGetKey: "Ottieni chiave",
+	mtAddModel: "Aggiungi modello",
 	editorSave: "Salva",
 	mtEnabled: "attivati",
 	mtNeedsKey: "Configura una chiave API per attivare i modelli",

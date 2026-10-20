@@ -347,6 +347,7 @@ const zh: Record<keyof typeof en, string> = {
 	editorTestOk: "连接成功",
 	editorTestFailed: "连接失败——请检查 Key 和 Endpoint",
 	editorGetKey: "获取 Key",
+	mtAddModel: "添加模型",
 	editorSave: "保存",
 	mtEnabled: "已启用",
 	mtNeedsKey: "配置 API Key 后可启用模型",

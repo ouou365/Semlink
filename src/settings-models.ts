@@ -2053,6 +2053,46 @@ function createProviderRow(listEl: HTMLElement, opts: RowOptions): HTMLElement {
 
 /** Modal hosting the full provider detail (name / base URL / protocol / key /
  *  model list). Reuses the same editor as the old inline expansion. */
+/** 手动添加模型的小弹窗：模型 ID + 上下文长度，保存后追加到供应商清单并自动启用。 */
+class AddModelModal extends Modal {
+	constructor(app: App, private onSubmit: (id: string, contextWindow: number) => void) {
+		super(app);
+		this.modalEl.addClass("semlink-provider-editor-modal");
+		this.modalEl.addClass("smart-vault-settings");
+	}
+
+	onOpen() {
+		this.titleEl.setText(t("mtAddModel"));
+		const { contentEl } = this;
+		contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("chatModelId") });
+		const idInput = contentEl.createEl("input", {
+			cls: "semlink-editor-input",
+			attr: { type: "text", placeholder: "e.g. my-model-v1", spellcheck: "false" },
+		});
+		contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("chatContextWindow") });
+		const ctxInput = contentEl.createEl("input", {
+			cls: "semlink-editor-input",
+			attr: { type: "text", inputmode: "numeric", placeholder: "e.g. 128000" },
+		});
+		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
+		footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") })
+			.addEventListener("click", () => this.close());
+		footer.createEl("button", { cls: "semlink-editor-save-btn", text: t("confirm") })
+			.addEventListener("click", () => {
+				const id = idInput.value.trim();
+				if (!id) return;
+				const ctx = parseInt(ctxInput.value, 10);
+				this.onSubmit(id, Number.isFinite(ctx) && ctx > 0 ? ctx : 0);
+				this.close();
+			});
+		idInput.focus();
+	}
+
+	onClose() {
+		this.contentEl.empty();
+	}
+}
+
 class ProviderEditorModal extends Modal {
 	constructor(
 		app: App,
@@ -3034,6 +3074,23 @@ export function renderModelsTab(
 		searchInput.value = st.search ?? "";
 
 		const showingEl = rightHost.createDiv({ cls: "semlink-mt-showing" });
+		const showingCountEl = showingEl.createSpan({ cls: "semlink-mt-showing-count" });
+		// 右侧添加模型按钮：手动录入目录里没有的模型
+		showingEl.createEl("button", { cls: "semlink-editor-cancel-btn semlink-mt-add-model", text: "＋ " + t("mtAddModel") })
+			.addEventListener("click", () => {
+				new AddModelModal(plugin.app, (id, contextWindow) => {
+					if (!sel.live) {
+						const created = ensureCatalogProvider(sel.name);
+						if (!created) return;
+						sel.live = created;
+						sel.models = created.models;
+					}
+					sel.models.push({ id, contextWindow, enabled: true });
+					void plugin.saveSettings();
+					renderRows();
+					updateCount();
+				}).open();
+			});
 		const rh = rightHost.createDiv({ cls: "semlink-mt-rows" });
 		rowsHost = rh;
 
@@ -3061,7 +3118,7 @@ export function renderModelsTab(
 			const shown = sel.models
 				.map((m, i) => ({ m, i }))
 				.filter(({ m }) => !q || m.id.toLowerCase().includes(q));
-			showingEl.setText(
+			showingCountEl.setText(
 				t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)),
 			);
 			// 保留滚动位置：empty() 的瞬间内容高度清零，浏览器会把 scrollTop

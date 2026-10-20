@@ -346,6 +346,7 @@ const t: Record<keyof typeof en, string> = {
 	editorTestOk: "연결 성공",
 	editorTestFailed: "연결 실패 — 키와 엔드포인트를 확인하세요",
 	editorGetKey: "키 발급",
+	mtAddModel: "모델 추가",
 	editorSave: "저장",
 	mtEnabled: "활성화됨",
 	mtNeedsKey: "API 키를 설정하면 모델을 활성화할 수 있습니다",

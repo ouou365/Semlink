@@ -801,6 +801,32 @@ body.theme-dark .smart-vault-settings .semlink-mt-provider.is-active {
 }
 
 .smart-vault-settings .semlink-mt-showing {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.smart-vault-settings .semlink-mt-showing-count {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.smart-vault-settings .semlink-mt-add-model {
+    flex-shrink: 0;
+    color: var(--interactive-accent);
+    font-weight: 600;
+    font-size: 12.5px;
+    padding: 2px 4px;
+}
+
+.smart-vault-settings .semlink-mt-add-model:hover {
+    text-decoration: underline;
+}
+
+.smart-vault-settings .semlink-mt-showing {
     color: var(--text-muted);
     font-size: 12.5px;
     padding: 0 4px;

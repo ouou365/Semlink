@@ -347,6 +347,7 @@ const t: Record<keyof typeof en, string> = {
 	editorTestOk: "Соединение установлено",
 	editorTestFailed: "Не удалось подключиться — проверьте ключ и эндпоинт",
 	editorGetKey: "Получить ключ",
+	mtAddModel: "Добавить модель",
 	editorSave: "Сохранить",
 	mtEnabled: "включено",
 	mtNeedsKey: "Настройте API-ключ, чтобы включить модели",
