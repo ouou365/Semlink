@@ -2521,41 +2521,6 @@ const MARKET_RANK: Record<string, number> = {
 	"Xiaomi": 15,
 };
 
-class NewFolderModal extends Modal {
-	constructor(app: App, private onOk: (name: string) => void) {
-		super(app);
-	}
-
-	onOpen(): void {
-		let name = "";
-		new Setting(this.contentEl)
-			.setName(t("mtNewFolder"))
-			.addText((tx) => {
-				tx.setPlaceholder(t("mtNewFolder")).onChange((v) => {
-					name = v.trim();
-				});
-				tx.inputEl.addEventListener("keydown", (e) => {
-					if (e.key === "Enter" && name) {
-						this.onOk(name);
-						this.close();
-					}
-				});
-			})
-			.addButton((b) =>
-				b.setButtonText(t("mtCreate")).setCta().onClick(() => {
-					if (name) {
-						this.onOk(name);
-						this.close();
-					}
-				}),
-			);
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
-}
-
 /** 实例模型清单跟随目录精选：目录条目对应的已添加实例，其模型列表在
  *  添加时从旧目录拷贝，目录精选收缩后仍是旧快照——加载时用目录清单
  *  覆盖，同时保留用户已拨过的 enabled 开关（id 仍存在时）。用户手工
@@ -2808,10 +2773,6 @@ export function renderModelsTab(
 	const leftHead = left.createDiv({ cls: "semlink-mt-providers-head" });
 	leftHead.createSpan({ cls: "semlink-mt-providers-title", text: t("mtProvidersTitle") });
 	const headBtns = leftHead.createDiv({ cls: "semlink-mt-head-actions" });
-	const addFolderBtn = headBtns.createEl("button", {
-		cls: "semlink-mt-add",
-		attr: { "aria-label": t("mtNewFolder") },
-	});
 	setIcon(addFolderBtn, "folder-plus");
 	addFolderBtn.addEventListener("click", () => {
 		new NewFolderModal(plugin.app, (name) => {
