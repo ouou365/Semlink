@@ -347,6 +347,7 @@ const t: Record<keyof typeof en, string> = {
 	editorClearSettings: "Limpar configurações",
 	editorTestOk: "Conexão bem-sucedida",
 	editorTestFailed: "Falha na conexão — verifique a chave e o endpoint",
+	editorGetKey: "Obter chave",
 	editorSave: "Salvar",
 	mtEnabled: "ativados",
 	mtNeedsKey: "Configure uma chave de API para ativar os modelos",

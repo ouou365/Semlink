@@ -345,6 +345,7 @@ const t: Record<keyof typeof en, string> = {
 	editorClearSettings: "設定をクリア",
 	editorTestOk: "接続に成功しました",
 	editorTestFailed: "接続に失敗しました。キーとエンドポイントを確認してください",
+	editorGetKey: "キーを取得",
 	editorSave: "保存",
 	mtEnabled: "有効",
 	mtNeedsKey: "API キーを設定するとモデルを有効化できます",

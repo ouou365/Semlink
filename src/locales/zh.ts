@@ -346,6 +346,7 @@ const zh: Record<keyof typeof en, string> = {
 	editorClearSettings: "清除配置",
 	editorTestOk: "连接成功",
 	editorTestFailed: "连接失败——请检查 Key 和 Endpoint",
+	editorGetKey: "获取 Key",
 	editorSave: "保存",
 	mtEnabled: "已启用",
 	mtNeedsKey: "配置 API Key 后可启用模型",

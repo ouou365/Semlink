@@ -344,6 +344,7 @@ const en = {
 	editorClearSettings: "Clear settings",
 	editorTestOk: "Connection successful",
 	editorTestFailed: "Connection failed — check the key and endpoint",
+	editorGetKey: "Get Key",
 	editorSave: "Save",
 	mtEnabled: "enabled",
 	mtNeedsKey: "Configure an API key to enable models",

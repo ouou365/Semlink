@@ -147,6 +147,9 @@ export interface CatalogEntry {
 	 *  carries no bare "/v1" segment (defaults per apiFormat: openai →
 	 *  "/v1/chat/completions", anthropic → "/v1/messages"). */
 	wirePath?: string;
+	/** Console page where the user creates an API key (编辑弹窗"获取 Key"
+	 *  按钮的跳转目标；未配置的供应商不显示该按钮）。 */
+	keysUrl?: string;
 	models: ChatModel[];
 }
 
@@ -188,6 +191,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "Anthropic",
 		baseUrl: "https://api.anthropic.com",
+		keysUrl: "https://console.anthropic.com/settings/keys",
 		apiFormat: "anthropic",
 		models: [
 			{ id: "claude-fable-5-1", contextWindow: 1000000 },
@@ -239,6 +243,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "Baseten",
 		baseUrl: "https://inference.baseten.co",
+		keysUrl: "https://app.baseten.co/settings/keys",
 		apiFormat: "openai",
 		models: [
 			{ id: "deepseek-ai/DeepSeek-V4-Pro", contextWindow: 262144 },
@@ -249,6 +254,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "Cerebras",
 		baseUrl: "https://api.cerebras.ai",
+		keysUrl: "https://cloud.cerebras.ai",
 		apiFormat: "openai",
 		models: [
 			{ id: "gpt-oss-120b", contextWindow: 131072 },
@@ -283,6 +289,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "DeepSeek",
 		baseUrl: "https://api.deepseek.com",
+		keysUrl: "https://platform.deepseek.com/api_keys",
 		apiFormat: "openai",
 		models: [
 			{ id: "deepseek-v4-pro", contextWindow: 1000000, priceIn: 1320.0, priceOut: 3960.0 },
@@ -298,6 +305,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "SiliconFlow",
 		baseUrl: "https://api.siliconflow.cn",
+		keysUrl: "https://cloud.siliconflow.cn/account/ak",
 		apiFormat: "openai",
 		models: [
 			{ id: "deepseek-ai/DeepSeek-V3.2", contextWindow: 163840 },
@@ -308,6 +316,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "Fireworks",
 		baseUrl: "https://api.fireworks.ai/inference",
+		keysUrl: "https://fireworks.ai/account/api-keys",
 		apiFormat: "openai",
 		models: [
 			{ id: "accounts/fireworks/models/ember-1", contextWindow: 1048576, priceIn: 3000.0, priceOut: 15000.0 },
@@ -361,6 +370,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		// Gemini's OpenAI-compat surface: full chat URL is
 		// …/v1beta/openai/chat/completions — no "/v1" segment, hence wirePath.
 		baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+		keysUrl: "https://aistudio.google.com/apikey",
 		wirePath: "/chat/completions",
 		apiFormat: "openai",
 		models: [
@@ -418,6 +428,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "Groq",
 		baseUrl: "https://api.groq.com/openai",
+		keysUrl: "https://console.groq.com/keys",
 		apiFormat: "openai",
 		models: [
 			{ id: "qwen/qwen3.8-27b", contextWindow: 131072, priceIn: 800.0, priceOut: 4000.0 },
@@ -450,6 +461,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "Hugging Face",
 		baseUrl: "https://router.huggingface.co",
+		keysUrl: "https://huggingface.co/settings/tokens",
 		apiFormat: "openai",
 		models: [
 			{ id: "deepseek-ai/DeepSeek-V3.2", contextWindow: 163840 },
@@ -470,6 +482,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "MiniMax",
 		baseUrl: "https://api.minimax.io/anthropic",
+		keysUrl: "https://platform.minimax.io/user-center/user/api-key",
 		apiFormat: "anthropic",
 		models: [
 			{ id: "MiniMax-M3", contextWindow: 1000000, priceIn: 300.0, priceOut: 1200.0 },
@@ -484,6 +497,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "MiniMax CN",
 		baseUrl: "https://api.minimaxi.com/anthropic",
+		keysUrl: "https://platform.minimaxi.com/user-center/user/api-key",
 		apiFormat: "anthropic",
 		models: [
 			{ id: "MiniMax-M3", contextWindow: 1000000 },
@@ -493,6 +507,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "Mistral",
 		baseUrl: "https://api.mistral.ai",
+		keysUrl: "https://console.mistral.ai/api-keys",
 		apiFormat: "openai",
 		models: [
 			{ id: "mistral-large-4", contextWindow: 1048576, priceIn: 680.0, priceOut: 2090.0 },
@@ -541,6 +556,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "Moonshot AI",
 		baseUrl: "https://api.moonshot.ai",
+		keysUrl: "https://platform.moonshot.ai/console/api-keys",
 		apiFormat: "openai",
 		models: [
 			{ id: "kimi-k3", contextWindow: 1048576, priceIn: 3000.0, priceOut: 15000.0 },
@@ -558,6 +574,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "Moonshot AI CN",
 		baseUrl: "https://api.moonshot.cn",
+		keysUrl: "https://platform.moonshot.cn/console/api-keys",
 		apiFormat: "openai",
 		models: [
 			{ id: "kimi-k2.5", contextWindow: 262144 },
@@ -568,6 +585,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "NVIDIA",
 		baseUrl: "https://integrate.api.nvidia.com",
+		keysUrl: "https://build.nvidia.com",
 		apiFormat: "openai",
 		models: [
 			{ id: "meta/llama-3.1-70b-instruct", contextWindow: 128000 },
@@ -578,6 +596,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "OpenAI",
 		baseUrl: "https://api.openai.com",
+		keysUrl: "https://platform.openai.com/api-keys",
 		apiFormat: "openai",
 		models: [
 			{ id: "o1-pro", contextWindow: 200000 },
@@ -645,6 +664,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "OpenRouter",
 		baseUrl: "https://openrouter.ai/api",
+		keysUrl: "https://openrouter.ai/keys",
 		apiFormat: "openai",
 		models: [
 			{ id: "google/gemini-4-argon", contextWindow: 1048576, priceIn: 2000.0, priceOut: 10000.0 },
@@ -1225,6 +1245,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "Together",
 		baseUrl: "https://api.together.ai",
+		keysUrl: "https://api.together.ai/settings/api-keys",
 		apiFormat: "openai",
 		models: [
 			{ id: "deepseek-ai/DeepSeek-V4-Pro", contextWindow: 512000 },
@@ -1584,6 +1605,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	{
 		name: "xAI",
 		baseUrl: "https://api.x.ai",
+		keysUrl: "https://console.x.ai",
 		apiFormat: "openai",
 		models: [
 			{ id: "grok-4.6", contextWindow: 500000 },
@@ -1640,6 +1662,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		// …/api/paas/v4/chat/completions — no "/v1" segment, hence wirePath.
 		// (The GLM Coding Plan has its own endpoint + entry below.)
 		baseUrl: "https://api.z.ai/api/paas/v4",
+		keysUrl: "https://z.ai/manage-apikey/apikey-list",
 		wirePath: "/chat/completions",
 		apiFormat: "openai",
 		models: [
@@ -1682,6 +1705,7 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		// 智谱 BigModel standard pay-as-you-go endpoint on the mainland host:
 		// full chat URL is …/api/paas/v4/chat/completions.
 		baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+		keysUrl: "https://open.bigmodel.cn/usercenter/apikeys",
 		wirePath: "/chat/completions",
 		apiFormat: "openai",
 		models: [
@@ -2828,10 +2852,20 @@ function renderProviderEditor(
 	let pending = p.apiKey;
 	let footer: HTMLElement;
 	const catalogDefault = CHAT_CATALOG.find((e) => e.name === p.name)?.baseUrl;
+	const keysUrl = CHAT_CATALOG.find((e) => e.name === p.name)?.keysUrl;
 	// Endpoint 输入直接改 p（Test & Save 时随保存落盘）；Cancel 需要还原
 	const originalBase = p.apiBase;
 
 	const maskKey = (key: string): string => "*".repeat(14) + key.slice(-3);
+
+	// "获取 Key"：新开控制台 Key 页（像获取验证码一样贴在输入框旁）
+	const appendGetKey = (row: HTMLElement): void => {
+		if (!keysUrl) return;
+		const btn = row.createEl("button", { cls: "semlink-editor-getkey-btn" });
+		setIcon(btn, "external-link");
+		btn.createSpan({ text: t("editorGetKey") });
+		btn.addEventListener("click", () => window.open(keysUrl));
+	};
 
 	const saveNow = (): void => {
 		p.curated = true;
@@ -2903,6 +2937,7 @@ function renderProviderEditor(
 				attr: { type: "text", readonly: "true", spellcheck: "false" },
 			});
 			shown.value = maskKey(p.apiKey);
+			appendGetKey(keyRow);
 			const pencil = keyRow.createEl("button", { cls: "semlink-editor-icon-btn" });
 			setIcon(pencil, "pencil");
 			pencil.addEventListener("click", () => {
@@ -2953,6 +2988,7 @@ function renderProviderEditor(
 				pending = input.value;
 				updateFooter();
 			});
+			appendGetKey(keyRow);
 
 			// ── 高级选项（仅编辑态；默认收起）：仅 Endpoint 一项 ──
 			const advHead = slot.createDiv({ cls: "semlink-editor-adv-head" });
