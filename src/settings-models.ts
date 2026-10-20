@@ -3115,11 +3115,12 @@ export function renderModelsTab(
 			// 钳制到 0，重建后就会“自动滚回顶部”。
 			const keepScroll = rh.scrollTop;
 			rh.empty();
-			for (const { m, i } of shown) {
+			// 分帧渲染：每帧 ~60 行。超大目录（OpenRouter 470+）一次性同步构建
+			// 会把渲染卡死/刷白；分帧让首屏立即可见。单行构建异常只跳过该行
+			// 并打印错误，不会把整个列表刷成空白。
+			const buildRow = (m: ChatModel, i: number): HTMLElement => {
 				const isSelected = st.modelSel === m.id;
-				const row = rh.createDiv({
-					cls: "semlink-mt-model" + (isSelected ? " is-selected" : ""),
-				});
+				const row = createDiv({ cls: "semlink-mt-model" + (isSelected ? " is-selected" : "") });
 				// 点击行切换选中态：就地搬 is-selected，不重建全部行；开关
 				// 区域的点击不参与（避免联动选行）
 				row.addEventListener("click", (e) => {
@@ -3188,10 +3189,31 @@ export function renderModelsTab(
 					void plugin.saveSettings();
 					updateCount();
 				});
-			}
-			// 名称溢出的行打跑马灯标记：复制两份文本（间隔 2ch）做无缝循环，
-			// 恒速 60px/s；动画只作用于内层轨道，外层 overflow 裁剪，不会盖到 logo
-			requestAnimationFrame(() => {
+				return row;
+			};
+			let cursor = 0;
+			const CHUNK = 60;
+			const frag = new DocumentFragment();
+			const buildChunk = (): void => {
+				const end = Math.min(cursor + CHUNK, shown.length);
+				for (; cursor < end; cursor++) {
+					const { m, i } = shown[cursor];
+					try {
+						frag.appendChild(buildRow(m, i));
+					} catch (e) {
+						console.error("[Semlink] model row failed:", m?.id, e);
+					}
+				}
+				rh.appendChild(frag);
+				if (cursor < shown.length) {
+					requestAnimationFrame(buildChunk);
+				} else {
+					rh.scrollTop = keepScroll;
+					// 跑马灯标记等全部行挂载完成后统一测量
+					requestAnimationFrame(() => markOverflowNames());
+				}
+			};
+			const markOverflowNames = (): void => {
 				rh.querySelectorAll(".semlink-mt-model-name").forEach((el) => {
 					const name = el as HTMLElement;
 					if (name.scrollWidth - name.clientWidth <= 2) return;
@@ -3204,10 +3226,9 @@ export function renderModelsTab(
 					const unit = name.scrollWidth / 2;
 					name.style.setProperty("--marquee-dur", `${(unit / 60).toFixed(2)}s`);
 				});
-			});
-			rh.scrollTop = keepScroll;
-		};
-		renderRows();
+			};
+			buildChunk();
+		};		renderRows();
 		rh.scrollTop = restoreScroll ? (st.rowsScroll ?? 0) : 0;
 		searchInput.addEventListener("input", () => {
 			st.search = searchInput.value;
