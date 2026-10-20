@@ -1960,6 +1960,8 @@ function renderDraftEditor(
 					apiBase: draft.baseUrl.trim(),
 					apiKey: draft.apiKey,
 					apiFormat: draft.apiFormat,
+					// 无鉴权的本地端点（如 Ollama）：不该被"配置 API"提示盯上
+					...(authSel.value === "none" ? { noAuth: true } : {}),
 					// Starts empty; models are added from the Models tab ("＋ Add").
 					models: [],
 					curated: true,
@@ -2609,20 +2611,23 @@ export function renderModelsTab(
 		searchInput.value = st.search ?? "";
 
 		const showingEl = rightHost.createDiv({ cls: "semlink-mt-showing" });
-		// showing 行随状态整体重建：还没添加实例 → 引导语 + 紫色"配置"按钮；
-		// 已有实例 → 计数 + "＋ 添加模型"（配置按钮根本不进 DOM）
+		// showing 行随状态整体重建：还没配置 Key（且非"无鉴权"的自定义
+		// 供应商）→ 引导语 + 紫色"配置"按钮；已配置 → 计数 + "＋ 添加模型"
 		const renderShowing = (shown: number): void => {
 			showingEl.empty();
-			if (!sel.live) {
+			const unconfigured = !sel.live?.apiKey?.trim() && !sel.live?.noAuth;
+			if (unconfigured) {
 				showingEl.createSpan({ cls: "semlink-mt-showing-count", text: t("mtNeedsKey") });
 				showingEl.createEl("button", {
 					cls: "semlink-editor-save-btn semlink-mt-configure",
 					text: t("mtConfigure"),
 				}).addEventListener("click", () => {
-					const created = ensureCatalogProvider(sel.name);
-					if (!created) return;
-					sel.live = created;
-					sel.models = created.models;
+					if (!sel.live) {
+						const created = ensureCatalogProvider(sel.name);
+						if (!created) return;
+						sel.live = created;
+						sel.models = created.models;
+					}
 					void plugin.saveSettings();
 					new ProviderEditorModal(plugin.app, plugin, sel.live, refreshKeepInner).open();
 				});
