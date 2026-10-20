@@ -897,6 +897,15 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     padding-right: 2ch;
 }
 
+/* 未悬停时隐藏第二份文本（它只为无缝循环而存在），静态态永远只显示一份 */
+.smart-vault-settings .semlink-mt-model-name.is-overflow .semlink-mt-model-name-text + .semlink-mt-model-name-text {
+    display: none;
+}
+
+.smart-vault-settings .semlink-mt-model-name.is-overflow:hover .semlink-mt-model-name-text + .semlink-mt-model-name-text {
+    display: inline-block;
+}
+
 .smart-vault-settings .semlink-mt-model-name.is-overflow:hover {
     text-overflow: clip;
 }
