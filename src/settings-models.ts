@@ -3214,7 +3214,7 @@ export function renderModelsTab(
 				}
 			};
 			const markOverflowNames = (): void => {
-				const names = Array.from(rh.querySelectorAll(".semlink-mt-model-name")) as HTMLElement[];
+				const names = [...rh.querySelectorAll<HTMLElement>(".semlink-mt-model-name")];
 				// 先只读：一次性量出所有溢出行（单次布局），再统一写入——
 				// 读写交替会在大列表上造成近千次强制重排，直接卡死主线程
 				const overflow = names
