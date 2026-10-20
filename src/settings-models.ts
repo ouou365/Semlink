@@ -2024,6 +2024,22 @@ class NewFolderModal extends Modal {
 	}
 }
 
+/** 实例模型清单跟随目录精选：目录条目对应的已添加实例，其模型列表在
+ *  添加时从旧目录拷贝，目录精选收缩后仍是旧快照——加载时用目录清单
+ *  覆盖，同时保留用户已拨过的 enabled 开关（id 仍存在时）。用户手工
+ *  通过"获取模型"拉取的清单（curated）同样被覆盖为目录精选。 */
+export function syncCatalogModels(settings: SmartVaultSettings): void {
+	for (const p of settings.providers) {
+		const entry = CHAT_CATALOG.find((e) => e.name === p.name);
+		if (!entry) continue; // 自定义供应商不归目录管
+		const prev = new Map(p.models.map((m) => [m.id, m]));
+		p.models = entry.models.map((m) => {
+			const old = prev.get(m.id);
+			return old ? { ...m, enabled: old.enabled } : { ...m };
+		});
+	}
+}
+
 /** 清洗手动排序 providerOrder：目录里已不存在（被移除/改名）的供应商名、
  *  以及指向旧 logo 分组的大段 SVG 键都会残留在里面——只保留当前目录
  *  条目名、已添加实例名和仍存在的用户文件夹键，其余剔除，避免旧顺序

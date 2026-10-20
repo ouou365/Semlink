@@ -7,7 +7,7 @@ import { debugLog, setDebugLogging } from "./src/log";
 import { join } from "path";
 import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
 import { UsageStore } from "./src/usage-store";
-import { migrateLegacyCatalogBases, sanitizeProviderOrder } from "./src/settings-models";
+import { migrateLegacyCatalogBases, sanitizeProviderOrder, syncCatalogModels } from "./src/settings-models";
 import { VectorStore } from "./src/vector-store";
 import { IndexQueue } from "./src/index-queue";
 import { EmbeddingClient } from "./src/embedding-client";
@@ -318,6 +318,7 @@ export default class SmartVaultPlugin extends Plugin {
 		// 改名的供应商、以及指向旧 logo 分组的大段 SVG 键都会残留在里面，
 		// 不清洗的话会一直以旧顺序压住默认排名。
 		sanitizeProviderOrder(this.settings);
+		syncCatalogModels(this.settings);
 	}
 
 	async saveSettings() {
