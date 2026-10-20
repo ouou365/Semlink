@@ -2621,45 +2621,51 @@ export function renderModelsTab(
 		searchInput.value = st.search ?? "";
 
 		const showingEl = rightHost.createDiv({ cls: "semlink-mt-showing" });
-		const showingCountEl = showingEl.createSpan({ cls: "semlink-mt-showing-count" });
-		// 右侧添加模型按钮：手动录入目录里没有的模型
-		const addBtn = showingEl.createEl("button", {
-			cls: "semlink-editor-cancel-btn semlink-mt-add-model",
-			text: "＋ " + t("mtAddModel"),
-		});
-		addBtn.addEventListener("click", () => {
-			new AddModelModal(plugin.app, {
-				title: t("mtAddModel"),
-				onSubmit: (id, contextWindow) => {
-					if (!sel.live) {
-						const created = ensureCatalogProvider(sel.name);
-						if (!created) return;
-						sel.live = created;
-						sel.models = created.models;
-					}
-					sel.models.push({ id, contextWindow, enabled: true });
-					void plugin.saveSettings();
-					renderRows();
-					updateCount();
-				},
-				}).open();
-		});
-		// 未配置 Key 时替换出现的"配置"按钮：先落盘实例再打开供应商编辑弹窗，
-		// 保存 Key 后 refresh 回到正常计数 + 添加模型
-		const configBtn = showingEl.createEl("button", {
-			cls: "semlink-editor-save-btn semlink-mt-configure",
-			text: t("mtConfigure"),
-		});
-		configBtn.addEventListener("click", () => {
+		// showing 行随状态整体重建：还没添加实例 → 引导语 + 紫色"配置"按钮；
+		// 已有实例 → 计数 + "＋ 添加模型"（配置按钮根本不进 DOM）
+		const renderShowing = (shown: number): void => {
+			showingEl.empty();
 			if (!sel.live) {
-				const created = ensureCatalogProvider(sel.name);
-				if (!created) return;
-				sel.live = created;
-				sel.models = created.models;
+				showingEl.createSpan({ cls: "semlink-mt-showing-count", text: t("mtNeedsKey") });
+				showingEl.createEl("button", {
+					cls: "semlink-editor-save-btn semlink-mt-configure",
+					text: t("mtConfigure"),
+				}).addEventListener("click", () => {
+					const created = ensureCatalogProvider(sel.name);
+					if (!created) return;
+					sel.live = created;
+					sel.models = created.models;
+					void plugin.saveSettings();
+					new ProviderEditorModal(plugin.app, plugin, sel.live, refreshKeepInner).open();
+				});
+				return;
 			}
-			void plugin.saveSettings();
-			new ProviderEditorModal(plugin.app, plugin, sel.live, refreshKeepInner).open();
-		});
+			showingEl.createSpan({
+				cls: "semlink-mt-showing-count",
+				text: t("mtShowing").replace("{shown}", String(shown)).replace("{total}", String(sel.models.length)),
+			});
+			// 右侧添加模型按钮：手动录入目录里没有的模型
+			showingEl.createEl("button", {
+				cls: "semlink-editor-cancel-btn semlink-mt-add-model",
+				text: "＋ " + t("mtAddModel"),
+			}).addEventListener("click", () => {
+				new AddModelModal(plugin.app, {
+					title: t("mtAddModel"),
+					onSubmit: (id, contextWindow) => {
+						if (!sel.live) {
+							const created = ensureCatalogProvider(sel.name);
+							if (!created) return;
+							sel.live = created;
+							sel.models = created.models;
+						}
+						sel.models.push({ id, contextWindow, enabled: true });
+						void plugin.saveSettings();
+						renderRows();
+						updateCount();
+					},
+					}).open();
+			});
+		};
 		const rh = rightHost.createDiv({ cls: "semlink-mt-rows" });
 		rowsHost = rh;
 
@@ -2687,14 +2693,7 @@ export function renderModelsTab(
 			const shown = sel.models
 				.map((m, i) => ({ m, i }))
 				.filter(({ m }) => !q || m.id.toLowerCase().includes(q));
-			// 仅当该供应商还没添加过实例时，这一行才是引导语 + "配置"按钮；
-			// 实例存在（即使还没配 Key）就回到正常计数 + 添加模型
-			const needsConfig = !sel.live;
-			showingCountEl.setText(needsConfig
-				? t("mtNeedsKey")
-				: t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)));
-			addBtn.toggleClass("semlink-hidden", needsConfig);
-			configBtn.toggleClass("semlink-hidden", !needsConfig);
+			renderShowing(shown.length);
 			// 保留滚动位置：empty() 的瞬间内容高度清零，浏览器会把 scrollTop
 			// 钳制到 0，重建后就会“自动滚回顶部”。
 			const keepScroll = rh.scrollTop;
