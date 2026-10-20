@@ -1308,12 +1308,6 @@
     font-size: 14px;
 }
 
-.smart-vault-settings .semlink-editor-input:focus {
-    outline: none;
-    border-color: var(--interactive-accent);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 15%, transparent);
-}
-
 .smart-vault-settings .semlink-editor-footer.is-simple {
     justify-content: flex-end;
     align-items: center;
