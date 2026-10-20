@@ -679,8 +679,9 @@
     height: 13px;
 }
 
-/* 重排落点：插入到该行之前 */
-.smart-vault-settings .semlink-mt-provider.is-droptarget-row {
+/* 重排落点：插入到该行之前（供应商行与模型行通用） */
+.smart-vault-settings .semlink-mt-provider.is-droptarget-row,
+.smart-vault-settings .semlink-mt-model.is-droptarget-row {
     outline: 1.5px dashed var(--interactive-accent);
     outline-offset: -1.5px;
 }

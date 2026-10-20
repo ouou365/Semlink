@@ -3815,7 +3815,11 @@ export function renderModelsTab(
 
 		const renderRows = (): void => {
 			const q = (st.search ?? "").toLowerCase();
-			const shown = sel.models.filter((m) => !q || m.id.toLowerCase().includes(q));
+			// 携带模型在全量清单里的原始下标：搜索过滤后拖拽重排仍按全量
+			// 顺序计算插入位置
+			const shown = sel.models
+				.map((m, i) => ({ m, i }))
+				.filter(({ m }) => !q || m.id.toLowerCase().includes(q));
 			// 未配置 Key 时这一行被"配置 API Key 后可启用模型 + 配置按钮"占用
 			if (isConfigured(sel)) {
 				showingEl.setText(
@@ -3827,7 +3831,7 @@ export function renderModelsTab(
 			const keepScroll = rh.scrollTop;
 			rh.empty();
 			const configured = isConfigured(sel);
-			for (const m of shown) {
+			for (const { m, i } of shown) {
 				const isSelected = st.modelSel === m.id;
 				const row = rh.createDiv({
 					cls: "semlink-mt-model" + (isSelected ? " is-selected" : ""),
@@ -3840,6 +3844,43 @@ export function renderModelsTab(
 					rh.querySelector(".semlink-mt-model.is-selected")?.removeClass("is-selected");
 					if (st.modelSel) row.addClass("is-selected");
 				});
+				// 左侧移动滑块：拖动调整模型顺序（仅已添加实例可持久化）
+				if (sel.live) {
+					const grip = row.createDiv({
+						cls: "semlink-mt-provider-grip",
+						attr: { "aria-label": t("modelDrag"), title: t("modelDrag") },
+					});
+					setIcon(grip, "grip-vertical");
+					grip.addEventListener("click", (e) => e.stopPropagation());
+					row.draggable = true;
+					const onDragStart = (e: DragEvent): void => {
+						e.dataTransfer?.setData("text/semlink-model", String(i));
+						if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+					};
+					row.addEventListener("dragstart", onDragStart);
+					grip.addEventListener("dragstart", onDragStart);
+					row.addEventListener("dragover", (e) => {
+						if (!e.dataTransfer?.types.includes("text/semlink-model")) return;
+						e.preventDefault();
+						row.addClass("is-droptarget-row");
+					});
+					row.addEventListener("dragleave", () => row.removeClass("is-droptarget-row"));
+					row.addEventListener("drop", (e) => {
+						e.preventDefault();
+						row.removeClass("is-droptarget-row");
+						const from = parseInt(e.dataTransfer?.getData("text/semlink-model") ?? "-1", 10);
+						if (isNaN(from) || from < 0 || from === i) return;
+						const arr = sel.models;
+						if (from >= arr.length || i >= arr.length) return;
+						const [moved] = arr.splice(from, 1);
+						arr.splice(i > from ? i - 1 : i, 0, moved);
+						void plugin.saveSettings();
+						renderRows();
+					});
+					row.addEventListener("dragend", () => {
+						rh.querySelectorAll(".is-droptarget-row").forEach((el) => el.removeClass("is-droptarget-row"));
+					});
+				}
 				const logo = row.createDiv({ cls: "semlink-mt-model-logo" });
 				appendProviderLogo(logo, sel.name, "semlink-mt-logo-svg");
 				const info = row.createDiv({ cls: "semlink-mt-model-info" });
