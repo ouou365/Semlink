@@ -1308,6 +1308,12 @@
     font-size: 14px;
 }
 
+/* 聚焦时不要主题默认的 box-shadow 光晕 */
+.smart-vault-settings .semlink-editor-input:focus {
+    box-shadow: none;
+    outline: none;
+}
+
 .smart-vault-settings .semlink-editor-footer.is-simple {
     justify-content: flex-end;
     align-items: center;
