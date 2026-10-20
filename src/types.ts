@@ -40,10 +40,6 @@ export interface ModelProvider {
 	 *  fetches the endpoint's full model list for this provider — refetching
 	 *  would silently resurrect models the user deliberately removed. */
 	curated?: boolean;
-	/** Custom provider created with "no authentication" (e.g. a local
-	 *  endpoint): it legitimately has no API key, so the model tab must not
-	 *  nag it with the "configure the API" hint. */
-	noAuth?: boolean;
 }
 
 /** Default providers. Order matters: the first entry is the fallback when no

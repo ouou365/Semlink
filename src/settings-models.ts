@@ -1973,8 +1973,6 @@ function renderDraftEditor(
 					apiBase: draft.baseUrl.trim(),
 					apiKey: draft.apiKey,
 					apiFormat: draft.apiFormat,
-					// 无鉴权的本地端点（如 Ollama）：不该被"配置 API"提示盯上
-					...(authSel.value === "none" ? { noAuth: true } : {}),
 					// Starts empty; models are added from the Models tab ("＋ Add").
 					models: [],
 					curated: true,
@@ -2689,9 +2687,9 @@ export function renderModelsTab(
 			const shown = sel.models
 				.map((m, i) => ({ m, i }))
 				.filter(({ m }) => !q || m.id.toLowerCase().includes(q));
-			// 未配置 Key（且非"无鉴权"的自定义供应商）：这一行换成引导语，
-			// 右侧按钮换成"配置"；配置好 Key 后回到计数 + 添加模型
-			const needsConfig = !sel.live?.apiKey?.trim() && !sel.live?.noAuth;
+			// 仅当该供应商还没添加过实例时，这一行才是引导语 + "配置"按钮；
+			// 实例存在（即使还没配 Key）就回到正常计数 + 添加模型
+			const needsConfig = !sel.live;
 			showingCountEl.setText(needsConfig
 				? t("mtNeedsKey")
 				: t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)));
