@@ -7,7 +7,7 @@ import { debugLog, setDebugLogging } from "./src/log";
 import { join } from "path";
 import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
 import { UsageStore } from "./src/usage-store";
-import { migrateLegacyCatalogBases } from "./src/settings-models";
+import { migrateLegacyCatalogBases, sanitizeProviderOrder } from "./src/settings-models";
 import { VectorStore } from "./src/vector-store";
 import { IndexQueue } from "./src/index-queue";
 import { EmbeddingClient } from "./src/embedding-client";
@@ -314,6 +314,10 @@ export default class SmartVaultPlugin extends Plugin {
 		// whose wire path was wrong from day one — patch those exact dead
 		// values (idempotent: a fixed base no longer matches).
 		migrateLegacyCatalogBases(this.settings);
+		// 手动排序（providerOrder）只保留仍然存在的条目：目录里已删除/已
+		// 改名的供应商、以及指向旧 logo 分组的大段 SVG 键都会残留在里面，
+		// 不清洗的话会一直以旧顺序压住默认排名。
+		sanitizeProviderOrder(this.settings);
 	}
 
 	async saveSettings() {

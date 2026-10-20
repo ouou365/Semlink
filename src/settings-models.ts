@@ -2716,6 +2716,20 @@ class NewFolderModal extends Modal {
 	}
 }
 
+/** 清洗手动排序 providerOrder：目录里已不存在（被移除/改名）的供应商名、
+ *  以及指向旧 logo 分组的大段 SVG 键都会残留在里面——只保留当前目录
+ *  条目名、已添加实例名和仍存在的用户文件夹键，其余剔除，避免旧顺序
+ *  一直压住默认排名。 */
+export function sanitizeProviderOrder(settings: SmartVaultSettings): void {
+	const order = settings.providerOrder;
+	if (!order || order.length === 0) return;
+	const valid = new Set<string>(CHAT_CATALOG.map((e) => e.name));
+	for (const p of settings.providers) valid.add(p.name);
+	for (const f of settings.providerFolders ?? []) valid.add(`user:${f}`);
+	const pruned = order.filter((k) => valid.has(k));
+	if (pruned.length !== order.length) settings.providerOrder = pruned;
+}
+
 export function renderModelsTab(
 	plugin: SmartVaultPlugin,
 	containerEl: HTMLElement,
@@ -2753,6 +2767,7 @@ export function renderModelsTab(
 		providers.push(provider);
 		return provider;
 	};
+
 
 	// ── 合并视图：全部内置目录条目 + 自定义供应商 ──
 	// 排序：手动顺序（拖动滑块后持久化的 providerOrder）优先，
