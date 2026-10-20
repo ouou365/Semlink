@@ -349,6 +349,7 @@ const t: Record<keyof typeof en, string> = {
 	mtAddModel: "モデルを追加",
 	mtModelEdit: "編集",
 	mtIcon: "アイコン",
+	mtIconDefault: "デフォルト（名前の頭文字）",
 	mtApiTypeOpenAI: "OpenAI Chat Completions API",
 	mtApiTypeAnthropic: "Anthropic Messages API",
 	mtEndpointHint: "Endpoint は {url} と互換性が必要です",

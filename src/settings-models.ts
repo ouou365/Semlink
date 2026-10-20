@@ -1298,6 +1298,8 @@ function getCachedModels(plugin: SmartVaultPlugin, base: string): FetchedModel[]
 /** Modal hosting the "Add provider" (catalog) or "Add a custom provider"
  *  create card. Closes on cancel or after a provider is created. */
 export class AddProviderModal extends Modal {
+	private disposeEditor: (() => void) | null = null;
+
 	constructor(
 		app: App,
 		private plugin: SmartVaultPlugin,
@@ -1326,11 +1328,13 @@ export class AddProviderModal extends Modal {
 		if (this.kind === "catalog") {
 			renderProviderCatalogGrid(contentEl, this.plugin, opts);
 		} else {
-			renderCustomCard(contentEl, this.plugin, opts);
+			this.disposeEditor = renderCustomCard(contentEl, this.plugin, opts);
 		}
 	}
 
 	onClose() {
+		this.disposeEditor?.();
+		this.disposeEditor = null;
 		this.contentEl.empty();
 	}
 }
@@ -1821,35 +1825,67 @@ interface DraftEditorOptions {
 }
 
 /** Field set of the "add a custom provider" card. Models are not edited
- *  here — after creation they are added from the Models tab ("＋ Add"). */
+ *  here — after creation they are added from the Models tab ("＋ Add").
+ *  Returns a dispose fn (releases the icon dropdown's outside-click
+ *  listener) that the hosting modal must call in onClose. */
 function renderDraftEditor(
 	slot: HTMLElement,
 	plugin: SmartVaultPlugin,
 	draft: ChatProviderDraft,
 	opts: DraftEditorOptions,
-): void {
+): () => void {
 	const errorEl = slot.createDiv({ cls: "semlink-draft-error" });
 	errorEl.addClass("semlink-hidden");
 	let busy = false;
 
-	// ── 图标：从内置图标库中选一个（可不选，回退名称首字母） ──
-	// 同一 SVG 的别名键（如 spacexai ← xai）只保留排序靠前的代表键，避免重复
+	// ── 图标：下拉选择内置图标（同一 SVG 的别名键只保留排序靠前的代表键） ──
 	slot.createDiv({ cls: "semlink-editor-field-label", text: t("mtIcon") });
-	const iconGrid = slot.createDiv({ cls: "semlink-icon-picker" });
+	const iconWrap = slot.createDiv({ cls: "semlink-icon-select-wrap" });
+	const iconBtn = iconWrap.createEl("button", { cls: "semlink-icon-select", attr: { type: "button" } });
+	const faceEl = iconBtn.createSpan({ cls: "semlink-icon-select-face" });
+	const labelEl = iconBtn.createSpan({ cls: "semlink-icon-select-label" });
+	const panelEl = iconWrap.createDiv({ cls: "semlink-icon-dropdown semlink-hidden" });
+	const iconGrid = panelEl.createDiv({ cls: "semlink-icon-picker" });
 	const seenSvgs = new Set<string>();
+	const swatches = new Map<string, HTMLElement>();
 	for (const key of Object.keys(PROVIDER_LOGOS).sort()) {
 		const svg = PROVIDER_LOGOS[key];
 		if (seenSvgs.has(svg)) continue;
 		seenSvgs.add(svg);
 		const swatch = iconGrid.createDiv({ cls: "semlink-icon-swatch", attr: { title: key } });
 		setSvgIcon(swatch, svg);
-		if (draft.icon === key) swatch.addClass("is-picked");
+		swatches.set(key, swatch);
 		swatch.addEventListener("click", () => {
 			draft.icon = draft.icon === key ? "" : key;
-			iconGrid.querySelectorAll(".semlink-icon-swatch").forEach((el) => el.removeClass("is-picked"));
-			if (draft.icon) swatch.addClass("is-picked");
+			refreshFace();
+			setPanelOpen(false);
 		});
 	}
+	const refreshFace = (): void => {
+		const picked = swatches.get(draft.icon);
+		faceEl.empty();
+		if (picked) {
+			setSvgIcon(faceEl, PROVIDER_LOGOS[draft.icon]);
+			labelEl.setText(draft.icon);
+		} else {
+			labelEl.setText(t("mtIconDefault"));
+		}
+		iconBtn.toggleClass("has-icon", !!picked);
+		for (const [key, swatch] of swatches) swatch.toggleClass("is-picked", key === draft.icon);
+	};
+	// 点击面板外收起（捕获阶段）；弹窗关闭时由 dispose 解绑
+	const onDocPoint = (evt: PointerEvent): void => {
+		if (!iconWrap.contains(evt.target as Node)) setPanelOpen(false);
+	};
+	const setPanelOpen = (open: boolean): void => {
+		const wasOpen = !panelEl.hasClass("semlink-hidden");
+		if (open === wasOpen) return;
+		panelEl.toggleClass("semlink-hidden", !open);
+		if (open) document.addEventListener("pointerdown", onDocPoint, true);
+		else document.removeEventListener("pointerdown", onDocPoint, true);
+	};
+	refreshFace();
+	iconBtn.addEventListener("click", () => setPanelOpen(panelEl.hasClass("semlink-hidden")));
 
 	// ── 名称 ──
 	slot.createDiv({ cls: "semlink-editor-field-label", text: t("chatProviderName") });
@@ -1946,6 +1982,8 @@ function renderDraftEditor(
 				opts.onCreated(provider);
 			});
 		});
+
+	return () => setPanelOpen(false);
 }
 
 /** Catalog entries pinned to the front of the picker grid with a star, in
@@ -2010,12 +2048,12 @@ function renderProviderCatalogGrid(
 }
 
 /** "Add a custom provider" card: route id + full details. Rendered inside
- *  the AddProviderModal. */
+ *  the AddProviderModal. Returns renderDraftEditor's dispose fn. */
 function renderCustomCard(
 	containerEl: HTMLElement,
 	plugin: SmartVaultPlugin,
 	opts: { onCancel: () => void; onCreated: (provider: ModelProvider) => void },
-): void {
+): () => void {
 	const card = containerEl.createDiv({ cls: "semlink-add-card" });
 
 	const draft: ChatProviderDraft = {
@@ -2027,7 +2065,7 @@ function renderCustomCard(
 	};
 
 	const bodyEl = card.createDiv({ cls: "semlink-add-card-body" });
-	renderDraftEditor(bodyEl, plugin, draft, {
+	return renderDraftEditor(bodyEl, plugin, draft, {
 		submitLabel: t("create"),
 		submitBusyLabel: t("creating"),
 		onCancel: opts.onCancel,

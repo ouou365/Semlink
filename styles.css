@@ -1442,6 +1442,79 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     box-shadow: 0 0 0 1px var(--interactive-accent);
 }
 
+/* 图标下拉选择器：按钮与协议下拉同风格，点击展开内置图标网格 */
+.smart-vault-settings .semlink-icon-select-wrap {
+    position: relative;
+}
+
+.smart-vault-settings .semlink-icon-select {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 16px;
+    padding: 8px 44px 8px 14px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    font-size: 14px;
+    color: var(--text-normal);
+    text-align: left;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--background-primary) url(data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2716%27 height=%2716%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23999%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E) no-repeat right 14px center;
+}
+
+.smart-vault-settings .semlink-icon-select:focus,
+.smart-vault-settings .semlink-icon-select:focus-visible {
+    box-shadow: none;
+    outline: none;
+}
+
+.smart-vault-settings .semlink-icon-select-face {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex: none;
+}
+
+.smart-vault-settings .semlink-icon-select-face svg {
+    width: 22px;
+    height: 22px;
+}
+
+.smart-vault-settings .semlink-icon-select-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.smart-vault-settings .semlink-icon-select:not(.has-icon) .semlink-icon-select-label {
+    color: var(--text-muted);
+}
+
+/* 下拉面板：浮在后续字段之上，内部复用图标网格的滚动 */
+.smart-vault-settings .semlink-icon-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 20;
+    padding: 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    background: var(--background-primary);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.smart-vault-settings .semlink-icon-dropdown .semlink-icon-picker {
+    max-height: 220px;
+    margin-bottom: 0;
+    padding: 0;
+}
+
 .smart-vault-settings .semlink-editor-select {
     width: 100%;
     /* height: 46px; */

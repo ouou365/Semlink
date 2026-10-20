@@ -349,6 +349,7 @@ const t: Record<keyof typeof en, string> = {
 	mtAddModel: "新增模型",
 	mtModelEdit: "編輯",
 	mtIcon: "圖示",
+	mtIconDefault: "預設（名稱首字母）",
 	mtApiTypeOpenAI: "OpenAI Chat Completions API",
 	mtApiTypeAnthropic: "Anthropic Messages API",
 	mtEndpointHint: "Endpoint 需相容 {url} 的 API 格式",
