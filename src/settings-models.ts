@@ -2811,8 +2811,8 @@ class ProviderEditorModal extends Modal {
 // ──── Editors ────
 
 /** Editor for one provider (embedding and chat are not distinct provider
- *  kinds): 显示名称 → Base URL → API 协议 → API 密钥 → 模型列表. The model
- *  list is kind-tagged — embedding/chat/… models all live in the same list. */
+ *  kinds): 显示名称 → Base URL → API 协议 → API 密钥。模型管理（搜索/启停）
+ *  在 Model 页右栏完成，这里不再重复渲染模型列表。 */
 function renderProviderEditor(
 	slot: HTMLElement,
 	plugin: SmartVaultPlugin,
@@ -2826,9 +2826,6 @@ function renderProviderEditor(
 		...p,
 		models: p.models.map((m) => ({ ...m })),
 	};
-	// The model list is rendered last; the probe-state refresh below needs a
-	// handle, so it is assigned at the end and dereferenced lazily.
-	let modelHandle: ModelListHandle | null = null;
 
 	new Setting(slot)
 		.setName(t("chatProviderName"))
@@ -2848,7 +2845,6 @@ function renderProviderEditor(
 				.setValue(draft.apiBase)
 				.onChange((value) => {
 					draft.apiBase = value;
-					modelHandle?.updateProbeState();
 				})
 		);
 
@@ -2863,7 +2859,6 @@ function renderProviderEditor(
 				.setValue(draft.apiFormat ?? "openai")
 				.onChange((value) => {
 					draft.apiFormat = value as ChatApiFormat;
-					modelHandle?.updateProbeState();
 				})
 		);
 
@@ -2875,23 +2870,12 @@ function renderProviderEditor(
 				.setValue(draft.apiKey)
 				.onChange((value) => {
 					draft.apiKey = value;
-					modelHandle?.updateProbeState();
 				})
 		)
 		.then((setting) => {
 			const input = setting.controlEl.querySelector("input");
 			if (input) input.type = "password";
 		});
-
-	modelHandle = renderModelList(slot, {
-		app: plugin.app,
-		plugin,
-		getModels: () => draft.models,
-		onChange: (models) => {
-			draft.models = models;
-		},
-		probe: () => ({ baseUrl: draft.apiBase, apiKey: draft.apiKey, apiFormat: draft.apiFormat ?? "openai" }),
-	});
 
 	// Footer: 删除在左（列表行不再放删除图标，入口收进编辑弹窗，二次确认），
 	// 取消/确定在右；确定提交暂存的 draft，取消丢弃。
