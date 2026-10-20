@@ -1377,7 +1377,8 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 }
 
 /* 新增供应商表单：协议/鉴权下拉与整行输入框同宽同风格 */
-.smart-vault-settings .semlink-editor-select:focus {
+.smart-vault-settings .semlink-editor-select:focus,
+.smart-vault-settings .semlink-editor-select:focus-visible {
     box-shadow: none;
     outline: none;
 }
