@@ -833,6 +833,10 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     background: rgba(255, 255, 255, 0.09);
 }
 
+.smart-vault-settings .semlink-mt-model-logo {
+    flex-shrink: 0;
+}
+
 .smart-vault-settings .semlink-mt-model-logo .semlink-mt-logo-svg,
 .smart-vault-settings .semlink-mt-model-logo svg,
 .smart-vault-settings .semlink-mt-model-logo .semlink-provider-fallback {
@@ -844,9 +848,15 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 .smart-vault-settings .semlink-mt-model-info {
     flex: 1 1 auto;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
 }
 
 .smart-vault-settings .semlink-mt-model-name {
+    position: relative;
+    max-width: 100%;
     font-weight: 600;
     color: var(--text-normal);
     overflow: hidden;
