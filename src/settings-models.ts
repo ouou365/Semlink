@@ -2642,16 +2642,20 @@ export function renderModelsTab(
 					updateCount();
 				});
 			}
-			// 名称溢出的行打跑马灯标记：悬停时按量好的位移/时长滚动展示全名
+			// 名称溢出的行打跑马灯标记：复制两份文本（间隔 2ch）做无缝循环，
+			// 恒速 60px/s；动画只作用于内层轨道，外层 overflow 裁剪，不会盖到 logo
 			requestAnimationFrame(() => {
 				rh.querySelectorAll(".semlink-mt-model-name").forEach((el) => {
 					const name = el as HTMLElement;
-					const shift = name.scrollWidth - name.clientWidth;
-					if (shift > 2) {
-						name.addClass("is-overflow");
-						name.style.setProperty("--marquee-shift", `${shift}px`);
-						name.style.setProperty("--marquee-dur", `${Math.min(8, Math.max(1.5, shift / 60))}s`);
-					}
+					if (name.scrollWidth - name.clientWidth <= 2) return;
+					name.addClass("is-overflow");
+					const text = name.textContent ?? "";
+					name.setText("");
+					const track = name.createSpan({ cls: "semlink-mt-model-name-track" });
+					track.createSpan({ cls: "semlink-mt-model-name-text", text });
+					track.createSpan({ cls: "semlink-mt-model-name-text", text });
+					const unit = name.scrollWidth / 2;
+					name.style.setProperty("--marquee-dur", `${(unit / 60).toFixed(2)}s`);
 				});
 			});
 			rh.scrollTop = keepScroll;

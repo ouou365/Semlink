@@ -854,15 +854,25 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     white-space: nowrap;
 }
 
-/* 名称过长（JS 标记 is-overflow）：悬停跑马灯滚动展示全名 */
+/* 名称过长（JS 标记 is-overflow）：悬停跑马灯。轨道在名称盒内部滚动，
+   两份文本（间隔 2ch）translateX(-50%) 无缝衔接，恒速由 --marquee-dur 控制 */
+.smart-vault-settings .semlink-mt-model-name-text {
+    display: inline-block;
+    padding-right: 2ch;
+}
+
 .smart-vault-settings .semlink-mt-model-name.is-overflow:hover {
     text-overflow: clip;
-    animation: semlink-marquee var(--marquee-dur, 6s) linear infinite alternate;
+}
+
+.smart-vault-settings .semlink-mt-model-name.is-overflow:hover .semlink-mt-model-name-track {
+    display: inline-block;
+    animation: semlink-marquee var(--marquee-dur, 8s) linear infinite;
 }
 
 @keyframes semlink-marquee {
     from { transform: translateX(0); }
-    to { transform: translateX(calc(-1 * var(--marquee-shift, 0px))); }
+    to { transform: translateX(-50%); }
 }
 
 .smart-vault-settings .semlink-mt-model-ctx {
