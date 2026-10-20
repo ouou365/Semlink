@@ -312,7 +312,7 @@ const en = {
 	chatAddProvider: "Add Provider",
 	chatAddModel: "Add Model",
 	chatDeleteProvider: "Delete Provider",
-	chatDeleteModel: "Delete Model",
+	chatDeleteModel: "Delete",
 	chatEditModel: "Edit Model",
 	chatNoModels: "No models yet. Add one below",
 	chatDone: "Done",
