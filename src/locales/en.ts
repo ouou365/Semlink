@@ -356,7 +356,7 @@ const en = {
 	mtAuthNone: "No authentication",
 	editorSave: "Save",
 	mtEnabled: "enabled",
-	mtNeedsKey: "Configure the API to use models",
+	mtNeedsKey: "Need API Key to use",
 	mtConfigure: "Configure",
 	mtShowing: "{total} models",
 	mtNewFolder: "New folder",
