@@ -2336,63 +2336,77 @@ function renderDraftEditor(
 	const errorEl = slot.createDiv({ cls: "semlink-draft-error" });
 	errorEl.addClass("semlink-hidden");
 	let busy = false;
-	// The model list is rendered last (after protocol + key); the probe-state
-	// refresh above needs a handle, so it is assigned lazily.
 	let modelHandle: ModelListHandle | null = null;
 
-	new Setting(slot)
-		.setName(t("chatProviderName"))
-		.addText((text) =>
-			text
-				.setPlaceholder("My Gateway")
-				.setValue(draft.name)
-				.onChange((value) => {
-					draft.name = value;
-				})
-		);
+	// ── 名称 ──
+	slot.createDiv({ cls: "semlink-editor-field-label", text: t("chatProviderName") });
+	const nameInput = slot.createEl("input", {
+		cls: "semlink-editor-input",
+		attr: { type: "text", placeholder: "My Gateway", spellcheck: "false" },
+	});
+	nameInput.value = draft.name;
+	nameInput.addEventListener("input", () => {
+		draft.name = nameInput.value;
+	});
 
-	new Setting(slot)
-		.setName(t("chatBaseUrl"))
-		.addText((text) =>
-			text
-				.setPlaceholder("https://api.example.com")
-				.setValue(draft.baseUrl)
-				.onChange((value) => {
-					draft.baseUrl = value;
-					modelHandle?.updateProbeState();
-				})
+	// ── API Type*：协议下拉 ──
+	slot.createDiv({ cls: "semlink-editor-field-label", text: t("chatApiFormat") });
+	const typeSel = slot.createEl("select", { cls: "semlink-editor-select" });
+	typeSel.createEl("option", { value: "openai", text: t("mtApiTypeOpenAI") });
+	typeSel.createEl("option", { value: "anthropic", text: t("mtApiTypeAnthropic") });
+	typeSel.value = draft.apiFormat;
+	typeSel.addEventListener("change", () => {
+		draft.apiFormat = typeSel.value as ChatApiFormat;
+		hintEl.setText(
+			t("mtEndpointHint").replace("{url}",
+				draft.apiFormat === "anthropic" ? "https://api.anthropic.com/v1/messages" : "https://api.openai.com/v1/chat/completions"),
 		);
+		modelHandle?.updateProbeState();
+	});
 
-	new Setting(slot)
-		.setName(t("chatApiFormat"))
-		.addDropdown((dropdown) =>
-			dropdown
-				.addOptions({
-					"openai": t("chatFormatOpenAI"),
-					"anthropic": t("chatFormatAnthropic"),
-				})
-				.setValue(draft.apiFormat)
-				.onChange((value) => {
-					draft.apiFormat = value as ChatApiFormat;
-					modelHandle?.updateProbeState();
-				})
-		);
+	// ── Endpoint URL*：整行输入 + 兼容性提示 ──
+	slot.createDiv({ cls: "semlink-editor-field-label", text: t("chatBaseUrl") });
+	const endpointInput = slot.createEl("input", {
+		cls: "semlink-editor-input",
+		attr: { type: "text", placeholder: "e.g., http://localhost:8080/v1/completions", spellcheck: "false" },
+	});
+	endpointInput.value = draft.baseUrl;
+	endpointInput.addEventListener("input", () => {
+		draft.baseUrl = endpointInput.value;
+		modelHandle?.updateProbeState();
+	});
+	const hintEl = slot.createDiv({ cls: "semlink-editor-adv-desc" });
 
-	new Setting(slot)
-		.setName(t("chatApiKey"))
-		.addText((text) =>
-			text
-				.setPlaceholder("sk-...")
-				.setValue(draft.apiKey)
-				.onChange((value) => {
-					draft.apiKey = value;
-					modelHandle?.updateProbeState();
-				})
-		)
-		.then((setting) => {
-			const input = setting.controlEl.querySelector("input");
-			if (input) input.type = "password";
-		});
+	// ── Authentication Type：鉴权下拉（无鉴权时隐藏 Key 输入） ──
+	slot.createDiv({ cls: "semlink-editor-field-label", text: t("chatApiKey") });
+	const authSel = slot.createEl("select", { cls: "semlink-editor-select" });
+	authSel.createEl("option", { value: "header", text: t("mtAuthHeader") });
+	authSel.createEl("option", { value: "none", text: t("mtAuthNone") });
+	const keyLabel = slot.createDiv({ cls: "semlink-editor-field-label", text: t("apiKey") });
+	const keyInput = slot.createEl("input", {
+		cls: "semlink-editor-input",
+		attr: { type: "password", placeholder: "sk-...", spellcheck: "false" },
+	});
+	keyInput.value = draft.apiKey;
+	keyInput.addEventListener("input", () => {
+		draft.apiKey = keyInput.value;
+		modelHandle?.updateProbeState();
+	});
+	const syncAuth = (): void => {
+		const noAuth = authSel.value === "none";
+		keyLabel.toggleClass("semlink-hidden", noAuth);
+		keyInput.toggleClass("semlink-hidden", noAuth);
+		if (noAuth) draft.apiKey = "";
+	};
+	authSel.addEventListener("change", () => {
+		syncAuth();
+		modelHandle?.updateProbeState();
+	});
+	syncAuth();
+	hintEl.setText(
+		t("mtEndpointHint").replace("{url}",
+			draft.apiFormat === "anthropic" ? "https://api.anthropic.com/v1/messages" : "https://api.openai.com/v1/chat/completions"),
+	);
 
 	modelHandle = renderModelList(slot, {
 		app: plugin.app,
@@ -2409,8 +2423,8 @@ function renderDraftEditor(
 		.addButton((btn) => {
 			btn.setButtonText(opts.submitLabel).setClass("mod-cta").onClick(async () => {
 				if (busy) return;
-			errorEl.addClass("semlink-hidden");
-			if (!draft.baseUrl.trim()) {
+				errorEl.addClass("semlink-hidden");
+				if (!draft.baseUrl.trim()) {
 					errorEl.setText(t("customNeedsBaseUrl"));
 					errorEl.removeClass("semlink-hidden");
 					return;

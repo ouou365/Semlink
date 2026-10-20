@@ -1376,6 +1376,22 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     margin-bottom: 8px;
 }
 
+/* 新增供应商表单：协议/鉴权下拉与整行输入框同宽同风格 */
+.smart-vault-settings .semlink-editor-select {
+    width: 100%;
+    margin-bottom: 16px;
+    padding: 11px 14px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    background: var(--background-primary);
+    font-size: 14px;
+}
+
+.smart-vault-settings .semlink-editor-input.semlink-hidden,
+.smart-vault-settings .semlink-editor-field-label.semlink-hidden {
+    display: none;
+}
+
 .smart-vault-settings .semlink-editor-input {
     width: 100%;
     margin-bottom: 16px;
