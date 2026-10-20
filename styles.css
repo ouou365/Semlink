@@ -694,6 +694,11 @@
     background: #eeeeee;
 }
 
+/* 深色主题：#eeeeee 会刺眼，改用半透明白叠加 */
+body.theme-dark .smart-vault-settings .semlink-mt-provider.is-active {
+    background: rgba(255, 255, 255, 0.09);
+}
+
 .smart-vault-settings .semlink-mt-provider-logo .semlink-mt-logo-svg,
 .smart-vault-settings .semlink-mt-provider-logo svg,
 .smart-vault-settings .semlink-mt-provider-logo .semlink-provider-fallback {
@@ -821,6 +826,11 @@
 .smart-vault-settings .semlink-mt-model:hover,
 .smart-vault-settings .semlink-mt-model.is-selected {
     background: #eeeeee;
+}
+
+body.theme-dark .smart-vault-settings .semlink-mt-model:hover,
+body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
+    background: rgba(255, 255, 255, 0.09);
 }
 
 .smart-vault-settings .semlink-mt-model-logo .semlink-mt-logo-svg,
