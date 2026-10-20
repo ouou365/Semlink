@@ -2842,22 +2842,17 @@ function renderProviderEditor(
 		close();
 	};
 
-	// API Key：唯一必填项
-	new Setting(slot)
-		.setName(t("apiKey"))
-		.addText((text) =>
-			text
-				.setPlaceholder("sk-...")
-				.setValue(draft.apiKey)
-				.onChange((value) => {
-					draft.apiKey = value;
-					scheduleSave();
-				})
-		)
-		.then((setting) => {
-			const input = setting.controlEl.querySelector("input");
-			if (input) input.type = "password";
-		});
+	// API Key：唯一必填项——标签在上、输入框整行
+	slot.createDiv({ cls: "semlink-editor-field-label", text: t("apiKey") });
+	const keyInput = slot.createEl("input", {
+		cls: "semlink-editor-input",
+		attr: { type: "password", placeholder: "sk-...", spellcheck: "false" },
+	});
+	keyInput.value = draft.apiKey;
+	keyInput.addEventListener("input", () => {
+		draft.apiKey = keyInput.value;
+		scheduleSave();
+	});
 
 	// 高级选项（默认收起）：仅 Endpoint 一项
 	const advHead = slot.createDiv({ cls: "semlink-editor-adv-head" });
@@ -2875,20 +2870,20 @@ function renderProviderEditor(
 		cls: "semlink-editor-adv-desc",
 		text: t("editorEndpointDesc").replace("{provider}", p.name),
 	});
-	new Setting(advBody)
-		.setName(t("editorEndpoint"))
-		.addText((text) =>
-			text
-				.setValue(draft.apiBase)
-				.onChange((value) => {
-					draft.apiBase = value;
-					scheduleSave();
-				})
-		);
+	advBody.createDiv({ cls: "semlink-editor-field-label", text: t("editorEndpoint") });
+	const epInput = advBody.createEl("input", {
+		cls: "semlink-editor-input",
+		attr: { type: "text", spellcheck: "false" },
+	});
+	epInput.value = draft.apiBase;
+	epInput.addEventListener("input", () => {
+		draft.apiBase = epInput.value;
+		scheduleSave();
+	});
 
-	// Footer: 删除在左（弱化），关闭在右；关闭即保存
+	// Footer: 删除在左（弱化为文字链），关闭在右（深色主按钮）；关闭即保存
 	const footer = slot.createDiv({ cls: "semlink-editor-footer is-simple" });
-	footer.createEl("button", { cls: "semlink-btn semlink-btn-danger", text: t("deleteProvider") })
+	footer.createEl("button", { cls: "semlink-editor-delete-link", text: t("deleteProvider") })
 		.addEventListener("click", () => {
 			const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
 			new DeleteProviderModal(plugin.app, p.name, () => {
@@ -2902,7 +2897,7 @@ function renderProviderEditor(
 				});
 			}).open();
 		});
-	footer.createEl("button", { cls: "semlink-btn semlink-btn-cta", text: t("close") })
+	footer.createEl("button", { cls: "semlink-editor-close-btn", text: t("close") })
 		.addEventListener("click", flushAndClose);
 }
 

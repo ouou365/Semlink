@@ -1248,11 +1248,64 @@
 .smart-vault-settings .semlink-editor-adv-desc {
     color: var(--text-muted);
     font-size: 12.5px;
-    margin-bottom: 2px;
+    margin-bottom: 10px;
+}
+
+/* 手工字段布局（TypingMind 式）：标签在上、整行大圆角输入框 */
+.smart-vault-settings .semlink-editor-field-label {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.smart-vault-settings .semlink-editor-input {
+    width: 100%;
+    margin-bottom: 16px;
+    padding: 11px 14px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    background: var(--background-primary);
+    font-size: 14px;
+}
+
+.smart-vault-settings .semlink-editor-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 15%, transparent);
 }
 
 .smart-vault-settings .semlink-editor-footer.is-simple {
     justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+}
+
+.smart-vault-settings .semlink-editor-delete-link {
+    background: transparent;
+    border: none;
+    padding: 4px 2px;
+    color: var(--text-error);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-editor-delete-link:hover {
+    text-decoration: underline;
+}
+
+.smart-vault-settings .semlink-editor-close-btn {
+    background: var(--text-normal);
+    color: var(--background-primary);
+    border: none;
+    border-radius: 10px;
+    padding: 10px 24px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-editor-close-btn:hover {
+    opacity: 0.88;
 }
 
 .smart-vault-settings .semlink-editor-footer {
