@@ -464,7 +464,7 @@ const en = {
 	licenseDevices: "Devices",
 	licenseLifetime: "Lifetime license",
 	licenseBadge: "Early bird",
-	licenseCardHeadline: "Unlock unlimited Productivity",
+	licenseCardHeadline: "Unlock Unlimited Productivity",
 	licenseCardFreeLine: "Advanced chat UI for AI. All models in one place. Private and local.",
 	licenseCardCta: "Unlock for $3",
 	licenseCardLifetime: "lifetime · no subscription",
