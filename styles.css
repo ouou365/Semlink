@@ -1204,6 +1204,57 @@
     padding-right: 2px;
 }
 
+/* 编辑弹窗（TypingMind 式极简配置）：标题居中，高级选项折叠（缩进 + 左
+   竖线），footer 删除在左、关闭在右。 */
+.semlink-provider-editor-modal .modal-title {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+    padding-top: 6px;
+}
+
+.smart-vault-settings .semlink-editor-adv-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 2px 0 12px;
+    color: var(--interactive-accent);
+    font-weight: 600;
+    font-size: 13.5px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.smart-vault-settings .semlink-editor-adv-head:hover .semlink-editor-adv-label {
+    text-decoration: underline;
+}
+
+.smart-vault-settings .semlink-editor-adv-chevron {
+    display: flex;
+    align-items: center;
+}
+
+.smart-vault-settings .semlink-editor-adv-chevron .svg-icon {
+    width: 15px;
+    height: 15px;
+}
+
+.smart-vault-settings .semlink-editor-adv-body {
+    border-left: 2px solid var(--background-modifier-border);
+    margin: 0 0 10px 3px;
+    padding-left: 16px;
+}
+
+.smart-vault-settings .semlink-editor-adv-desc {
+    color: var(--text-muted);
+    font-size: 12.5px;
+    margin-bottom: 2px;
+}
+
+.smart-vault-settings .semlink-editor-footer.is-simple {
+    justify-content: space-between;
+}
+
 .smart-vault-settings .semlink-editor-footer {
     display: flex;
     justify-content: flex-end;

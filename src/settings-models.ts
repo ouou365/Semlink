@@ -2797,7 +2797,7 @@ class ProviderEditorModal extends Modal {
 	}
 
 	onOpen() {
-		this.titleEl.setText(t("editProvider"));
+		this.titleEl.setText(t("editorConfigTitle").replace("{provider}", this.provider.name));
 		const { contentEl } = this;
 		contentEl.empty();
 		renderProviderEditor(contentEl, this.plugin, this.provider, this.refresh, () => this.close());
@@ -2811,8 +2811,9 @@ class ProviderEditorModal extends Modal {
 // ──── Editors ────
 
 /** Editor for one provider (embedding and chat are not distinct provider
- *  kinds): 显示名称 → Base URL → API 协议 → API 密钥。模型管理（搜索/启停）
- *  在 Model 页右栏完成，这里不再重复渲染模型列表。 */
+ *  kinds) — TypingMind 式极简配置：用户只填 API Key（输入即自动保存），
+ *  Endpoint 折叠在"高级选项"里；API 协议不暴露（沿用既有值）。模型管理
+ *  （搜索/启停）在 Model 页右栏完成。 */
 function renderProviderEditor(
 	slot: HTMLElement,
 	plugin: SmartVaultPlugin,
@@ -2820,48 +2821,28 @@ function renderProviderEditor(
 	refresh: () => void,
 	close: () => void,
 ): void {
-	// Draft copy: edits are staged on the draft and only written back (and
-	// saved) when 确定 is clicked; 取消 discards them.
-	const draft: ModelProvider = {
-		...p,
-		models: p.models.map((m) => ({ ...m })),
+	// Edits land on the live draft object; a debounce saves them while the
+	// user types, 关闭 flushes immediately（无 取消/确定——所见即所存）。
+	const draft: ModelProvider = { ...p };
+	let saveTimer = 0;
+	const commit = (): void => {
+		Object.assign(p, draft);
+		// The list counts as user-curated: the onboarding guide must stop
+		// auto-refetching it (that would resurrect removed models).
+		p.curated = true;
+		void plugin.saveSettings().then(() => refresh());
+	};
+	const scheduleSave = (): void => {
+		window.clearTimeout(saveTimer);
+		saveTimer = window.setTimeout(commit, 500);
+	};
+	const flushAndClose = (): void => {
+		window.clearTimeout(saveTimer);
+		commit();
+		close();
 	};
 
-	new Setting(slot)
-		.setName(t("chatProviderName"))
-		.addText((text) =>
-			text
-				.setValue(draft.name)
-				.onChange((value) => {
-					draft.name = value;
-				})
-		);
-
-	new Setting(slot)
-		.setName(t("chatBaseUrl"))
-		.addText((text) =>
-			text
-				.setPlaceholder("https://api.siliconflow.cn")
-				.setValue(draft.apiBase)
-				.onChange((value) => {
-					draft.apiBase = value;
-				})
-		);
-
-	new Setting(slot)
-		.setName(t("chatApiFormat"))
-		.addDropdown((dropdown) =>
-			dropdown
-				.addOptions({
-					"openai": t("chatFormatOpenAI"),
-					"anthropic": t("chatFormatAnthropic"),
-				})
-				.setValue(draft.apiFormat ?? "openai")
-				.onChange((value) => {
-					draft.apiFormat = value as ChatApiFormat;
-				})
-		);
-
+	// API Key：唯一必填项
 	new Setting(slot)
 		.setName(t("apiKey"))
 		.addText((text) =>
@@ -2870,6 +2851,7 @@ function renderProviderEditor(
 				.setValue(draft.apiKey)
 				.onChange((value) => {
 					draft.apiKey = value;
+					scheduleSave();
 				})
 		)
 		.then((setting) => {
@@ -2877,9 +2859,35 @@ function renderProviderEditor(
 			if (input) input.type = "password";
 		});
 
-	// Footer: 删除在左（列表行不再放删除图标，入口收进编辑弹窗，二次确认），
-	// 取消/确定在右；确定提交暂存的 draft，取消丢弃。
-	const footer = slot.createDiv({ cls: "semlink-editor-footer" });
+	// 高级选项（默认收起）：仅 Endpoint 一项
+	const advHead = slot.createDiv({ cls: "semlink-editor-adv-head" });
+	const chev = advHead.createSpan({ cls: "semlink-editor-adv-chevron" });
+	setIcon(chev, "chevron-right");
+	const advLabel = advHead.createSpan({ cls: "semlink-editor-adv-label", text: t("editorAdvancedShow") });
+	const advBody = slot.createDiv({ cls: "semlink-editor-adv-body semlink-hidden" });
+	advHead.addEventListener("click", () => {
+		const open = !advBody.hasClass("semlink-hidden");
+		advBody.toggleClass("semlink-hidden", open);
+		setIcon(chev, open ? "chevron-right" : "chevron-down");
+		advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
+	});
+	advBody.createDiv({
+		cls: "semlink-editor-adv-desc",
+		text: t("editorEndpointDesc").replace("{provider}", p.name),
+	});
+	new Setting(advBody)
+		.setName(t("editorEndpoint"))
+		.addText((text) =>
+			text
+				.setValue(draft.apiBase)
+				.onChange((value) => {
+					draft.apiBase = value;
+					scheduleSave();
+				})
+		);
+
+	// Footer: 删除在左（弱化），关闭在右；关闭即保存
+	const footer = slot.createDiv({ cls: "semlink-editor-footer is-simple" });
 	footer.createEl("button", { cls: "semlink-btn semlink-btn-danger", text: t("deleteProvider") })
 		.addEventListener("click", () => {
 			const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
@@ -2894,19 +2902,8 @@ function renderProviderEditor(
 				});
 			}).open();
 		});
-	footer.createEl("button", { cls: "semlink-btn", text: t("cancel") })
-		.addEventListener("click", close);
-	footer.createEl("button", { cls: "semlink-btn semlink-btn-cta", text: t("confirm") })
-		.addEventListener("click", () => void (async () => {
-			Object.assign(p, draft);
-			p.models = draft.models;
-			// The list is now user-curated: the onboarding guide must stop
-			// auto-refetching it (that would resurrect removed models).
-			p.curated = true;
-			await plugin.saveSettings();
-			refresh();
-			close();
-		})());
+	footer.createEl("button", { cls: "semlink-btn semlink-btn-cta", text: t("close") })
+		.addEventListener("click", flushAndClose);
 }
 
 // ──── Create cards (add provider / add custom provider) ────
