@@ -3352,7 +3352,14 @@ export function renderModelsTab(
 			const named = [...node.members].sort((a, b) => a.name.length - b.name.length)[0];
 			node.name = named ? named.name : node.key.slice(5, 25);
 		}
-		node.rank = node.members.length ? Math.min(...node.members.map((m) => m.rank)) : 9999;
+		// 文件夹排序：手动拖动登记过（providerOrder 里的文件夹键）优先，
+		// 否则取成员中最优排名参与混排
+		const manualIdx = manualOrder.indexOf(node.key);
+		node.rank = manualIdx !== -1
+			? manualIdx
+			: node.members.length
+				? Math.min(...node.members.map((m) => m.rank))
+				: 999999;
 	}
 	nodes.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
 
@@ -3461,7 +3468,8 @@ export function renderModelsTab(
 		grip.addEventListener("dragstart", onDragStart);
 		// 行间重排：拖中的行高亮，松手按当前展示顺序插入目标行之前
 		row.addEventListener("dragover", (e) => {
-			if (!e.dataTransfer?.types.includes("text/semlink-provider")) return;
+			const types = e.dataTransfer?.types;
+			if (!types?.includes("text/semlink-provider") && !types?.includes("text/semlink-folder")) return;
 			e.preventDefault();
 			e.stopPropagation();
 			row.addClass("is-droptarget-row");
@@ -3471,7 +3479,9 @@ export function renderModelsTab(
 			e.preventDefault();
 			e.stopPropagation();
 			row.removeClass("is-droptarget-row");
-			const dragged = e.dataTransfer?.getData("text/semlink-provider");
+			const dt = e.dataTransfer;
+			// 被拖的可以是供应商（名称）或文件夹（键）
+			const dragged = dt?.getData("text/semlink-provider") || dt?.getData("text/semlink-folder");
 			if (!dragged || dragged === r.name) return;
 			const seq = displaySequence();
 			const target = seq.indexOf(r.name);
@@ -3526,14 +3536,33 @@ export function renderModelsTab(
 			cls: "semlink-mt-provider is-folder",
 			attr: { "data-folder": node.key },
 		});
+		// 拖中文件夹时显示"插到前面"落点；拖的是供应商时仍是归档落点
 		headRow.addEventListener("dragover", (e) => {
 			e.preventDefault();
-			headRow.addClass("is-droptarget");
+			headRow.addClass(
+				e.dataTransfer?.types.includes("text/semlink-folder") ? "is-droptarget-row" : "is-droptarget",
+			);
 		});
-		headRow.addEventListener("dragleave", () => headRow.removeClass("is-droptarget"));
+		headRow.addEventListener("dragleave", () => {
+			headRow.removeClass("is-droptarget");
+			headRow.removeClass("is-droptarget-row");
+		});
 		headRow.addEventListener("drop", (e) => {
 			e.preventDefault();
 			headRow.removeClass("is-droptarget");
+			headRow.removeClass("is-droptarget-row");
+			// 文件夹拖到文件夹上：按展示顺序插到目标文件夹前面
+			const draggedFolder = e.dataTransfer?.getData("text/semlink-folder");
+			if (draggedFolder) {
+				if (draggedFolder === node.key) return;
+				const seq = displaySequence();
+				if (seq.indexOf(draggedFolder) === -1 || seq.indexOf(node.key) === -1) return;
+				seq.splice(seq.indexOf(draggedFolder), 1);
+				seq.splice(seq.indexOf(node.key), 0, draggedFolder);
+				plugin.settings.providerOrder = seq;
+				void plugin.saveSettings().then(() => refreshKeepInner());
+				return;
+			}
 			const name = e.dataTransfer?.getData("text/semlink-provider");
 			if (!name) return;
 			const p = providers.find((x) => x.name === name);
@@ -3541,6 +3570,20 @@ export function renderModelsTab(
 			p.folder = node.key;
 			void plugin.saveSettings().then(() => refreshKeepInner());
 		});
+		// 移动滑块：整个文件夹作为整体参与排序
+		const grip = headRow.createDiv({
+			cls: "semlink-mt-provider-grip",
+			attr: { "aria-label": t("modelDrag"), title: t("modelDrag") },
+		});
+		setIcon(grip, "grip-vertical");
+		grip.addEventListener("click", (e) => e.stopPropagation());
+		headRow.draggable = true;
+		const onFolderDragStart = (e: DragEvent): void => {
+			e.dataTransfer?.setData("text/semlink-folder", node.key);
+			if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+		};
+		headRow.addEventListener("dragstart", onFolderDragStart);
+		grip.addEventListener("dragstart", onFolderDragStart);
 		if (hottest) {
 			const logo = headRow.createDiv({ cls: "semlink-mt-provider-logo" });
 			appendProviderLogo(logo, hottest.name, "semlink-mt-logo-svg");
@@ -3591,12 +3634,13 @@ export function renderModelsTab(
 	}
 	items.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
 
-	// 当前展示顺序（文件夹展开为其成员名序列，收起时也按成员计入）——
-	// 拖动重排以此为基准生成新的持久化顺序
+	// 当前展示顺序：顶层供应商记名称，文件夹记其键 + 展开的成员名序列
+	//（收起时也按成员计入）——拖动重排以此为基准生成新的持久化顺序
 	const displaySequence = (): string[] => {
 		const seq: string[] = [];
 		for (const item of items) {
 			if (item.node) {
+				seq.push(item.node.key);
 				for (const m of item.node.members) seq.push(m.name);
 			} else if (item.row) {
 				seq.push(item.row.name);
