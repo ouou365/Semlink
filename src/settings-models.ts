@@ -3210,15 +3210,6 @@ export function renderModelsTab(
 		searchInput.value = st.search ?? "";
 
 		const showingEl = rightHost.createDiv({ cls: "semlink-mt-showing" });
-		// 未配置 Key：这行整体换成"配置 API Key 后可启用模型"，右侧给配置按钮
-		// （renderRows 里只在已配置时才写回计数文案，避免搜索时覆盖本行）
-		if (!isConfigured(sel)) {
-			showingEl.addClass("is-keyhint");
-			showingEl.setText(t("mtNeedsKey"));
-			showingEl
-				.createEl("button", { cls: "semlink-btn semlink-btn-cta semlink-mt-keyhint-btn", text: t("mtConfigure") })
-				.addEventListener("click", () => openEditor(sel));
-		}
 		const rh = rightHost.createDiv({ cls: "semlink-mt-rows" });
 		rowsHost = rh;
 
@@ -3246,17 +3237,13 @@ export function renderModelsTab(
 			const shown = sel.models
 				.map((m, i) => ({ m, i }))
 				.filter(({ m }) => !q || m.id.toLowerCase().includes(q));
-			// 未配置 Key 时这一行被"配置 API Key 后可启用模型 + 配置按钮"占用
-			if (isConfigured(sel)) {
-				showingEl.setText(
-					t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)),
-				);
-			}
+			showingEl.setText(
+				t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)),
+			);
 			// 保留滚动位置：empty() 的瞬间内容高度清零，浏览器会把 scrollTop
 			// 钳制到 0，重建后就会“自动滚回顶部”。
 			const keepScroll = rh.scrollTop;
 			rh.empty();
-			const configured = isConfigured(sel);
 			for (const { m, i } of shown) {
 				const isSelected = st.modelSel === m.id;
 				const row = rh.createDiv({
@@ -3323,15 +3310,12 @@ export function renderModelsTab(
 				if (!m.contextWindow || m.contextWindow <= 0) ctx.addClass("semlink-hidden");
 				const toggleWrap = row.createDiv({ cls: "semlink-mt-model-toggle" });
 				const toggle = new ToggleComponent(toggleWrap).setValue(m.enabled === true);
-				if (!configured) {
-					toggle.setDisabled(true);
-				} else {
-					toggle.onChange((v) => {
-						m.enabled = v;
-						void plugin.saveSettings();
-						updateCount();
-					});
-				}
+				// 未配置 Key 也允许开启：先把清单勾好，填 Key 后立即可用
+				toggle.onChange((v) => {
+					m.enabled = v;
+					void plugin.saveSettings();
+					updateCount();
+				});
 			}
 			rh.scrollTop = keepScroll;
 		};
