@@ -347,6 +347,7 @@ const t: Record<keyof typeof en, string> = {
 	editorTestFailed: "接続に失敗しました。キーとエンドポイントを確認してください",
 	editorGetKey: "キーを取得",
 	mtAddModel: "モデルを追加",
+	mtModelEdit: "編集",
 	mtApiTypeOpenAI: "OpenAI Chat Completions API",
 	mtApiTypeAnthropic: "Anthropic Messages API",
 	mtEndpointHint: "Endpoint は {url} と互換性が必要です",

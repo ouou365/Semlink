@@ -346,6 +346,7 @@ const en = {
 	editorTestFailed: "Connection failed — check the key and endpoint",
 	editorGetKey: "Get Key",
 	mtAddModel: "Add",
+	mtModelEdit: "Edit",
 	mtApiTypeOpenAI: "OpenAI Chat Completions API",
 	mtApiTypeAnthropic: "Anthropic Messages API",
 	mtEndpointHint: "Endpoint must be compatible with {url} API format",

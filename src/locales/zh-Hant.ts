@@ -347,6 +347,7 @@ const t: Record<keyof typeof en, string> = {
 	editorTestFailed: "連線失敗——請檢查 Key 與 Endpoint",
 	editorGetKey: "取得 Key",
 	mtAddModel: "新增模型",
+	mtModelEdit: "編輯",
 	mtApiTypeOpenAI: "OpenAI Chat Completions API",
 	mtApiTypeAnthropic: "Anthropic Messages API",
 	mtEndpointHint: "Endpoint 需相容 {url} 的 API 格式",

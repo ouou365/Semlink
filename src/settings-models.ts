@@ -2055,25 +2055,30 @@ function createProviderRow(listEl: HTMLElement, opts: RowOptions): HTMLElement {
  *  model list). Reuses the same editor as the old inline expansion. */
 /** 手动添加模型的小弹窗：模型 ID + 上下文长度，保存后追加到供应商清单并自动启用。 */
 class AddModelModal extends Modal {
-	constructor(app: App, private onSubmit: (id: string, contextWindow: number) => void) {
+	constructor(
+		app: App,
+		private opts: { title: string; initial?: { id: string; contextWindow: number }; onSubmit: (id: string, contextWindow: number) => void },
+	) {
 		super(app);
 		this.modalEl.addClass("semlink-provider-editor-modal");
 		this.modalEl.addClass("smart-vault-settings");
 	}
 
 	onOpen() {
-		this.titleEl.setText(t("mtAddModel"));
+		this.titleEl.setText(this.opts.title);
 		const { contentEl } = this;
 		contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("chatModelId") });
 		const idInput = contentEl.createEl("input", {
 			cls: "semlink-editor-input",
 			attr: { type: "text", placeholder: "e.g. my-model-v1", spellcheck: "false" },
 		});
+		idInput.value = this.opts.initial?.id ?? "";
 		contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("chatContextWindow") });
 		const ctxInput = contentEl.createEl("input", {
 			cls: "semlink-editor-input",
 			attr: { type: "text", inputmode: "numeric", placeholder: "e.g. 128000" },
 		});
+		ctxInput.value = this.opts.initial?.contextWindow ? String(this.opts.initial.contextWindow) : "";
 		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
 		footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") })
 			.addEventListener("click", () => this.close());
@@ -2082,7 +2087,7 @@ class AddModelModal extends Modal {
 				const id = idInput.value.trim();
 				if (!id) return;
 				const ctx = parseInt(ctxInput.value, 10);
-				this.onSubmit(id, Number.isFinite(ctx) && ctx > 0 ? ctx : 0);
+				this.opts.onSubmit(id, Number.isFinite(ctx) && ctx > 0 ? ctx : 0);
 				this.close();
 			});
 		idInput.focus();
@@ -2092,7 +2097,6 @@ class AddModelModal extends Modal {
 		this.contentEl.empty();
 	}
 }
-
 class ProviderEditorModal extends Modal {
 	constructor(
 		app: App,
@@ -3103,18 +3107,21 @@ export function renderModelsTab(
 		// 右侧添加模型按钮：手动录入目录里没有的模型
 		showingEl.createEl("button", { cls: "semlink-editor-cancel-btn semlink-mt-add-model", text: "＋ " + t("mtAddModel") })
 			.addEventListener("click", () => {
-				new AddModelModal(plugin.app, (id, contextWindow) => {
-					if (!sel.live) {
-						const created = ensureCatalogProvider(sel.name);
-						if (!created) return;
-						sel.live = created;
-						sel.models = created.models;
-					}
-					sel.models.push({ id, contextWindow, enabled: true });
-					void plugin.saveSettings();
-					renderRows();
-					updateCount();
-				}).open();
+				new AddModelModal(plugin.app, {
+					title: t("mtAddModel"),
+					onSubmit: (id, contextWindow) => {
+						if (!sel.live) {
+							const created = ensureCatalogProvider(sel.name);
+							if (!created) return;
+							sel.live = created;
+							sel.models = created.models;
+						}
+						sel.models.push({ id, contextWindow, enabled: true });
+						void plugin.saveSettings();
+						renderRows();
+						updateCount();
+					},
+					}).open();
 			});
 		const rh = rightHost.createDiv({ cls: "semlink-mt-rows" });
 		rowsHost = rh;
@@ -3223,6 +3230,35 @@ export function renderModelsTab(
 					m.enabled = v;
 					void plugin.saveSettings();
 					updateCount();
+				});
+				// 悬停出现的更多按钮：编辑 / 删除当前模型
+				const more = row.createDiv({ cls: "semlink-mt-model-more" });
+				setIcon(more, "more-vertical");
+				more.addEventListener("click", (e) => {
+					e.stopPropagation();
+					const menu = new Menu();
+					menu.addItem((mi) => mi.setTitle(t("mtModelEdit")).setIcon("pencil").onClick(() => {
+						new AddModelModal(plugin.app, {
+							title: t("mtModelEdit"),
+							initial: { id: m.id, contextWindow: m.contextWindow },
+							onSubmit: (id, contextWindow) => {
+								m.id = id;
+								m.contextWindow = contextWindow;
+								void plugin.saveSettings();
+								renderRows();
+							},
+						}).open();
+					}));
+					menu.addItem((mi) => mi.setTitle(t("chatDeleteModel")).setIcon("trash-2").setWarning(true).onClick(() => {
+						const arr = sel.models;
+						const idx = arr.indexOf(m);
+						if (idx !== -1) arr.splice(idx, 1);
+						if (st.modelSel === m.id) st.modelSel = "";
+						void plugin.saveSettings();
+						renderRows();
+						updateCount();
+					}));
+					menu.showAtMouseEvent(e);
 				});
 				return row;
 			};

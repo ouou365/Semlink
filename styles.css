@@ -880,6 +880,36 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     gap: 1px;
 }
 
+/* 悬停出现的更多按钮（编辑/删除当前模型） */
+.smart-vault-settings .semlink-mt-model-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.smart-vault-settings .semlink-mt-model:hover .semlink-mt-model-more {
+    opacity: 1;
+}
+
+.smart-vault-settings .semlink-mt-model-more:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.smart-vault-settings .semlink-mt-model-more .svg-icon {
+    width: 15px;
+    height: 15px;
+}
+
 .smart-vault-settings .semlink-mt-model-name {
     position: relative;
     max-width: 100%;

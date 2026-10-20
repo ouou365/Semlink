@@ -347,6 +347,7 @@ const t: Record<keyof typeof en, string> = {
 	editorTestFailed: "Verbindung fehlgeschlagen – bitte Key und Endpoint prüfen",
 	editorGetKey: "Key holen",
 	mtAddModel: "Modell hinzufügen",
+	mtModelEdit: "Bearbeiten",
 	mtApiTypeOpenAI: "OpenAI Chat Completions API",
 	mtApiTypeAnthropic: "Anthropic Messages API",
 	mtEndpointHint: "Endpoint muss mit dem {url} API-Format kompatibel sein",

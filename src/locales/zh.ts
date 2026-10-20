@@ -348,6 +348,7 @@ const zh: Record<keyof typeof en, string> = {
 	editorTestFailed: "连接失败——请检查 Key 和 Endpoint",
 	editorGetKey: "获取 Key",
 	mtAddModel: "添加模型",
+	mtModelEdit: "编辑",
 	mtApiTypeOpenAI: "OpenAI Chat Completions API",
 	mtApiTypeAnthropic: "Anthropic Messages API",
 	mtEndpointHint: "Endpoint 需兼容 {url} 的 API 格式",
