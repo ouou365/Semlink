@@ -1855,7 +1855,19 @@ function renderDraftEditor(
 	const iconGrid = panelEl.createDiv({ cls: "semlink-icon-picker" });
 	const seenSvgs = new Set<string>();
 	const swatches = new Map<string, HTMLElement>();
-	for (const key of Object.keys(PROVIDER_LOGOS).sort()) {
+	// 排序按热门程度：ollama（缺省）置顶 → MARKET_RANK 的 15 家（OpenAI…
+	// Xiaomi）→ 其余品牌按名称殿后；别名组的代表键也随之取最热者
+	const logoRank = (key: string): number => {
+		if (key === "ollama") return 0;
+		const entry = CHAT_CATALOG.find(
+			(e) => e.name.toLowerCase().replace(/[^a-z0-9]/g, "") === key,
+		);
+		return (entry && MARKET_RANK[entry.name]) ?? Number.MAX_SAFE_INTEGER;
+	};
+	const orderedKeys = Object.keys(PROVIDER_LOGOS).sort(
+		(a, b) => logoRank(a) - logoRank(b) || a.localeCompare(b),
+	);
+	for (const key of orderedKeys) {
 		const svg = PROVIDER_LOGOS[key];
 		const dedupeKey = iconDedupeKey(svg);
 		if (seenSvgs.has(dedupeKey)) continue;
