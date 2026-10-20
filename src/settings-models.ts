@@ -2773,14 +2773,6 @@ export function renderModelsTab(
 	const leftHead = left.createDiv({ cls: "semlink-mt-providers-head" });
 	leftHead.createSpan({ cls: "semlink-mt-providers-title", text: t("mtProvidersTitle") });
 	const headBtns = leftHead.createDiv({ cls: "semlink-mt-head-actions" });
-	setIcon(addFolderBtn, "folder-plus");
-	addFolderBtn.addEventListener("click", () => {
-		new NewFolderModal(plugin.app, (name) => {
-			if (!userFolders.includes(name)) userFolders.push(name);
-			void plugin.saveSettings();
-			refreshKeepInner();
-		}).open();
-	});
 	const addBtn = headBtns.createEl("button", {
 		cls: "semlink-mt-add",
 		text: "＋",
