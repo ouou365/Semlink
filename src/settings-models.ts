@@ -1651,7 +1651,6 @@ function renderProviderEditor(
 				attr: { type: "text", readonly: "true", spellcheck: "false" },
 			});
 			shown.value = maskKey(p.apiKey);
-			appendGetKey(keyRow);
 			const pencil = keyRow.createEl("button", { cls: "semlink-editor-icon-btn" });
 			setIcon(pencil, "pencil");
 			pencil.addEventListener("click", () => {
