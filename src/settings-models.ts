@@ -3214,18 +3214,23 @@ export function renderModelsTab(
 				}
 			};
 			const markOverflowNames = (): void => {
-				rh.querySelectorAll(".semlink-mt-model-name").forEach((el) => {
-					const name = el as HTMLElement;
-					if (name.scrollWidth - name.clientWidth <= 2) return;
+				const names = Array.from(rh.querySelectorAll(".semlink-mt-model-name")) as HTMLElement[];
+				// 先只读：一次性量出所有溢出行（单次布局），再统一写入——
+				// 读写交替会在大列表上造成近千次强制重排，直接卡死主线程
+				const overflow = names
+					.map((name) => ({ name, shift: name.scrollWidth - name.clientWidth }))
+					.filter((x) => x.shift > 2);
+				if (overflow.length === 0) return;
+				for (const { name, shift } of overflow) {
 					name.addClass("is-overflow");
 					const text = name.textContent ?? "";
 					name.setText("");
 					const track = name.createSpan({ cls: "semlink-mt-model-name-track" });
 					track.createSpan({ cls: "semlink-mt-model-name-text", text });
 					track.createSpan({ cls: "semlink-mt-model-name-text", text });
-					const unit = name.scrollWidth / 2;
-					name.style.setProperty("--marquee-dur", `${(unit / 60).toFixed(2)}s`);
-				});
+					// 恒速 60px/s；轨宽用第一次量出的溢出宽度 + 2ch 间隔近似
+					name.style.setProperty("--marquee-dur", `${((shift + 16) / 60).toFixed(2)}s`);
+				}
 			};
 			buildChunk();
 		};		renderRows();
