@@ -281,11 +281,12 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		keysUrl: "https://console.mistral.ai/api-keys",
 		apiFormat: "openai",
 		models: [
-			{ id: "mistral-large-4", contextWindow: 1048576, priceIn: 680.0, priceOut: 2090.0 },
-			{ id: "mistral-medium-2604", contextWindow: 262144, priceIn: 1500.0, priceOut: 7500.0 },
-			{ id: "mistral-small-latest", contextWindow: 262144, priceIn: 150.0, priceOut: 600.0 },
-			{ id: "magistral-medium-latest", contextWindow: 262144, priceIn: 2000.0, priceOut: 5000.0 },
-			{ id: "codestral-latest", contextWindow: 256000, priceIn: 300.0, priceOut: 900.0 },
+			{ id: "mistral-large-4", contextWindow: 1048576, priceIn: 680.0, priceOut: 2090.0  },
+			{ id: "mistral-medium-latest", contextWindow: 262144, priceIn: 1500.0, priceOut: 7500.0  },
+			{ id: "mistral-small-latest", contextWindow: 262144, priceIn: 150.0, priceOut: 600.0  },
+			{ id: "codestral-latest", contextWindow: 256000, priceIn: 300.0, priceOut: 900.0  },
+			{ id: "magistral-medium-latest", contextWindow: 262144, priceIn: 2000.0, priceOut: 5000.0  },
+
 		],
 	},
 	{
@@ -294,11 +295,9 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		keysUrl: "https://platform.deepseek.com/api_keys",
 		apiFormat: "openai",
 		models: [
-			{ id: "deepseek-v4-pro", contextWindow: 1000000, priceIn: 1320.0, priceOut: 3960.0 },
-			{ id: "deepseek-v4-flash", contextWindow: 1000000, priceIn: 300.0, priceOut: 1200.0 },
-			{ id: "deepseek-v4-flash-vision-exp", contextWindow: 1000000, priceIn: 300.0, priceOut: 1200.0 },
-			{ id: "deepseek-chat", contextWindow: 1000000, priceIn: 140.0, priceOut: 280.0 },
-			{ id: "deepseek-reasoner", contextWindow: 1000000, priceIn: 140.0, priceOut: 280.0 },
+			{ id: "deepseek-flash", contextWindow: 1000000, priceIn: 150.0, priceOut: 600.0 },
+			{ id: "deepseek-v4-pro", contextWindow: 1000000, priceIn: 1320.0, priceOut: 3960.0  },
+
 		],
 	},
 	{
@@ -343,11 +342,12 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		wirePath: "/chat/completions",
 		apiFormat: "openai",
 		models: [
-			{ id: "glm-5.3", contextWindow: 1000000, priceIn: 1400.0, priceOut: 4400.0 },
-			{ id: "glm-5.2", contextWindow: 1000000, priceIn: 1400.0, priceOut: 4400.0 },
-			{ id: "glm-4.7", contextWindow: 204800, priceIn: 600.0, priceOut: 2200.0 },
-			{ id: "glm-4.6v", contextWindow: 128000, priceIn: 300.0, priceOut: 900.0 },
-			{ id: "glm-4.5-air", contextWindow: 131072, priceIn: 200.0, priceOut: 1100.0 },
+			{ id: "glm-5.3", contextWindow: 1000000, priceIn: 1400.0, priceOut: 4400.0  },
+			{ id: "glm-5.3-flash", contextWindow: 1000000, priceIn: 150.0, priceOut: 500.0  },
+			{ id: "glm-5.2", contextWindow: 1000000, priceIn: 1400.0, priceOut: 4400.0  },
+			{ id: "glm-4.7-flash", contextWindow: 200000  },
+			{ id: "glm-4.6v", contextWindow: 128000, priceIn: 300.0, priceOut: 900.0  },
+
 		],
 	},
 	{
@@ -402,11 +402,9 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		keysUrl: "https://platform.minimax.io/user-center/user/api-key",
 		apiFormat: "anthropic",
 		models: [
-			{ id: "MiniMax-M3", contextWindow: 1000000, priceIn: 300.0, priceOut: 1200.0 },
-			{ id: "MiniMax-M2.7", contextWindow: 204800, priceIn: 300.0, priceOut: 1200.0 },
-			{ id: "MiniMax-M2.5", contextWindow: 204800, priceIn: 300.0, priceOut: 1200.0 },
-			{ id: "MiniMax-M2.1", contextWindow: 204800, priceIn: 300.0, priceOut: 1200.0 },
-			{ id: "MiniMax-M2", contextWindow: 204800, priceIn: 300.0, priceOut: 1200.0 },
+			{ id: "MiniMax-M3.1-Flash", contextWindow: 1000000 },
+			{ id: "MiniMax-M3", contextWindow: 1000000, priceIn: 300.0, priceOut: 1200.0  },
+
 		],
 	},
 	{
@@ -415,8 +413,9 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		keysUrl: "https://platform.minimaxi.com/user-center/user/api-key",
 		apiFormat: "anthropic",
 		models: [
-			{ id: "MiniMax-M3", contextWindow: 1000000 },
-			{ id: "MiniMax-M2.7", contextWindow: 204800 },
+			{ id: "MiniMax-M3.1-Flash", contextWindow: 1000000 },
+			{ id: "MiniMax-M3", contextWindow: 1000000, priceIn: 300.0, priceOut: 1200.0  },
+
 		],
 	},
 	{
@@ -425,10 +424,11 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		keysUrl: "https://platform.moonshot.cn/console/api-keys",
 		apiFormat: "openai",
 		models: [
-			{ id: "kimi-k3", contextWindow: 1048576 },
-			{ id: "kimi-k2.5", contextWindow: 262144 },
-			{ id: "kimi-k2-thinking", contextWindow: 262144 },
-			{ id: "kimi-k2-0905-preview", contextWindow: 262144 },
+			{ id: "kimi-k3", contextWindow: 1048576, priceIn: 3000.0, priceOut: 15000.0  },
+			{ id: "kimi-k2.7-code", contextWindow: 262144, priceIn: 950.0, priceOut: 4000.0  },
+			{ id: "kimi-k2.7-code-highspeed", contextWindow: 262144, priceIn: 1900.0, priceOut: 8000.0  },
+			{ id: "kimi-k2.6", contextWindow: 262144, priceIn: 950.0, priceOut: 4000.0  },
+
 		],
 	},
 	{
@@ -437,12 +437,11 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		keysUrl: "https://cloud.siliconflow.cn/account/ak",
 		apiFormat: "openai",
 		models: [
-			{ id: "deepseek-ai/DeepSeek-V3.2", contextWindow: 163840 },
-			{ id: "Qwen/Qwen3-235B-A22B", contextWindow: 262144 },
-			{ id: "THUDM/GLM-4-Plus", contextWindow: 131072 },
-			{ id: "deepseek-ai/DeepSeek-R1", contextWindow: 131072 },
-			{ id: "Qwen/Qwen2.5-72B-Instruct", contextWindow: 32768 },
-			{ id: "moonshotai/Kimi-K2-Instruct", contextWindow: 131072 },
+			{ id: "deepseek-ai/DeepSeek-V3.2", contextWindow: 163840  },
+			{ id: "Pro/moonshotai/Kimi-K2.6", contextWindow: 0 },
+			{ id: "Pro/zai-org/GLM-5.1", contextWindow: 0 },
+			{ id: "Qwen/Qwen3.6-27B", contextWindow: 0 },
+
 		],
 	},
 	{
@@ -450,11 +449,10 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		baseUrl: "https://api.xiaomimimo.com",
 		apiFormat: "openai",
 		models: [
-			{ id: "mimo-v2.6-pro", contextWindow: 1048576, priceIn: 435.0, priceOut: 870.0 },
-			{ id: "mimo-v2.6-flash", contextWindow: 1048576, priceIn: 140.0, priceOut: 280.0 },
-			{ id: "mimo-v2.6-pro-ultraspeed", contextWindow: 1048576, priceIn: 4350.0, priceOut: 8700.0 },
-			{ id: "mimo-v2.5-pro", contextWindow: 1048576, priceIn: 435.0, priceOut: 870.0 },
-			{ id: "mimo-v2-omni", contextWindow: 262144, priceIn: 140.0, priceOut: 280.0 },
+			{ id: "mimo-v2.6-pro", contextWindow: 1048576, priceIn: 435.0, priceOut: 870.0  },
+			{ id: "mimo-v2.6-flash", contextWindow: 1048576, priceIn: 140.0, priceOut: 280.0  },
+			{ id: "mimo-v2.6-pro-ultraspeed", contextWindow: 1048576, priceIn: 4350.0, priceOut: 8700.0  },
+
 		],
 	},
 	{
@@ -462,8 +460,8 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		baseUrl: "https://token-plan-ams.xiaomimimo.com",
 		apiFormat: "openai",
 		models: [
-			{ id: "mimo-v2-pro", contextWindow: 1048576 },
-			{ id: "mimo-v2.5", contextWindow: 1048576 },
+			{ id: "mimo-v2.6-pro", contextWindow: 1048576, priceIn: 435.0, priceOut: 870.0  },
+
 		],
 	},
 	{
@@ -471,8 +469,8 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		baseUrl: "https://token-plan-cn.xiaomimimo.com",
 		apiFormat: "openai",
 		models: [
-			{ id: "mimo-v2-pro", contextWindow: 1048576 },
-			{ id: "mimo-v2.5", contextWindow: 1048576 },
+			{ id: "mimo-v2.6-pro", contextWindow: 1048576, priceIn: 435.0, priceOut: 870.0  },
+
 		],
 	},
 	{
@@ -480,8 +478,8 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 		baseUrl: "https://token-plan-sgp.xiaomimimo.com",
 		apiFormat: "openai",
 		models: [
-			{ id: "mimo-v2-pro", contextWindow: 1048576 },
-			{ id: "mimo-v2.5", contextWindow: 1048576 },
+			{ id: "mimo-v2.6-pro", contextWindow: 1048576, priceIn: 435.0, priceOut: 870.0  },
+
 		],
 	},
 ];
