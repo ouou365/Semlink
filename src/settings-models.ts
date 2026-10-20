@@ -2702,10 +2702,13 @@ export function renderModelsTab(
 		const renderRows = (): void => {
 			const q = (st.search ?? "").toLowerCase();
 			// 携带模型在全量清单里的原始下标：搜索过滤后拖拽重排仍按全量
-			// 顺序计算插入位置
+			// 顺序计算插入位置。启用的模型自动置顶（供应商状态点为绿即有
+			// 启用模型）；稳定排序，组内保持原有（拖拽/目录）顺序，行仍携带
+			// 全量下标供拖拽落点计算
 			const shown = sel.models
 				.map((m, i) => ({ m, i }))
-				.filter(({ m }) => !q || m.id.toLowerCase().includes(q));
+				.filter(({ m }) => !q || m.id.toLowerCase().includes(q))
+				.sort((a, b) => Number(b.m.enabled === true) - Number(a.m.enabled === true));
 			renderShowing(shown.length);
 			// 保留滚动位置：empty() 的瞬间内容高度清零，浏览器会把 scrollTop
 			// 钳制到 0，重建后就会“自动滚回顶部”。
@@ -2792,10 +2795,12 @@ export function renderModelsTab(
 				if (!m.contextWindow || m.contextWindow <= 0) ctx.addClass("semlink-hidden");
 				const toggleWrap = row.createDiv({ cls: "semlink-mt-model-toggle" });
 				const toggle = new ToggleComponent(toggleWrap).setValue(m.enabled === true);
-				// 未配置 Key 也允许开启：先把清单勾好，填 Key 后立即可用
+				// 未配置 Key 也允许开启：先把清单勾好，填 Key 后立即可用。
+				// 开关后重渲染：启用的模型随即置顶
 				toggle.onChange((v) => {
 					m.enabled = v;
 					void plugin.saveSettings();
+					renderRows();
 					updateCount();
 				});
 				return row;
