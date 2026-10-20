@@ -1839,7 +1839,12 @@ function renderDraftEditor(
 	let busy = false;
 
 	// ── 图标：左侧正方形图标块，点击展开内置图标面板（缺省 ollama） ──
-	// 同一 SVG 的别名键（如 spacexai ← xai）只保留排序靠前的代表键，避免重复
+	// 去重键 = viewBox + 全部路径 d 的集合：整串比对会漏掉写法不同但图形
+	// 相同的条目（如 opencode 与 opencodego 的属性大小写/自闭合差异）
+	const iconDedupeKey = (svg: string): string =>
+		`${svg.match(/viewBox="([^"]*)"/)?.[1] ?? ""}|${
+			[...svg.matchAll(/\bd="([^"]*)"/g)].map((x) => x[1]).sort().join("|")
+		}`;
 	const iconWrap = slot.createDiv({ cls: "semlink-icon-select-wrap" });
 	const iconBox = iconWrap.createEl("button", { cls: "semlink-icon-box", attr: { type: "button" } });
 	const faceEl = iconBox.createSpan({ cls: "semlink-icon-select-face" });
@@ -1852,8 +1857,9 @@ function renderDraftEditor(
 	const swatches = new Map<string, HTMLElement>();
 	for (const key of Object.keys(PROVIDER_LOGOS).sort()) {
 		const svg = PROVIDER_LOGOS[key];
-		if (seenSvgs.has(svg)) continue;
-		seenSvgs.add(svg);
+		const dedupeKey = iconDedupeKey(svg);
+		if (seenSvgs.has(dedupeKey)) continue;
+		seenSvgs.add(dedupeKey);
 		const swatch = iconGrid.createDiv({ cls: "semlink-icon-swatch", attr: { title: key } });
 		setSvgIcon(swatch, svg);
 		swatches.set(key, swatch);
