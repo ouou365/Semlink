@@ -80,6 +80,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 		containerEl.addClass("smart-vault-settings");
+		// 弹窗（编辑供应商等）也会挂 smart-vault-settings 来复用内部样式，
+		// "撑满 Tab 容器"的 flex 布局只能作用于设置 Tab 根节点本身——
+		// 用这个专属类做作用域，避免把弹窗撑出一大截空白。
+		containerEl.addClass("semlink-settings-root");
 
 		// Title heading row: brand text · version · language dropdown (right).
 		// Everything rides in the NAME element: heading-mode settings may hide

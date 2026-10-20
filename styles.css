@@ -530,19 +530,21 @@
 /* Tab 内容容器（.vertical-tab-content）自身 height:100% + overflow:auto，
    上 padding 48px / 下 padding 64px。面板高度因此不靠估算：设置根节点
    min-height:100% 撑满容器并做 flex 纵列，面板 flex:1 正好填到容器底部
-   ——空间足够时无整页滚动条，窗口小时 500px 保底、容器正常滚动。 */
-.smart-vault-settings {
+   ——空间足够时无整页滚动条，窗口小时 500px 保底、容器正常滚动。
+   只作用于设置 Tab 根节点（.semlink-settings-root）：弹窗借用
+   smart-vault-settings 复用样式，不能被这套 flex 撑满规则波及。 */
+.semlink-settings-root {
     display: flex;
     flex-direction: column;
     min-height: 100%;
 }
 
-.smart-vault-settings .setting-item-heading,
-.smart-vault-settings .semlink-settings-tabs {
+.semlink-settings-root .setting-item-heading,
+.semlink-settings-root .semlink-settings-tabs {
     flex-shrink: 0;
 }
 
-.smart-vault-settings .semlink-settings-panel {
+.semlink-settings-root .semlink-settings-panel {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
