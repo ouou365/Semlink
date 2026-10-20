@@ -257,6 +257,9 @@ export interface SmartVaultSettings {
 	 *  (they drive the current step), `done` suppresses the guide. */
 	/** Model-tab user folders（内置系列分组之外的用户自建文件夹）。 */
 	providerFolders?: string[];
+	/** Model-tab manual provider order（拖动滑块后的展示顺序，按名称登记；
+	 *  未登记的供应商按市场排名殿后）。 */
+	providerOrder?: string[];
 	onboarding?: {
 		done?: boolean;
 		providerId?: string;

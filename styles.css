@@ -634,6 +634,34 @@
     min-width: 0;
 }
 
+/* 左侧移动滑块：拖动调整供应商顺序 */
+.smart-vault-settings .semlink-mt-provider-grip {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--text-faint);
+    cursor: grab;
+}
+
+.smart-vault-settings .semlink-mt-provider-grip:hover {
+    color: var(--text-muted);
+}
+
+.smart-vault-settings .semlink-mt-provider-grip:active {
+    cursor: grabbing;
+}
+
+.smart-vault-settings .semlink-mt-provider-grip .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
+/* 重排落点：插入到该行之前 */
+.smart-vault-settings .semlink-mt-provider.is-droptarget-row {
+    outline: 1.5px dashed var(--interactive-accent);
+    outline-offset: -1.5px;
+}
+
 .smart-vault-settings .semlink-mt-provider:hover {
     background: var(--background-modifier-hover);
 }
