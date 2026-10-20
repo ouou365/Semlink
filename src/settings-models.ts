@@ -2057,7 +2057,12 @@ function createProviderRow(listEl: HTMLElement, opts: RowOptions): HTMLElement {
 class AddModelModal extends Modal {
 	constructor(
 		app: App,
-		private opts: { title: string; initial?: { id: string; contextWindow: number }; onSubmit: (id: string, contextWindow: number) => void },
+		private opts: {
+			title: string;
+			initial?: { id: string; contextWindow: number };
+			onSubmit: (id: string, contextWindow: number) => void;
+			onDelete?: () => void;
+		},
 	) {
 		super(app);
 		this.modalEl.addClass("semlink-provider-editor-modal");
@@ -2080,7 +2085,13 @@ class AddModelModal extends Modal {
 		});
 		ctxInput.value = this.opts.initial?.contextWindow ? String(this.opts.initial.contextWindow) : "";
 		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
-		footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") })
+		if (this.opts.onDelete) {
+			footer.createEl("button", { cls: "semlink-editor-delete-link", text: t("chatDeleteModel") })
+				.addEventListener("click", () => {
+					this.close();
+					this.opts.onDelete?.();
+				});
+		}		footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") })
 			.addEventListener("click", () => this.close());
 		footer.createEl("button", { cls: "semlink-editor-save-btn", text: t("confirm") })
 			.addEventListener("click", () => {
@@ -3178,17 +3189,30 @@ export function renderModelsTab(
 			// 会把渲染卡死/刷白；分帧让首屏立即可见。单行构建异常只跳过该行
 			// 并打印错误，不会把整个列表刷成空白。
 			const buildRow = (m: ChatModel, i: number): HTMLElement => {
-				const isSelected = st.modelSel === m.id;
-				const row = createDiv({ cls: "semlink-mt-model" + (isSelected ? " is-selected" : "") });
-				// 点击行切换选中态：就地搬 is-selected，不重建全部行；开关
-				// 区域的点击不参与（避免联动选行）
+				const row = createDiv({ cls: "semlink-mt-model" });
+				// 点击行打开编辑弹窗（修改模型 ID/上下文，弹窗内可删除）；开关
+				// 区域的点击不参与
 				row.addEventListener("click", (e) => {
 					if ((e.target as HTMLElement).closest(".semlink-mt-model-toggle")) return;
-					st.modelSel = isSelected ? "" : m.id;
-					rh.querySelector(".semlink-mt-model.is-selected")?.removeClass("is-selected");
-					if (st.modelSel) row.addClass("is-selected");
-				});
-				// 左侧移动滑块：拖动调整模型顺序。目录预览（还没添加实例的）
+					new AddModelModal(plugin.app, {
+						title: t("mtModelEdit"),
+						initial: { id: m.id, contextWindow: m.contextWindow },
+						onSubmit: (id, contextWindow) => {
+							m.id = id;
+							m.contextWindow = contextWindow;
+							void plugin.saveSettings();
+							renderRows();
+						},
+						onDelete: () => {
+							const arr = sel.models;
+							const idx = arr.indexOf(m);
+							if (idx !== -1) arr.splice(idx, 1);
+							void plugin.saveSettings();
+							renderRows();
+							updateCount();
+						},
+					}).open();
+				});				// 左侧移动滑块：拖动调整模型顺序。目录预览（还没添加实例的）
 				// 供应商也能拖——首次拖动时自动落一个实例（与齿轮行为一致），
 				// 顺序才有地方持久化。
 				{
@@ -3247,35 +3271,6 @@ export function renderModelsTab(
 					m.enabled = v;
 					void plugin.saveSettings();
 					updateCount();
-				});
-				// 悬停出现的更多按钮：编辑 / 删除当前模型
-				const more = row.createDiv({ cls: "semlink-mt-model-more" });
-				setIcon(more, "more-vertical");
-				more.addEventListener("click", (e) => {
-					e.stopPropagation();
-					const menu = new Menu();
-					menu.addItem((mi) => mi.setTitle(t("mtModelEdit")).setIcon("pencil").onClick(() => {
-						new AddModelModal(plugin.app, {
-							title: t("mtModelEdit"),
-							initial: { id: m.id, contextWindow: m.contextWindow },
-							onSubmit: (id, contextWindow) => {
-								m.id = id;
-								m.contextWindow = contextWindow;
-								void plugin.saveSettings();
-								renderRows();
-							},
-						}).open();
-					}));
-					menu.addItem((mi) => mi.setTitle(t("chatDeleteModel")).setIcon("trash-2").setWarning(true).onClick(() => {
-						const arr = sel.models;
-						const idx = arr.indexOf(m);
-						if (idx !== -1) arr.splice(idx, 1);
-						if (st.modelSel === m.id) st.modelSel = "";
-						void plugin.saveSettings();
-						renderRows();
-						updateCount();
-					}));
-					menu.showAtMouseEvent(e);
 				});
 				return row;
 			};
