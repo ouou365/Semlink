@@ -7,7 +7,7 @@
 // provider" (catalog) and "Add a custom provider" flows. Providers support
 // fetching the model list from their own endpoint.
 
-import { App, Modal, Setting, ToggleComponent, requestUrl, setIcon } from "obsidian";
+import { App, Menu, Modal, Notice, Setting, ToggleComponent, requestUrl, setIcon } from "obsidian";
 import type SmartVaultPlugin from "../main";
 import type { ChatApiFormat, ChatModel, ChatModelKind, EmbeddingProvider, ModelProvider, SmartVaultSettings } from "./types";
 import { t } from "./i18n";
@@ -2811,9 +2811,11 @@ class ProviderEditorModal extends Modal {
 // ──── Editors ────
 
 /** Editor for one provider (embedding and chat are not distinct provider
- *  kinds) — TypingMind 式极简配置：用户只填 API Key（输入即自动保存），
- *  Endpoint 折叠在"高级选项"里；API 协议不暴露（沿用既有值）。模型管理
- *  （搜索/启停）在 Model 页右栏完成。 */
+ *  kinds) — TypingMind 式三态：
+ *  ① 未配置 Key：密码输入框 + Close；
+ *  ② 编辑中有输入：Cancel + "✓ Test & Save"（先探活再保存）；
+ *  ③ 已保存：掩码展示 + 铅笔（编辑）+ 竖点菜单（测试连接/清除配置/删除）+ Close。
+ *  Endpoint 折叠在编辑态的"高级选项"里；API 协议沿用既有值不暴露。 */
 function renderProviderEditor(
 	slot: HTMLElement,
 	plugin: SmartVaultPlugin,
@@ -2821,84 +2823,169 @@ function renderProviderEditor(
 	refresh: () => void,
 	close: () => void,
 ): void {
-	// Edits land on the live draft object; a debounce saves them while the
-	// user types, 关闭 flushes immediately（无 取消/确定——所见即所存）。
-	const draft: ModelProvider = { ...p };
-	let saveTimer = 0;
-	const commit = (): void => {
-		Object.assign(p, draft);
-		// The list counts as user-curated: the onboarding guide must stop
-		// auto-refetching it (that would resurrect removed models).
+	type Mode = "saved" | "editing";
+	let mode: Mode = p.apiKey.trim() ? "saved" : "editing";
+	let pending = p.apiKey;
+	let footer: HTMLElement;
+	const catalogDefault = CHAT_CATALOG.find((e) => e.name === p.name)?.baseUrl;
+	// Endpoint 输入直接改 p（Test & Save 时随保存落盘）；Cancel 需要还原
+	const originalBase = p.apiBase;
+
+	const maskKey = (key: string): string => "*".repeat(14) + key.slice(-3);
+
+	const saveNow = (): void => {
 		p.curated = true;
 		void plugin.saveSettings().then(() => refresh());
 	};
-	const scheduleSave = (): void => {
-		window.clearTimeout(saveTimer);
-		saveTimer = window.setTimeout(commit, 500);
+
+	/** 探活 = 拉一次模型列表；列表非空即认为 Key/Endpoint 有效。 */
+	const runTest = async (endpoint: string, key: string): Promise<boolean> => {
+		try {
+			const base = endpoint.trim().replace(/\/+$/, "");
+			const entries = await fetchModelIds(base, key, p.apiFormat ?? "openai");
+			return entries.length > 0;
+		} catch {
+			return false;
+		}
 	};
-	const flushAndClose = (): void => {
-		window.clearTimeout(saveTimer);
-		commit();
-		close();
+
+	const rerender = (): void => {
+		slot.empty();
+		build();
 	};
 
-	// API Key：唯一必填项——标签在上、输入框整行
-	slot.createDiv({ cls: "semlink-editor-field-label", text: t("apiKey") });
-	const keyInput = slot.createEl("input", {
-		cls: "semlink-editor-input",
-		attr: { type: "password", placeholder: "sk-...", spellcheck: "false" },
-	});
-	keyInput.value = draft.apiKey;
-	keyInput.addEventListener("input", () => {
-		draft.apiKey = keyInput.value;
-		scheduleSave();
-	});
-
-	// 高级选项（默认收起）：仅 Endpoint 一项
-	const advHead = slot.createDiv({ cls: "semlink-editor-adv-head" });
-	const chev = advHead.createSpan({ cls: "semlink-editor-adv-chevron" });
-	setIcon(chev, "chevron-right");
-	const advLabel = advHead.createSpan({ cls: "semlink-editor-adv-label", text: t("editorAdvancedShow") });
-	const advBody = slot.createDiv({ cls: "semlink-editor-adv-body semlink-hidden" });
-	advHead.addEventListener("click", () => {
-		const open = !advBody.hasClass("semlink-hidden");
-		advBody.toggleClass("semlink-hidden", open);
-		setIcon(chev, open ? "chevron-right" : "chevron-down");
-		advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
-	});
-	advBody.createDiv({
-		cls: "semlink-editor-adv-desc",
-		text: t("editorEndpointDesc").replace("{provider}", p.name),
-	});
-	advBody.createDiv({ cls: "semlink-editor-field-label", text: t("editorEndpoint") });
-	const epInput = advBody.createEl("input", {
-		cls: "semlink-editor-input",
-		attr: { type: "text", spellcheck: "false" },
-	});
-	epInput.value = draft.apiBase;
-	epInput.addEventListener("input", () => {
-		draft.apiBase = epInput.value;
-		scheduleSave();
-	});
-
-	// Footer: 删除在左（弱化为文字链），关闭在右（深色主按钮）；关闭即保存
-	const footer = slot.createDiv({ cls: "semlink-editor-footer is-simple" });
-	footer.createEl("button", { cls: "semlink-editor-delete-link", text: t("deleteProvider") })
-		.addEventListener("click", () => {
-			const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
-			new DeleteProviderModal(plugin.app, p.name, () => {
-				plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== p.id);
-				if (activePid === p.id) {
-					plugin.settings.embeddingModelKey = "";
+	const updateFooter = (): void => {
+		footer.empty();
+		// 已保存态 / 编辑中但还没输入：只有 Close
+		if (mode === "saved" || !pending.trim()) {
+			footer.createEl("button", { cls: "semlink-editor-close-btn", text: t("close") })
+				.addEventListener("click", close);
+			return;
+		}
+		// 编辑中有输入：Cancel + Test & Save
+		footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") })
+			.addEventListener("click", () => {
+				p.apiBase = originalBase;
+				close();
+			});
+		const saveBtn = footer.createEl("button", { cls: "semlink-editor-save-btn" });
+		setIcon(saveBtn, "check");
+		const label = saveBtn.createSpan({ text: t("editorTestSave") });
+		saveBtn.addEventListener("click", () => {
+			saveBtn.disabled = true;
+			label.setText(t("editorTesting"));
+			void runTest(p.apiBase, pending).then((ok) => {
+				if (!ok) {
+					new Notice(t("editorTestFailed"));
+					saveBtn.disabled = false;
+					label.setText(t("editorTestSave"));
+					return;
 				}
+				p.apiKey = pending;
+				p.curated = true;
 				void plugin.saveSettings().then(() => {
 					refresh();
-					close();
+					mode = "saved";
+					rerender();
 				});
-			}).open();
+			});
 		});
-	footer.createEl("button", { cls: "semlink-editor-close-btn", text: t("close") })
-		.addEventListener("click", flushAndClose);
+	};
+
+	const build = (): void => {
+		// ── API Key 行 ──
+		slot.createDiv({ cls: "semlink-editor-field-label", text: t("apiKey") });
+		const keyRow = slot.createDiv({ cls: "semlink-editor-key-row" });
+		if (mode === "saved") {
+			// 掩码展示 + 铅笔进入编辑 + 竖点菜单
+			const shown = keyRow.createEl("input", {
+				cls: "semlink-editor-input is-masked",
+				attr: { type: "text", readonly: "true", spellcheck: "false" },
+			});
+			shown.value = maskKey(p.apiKey);
+			const pencil = keyRow.createEl("button", { cls: "semlink-editor-icon-btn" });
+			setIcon(pencil, "pencil");
+			pencil.addEventListener("click", () => {
+				mode = "editing";
+				pending = p.apiKey;
+				rerender();
+			});
+			const kebab = keyRow.createEl("button", { cls: "semlink-editor-icon-btn" });
+			setIcon(kebab, "more-vertical");
+			kebab.addEventListener("click", (e) => {
+				const menu = new Menu();
+				menu.addItem((mi) => mi.setTitle(t("editorTestConnection")).setIcon("zap").onClick(() => {
+					void runTest(p.apiBase, p.apiKey).then((ok) => {
+						new Notice(ok ? t("editorTestOk") : t("editorTestFailed"));
+					});
+				}));
+				menu.addItem((mi) => mi.setTitle(t("editorClearSettings")).setIcon("trash-2").setWarning(true).onClick(() => {
+					p.apiKey = "";
+					if (catalogDefault) p.apiBase = catalogDefault;
+					saveNow();
+					mode = "editing";
+					pending = "";
+					rerender();
+				}));
+				menu.addSeparator();
+				menu.addItem((mi) => mi.setTitle(t("deleteProvider")).setIcon("trash-2").setWarning(true).onClick(() => {
+					const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
+					new DeleteProviderModal(plugin.app, p.name, () => {
+						plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== p.id);
+						if (activePid === p.id) {
+							plugin.settings.embeddingModelKey = "";
+						}
+						void plugin.saveSettings().then(() => {
+							refresh();
+							close();
+						});
+					}).open();
+				}));
+				menu.showAtMouseEvent(e);
+			});
+		} else {
+			const input = keyRow.createEl("input", {
+				cls: "semlink-editor-input",
+				attr: { type: "password", placeholder: "sk-...", spellcheck: "false" },
+			});
+			input.value = pending;
+			input.addEventListener("input", () => {
+				pending = input.value;
+				updateFooter();
+			});
+
+			// ── 高级选项（仅编辑态；默认收起）：仅 Endpoint 一项 ──
+			const advHead = slot.createDiv({ cls: "semlink-editor-adv-head" });
+			const chev = advHead.createSpan({ cls: "semlink-editor-adv-chevron" });
+			setIcon(chev, "chevron-right");
+			const advLabel = advHead.createSpan({ cls: "semlink-editor-adv-label", text: t("editorAdvancedShow") });
+			const advBody = slot.createDiv({ cls: "semlink-editor-adv-body semlink-hidden" });
+			advHead.addEventListener("click", () => {
+				const open = !advBody.hasClass("semlink-hidden");
+				advBody.toggleClass("semlink-hidden", open);
+				setIcon(chev, open ? "chevron-right" : "chevron-down");
+				advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
+			});
+			advBody.createDiv({
+				cls: "semlink-editor-adv-desc",
+				text: t("editorEndpointDesc").replace("{provider}", p.name),
+			});
+			advBody.createDiv({ cls: "semlink-editor-field-label", text: t("editorEndpoint") });
+			const epInput = advBody.createEl("input", {
+				cls: "semlink-editor-input",
+				attr: { type: "text", spellcheck: "false" },
+			});
+			epInput.value = p.apiBase;
+			epInput.addEventListener("input", () => {
+				p.apiBase = epInput.value;
+			});
+		}
+
+		// ── Footer（随状态变化）──
+		footer = slot.createDiv({ cls: "semlink-editor-footer is-simple" });
+		updateFooter();
+	};
+	build();
 }
 
 // ──── Create cards (add provider / add custom provider) ────

@@ -1213,11 +1213,50 @@
     padding-top: 6px;
 }
 
+/* API Key 行：已保存态 = 掩码输入框（只读）+ 铅笔/竖点按钮 */
+.smart-vault-settings .semlink-editor-key-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.smart-vault-settings .semlink-editor-key-row .semlink-editor-input {
+    flex: 1 1 auto;
+    margin-bottom: 0;
+}
+
+.smart-vault-settings .semlink-editor-input.is-masked {
+    cursor: default;
+    letter-spacing: 1px;
+}
+
+.smart-vault-settings .semlink-editor-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 7px;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-editor-icon-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.smart-vault-settings .semlink-editor-icon-btn .svg-icon {
+    width: 16px;
+    height: 16px;
+}
+
 .smart-vault-settings .semlink-editor-adv-head {
     display: flex;
     align-items: center;
     gap: 4px;
-    margin: 2px 0 12px;
+    margin: 16px 0 12px;
     color: var(--interactive-accent);
     font-weight: 600;
     font-size: 13.5px;
@@ -1280,17 +1319,47 @@
     margin-top: 20px;
 }
 
-.smart-vault-settings .semlink-editor-delete-link {
+/* 编辑态 footer：Cancel（纯文字）+ "✓ Test & Save"（深色主按钮） */
+.smart-vault-settings .semlink-editor-cancel-btn {
     background: transparent;
     border: none;
-    padding: 4px 2px;
-    color: var(--text-error);
-    font-size: 13px;
+    padding: 8px 10px;
+    color: var(--text-normal);
+    font-size: 15px;
+    font-weight: 600;
     cursor: pointer;
 }
 
-.smart-vault-settings .semlink-editor-delete-link:hover {
-    text-decoration: underline;
+.smart-vault-settings .semlink-editor-cancel-btn:hover {
+    opacity: 0.75;
+}
+
+.smart-vault-settings .semlink-editor-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--text-normal);
+    color: var(--background-primary);
+    border: none;
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-weight: 700;
+    font-size: 14.5px;
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-editor-save-btn:hover {
+    opacity: 0.88;
+}
+
+.smart-vault-settings .semlink-editor-save-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.smart-vault-settings .semlink-editor-save-btn .svg-icon {
+    width: 15px;
+    height: 15px;
 }
 
 .smart-vault-settings .semlink-editor-close-btn {
