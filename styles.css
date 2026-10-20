@@ -1314,8 +1314,9 @@
 }
 
 .smart-vault-settings .semlink-editor-footer.is-simple {
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
+    gap: 10px;
     margin-top: 20px;
 }
 
