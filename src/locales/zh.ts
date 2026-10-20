@@ -358,7 +358,7 @@ const zh: Record<keyof typeof en, string> = {
 	mtAuthNone: "无鉴权",
 	editorSave: "保存",
 	mtEnabled: "已启用",
-	mtNeedsKey: "配置 API Key 后可启用模型",
+	mtNeedsKey: "配置API后可使用",
 	mtConfigure: "配置",
 	mtShowing: "显示 {shown} / {total} 个模型",
 	mtNewFolder: "新建文件夹",

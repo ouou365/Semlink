@@ -357,7 +357,7 @@ const t: Record<keyof typeof en, string> = {
 	mtAuthNone: "Sans authentification",
 	editorSave: "Enregistrer",
 	mtEnabled: "activés",
-	mtNeedsKey: "Configurez une clé API pour activer les modèles",
+	mtNeedsKey: "Configurez l'API pour utiliser les modèles",
 	mtConfigure: "Configurer",
 	mtShowing: "{shown} modèles sur {total} affichés",
 	mtNewFolder: "Nouveau dossier",

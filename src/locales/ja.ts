@@ -357,7 +357,7 @@ const t: Record<keyof typeof en, string> = {
 	mtAuthNone: "認証なし",
 	editorSave: "保存",
 	mtEnabled: "有効",
-	mtNeedsKey: "API キーを設定するとモデルを有効化できます",
+	mtNeedsKey: "APIを設定すると利用できます",
 	mtConfigure: "設定",
 	mtShowing: "{shown} / {total} モデルを表示",
 	mtNewFolder: "新しいフォルダ",

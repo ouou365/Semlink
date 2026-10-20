@@ -358,7 +358,7 @@ const t: Record<keyof typeof en, string> = {
 	mtAuthNone: "Без аутентификации",
 	editorSave: "Сохранить",
 	mtEnabled: "включено",
-	mtNeedsKey: "Настройте API-ключ, чтобы включить модели",
+	mtNeedsKey: "Настройте API, чтобы использовать модели",
 	mtConfigure: "Настроить",
 	mtShowing: "Показано {shown} из {total} моделей",
 	mtNewFolder: "Новая папка",

@@ -1973,6 +1973,8 @@ function renderDraftEditor(
 					apiBase: draft.baseUrl.trim(),
 					apiKey: draft.apiKey,
 					apiFormat: draft.apiFormat,
+					// 无鉴权的本地端点（如 Ollama）：不该被"配置 API"提示盯上
+					...(authSel.value === "none" ? { noAuth: true } : {}),
 					// Starts empty; models are added from the Models tab ("＋ Add").
 					models: [],
 					curated: true,
@@ -2623,24 +2625,43 @@ export function renderModelsTab(
 		const showingEl = rightHost.createDiv({ cls: "semlink-mt-showing" });
 		const showingCountEl = showingEl.createSpan({ cls: "semlink-mt-showing-count" });
 		// 右侧添加模型按钮：手动录入目录里没有的模型
-		showingEl.createEl("button", { cls: "semlink-editor-cancel-btn semlink-mt-add-model", text: "＋ " + t("mtAddModel") })
-			.addEventListener("click", () => {
-				new AddModelModal(plugin.app, {
-					title: t("mtAddModel"),
-					onSubmit: (id, contextWindow) => {
-						if (!sel.live) {
-							const created = ensureCatalogProvider(sel.name);
-							if (!created) return;
-							sel.live = created;
-							sel.models = created.models;
-						}
-						sel.models.push({ id, contextWindow, enabled: true });
-						void plugin.saveSettings();
-						renderRows();
-						updateCount();
-					},
-					}).open();
-			});
+		const addBtn = showingEl.createEl("button", {
+			cls: "semlink-editor-cancel-btn semlink-mt-add-model",
+			text: "＋ " + t("mtAddModel"),
+		});
+		addBtn.addEventListener("click", () => {
+			new AddModelModal(plugin.app, {
+				title: t("mtAddModel"),
+				onSubmit: (id, contextWindow) => {
+					if (!sel.live) {
+						const created = ensureCatalogProvider(sel.name);
+						if (!created) return;
+						sel.live = created;
+						sel.models = created.models;
+					}
+					sel.models.push({ id, contextWindow, enabled: true });
+					void plugin.saveSettings();
+					renderRows();
+					updateCount();
+				},
+				}).open();
+		});
+		// 未配置 Key 时替换出现的"配置"按钮：先落盘实例再打开供应商编辑弹窗，
+		// 保存 Key 后 refresh 回到正常计数 + 添加模型
+		const configBtn = showingEl.createEl("button", {
+			cls: "semlink-editor-save-btn semlink-mt-configure",
+			text: t("mtConfigure"),
+		});
+		configBtn.addEventListener("click", () => {
+			if (!sel.live) {
+				const created = ensureCatalogProvider(sel.name);
+				if (!created) return;
+				sel.live = created;
+				sel.models = created.models;
+			}
+			void plugin.saveSettings();
+			new ProviderEditorModal(plugin.app, plugin, sel.live, refreshKeepInner).open();
+		});
 		const rh = rightHost.createDiv({ cls: "semlink-mt-rows" });
 		rowsHost = rh;
 
@@ -2668,9 +2689,14 @@ export function renderModelsTab(
 			const shown = sel.models
 				.map((m, i) => ({ m, i }))
 				.filter(({ m }) => !q || m.id.toLowerCase().includes(q));
-			showingCountEl.setText(
-				t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)),
-			);
+			// 未配置 Key（且非"无鉴权"的自定义供应商）：这一行换成引导语，
+			// 右侧按钮换成"配置"；配置好 Key 后回到计数 + 添加模型
+			const needsConfig = !sel.live?.apiKey?.trim() && !sel.live?.noAuth;
+			showingCountEl.setText(needsConfig
+				? t("mtNeedsKey")
+				: t("mtShowing").replace("{shown}", String(shown.length)).replace("{total}", String(sel.models.length)));
+			addBtn.toggleClass("semlink-hidden", needsConfig);
+			configBtn.toggleClass("semlink-hidden", !needsConfig);
 			// 保留滚动位置：empty() 的瞬间内容高度清零，浏览器会把 scrollTop
 			// 钳制到 0，重建后就会“自动滚回顶部”。
 			const keepScroll = rh.scrollTop;

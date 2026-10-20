@@ -826,6 +826,14 @@ body.theme-dark .smart-vault-settings .semlink-mt-provider.is-active {
     text-decoration: underline;
 }
 
+/* 未配置 Key 时 showing 行右侧的紫色"配置"按钮 */
+.smart-vault-settings .semlink-mt-configure {
+    flex-shrink: 0;
+    padding: 3px 14px;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
 .smart-vault-settings .semlink-mt-showing {
     color: var(--text-muted);
     font-size: 12.5px;
