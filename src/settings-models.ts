@@ -96,6 +96,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
 	"moonshotai": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd"><path d="M1.052 16.916l9.539 2.552a21.007 21.007 0 00.06 2.033l5.956 1.593a11.997 11.997 0 01-5.586.865l-.18-.016-.044-.004-.084-.009-.094-.01a11.605 11.605 0 01-.157-.02l-.107-.014-.11-.016a11.962 11.962 0 01-.32-.051l-.042-.008-.075-.013-.107-.02-.07-.015-.093-.019-.075-.016-.095-.02-.097-.023-.094-.022-.068-.017-.088-.022-.09-.024-.095-.025-.082-.023-.109-.03-.062-.02-.084-.025-.093-.028-.105-.034-.058-.019-.08-.026-.09-.031-.066-.024a6.293 6.293 0 01-.044-.015l-.068-.025-.101-.037-.057-.022-.08-.03-.087-.035-.088-.035-.079-.032-.095-.04-.063-.028-.063-.027a5.655 5.655 0 01-.041-.018l-.066-.03-.103-.047-.052-.024-.096-.046-.062-.03-.084-.04-.086-.044-.093-.047-.052-.027-.103-.055-.057-.03-.058-.032a6.49 6.49 0 01-.046-.026l-.094-.053-.06-.034-.051-.03-.072-.041-.082-.05-.093-.056-.052-.032-.084-.053-.061-.039-.079-.05-.07-.047-.053-.035a7.785 7.785 0 01-.054-.036l-.044-.03-.044-.03a6.066 6.066 0 01-.04-.028l-.057-.04-.076-.054-.069-.05-.074-.054-.056-.042-.076-.057-.076-.059-.086-.067-.045-.035-.064-.052-.074-.06-.089-.073-.046-.039-.046-.039a7.516 7.516 0 01-.043-.037l-.045-.04-.061-.053-.07-.062-.068-.06-.062-.058-.067-.062-.053-.05-.088-.084a13.28 13.28 0 01-.099-.097l-.029-.028-.041-.042-.069-.07-.05-.051-.05-.053a6.457 6.457 0 01-.168-.179l-.08-.088-.062-.07-.071-.08-.042-.049-.053-.062-.058-.068-.046-.056a7.175 7.175 0 01-.027-.033l-.045-.055-.066-.082-.041-.052-.05-.064-.02-.025a11.99 11.99 0 01-1.44-2.402zm-1.02-5.794l11.353 3.037a20.468 20.468 0 00-.469 2.011l10.817 2.894a12.076 12.076 0 01-1.845 2.005L.657 15.923l-.016-.046-.035-.104a11.965 11.965 0 01-.05-.153l-.007-.023a11.896 11.896 0 01-.207-.741l-.03-.126-.018-.08-.021-.097-.018-.081-.018-.09-.017-.084-.018-.094c-.026-.141-.05-.283-.071-.426l-.017-.118-.011-.083-.013-.102a12.01 12.01 0 01-.019-.161l-.005-.047a12.12 12.12 0 01-.034-2.145zm1.593-5.15l11.948 3.196c-.368.605-.705 1.231-1.01 1.875l11.295 3.022c-.142.82-.368 1.612-.668 2.365l-11.55-3.09L.124 10.26l.015-.1.008-.049.01-.067.015-.087.018-.098c.026-.148.056-.295.088-.442l.028-.124.02-.085.024-.097c.022-.09.045-.18.07-.268l.028-.102.023-.083.03-.1.025-.082.03-.096.026-.082.031-.095a11.896 11.896 0 011.01-2.232zm4.442-4.4L17.352 4.59a20.77 20.77 0 00-1.688 1.721l7.823 2.093c.267.852.442 1.744.513 2.665L2.106 5.213l.045-.065.027-.04.04-.055.046-.065.055-.076.054-.072.064-.086.05-.065.057-.073.055-.07.06-.074.055-.069.065-.077.054-.066.066-.077.053-.06.072-.082.053-.06.067-.074.054-.058.073-.078.058-.06.063-.067.168-.17.1-.098.059-.056.076-.071a12.084 12.084 0 012.272-1.677zM12.017 0h.097l.082.001.069.001.054.002.068.002.046.001.076.003.047.002.06.003.054.002.087.005.105.007.144.011.088.007.044.004.077.008.082.008.047.005.102.012.05.006.108.014.081.01.042.006.065.01.207.032.07.012.065.011.14.026.092.018.11.022.046.01.075.016.041.01L14.7.3l.042.01.065.015.049.012.071.017.096.024.112.03.113.03.113.032.05.015.07.02.078.024.073.023.05.016.05.016.076.025.099.033.102.036.048.017.064.023.093.034.11.041.116.045.1.04.047.02.06.024.041.018.063.026.04.018.057.025.11.048.1.046.074.035.075.036.06.028.092.046.091.045.102.052.053.028.049.026.046.024.06.033.041.022.052.029.088.05.106.06.087.051.057.034.053.032.096.059.088.055.098.062.036.024.064.041.084.056.04.027.062.042.062.043.023.017c.054.037.108.075.161.114l.083.06.065.048.056.043.086.065.082.064.04.03.05.041.086.069.079.065.085.071c.712.6 1.353 1.283 1.909 2.031L7.222.994l.062-.027.065-.028.081-.034.086-.035c.113-.045.227-.09.341-.131l.096-.035.093-.033.084-.03.096-.031c.087-.03.176-.058.264-.085l.091-.027.086-.025.102-.03.085-.023.1-.026L9.04.37l.09-.023.091-.022.095-.022.09-.02.098-.021.091-.02.095-.018.092-.018.1-.018.091-.016.098-.017.092-.014.097-.015.092-.013.102-.013.091-.012.105-.012.09-.01.105-.01c.093-.01.186-.018.28-.024l.106-.008.09-.005.11-.006.093-.004.1-.004.097-.002.099-.002.197-.002z"></path></svg>`,
 	"moonshotaicn": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd"><path d="M1.052 16.916l9.539 2.552a21.007 21.007 0 00.06 2.033l5.956 1.593a11.997 11.997 0 01-5.586.865l-.18-.016-.044-.004-.084-.009-.094-.01a11.605 11.605 0 01-.157-.02l-.107-.014-.11-.016a11.962 11.962 0 01-.32-.051l-.042-.008-.075-.013-.107-.02-.07-.015-.093-.019-.075-.016-.095-.02-.097-.023-.094-.022-.068-.017-.088-.022-.09-.024-.095-.025-.082-.023-.109-.03-.062-.02-.084-.025-.093-.028-.105-.034-.058-.019-.08-.026-.09-.031-.066-.024a6.293 6.293 0 01-.044-.015l-.068-.025-.101-.037-.057-.022-.08-.03-.087-.035-.088-.035-.079-.032-.095-.04-.063-.028-.063-.027a5.655 5.655 0 01-.041-.018l-.066-.03-.103-.047-.052-.024-.096-.046-.062-.03-.084-.04-.086-.044-.093-.047-.052-.027-.103-.055-.057-.03-.058-.032a6.49 6.49 0 01-.046-.026l-.094-.053-.06-.034-.051-.03-.072-.041-.082-.05-.093-.056-.052-.032-.084-.053-.061-.039-.079-.05-.07-.047-.053-.035a7.785 7.785 0 01-.054-.036l-.044-.03-.044-.03a6.066 6.066 0 01-.04-.028l-.057-.04-.076-.054-.069-.05-.074-.054-.056-.042-.076-.057-.076-.059-.086-.067-.045-.035-.064-.052-.074-.06-.089-.073-.046-.039-.046-.039a7.516 7.516 0 01-.043-.037l-.045-.04-.061-.053-.07-.062-.068-.06-.062-.058-.067-.062-.053-.05-.088-.084a13.28 13.28 0 01-.099-.097l-.029-.028-.041-.042-.069-.07-.05-.051-.05-.053a6.457 6.457 0 01-.168-.179l-.08-.088-.062-.07-.071-.08-.042-.049-.053-.062-.058-.068-.046-.056a7.175 7.175 0 01-.027-.033l-.045-.055-.066-.082-.041-.052-.05-.064-.02-.025a11.99 11.99 0 01-1.44-2.402zm-1.02-5.794l11.353 3.037a20.468 20.468 0 00-.469 2.011l10.817 2.894a12.076 12.076 0 01-1.845 2.005L.657 15.923l-.016-.046-.035-.104a11.965 11.965 0 01-.05-.153l-.007-.023a11.896 11.896 0 01-.207-.741l-.03-.126-.018-.08-.021-.097-.018-.081-.018-.09-.017-.084-.018-.094c-.026-.141-.05-.283-.071-.426l-.017-.118-.011-.083-.013-.102a12.01 12.01 0 01-.019-.161l-.005-.047a12.12 12.12 0 01-.034-2.145zm1.593-5.15l11.948 3.196c-.368.605-.705 1.231-1.01 1.875l11.295 3.022c-.142.82-.368 1.612-.668 2.365l-11.55-3.09L.124 10.26l.015-.1.008-.049.01-.067.015-.087.018-.098c.026-.148.056-.295.088-.442l.028-.124.02-.085.024-.097c.022-.09.045-.18.07-.268l.028-.102.023-.083.03-.1.025-.082.03-.096.026-.082.031-.095a11.896 11.896 0 011.01-2.232zm4.442-4.4L17.352 4.59a20.77 20.77 0 00-1.688 1.721l7.823 2.093c.267.852.442 1.744.513 2.665L2.106 5.213l.045-.065.027-.04.04-.055.046-.065.055-.076.054-.072.064-.086.05-.065.057-.073.055-.07.06-.074.055-.069.065-.077.054-.066.066-.077.053-.06.072-.082.053-.06.067-.074.054-.058.073-.078.058-.06.063-.067.168-.17.1-.098.059-.056.076-.071a12.084 12.084 0 012.272-1.677zM12.017 0h.097l.082.001.069.001.054.002.068.002.046.001.076.003.047.002.06.003.054.002.087.005.105.007.144.011.088.007.044.004.077.008.082.008.047.005.102.012.05.006.108.014.081.01.042.006.065.01.207.032.07.012.065.011.14.026.092.018.11.022.046.01.075.016.041.01L14.7.3l.042.01.065.015.049.012.071.017.096.024.112.03.113.03.113.032.05.015.07.02.078.024.073.023.05.016.05.016.076.025.099.033.102.036.048.017.064.023.093.034.11.041.116.045.1.04.047.02.06.024.041.018.063.026.04.018.057.025.11.048.1.046.074.035.075.036.06.028.092.046.091.045.102.052.053.028.049.026.046.024.06.033.041.022.052.029.088.05.106.06.087.051.057.034.053.032.096.059.088.055.098.062.036.024.064.041.084.056.04.027.062.042.062.043.023.017c.054.037.108.075.161.114l.083.06.065.048.056.043.086.065.082.064.04.03.05.041.086.069.079.065.085.071c.712.6 1.353 1.283 1.909 2.031L7.222.994l.062-.027.065-.028.081-.034.086-.035c.113-.045.227-.09.341-.131l.096-.035.093-.033.084-.03.096-.031c.087-.03.176-.058.264-.085l.091-.027.086-.025.102-.03.085-.023.1-.026L9.04.37l.09-.023.091-.022.095-.022.09-.02.098-.021.091-.02.095-.018.092-.018.1-.018.091-.016.098-.017.092-.014.097-.015.092-.013.102-.013.091-.012.105-.012.09-.01.105-.01c.093-.01.186-.018.28-.024l.106-.008.09-.005.11-.006.093-.004.1-.004.097-.002.099-.002.197-.002z"></path></svg>`,
 	"nvidia": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd"><path d="M10.212 8.976V7.62c.127-.01.256-.017.388-.021 3.596-.117 5.957 3.184 5.957 3.184s-2.548 3.647-5.282 3.647a3.227 3.227 0 01-1.063-.175v-4.109c1.4.174 1.681.812 2.523 2.258l1.873-1.627a4.905 4.905 0 00-3.67-1.846 6.594 6.594 0 00-.729.044m0-4.476v2.025c.13-.01.259-.019.388-.024 5.002-.174 8.261 4.226 8.261 4.226s-3.743 4.69-7.643 4.69c-.338 0-.675-.031-1.007-.092v1.25c.278.038.558.057.838.057 3.629 0 6.253-1.91 8.794-4.169.421.347 2.146 1.193 2.501 1.564-2.416 2.083-8.048 3.763-11.24 3.763-.308 0-.603-.02-.894-.048V19.5H24v-15H10.21zm0 9.756v1.068c-3.356-.616-4.287-4.21-4.287-4.21a7.173 7.173 0 014.287-2.138v1.172h-.005a3.182 3.182 0 00-2.502 1.178s.615 2.276 2.507 2.931m-5.961-3.3c1.436-1.935 3.604-3.148 5.961-3.336V6.523C5.81 6.887 2 10.723 2 10.723s2.158 6.427 8.21 7.015v-1.166C5.77 16 4.25 10.958 4.25 10.958h-.002z" fill="#74B71B" fill-rule="nonzero"></path></svg>`,
+	"ollama": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M7.905 1.09c.216.085.411.225.588.41.295.306.544.744.734 1.263.191.522.315 1.1.362 1.68a5.054 5.054 0 012.049-.636l.051-.004c.87-.07 1.73.087 2.48.474.101.053.2.11.297.17.05-.569.172-1.134.36-1.644.19-.52.439-.957.733-1.264a1.67 1.67 0 01.589-.41c.257-.1.53-.118.796-.042.401.114.745.368 1.016.737.248.337.434.769.561 1.287.23.934.27 2.163.115 3.645l.053.04.026.019c.757.576 1.284 1.397 1.563 2.35.435 1.487.216 3.155-.534 4.088l-.018.021.002.003c.417.762.67 1.567.724 2.4l.002.03c.064 1.065-.2 2.137-.814 3.19l-.007.01.01.024c.472 1.157.62 2.322.438 3.486l-.006.039a.651.651 0 01-.747.536.648.648 0 01-.54-.742c.167-1.033.01-2.069-.48-3.123a.643.643 0 01.04-.617l.004-.006c.604-.924.854-1.83.8-2.72-.046-.779-.325-1.544-.8-2.273a.644.644 0 01.18-.886l.009-.006c.243-.159.467-.565.58-1.12a4.229 4.229 0 00-.095-1.974c-.205-.7-.58-1.284-1.105-1.683-.595-.454-1.383-.673-2.38-.61a.653.653 0 01-.632-.371c-.314-.665-.772-1.141-1.343-1.436a3.288 3.288 0 00-1.772-.332c-1.245.099-2.343.801-2.67 1.686a.652.652 0 01-.61.425c-1.067.002-1.893.252-2.497.703-.522.39-.878.935-1.066 1.588a4.07 4.07 0 00-.068 1.886c.112.558.331 1.02.582 1.269l.008.007c.212.207.257.53.109.785-.36.622-.629 1.549-.673 2.44-.05 1.018.186 1.902.719 2.536l.016.019a.643.643 0 01.095.69c-.576 1.236-.753 2.252-.562 3.052a.652.652 0 01-1.269.298c-.243-1.018-.078-2.184.473-3.498l.014-.035-.008-.012a4.339 4.339 0 01-.598-1.309l-.005-.019a5.764 5.764 0 01-.177-1.785c.044-.91.278-1.842.622-2.59l.012-.026-.002-.002c-.293-.418-.51-.953-.63-1.545l-.005-.024a5.352 5.352 0 01.093-2.49c.262-.915.777-1.701 1.536-2.269.06-.045.123-.09.186-.132-.159-1.493-.119-2.73.112-3.67.127-.518.314-.95.562-1.287.27-.368.614-.622 1.015-.737.266-.076.54-.059.797.042zm4.116 9.09c.936 0 1.8.313 2.446.855.63.527 1.005 1.235 1.005 1.94 0 .888-.406 1.58-1.133 2.022-.62.375-1.451.557-2.403.557-1.009 0-1.871-.259-2.493-.734-.617-.47-.963-1.13-.963-1.845 0-.707.398-1.417 1.056-1.946.668-.537 1.55-.849 2.485-.849zm0 .896a3.07 3.07 0 00-1.916.65c-.461.37-.722.835-.722 1.25 0 .428.21.829.61 1.134.455.347 1.124.548 1.943.548.799 0 1.473-.147 1.932-.426.463-.28.7-.686.7-1.257 0-.423-.246-.89-.683-1.256-.484-.405-1.14-.643-1.864-.643zm.662 1.21l.004.004c.12.151.095.37-.056.49l-.292.23v.446a.375.375 0 01-.376.373.375.375 0 01-.376-.373v-.46l-.271-.218a.347.347 0 01-.052-.49.353.353 0 01.494-.051l.215.172.22-.174a.353.353 0 01.49.051zm-5.04-1.919c.478 0 .867.39.867.871a.87.87 0 01-.868.871.87.87 0 01-.867-.87.87.87 0 01.867-.872zm8.706 0c.48 0 .868.39.868.871a.87.87 0 01-.868.871.87.87 0 01-.867-.87.87.87 0 01.867-.872zM7.44 2.3l-.003.002a.659.659 0 00-.285.238l-.005.006c-.138.189-.258.467-.348.832-.17.692-.216 1.631-.124 2.782.43-.128.899-.208 1.404-.237l.01-.001.019-.034c.046-.082.095-.161.148-.239.123-.771.022-1.692-.253-2.444-.134-.364-.297-.65-.453-.813a.628.628 0 00-.107-.09L7.44 2.3zm9.174.04l-.002.001a.628.628 0 00-.107.09c-.156.163-.32.45-.453.814-.29.794-.387 1.776-.23 2.572l.058.097.008.014h.03a5.184 5.184 0 011.466.212c.086-1.124.038-2.043-.128-2.722-.09-.365-.21-.643-.349-.832l-.004-.006a.659.659 0 00-.285-.239h-.004z"></path></svg>`,
 	"openai": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd"><path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"></path></svg>`,
 	"openrouter": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd"><path d="M18.654 3.87a5.087 5.087 0 110 10.174L23.7 19.09c.64.641.187 1.737-.72 1.737H8.48a8.479 8.479 0 010-16.958h10.175zM8.479 7.26a5.087 5.087 0 100 10.176 5.087 5.087 0 000-10.175z" fill="#7624f4"></path></svg>`,
 	"qwen": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd"><path d="M12.604 1.34c.393.69.784 1.382 1.174 2.075a.18.18 0 00.157.091h5.552c.174 0 .322.11.446.327l1.454 2.57c.19.337.24.478.024.837-.26.43-.513.864-.76 1.3l-.367.658c-.106.196-.223.28-.04.512l2.652 4.637c.172.301.111.494-.043.77-.437.785-.882 1.564-1.335 2.34-.159.272-.352.375-.68.37-.777-.016-1.552-.01-2.327.016a.099.099 0 00-.081.05 575.097 575.097 0 01-2.705 4.74c-.169.293-.38.363-.725.364-.997.003-2.002.004-3.017.002a.537.537 0 01-.465-.271l-1.335-2.323a.09.09 0 00-.083-.049H4.982c-.285.03-.553-.001-.805-.092l-1.603-2.77a.543.543 0 01-.002-.54l1.207-2.12a.198.198 0 000-.197 550.951 550.951 0 01-1.875-3.272l-.79-1.395c-.16-.31-.173-.496.095-.965.465-.813.927-1.625 1.387-2.436.132-.234.304-.334.584-.335a338.3 338.3 0 012.589-.001.124.124 0 00.107-.063l2.806-4.895a.488.488 0 01.422-.246c.524-.001 1.053 0 1.583-.006L11.704 1c.341-.003.724.032.9.34zm-3.432.403a.06.06 0 00-.052.03L6.254 6.788a.157.157 0 01-.135.078H3.253c-.056 0-.07.025-.041.074l5.81 10.156c.025.042.013.062-.034.063l-2.795.015a.218.218 0 00-.2.116l-1.32 2.31c-.044.078-.021.118.068.118l5.716.008c.046 0 .08.02.104.061l1.403 2.454c.046.081.092.082.139 0l5.006-8.76.783-1.382a.055.055 0 01.096 0l1.424 2.53a.122.122 0 00.107.062l2.763-.02a.04.04 0 00.035-.02.041.041 0 000-.04l-2.9-5.086a.108.108 0 010-.113l.293-.507 1.12-1.977c.024-.041.012-.062-.035-.062H9.2c-.059 0-.073-.026-.043-.077l1.434-2.505a.107.107 0 000-.114L9.225 1.774a.06.06 0 00-.053-.031zm6.29 8.02c.046 0 .058.02.034.06l-.832 1.465-2.613 4.585a.056.056 0 01-.05.029.058.058 0 01-.05-.029L8.498 9.841c-.02-.034-.01-.052.028-.054l.216-.012 6.722-.012z" fill="url(#lobe-icons-qwen-_R_0_)" fill-rule="nonzero"></path><defs><linearGradient id="lobe-icons-qwen-_R_0_" x1="0%" x2="100%" y1="0%" y2="0%"><stop offset="0%" stop-color="#6336E7" stop-opacity=".84"></stop><stop offset="100%" stop-color="#6F69F7" stop-opacity=".84"></stop></linearGradient></defs></svg>`,
@@ -1294,246 +1295,6 @@ function getCachedModels(plugin: SmartVaultPlugin, base: string): FetchedModel[]
 	return out;
 }
 
-/** Look up a model's context window in the built-in catalog by id — the
- *  fetch API only returns model ids, so catalog-known models (e.g.
- *  deepseek-v4-flash → 1M) keep their real capacity instead of the generic
- *  128k fallback. */
-function catalogContextWindow(modelId: string): number | undefined {
-	for (const entry of CHAT_CATALOG) {
-		for (const m of entry.models) {
-			if (m.id === modelId) return m.contextWindow;
-		}
-	}
-	return undefined;
-}
-
-/** Default context window for models the catalog does not describe. */
-const DEFAULT_CONTEXT_WINDOW = 128000;
-
-/** Default per-category capacity: chat models get the generic 128k context
- *  window, embedding models a 8k max-input (bge-m3's standard limit). */
-function defaultContextFor(kind: ChatModelKind): number {
-	return kind === "embedding" ? 8192 : DEFAULT_CONTEXT_WINDOW;
-}
-
-/** Compact token-count spelling: 1000000 → "1M", 262144 → "256K". */
-export function formatContext(tokens: number): string {
-	if (tokens >= 1000000) {
-		const m = tokens / 1000000;
-		return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
-	}
-	if (tokens >= 1000) {
-		const k = tokens / 1000;
-		return `${Number.isInteger(k) ? k : k.toFixed(1)}K`;
-	}
-	return String(tokens);
-}
-
-/** Candidate-picker modal (checkbox list); adopts the checked ids. */
-class FetchModelsModal extends Modal {
-	private picked = new Set<string>();
-
-	constructor(
-		app: App,
-		private models: FetchedModel[],
-		private existing: ReadonlySet<string>,
-		private onAdopt: (ids: string[]) => void,
-	) {
-		super(app);
-		this.modalEl.addClass("semlink-fetch-modal");
-	}
-
-	/** Whether the modal is currently mounted (guards background refreshes). */
-	private alive = false;
-	private listEl: HTMLElement | null = null;
-	private refreshingEl: HTMLElement | null = null;
-	private errorEl: HTMLElement | null = null;
-	private emptyEl: HTMLElement | null = null;
-	private searchEl: HTMLInputElement | null = null;
-	/** Lower-cased model-id filter ("" = show all). */
-	private filter = "";
-	/** model id → rendered row, for incremental updates. */
-	private rows = new Map<string, HTMLElement>();
-
-	onOpen() {
-		this.alive = true;
-		this.titleEl.setText(t("fetchTitle"));
-		const { contentEl } = this;
-		contentEl.empty();
-		contentEl.createDiv({ cls: "semlink-fetch-desc", text: t("fetchDescription") });
-		this.searchEl = contentEl.createEl("input", {
-			cls: "semlink-fetch-search",
-			attr: { type: "text", placeholder: t("fetchSearchPlaceholder") },
-		});
-		this.searchEl.addEventListener("input", () => {
-			this.filter = (this.searchEl?.value ?? "").trim().toLowerCase();
-			this.renderList();
-		});
-		this.refreshingEl = contentEl.createDiv({ cls: "semlink-fetch-refreshing" });
-		this.refreshingEl.addClass("semlink-hidden");
-		this.errorEl = contentEl.createDiv({ cls: "semlink-fetch-error" });
-		this.errorEl.addClass("semlink-hidden");
-		this.emptyEl = contentEl.createDiv({ cls: "semlink-fetch-empty" });
-		this.emptyEl.addClass("semlink-hidden");
-		this.listEl = contentEl.createDiv({ cls: "semlink-fetch-list" });
-		this.renderList();
-		new Setting(contentEl)
-			.addButton((btn) => btn.setButtonText(t("cancel")).onClick(() => this.close()))
-			.addButton((btn) =>
-				btn
-					.setButtonText(t("fetchAdopt"))
-					.setClass("mod-cta")
-					.onClick(() => {
-						this.onAdopt([...this.picked]);
-						this.close();
-					})
-			);
-	}
-
-	onClose() {
-		this.alive = false;
-		this.listEl = null;
-		this.refreshingEl = null;
-		this.errorEl = null;
-		this.emptyEl = null;
-		this.searchEl = null;
-		this.rows.clear();
-		this.contentEl.empty();
-	}
-
-	/** Show/hide the "refreshing live list" indicator — a progress bar with a
-	 *  small done/total label underneath (167/422 etc.). */
-	setRefreshing(on: boolean, done?: number, total?: number): void {
-		if (!this.refreshingEl) return;
-		this.refreshingEl.toggleClass("semlink-hidden", !on);
-		if (!on) return;
-		this.refreshingEl.empty();
-		if (done !== undefined && total !== undefined && total > 0) {
-			const pct = Math.min(100, Math.round((done / total) * 100));
-			const bar = this.refreshingEl.createDiv({ cls: "semlink-fetch-progress" });
-			bar.createDiv({
-				cls: "semlink-fetch-progress-fill",
-				attr: { style: `width: ${pct}%` },
-			});
-			const label = this.refreshingEl.createDiv({ cls: "semlink-fetch-progress-label" });
-			label.setText(
-				t("fetchRefreshing").replace("{done}", String(done)).replace("{total}", String(total)),
-			);
-		} else {
-			this.refreshingEl.setText(t("fetchRefreshingShort"));
-		}
-	}
-
-	/** Show a fetch/refresh failure inside the modal. */
-	setError(message: string): void {
-		if (!this.errorEl) return;
-		this.setRefreshing(false);
-		this.errorEl.setText(message);
-		this.errorEl.removeClass("semlink-hidden");
-	}
-
-	/** Replace the candidate list with freshly fetched results, keeping the
-	 *  user's checked selection (by model id) and the configured markers. */
-	setModels(models: FetchedModel[]): void {
-		if (!this.alive) return;
-		this.models = models;
-		this.renderList();
-		if (this.errorEl) this.errorEl.addClass("semlink-hidden");
-		this.setRefreshing(false);
-	}
-
-	/** Add one freshly classified model to the list, or update its row when
-	 *  it already exists (from cache) — the list grows incrementally while
-	 *  the live fetch is still running. Rows that do not match the current
-	 *  filter are kept in the data but not rendered. */
-	upsertModel(model: FetchedModel): void {
-		if (!this.alive) return;
-		const index = this.models.findIndex((m) => m.id === model.id);
-		if (index >= 0) {
-			this.models[index] = model;
-		} else {
-			this.models.push(model);
-		}
-		if (!this.matchesFilter(model)) return;
-		const row = this.renderItem(model);
-		const existing = this.rows.get(model.id);
-		if (existing && existing.isConnected) {
-			existing.replaceWith(row);
-		} else if (this.listEl) {
-			this.listEl.appendChild(row);
-		}
-		this.rows.set(model.id, row);
-	}
-
-	/** Whether a model passes the current search filter. */
-	private matchesFilter(model: FetchedModel): boolean {
-		return this.filter.length === 0 || model.id.toLowerCase().includes(this.filter);
-	}
-
-	/** Render one candidate row (checkbox + id + kind tag + ctx + ✓). */
-	private renderItem(model: FetchedModel): HTMLElement {
-		const label = createEl("label");
-		label.className = "semlink-fetch-item";
-		const cb = label.createEl("input", { attr: { type: "checkbox" } });
-		// Nothing is pre-checked — the user picks exactly what to add.
-		cb.checked = this.picked.has(model.id);
-		cb.addEventListener("change", () => {
-			if (cb.checked) this.picked.add(model.id);
-			else this.picked.delete(model.id);
-		});
-		label.createSpan({ text: model.id });
-		// Kind tag: the three probed categories get accent colors, the
-		// id-hinted ones (speech/image/video/translation) a neutral pill.
-		const kindCls = model.kind === "embedding"
-			? "is-embedding"
-			: model.kind === "chat"
-				? "is-chat"
-				: model.kind === "rerank"
-					? "is-rerank"
-					: null;
-		if (model.kind !== "unknown") {
-			label.createSpan({
-				cls: `semlink-fetch-kind${kindCls ? ` ${kindCls}` : ""}`,
-				// The kind key must go through t() — showing the raw key
-				// would print "modelTagChat" etc.
-				text: t(modelKindKey(model.kind)),
-			});
-		}
-		// Show the context window when the endpoint or the catalog
-		// reported one (e.g. "1M"), right-aligned, so adopting is an
-		// informed choice.
-		const ctx = model.contextWindow ?? catalogContextWindow(model.id);
-		if (ctx !== undefined) {
-			label.createSpan({ cls: "semlink-fetch-ctx", text: formatContext(ctx) });
-		}
-		if (this.existing.has(model.id)) {
-			label.createSpan({ cls: "semlink-fetch-existing", text: "✓" });
-		}
-		return label;
-	}
-
-	/** Render the checkbox list from the current candidate set, filtered. */
-	private renderList(): void {
-		if (!this.listEl) return;
-		this.listEl.empty();
-		this.rows.clear();
-		for (const model of this.models) {
-			if (!this.matchesFilter(model)) continue;
-			const row = this.renderItem(model);
-			this.rows.set(model.id, row);
-			this.listEl.appendChild(row);
-		}
-		// "No match" hint when the filter yields nothing. A merely-empty list
-		// (e.g. mid-refresh) shows nothing — the head already carries the
-		// refresh progress label.
-		if (this.emptyEl) {
-			const showNoMatch = this.rows.size === 0 && this.filter.length > 0;
-			this.emptyEl.toggleClass("semlink-hidden", !showNoMatch);
-			if (showNoMatch) this.emptyEl.setText(t("fetchNoMatch"));
-		}
-	}
-}
-
 /** Modal hosting the "Add provider" (catalog) or "Add a custom provider"
  *  create card. Closes on cancel or after a provider is created. */
 export class AddProviderModal extends Modal {
@@ -1604,299 +1365,6 @@ class DeleteProviderModal extends Modal {
 	onClose() {
 		this.contentEl.empty();
 	}
-}
-
-// ──── Model list editor (shared by chat editors and create cards) ────
-
-/** The model-category choices offered per model row. */
-const MODEL_KINDS: readonly ChatModelKind[] = [
-	"chat",
-	"embedding",
-	"rerank",
-	"tts",
-	"asr",
-	"image",
-	"video",
-	"translate",
-];
-
-/** i18n key for a model-category label. */
-function modelKindKey(kind: ChatModelKind): string {
-	switch (kind) {
-		case "embedding": return "modelTagEmbedding";
-		case "rerank": return "modelTagRerank";
-		case "tts": return "modelTagTts";
-		case "asr": return "modelTagAsr";
-		case "image": return "modelTagImage";
-		case "video": return "modelTagVideo";
-		case "translate": return "modelTagTranslate";
-		default: return "modelTagChat";
-	}
-}
-
-export interface ModelProbe {
-	baseUrl: string;
-	apiKey: string;
-	apiFormat: ChatApiFormat;
-}
-
-interface ModelListOptions {
-	app: App;
-	/** Plugin for the persisted model-kind cache. */
-	plugin: SmartVaultPlugin;
-	/** Read the current model rows (may be replaced after each change). */
-	getModels: () => ChatModel[];
-	/** Persist a (possibly new) model list. */
-	onChange: (models: ChatModel[]) => void;
-	/** Current endpoint facts for the fetch action. */
-	probe: () => ModelProbe;
-	/** Kind given to newly added rows. Defaults to "chat"; embedding-provider
-	 *  editors pass "embedding" so models added there are selectable in the
-	 *  General tab's embedding-model dropdown right away. */
-	defaultKind?: ChatModelKind;
-	/** Called after a structural change (add/remove a row, adopt fetched
-	 *  models) so the surrounding page can re-render — e.g. the General tab's
-	 *  model dropdowns derive their options from these lists. */
-	onStructuralChange?: () => void;
-}
-
-interface ModelListHandle {
-	/** Re-evaluate the fetch button's disabled state (call after the probe
-	 *  fields — baseUrl / apiKey — change in the surrounding editor). */
-	updateProbeState: () => void;
-}
-
-/** Render the model rows of one chat provider with add/fetch/remove actions. */
-function renderModelList(containerEl: HTMLElement, opts: ModelListOptions): ModelListHandle {
-	const section = containerEl.createDiv({ cls: "semlink-model-list" });
-	const headEl = section.createDiv({ cls: "semlink-model-list-head" });
-	headEl.createSpan({ cls: "semlink-model-list-title", text: t("chatModels") });
-	const countEl = headEl.createSpan({ cls: "semlink-model-list-count" });
-	const fetchBtn = headEl.createEl("button", { cls: "semlink-link-btn", text: t("fetchModels") });
-	const rowsEl = section.createDiv({ cls: "semlink-model-rows" });
-	const errorEl = section.createDiv({ cls: "semlink-model-error" });
-	errorEl.addClass("semlink-hidden");
-	const addBtn = section.createEl("button", { cls: "semlink-add-model-btn", text: `＋ ${t("chatAddModel")}` });
-
-	let fetching = false;
-
-	const updateProbeState = () => {
-		const { baseUrl, apiKey } = opts.probe();
-		const base = baseUrl.trim();
-		// A live interrogation needs both the base URL and the key.
-		const ok = base.length > 0 && apiKey.trim().length > 0;
-		fetchBtn.disabled = !ok || fetching;
-		fetchBtn.setAttr("title", ok ? "" : t("fetchNeedsBaseUrl"));
-	};
-
-	const rerender = () => {
-		const models = opts.getModels();
-		countEl.setText(`(${String(models.length)})`);
-		rowsEl.empty();
-		models.forEach((model, mi) => {
-			const rowEl = rowsEl.createDiv({ cls: `semlink-model-row${model.enabled === true ? "" : " is-disabled"}` });
-			// Drag handle (leftmost): the ONLY element that starts a drag.
-			const grip = rowEl.createEl("button", {
-				cls: "semlink-icon-btn semlink-model-grip",
-				attr: { "aria-label": t("modelDrag"), title: t("modelDrag") },
-			});
-			setIcon(grip, "grip-vertical");
-			// Enable/disable switch.
-			const enabledBox = rowEl.createEl("input", {
-				cls: "semlink-model-enabled",
-				attr: { type: "checkbox", title: t("modelEnabled"), "aria-label": t("modelEnabled") },
-			});
-			enabledBox.checked = model.enabled === true;
-			enabledBox.addEventListener("change", () => {
-				model.enabled = enabledBox.checked;
-				rowEl.toggleClass("is-disabled", !enabledBox.checked);
-				opts.onChange(models);
-				opts.onStructuralChange?.();
-			});
-			// Model-category selector (嵌入/对话/重排序…).
-			const kindSel = rowEl.createEl("select", { cls: "semlink-input semlink-model-kind" });
-			for (const kind of MODEL_KINDS) {
-				kindSel.createEl("option", { value: kind, text: t(modelKindKey(kind)) });
-			}
-			kindSel.value = model.kind ?? "chat";
-			kindSel.addEventListener("change", () => {
-				model.kind = kindSel.value as ChatModelKind;
-				// Embedding models have a max-input limit, not a chat context
-				// window — the placeholder follows the row's category.
-				ctxInput.setAttr("placeholder", model.kind === "embedding"
-					? t("embedMaxInput")
-					: t("chatContextWindow"));
-				opts.onChange(models);
-				// The category feeds the General tab's embedding/chat model
-				// dropdowns — re-render so a model re-tagged as 嵌入/对话 shows
-				// up there immediately (this is the "mark as embedding" step).
-				opts.onStructuralChange?.();
-			});
-			const idInput = rowEl.createEl("input", {
-				cls: "semlink-input",
-				attr: { placeholder: t("chatModelId") },
-			});
-			idInput.value = model.id;
-			idInput.addEventListener("input", () => {
-				model.id = idInput.value;
-				opts.onChange(models);
-			});
-			const ctxInput = rowEl.createEl("input", {
-				cls: "semlink-input semlink-input-ctx",
-				attr: {
-					placeholder: (model.kind ?? "chat") === "embedding"
-						? t("embedMaxInput")
-						: t("chatContextWindow"),
-				},
-			});
-			ctxInput.value = model.contextWindow != null ? formatContextWindow(model.contextWindow) : "";
-			ctxInput.addEventListener("input", () => {
-				const n = parseContextWindow(ctxInput.value);
-				if (n !== null) {
-					model.contextWindow = n;
-					opts.onChange(models);
-				}
-			});
-			const rmBtn = rowEl.createEl("button", {
-				cls: "semlink-icon-btn semlink-icon-btn-danger",
-				attr: { "aria-label": `${t("chatDeleteModel")} ${mi + 1}` },
-			});
-			setIcon(rmBtn, "trash");
-			rmBtn.addEventListener("click", () => {
-				models.splice(mi, 1);
-				opts.onChange(models);
-				opts.onStructuralChange?.();
-				rerender();
-			});
-
-			// ── Drag to reorder via the grip handle only. The grip itself is
-			// draggable (a `button` child of a draggable row sometimes fails to
-			// start a drag in some browsers); the row stays a drop target. ──
-			grip.setAttr("draggable", "true");
-			grip.addEventListener("dragstart", (e) => {
-				rowEl.addClass("is-dragging");
-				e.dataTransfer?.setData("text/plain", String(mi));
-				if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-			});
-			rowEl.addEventListener("dragend", () => {
-				rowEl.removeClass("is-dragging");
-				rowsEl.querySelectorAll(".is-drag-over").forEach((el) => el.removeClass("is-drag-over"));
-			});
-			rowEl.addEventListener("dragover", (e) => {
-				e.preventDefault();
-				if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-				rowEl.addClass("is-drag-over");
-			});
-			rowEl.addEventListener("dragleave", () => {
-				rowEl.removeClass("is-drag-over");
-			});
-			rowEl.addEventListener("drop", (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-				rowEl.removeClass("is-drag-over");
-				const from = parseInt(e.dataTransfer?.getData("text/plain") ?? "-1", 10);
-				if (isNaN(from) || from < 0 || from === mi) return;
-				const arr = opts.getModels();
-				if (from >= arr.length || mi >= arr.length) return;
-				const [moved] = arr.splice(from, 1);
-				// Insert "before the row that was at mi" — shifts down one.
-				const insertAt = mi > from ? mi - 1 : mi;
-				arr.splice(insertAt, 0, moved);
-				opts.onChange(arr);
-				opts.onStructuralChange?.();
-				rerender();
-			});
-		});
-		updateProbeState();
-	};
-
-	addBtn.addEventListener("click", () => {
-		const kind = opts.defaultKind ?? "chat";
-		opts.getModels().push({ id: "", contextWindow: defaultContextFor(kind), kind });
-		opts.onChange(opts.getModels());
-		opts.onStructuralChange?.();
-		rerender();
-	});
-
-	fetchBtn.addEventListener("click", () => void (async () => {
-		const { baseUrl, apiKey, apiFormat } = opts.probe();
-		const base = baseUrl.trim().replace(/\/+$/, "");
-		fetching = true;
-		updateProbeState();
-		errorEl.addClass("semlink-hidden");
-
-		const current = opts.getModels();
-		const known = new Set(current.map((m) => m.id).filter((id) => id.length > 0));
-		/** Adopt the picked ids using the freshest candidate list known. */
-		const adopt = (picked: string[], candidates: FetchedModel[]) => {
-			const byId = new Map(opts.getModels().map((m) => [m.id, m]));
-			for (const id of picked) {
-				const found = candidates.find((fm) => fm.id === id);
-				if (!found) continue;
-				const existing = byId.get(id);
-				// Refresh the kind + context window of models already in the
-				// list too: the endpoint classification and the catalog are
-				// more accurate than the generic defaults. Unknown keeps the
-				// current kind; missing context keeps the existing value.
-				const kind: ChatModelKind = found.kind !== "unknown"
-					? found.kind
-					: existing?.kind ?? "chat";
-				const ctx = found.contextWindow
-					?? catalogContextWindow(id)
-					?? existing?.contextWindow
-					?? defaultContextFor(kind);
-				byId.set(id, existing
-					? { ...existing, id, contextWindow: ctx, kind }
-					: { id, contextWindow: ctx, kind });
-			}
-			opts.onChange([...byId.values()]);
-			opts.onStructuralChange?.();
-			rerender();
-		};
-
-		// Open the picker immediately: cached models show instantly (or an
-		// empty list on first run), and the live fetch + classification
-		// progress streams into the modal until the real list lands.
-		const cached = getCachedModels(opts.plugin, base);
-		let latest = cached;
-		const modal = new FetchModelsModal(opts.app, cached, known, (picked) => {
-			adopt(picked, latest.length > 0 ? latest : cached);
-		});
-		modal.open();
-		modal.setRefreshing(true);
-
-		try {
-			const models = await fetchAvailableModels(
-				opts.plugin,
-				baseUrl,
-				apiKey,
-				apiFormat,
-				(done, total, model) => {
-					// Stream progress AND the model list incrementally into
-					// the open modal — rows appear as they are classified.
-					modal.setRefreshing(true, done, total);
-					if (model) modal.upsertModel(model);
-				},
-			);
-			latest = models;
-			if (models.length > 0) {
-				modal.setModels(models);
-			} else {
-				modal.setError(t("fetchEmpty"));
-			}
-		} catch (e) {
-			// Keep whatever the user can still work with; surface the failure
-			// inside the modal (which stays open for manual selection).
-			modal.setError(e instanceof Error ? e.message : String(e));
-		} finally {
-			fetching = false;
-			fetchBtn.setText(t("fetchModels"));
-			updateProbeState();
-		}
-	})());
-
-	rerender();
-	return { updateProbeState };
 }
 
 // ──── Provider rows ────
@@ -2343,7 +1811,6 @@ interface ChatProviderDraft {
 	baseUrl: string;
 	apiKey: string;
 	apiFormat: ChatApiFormat;
-	models: ChatModel[];
 }
 
 interface DraftEditorOptions {
@@ -2353,7 +1820,8 @@ interface DraftEditorOptions {
 	onCreated: (provider: ModelProvider) => void;
 }
 
-/** Field set shared by the catalog-add and custom-provider create cards. */
+/** Field set of the "add a custom provider" card. Models are not edited
+ *  here — after creation they are added from the Models tab ("＋ Add"). */
 function renderDraftEditor(
 	slot: HTMLElement,
 	plugin: SmartVaultPlugin,
@@ -2363,14 +1831,18 @@ function renderDraftEditor(
 	const errorEl = slot.createDiv({ cls: "semlink-draft-error" });
 	errorEl.addClass("semlink-hidden");
 	let busy = false;
-	let modelHandle: ModelListHandle | null = null;
 
 	// ── 图标：从内置图标库中选一个（可不选，回退名称首字母） ──
+	// 同一 SVG 的别名键（如 spacexai ← xai）只保留排序靠前的代表键，避免重复
 	slot.createDiv({ cls: "semlink-editor-field-label", text: t("mtIcon") });
 	const iconGrid = slot.createDiv({ cls: "semlink-icon-picker" });
+	const seenSvgs = new Set<string>();
 	for (const key of Object.keys(PROVIDER_LOGOS).sort()) {
+		const svg = PROVIDER_LOGOS[key];
+		if (seenSvgs.has(svg)) continue;
+		seenSvgs.add(svg);
 		const swatch = iconGrid.createDiv({ cls: "semlink-icon-swatch", attr: { title: key } });
-		setSvgIcon(swatch, PROVIDER_LOGOS[key]);
+		setSvgIcon(swatch, svg);
 		if (draft.icon === key) swatch.addClass("is-picked");
 		swatch.addEventListener("click", () => {
 			draft.icon = draft.icon === key ? "" : key;
@@ -2402,7 +1874,6 @@ function renderDraftEditor(
 			t("mtEndpointHint").replace("{url}",
 				draft.apiFormat === "anthropic" ? "https://api.anthropic.com/v1/messages" : "https://api.openai.com/v1/chat/completions"),
 		);
-		modelHandle?.updateProbeState();
 	});
 
 	// ── Endpoint URL*：整行输入 + 兼容性提示 ──
@@ -2414,7 +1885,6 @@ function renderDraftEditor(
 	endpointInput.value = draft.baseUrl;
 	endpointInput.addEventListener("input", () => {
 		draft.baseUrl = endpointInput.value;
-		modelHandle?.updateProbeState();
 	});
 	const hintEl = slot.createDiv({ cls: "semlink-editor-adv-desc" });
 
@@ -2431,7 +1901,6 @@ function renderDraftEditor(
 	keyInput.value = draft.apiKey;
 	keyInput.addEventListener("input", () => {
 		draft.apiKey = keyInput.value;
-		modelHandle?.updateProbeState();
 	});
 	const syncAuth = (): void => {
 		const noAuth = authSel.value === "none";
@@ -2441,23 +1910,12 @@ function renderDraftEditor(
 	};
 	authSel.addEventListener("change", () => {
 		syncAuth();
-		modelHandle?.updateProbeState();
 	});
 	syncAuth();
 	hintEl.setText(
 		t("mtEndpointHint").replace("{url}",
 			draft.apiFormat === "anthropic" ? "https://api.anthropic.com/v1/messages" : "https://api.openai.com/v1/chat/completions"),
 	);
-
-	modelHandle = renderModelList(slot, {
-		app: plugin.app,
-		plugin,
-		getModels: () => draft.models,
-		onChange: (models) => {
-			draft.models = models;
-		},
-		probe: () => ({ baseUrl: draft.baseUrl, apiKey: draft.apiKey, apiFormat: draft.apiFormat }),
-	});
 
 	new Setting(slot)
 		.addButton((btn) => btn.setButtonText(t("cancel")).onClick(() => opts.onCancel()))
@@ -2470,11 +1928,6 @@ function renderDraftEditor(
 					errorEl.removeClass("semlink-hidden");
 					return;
 				}
-				if (draft.models.length === 0 || draft.models.some((m) => !m.id.trim())) {
-					errorEl.setText(t("customNeedsModels"));
-					errorEl.removeClass("semlink-hidden");
-					return;
-				}
 				busy = true;
 				btn.setButtonText(opts.submitBusyLabel).setDisabled(true);
 				const provider: ModelProvider = {
@@ -2484,8 +1937,8 @@ function renderDraftEditor(
 					apiBase: draft.baseUrl.trim(),
 					apiKey: draft.apiKey,
 					apiFormat: draft.apiFormat,
-					models: draft.models.map((m) => ({ ...m })),
-					// The user explicitly built this list — it is curated.
+					// Starts empty; models are added from the Models tab ("＋ Add").
+					models: [],
 					curated: true,
 				};
 				plugin.settings.providers.push(provider);
@@ -2571,7 +2024,6 @@ function renderCustomCard(
 		baseUrl: "",
 		apiKey: "",
 		apiFormat: "openai",
-		models: [],
 	};
 
 	const bodyEl = card.createDiv({ cls: "semlink-add-card-body" });

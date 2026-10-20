@@ -1909,9 +1909,46 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     background: color-mix(in srgb, var(--color-orange) 15%, transparent);
 }
 
-/* Add-provider modal */
+/* Add-provider modal: fixed title bar on top, scrollable middle, and the
+   form's action bar pinned to the bottom edge — long forms scroll between
+   the two instead of pushing the buttons out of view. */
 .semlink-add-provider-modal {
+    display: flex;
+    flex-direction: column;
     width: min(600px, 92vw);
+    max-height: min(720px, 88vh);
+    overflow: hidden;
+}
+
+.semlink-add-provider-modal .modal-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 0;
+}
+
+.semlink-add-provider-modal .semlink-add-card,
+.semlink-add-provider-modal .semlink-add-card-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Bottom action bar (Cancel / Create): pinned via margin-top:auto when the
+   form is short, and position:sticky while the form scrolls. */
+.semlink-add-provider-modal .semlink-add-card-body > .setting-item {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: auto;
+    margin-bottom: 0;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    background: var(--background-primary);
+    border-top: 1px solid var(--background-modifier-border);
 }
 
 .semlink-add-provider-modal .semlink-add-card {
