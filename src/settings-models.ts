@@ -2626,6 +2626,8 @@ export function renderModelsTab(
 						rh.querySelectorAll(".is-droptarget-row").forEach((el) => el.removeClass("is-droptarget-row"));
 					});
 				}
+				const logo = row.createDiv({ cls: "semlink-mt-model-logo" });
+				appendProviderLogo(logo, sel.name, "semlink-mt-logo-svg");
 				const info = row.createDiv({ cls: "semlink-mt-model-info" });
 				const nameEl = info.createDiv({ cls: "semlink-mt-model-name" });
 				nameEl.createSpan({ cls: "semlink-mt-model-name-text", text: m.id });
@@ -2648,7 +2650,7 @@ export function renderModelsTab(
 					if (shift > 2) {
 						name.addClass("is-overflow");
 						name.style.setProperty("--marquee-shift", `${shift}px`);
-						name.style.setProperty("--marquee-dur", `${Math.min(12, Math.max(3, shift / 25))}s`);
+						name.style.setProperty("--marquee-dur", `${Math.min(8, Math.max(1.5, shift / 60))}s`);
 					}
 				});
 			});
