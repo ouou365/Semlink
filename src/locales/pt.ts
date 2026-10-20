@@ -350,6 +350,7 @@ const t: Record<keyof typeof en, string> = {
 	editorGetKey: "Obter chave",
 	mtAddModel: "Adicionar modelo",
 	mtModelEdit: "Editar",
+	mtIcon: "Ícone",
 	mtApiTypeOpenAI: "OpenAI Chat Completions API",
 	mtApiTypeAnthropic: "Anthropic Messages API",
 	mtEndpointHint: "O endpoint deve ser compatível com o formato de API {url}",

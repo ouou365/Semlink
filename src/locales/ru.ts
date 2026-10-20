@@ -349,6 +349,7 @@ const t: Record<keyof typeof en, string> = {
 	editorGetKey: "Получить ключ",
 	mtAddModel: "Добавить модель",
 	mtModelEdit: "Изменить",
+	mtIcon: "Иконка",
 	mtApiTypeOpenAI: "OpenAI Chat Completions API",
 	mtApiTypeAnthropic: "Anthropic Messages API",
 	mtEndpointHint: "Endpoint должен быть совместим с форматом API {url}",

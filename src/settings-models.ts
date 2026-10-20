@@ -2328,6 +2328,7 @@ function renderProviderEditor(
 
 interface ChatProviderDraft {
 	name: string;
+	icon: string;
 	baseUrl: string;
 	apiKey: string;
 	apiFormat: ChatApiFormat;
@@ -2352,6 +2353,20 @@ function renderDraftEditor(
 	errorEl.addClass("semlink-hidden");
 	let busy = false;
 	let modelHandle: ModelListHandle | null = null;
+
+	// ── 图标：从内置图标库中选一个（可不选，回退名称首字母） ──
+	slot.createDiv({ cls: "semlink-editor-field-label", text: t("mtIcon") });
+	const iconGrid = slot.createDiv({ cls: "semlink-icon-picker" });
+	for (const key of Object.keys(PROVIDER_LOGOS).sort()) {
+		const swatch = iconGrid.createDiv({ cls: "semlink-icon-swatch", attr: { title: key } });
+		setSvgIcon(swatch, PROVIDER_LOGOS[key]);
+		if (draft.icon === key) swatch.addClass("is-picked");
+		swatch.addEventListener("click", () => {
+			draft.icon = draft.icon === key ? "" : key;
+			iconGrid.querySelectorAll(".semlink-icon-swatch").forEach((el) => el.removeClass("is-picked"));
+			if (draft.icon) swatch.addClass("is-picked");
+		});
+	}
 
 	// ── 名称 ──
 	slot.createDiv({ cls: "semlink-editor-field-label", text: t("chatProviderName") });
@@ -2454,6 +2469,7 @@ function renderDraftEditor(
 				const provider: ModelProvider = {
 					id: `provider-${Date.now()}`,
 					name: draft.name.trim() || draft.baseUrl.trim(),
+					...(draft.icon ? { icon: draft.icon } : {}),
 					apiBase: draft.baseUrl.trim(),
 					apiKey: draft.apiKey,
 					apiFormat: draft.apiFormat,
@@ -2540,6 +2556,7 @@ function renderCustomCard(
 
 	const draft: ChatProviderDraft = {
 		name: "",
+		icon: "",
 		baseUrl: "",
 		apiKey: "",
 		apiFormat: "openai",
@@ -2848,7 +2865,7 @@ export function renderModelsTab(
 		attr: { "aria-label": t("addProvider") },
 	});
 	addBtn.addEventListener("click", () => {
-		new AddProviderModal(plugin.app, plugin, "catalog", () => refreshKeepInner()).open();
+		new AddProviderModal(plugin.app, plugin, "custom", () => refreshKeepInner()).open();
 	});
 
 	const list = left.createDiv({ cls: "semlink-mt-provider-list" });
@@ -2916,7 +2933,7 @@ export function renderModelsTab(
 		// 文件夹内的供应商不重复显示图标（文件夹行已带最热门成员的 logo）
 		if (!nested) {
 			const logo = row.createDiv({ cls: "semlink-mt-provider-logo" });
-			appendProviderLogo(logo, r.name, "semlink-mt-logo-svg");
+			appendProviderLogo(logo, r.live?.icon || r.name, "semlink-mt-logo-svg");
 		}
 		const info = row.createDiv({ cls: "semlink-mt-provider-info" });
 		info.createDiv({ cls: "semlink-mt-provider-name", text: r.name });
@@ -3217,7 +3234,7 @@ export function renderModelsTab(
 					});
 				}
 				const logo = row.createDiv({ cls: "semlink-mt-model-logo" });
-				appendProviderLogo(logo, sel.name, "semlink-mt-logo-svg");
+				appendProviderLogo(logo, sel.live?.icon || sel.name, "semlink-mt-logo-svg");
 				const info = row.createDiv({ cls: "semlink-mt-model-info" });
 				const nameEl = info.createDiv({ cls: "semlink-mt-model-name" });
 				nameEl.createSpan({ cls: "semlink-mt-model-name-text", text: m.id });

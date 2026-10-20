@@ -21,6 +21,8 @@ export interface ModelProvider {
 	apiBase: string;
 	/** API key. */
 	apiKey: string;
+	/** 自定义图标键（PROVIDER_LOGOS 的键）；未设置时按名称取内置图标。 */
+	icon?: string;
 	/** Wire format for chat requests / model-list fetch. */
 	apiFormat: ChatApiFormat;
 	/** Explicit chat path appended to apiBase, for endpoints whose real path

@@ -347,6 +347,7 @@ const en = {
 	editorGetKey: "Get Key",
 	mtAddModel: "Add",
 	mtModelEdit: "Edit",
+	mtIcon: "Icon",
 	mtApiTypeOpenAI: "OpenAI Chat Completions API",
 	mtApiTypeAnthropic: "Anthropic Messages API",
 	mtEndpointHint: "Endpoint must be compatible with {url} API format",
