@@ -44,7 +44,7 @@ export interface OnboardingViewHost {
 const PROVIDER_CONSOLE: Record<string, string> = {
 	"SiliconFlow": "https://cloud.siliconflow.cn/i/9BDh114N",
 	"DeepSeek": "https://platform.deepseek.com/api_keys",
-	"Moonshot AI CN": "https://platform.moonshot.cn/console/api-keys",
+	"Moonshot CN": "https://platform.moonshot.cn/console/api-keys",
 	"Z.AI CN": "https://open.bigmodel.cn/usercenter/apikeys",
 	"Kimi For Coding": "https://www.kimi.com/code",
 	"OpenAI": "https://platform.openai.com/api-keys",

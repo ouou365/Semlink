@@ -864,6 +864,19 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	},
 	{
 		name: "Moonshot",
+		baseUrl: "https://api.moonshot.ai",
+		keysUrl: "https://platform.moonshot.ai/console/api-keys",
+		apiFormat: "openai",
+		models: [
+			{ id: "kimi-k3", contextWindow: 1048576, priceIn: 3000.0, priceOut: 15000.0  },
+			{ id: "kimi-k2.7-code", contextWindow: 262144, priceIn: 950.0, priceOut: 4000.0  },
+			{ id: "kimi-k2.7-code-highspeed", contextWindow: 262144, priceIn: 1900.0, priceOut: 8000.0  },
+			{ id: "kimi-k2.6", contextWindow: 262144, priceIn: 950.0, priceOut: 4000.0  },
+
+		],
+	},
+	{
+		name: "Moonshot CN",
 		baseUrl: "https://api.moonshot.cn",
 		keysUrl: "https://platform.moonshot.cn/console/api-keys",
 		apiFormat: "openai",
@@ -873,6 +886,16 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 			{ id: "kimi-k2.7-code-highspeed", contextWindow: 262144, priceIn: 1900.0, priceOut: 8000.0  },
 			{ id: "kimi-k2.6", contextWindow: 262144, priceIn: 950.0, priceOut: 4000.0  },
 
+		],
+	},
+	{
+		name: "Kimi For Coding",
+		baseUrl: "https://api.kimi.com/coding/v1",
+		keysUrl: "https://www.kimi.com/code",
+		apiFormat: "openai",
+		models: [
+			{ id: "kimi-k2.7-code", contextWindow: 262144, priceIn: 950.0, priceOut: 4000.0  },
+			{ id: "kimi-k2.7-code-highspeed", contextWindow: 262144, priceIn: 1900.0, priceOut: 8000.0  },
 		],
 	},
 	{
@@ -2091,6 +2114,9 @@ const SERIES_FOLDER: Record<string, string> = {
 	"Z.AI CN": "Z.AI",
 	"Z.AI Coding": "Z.AI",
 	"Z.AI Coding CN": "Z.AI",
+	"Moonshot": "Moonshot",
+	"Moonshot CN": "Moonshot",
+	"Kimi For Coding": "Moonshot",
 	"Xiaomi": "Xiaomi",
 	"Xiaomi Token Plan AMS": "Xiaomi",
 	"Xiaomi Token Plan CN": "Xiaomi",
