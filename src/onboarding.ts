@@ -691,7 +691,9 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		const renderList = (): void => {
 			const models = provider.models.filter((m) => wanted(m))
 				// Alphabetical, natural-number aware (qwen2 < qwen10).
-				.sort((a, b) => a.id.localeCompare(b.id, undefined, { sensitivity: "base", numeric: true }));
+				.sort((a, b) => a.id.localeCompare(b.id, undefined, { sensitivity: "base", numeric: true }))
+				// 引导页只展示前 10 个，更多模型可搜索或点"获取模型"刷新
+				.slice(0, 10);
 			const scroll = cards.scrollTop;
 			cards.empty();
 			for (const model of models) {
