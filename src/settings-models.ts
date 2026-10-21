@@ -1915,15 +1915,32 @@ function renderDraftEditor(
 	const iconGrid = panelEl.createDiv({ cls: "semlink-icon-picker" });
 	const seenSvgs = new Set<string>();
 	const swatches = new Map<string, HTMLElement>();
-	// 排序按热门程度：ollama（缺省）置顶 → MARKET_RANK 的 15 家（OpenAI…
-	// Xiaomi）→ 其余品牌按名称殿后；别名组的代表键也随之取最热者
-	const logoRank = (key: string): number => {
-		if (key === "ollama") return 0;
-		const entry = CHAT_CATALOG.find(
-			(e) => e.name.toLowerCase().replace(/[^a-z0-9]/g, "") === key,
-		);
-		return (entry && MARKET_RANK[entry.name]) ?? Number.MAX_SAFE_INTEGER;
+	// 排序按海外用户知名度：缺省的 ollama 置顶 → 国际主流（OpenAI、
+	// Anthropic、Google、Meta、xAI、Mistral、Groq、OpenRouter、DeepSeek）
+	// → 国产厂商（Qwen、Moonshot、Z.AI、MiniMax、SiliconFlow、Xiaomi）
+	// → 其余品牌按名称殿后；别名组的代表键也随之取最知名者
+	const iconPopularity: Record<string, number> = {
+		ollama: 0,
+		openai: 1,
+		anthropic: 2,
+		google: 3,
+		meta: 4,
+		spacexai: 5,
+		mistral: 6,
+		groq: 7,
+		openrouter: 8,
+		deepseek: 9,
+		qwen: 10,
+		moonshot: 11,
+		zai: 12,
+		zaicn: 13,
+		minimax: 14,
+		siliconflow: 15,
+		xiaomi: 16,
+		kimiforcoding: 17,
 	};
+	const logoRank = (key: string): number =>
+		iconPopularity[key] ?? Number.MAX_SAFE_INTEGER;
 	const orderedKeys = Object.keys(PROVIDER_LOGOS).sort(
 		(a, b) => logoRank(a) - logoRank(b) || a.localeCompare(b),
 	);
