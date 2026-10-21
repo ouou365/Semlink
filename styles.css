@@ -2729,6 +2729,18 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     transition: border-color 0.12s ease, background 0.12s ease;
 }
 
+/* 系列二次确认弹窗里的纵向排列：一行一个成员 */
+.semlink-guide-provider-grid-vertical {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: stretch;
+}
+
+.semlink-guide-provider-grid-vertical .semlink-guide-provider-card {
+    width: 100%;
+    box-sizing: border-box;
+}
+
 .semlink-guide-provider-card:hover {
     border-color: var(--interactive-accent);
     background: var(--background-modifier-hover);

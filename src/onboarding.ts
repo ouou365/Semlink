@@ -351,7 +351,7 @@ class SeriesPickModal extends Modal {
 		const { contentEl } = this;
 		const configuredOf = (name: string): boolean =>
 			this.plugin.settings.providers.some((x) => x.name === name && !!x.apiKey.trim());
-		const grid = contentEl.createDiv({ cls: "semlink-guide-provider-grid" });
+		const grid = contentEl.createDiv({ cls: "semlink-guide-provider-grid semlink-guide-provider-grid-vertical" });
 		for (const member of this.members) {
 			const card = grid.createDiv({ cls: "semlink-guide-provider-card" });
 			if (configuredOf(member)) {
