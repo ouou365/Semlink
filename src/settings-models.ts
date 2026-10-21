@@ -1525,8 +1525,9 @@ function createProviderRow(listEl: HTMLElement, opts: RowOptions): HTMLElement {
 
 /** Modal hosting the full provider detail (name / base URL / protocol / key /
  *  model list). Reuses the same editor as the old inline expansion. */
-/** 手动添加模型的小弹窗：模型 ID + 上下文长度，保存后追加到供应商清单并自动启用。 */
-class AddModelModal extends Modal {
+/** 手动添加模型的小弹窗：模型 ID + 上下文长度，保存后追加到供应商清单并自动启用。
+ *  设置页模型右栏与引导第三步共用。 */
+export class AddModelModal extends Modal {
 	constructor(
 		app: App,
 		private opts: {

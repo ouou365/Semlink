@@ -13,7 +13,7 @@
 
 import { Modal, ToggleComponent, setIcon } from "obsidian";
 import { mountCoffeeCanvas, mountTicketDeck } from "./coffee-canvas";
-import { AddProviderModal, brandLogoOf, buildGuideProviderGroups, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, providerLogo, validateModelId, setSvgIcon } from "./settings-models";
+import { AddModelModal, AddProviderModal, brandLogoOf, buildGuideProviderGroups, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, providerLogo, setSvgIcon } from "./settings-models";
 import type { FetchedModel } from "./settings-models";
 import { t } from "./i18n";
 import type SmartVaultPlugin from "../main";
@@ -661,20 +661,25 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			text: "＋ " + t("mtAddModel"),
 		});
 		addBtn.addEventListener("click", () => {
-			new AddModelModal(plugin, provider, kindWanted, (id) => {
-				let model = provider.models.find((x) => x.id === id);
-				if (!model) {
-					model = {
-						id,
-						contextWindow: FALLBACK_CONTEXT,
-						kind: kindWanted,
-						enabled: true,
-					};
-					provider.models.push(model);
-				} else {
-					model.enabled = true;
-				}
-				renderList();
+			// 复用设置页的添加模型弹窗（Model ID + Context Window）
+			new AddModelModal(plugin.app, {
+				title: t("mtAddModel"),
+				onSubmit: (id, contextWindow) => {
+					let model = provider.models.find((x) => x.id === id);
+					if (!model) {
+						model = {
+							id,
+							contextWindow: contextWindow > 0 ? contextWindow : FALLBACK_CONTEXT,
+							kind: kindWanted,
+							enabled: true,
+						};
+						provider.models.push(model);
+					} else {
+						model.enabled = true;
+					}
+					void plugin.saveSettings();
+					renderList();
+				},
 			}).open();
 		});
 
@@ -802,68 +807,3 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 
 		redraw();
 	}
-
-/** "添加模型" dialog: enter a model ID, it is validated against the
- *  provider endpoint (chat or embedding probe) before being added and
- *  selected. */
-class AddModelModal extends Modal {
-	constructor(
-		plugin: SmartVaultPlugin,
-		private provider: ModelProvider,
-		private kind: "chat" | "embedding",
-		private onConfirm: (id: string) => void,
-	) {
-		super(plugin.app);
-	}
-
-	onOpen(): void {
-		const { contentEl } = this;
-		contentEl.createEl("h3", { text: t("addModelTitle") });
-		const input = contentEl.createEl("input", {
-			cls: "semlink-guide-keyinput semlink-guide-fullwidth",
-			type: "text",
-			placeholder: t("addModelPlaceholder"),
-		});
-		const error = contentEl.createDiv({ cls: "semlink-guide-error" });
-		const confirmBtn = contentEl.createEl("button", {
-			cls: "semlink-guide-save semlink-guide-primary semlink-guide-fullwidth semlink-guide-gap-top",
-			text: t("confirm"),
-		});
-
-		const confirm = async (): Promise<void> => {
-			const id = input.value.trim();
-			if (!id) {
-				error.setText(t("addModelPlaceholder"));
-				return;
-			}
-			confirmBtn.disabled = true;
-			confirmBtn.setText(t("guideValidating"));
-			try {
-				const ok = await validateModelId(this.provider.apiBase, this.provider.apiKey, this.provider.apiFormat, id, this.kind);
-				if (!ok) {
-					error.setText(t("addModelInvalid"));
-					return;
-				}
-				this.onConfirm(id);
-				this.close();
-			} catch (e) {
-				error.setText(t("guideFetchFailed").replace("{err}", e instanceof Error ? e.message : String(e)));
-			} finally {
-				confirmBtn.disabled = false;
-				confirmBtn.setText(t("confirm"));
-			}
-		};
-		confirmBtn.addEventListener("click", () => void confirm());
-		input.addEventListener("keydown", (evt) => {
-			if (evt.key === "Enter") {
-				evt.preventDefault();
-				void confirm();
-			}
-		});
-		window.setTimeout(() => input.focus());
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
-}
