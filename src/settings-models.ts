@@ -158,6 +158,18 @@ export interface CatalogEntry {
 	models: ChatModel[];
 }
 
+/** 目录条目的完整请求端点（区别于 Base URL——它是实际发请求的完整 URL）：
+ *  Base URL + wirePath，没有 wirePath 时按协议默认路径拼（openai →
+ *  "/v1/chat/completions"，anthropic → "/v1/messages"）；wirePath "/" 表示
+ *  Base URL 本身就是端点。与 chat-client 的 chatEndpoint 拼接规则一致。 */
+export function catalogEndpoint(entry: CatalogEntry): string {
+	const path = entry.wirePath?.trim();
+	const suffix = entry.apiFormat === "anthropic" ? "/v1/messages" : "/v1/chat/completions";
+	if (path === "/") return entry.baseUrl.replace(/\/+$/, "");
+	if (path) return `${entry.baseUrl}${path.startsWith("/") ? "" : "/"}${path}`;
+	return `${entry.baseUrl}${suffix}`;
+}
+
 /**
  * Built-in chat provider directory, statically embedded from the pi-ai
  * provider catalog (`@earendil-works/pi-ai` — the same catalog the
@@ -1947,8 +1959,8 @@ function renderDraftEditor(
 		draft.apiFormat = typeSel.value as ChatApiFormat;
 	});
 
-	// ── Endpoint URL*：整行输入 ──
-	slot.createDiv({ cls: "semlink-editor-field-label", text: t("chatBaseUrl") });
+	// ── Endpoint URL*：整行输入（标签用 Endpoint，与供应商文档口径一致） ──
+	slot.createDiv({ cls: "semlink-editor-field-label", text: t("editorEndpoint") });
 	const endpointInput = slot.createEl("input", {
 		cls: "semlink-editor-input",
 		attr: { type: "text", placeholder: "e.g., http://localhost:8080/v1/completions", spellcheck: "false" },
@@ -2052,11 +2064,11 @@ function renderProviderCatalogGrid(
 			card.createDiv({ cls: "semlink-add-provider-card-fallback", text: entry.name.charAt(0).toUpperCase() });
 		}
 		card.createDiv({ cls: "semlink-add-provider-card-name", text: entry.name });
-		// 右侧显示该供应商的 Endpoint，选之前能看清要连的是哪个端点
+		// 右侧显示完整请求端点（Base URL + 协议路径），选之前能看清要连的是哪个
 		card.createSpan({
 			cls: "semlink-add-provider-card-endpoint",
-			text: entry.baseUrl,
-			attr: { title: entry.baseUrl },
+			text: catalogEndpoint(entry),
+			attr: { title: catalogEndpoint(entry) },
 		});
 		card.addEventListener("click", () => void (async () => {
 			const provider: ModelProvider = {
