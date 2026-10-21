@@ -3084,6 +3084,38 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     border-color: var(--interactive-accent);
 }
 
+/* 引导第二步的高级选项折叠（同供应商配置弹窗的 Show/Hide advanced options） */
+.semlink-guide-adv-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 16px 0 12px;
+    color: var(--interactive-accent);
+    font-weight: 600;
+    font-size: 13.5px;
+    cursor: pointer;
+}
+
+.semlink-guide-adv-head:hover .semlink-guide-adv-label {
+    text-decoration: underline;
+}
+
+.semlink-guide-adv-chevron {
+    display: flex;
+    align-items: center;
+}
+
+.semlink-guide-adv-chevron .svg-icon {
+    width: 15px;
+    height: 15px;
+}
+
+.semlink-guide-adv-body {
+    border-left: 2px solid var(--background-modifier-border);
+    margin: 0 0 10px 3px;
+    padding-left: 16px;
+}
+
 .semlink-guide-keygroup .semlink-guide-keyinput {
     flex: 1 1 0;
     min-width: 0;

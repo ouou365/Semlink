@@ -11,7 +11,7 @@
 // state lives in `settings.onboarding`, so the guide survives re-renders
 // (time-slot refresh, language switch) and restarts.
 
-import { Modal } from "obsidian";
+import { Modal, setIcon } from "obsidian";
 import { mountCoffeeCanvas, mountTicketDeck } from "./coffee-canvas";
 import { AddProviderModal, brandLogoOf, buildGuideProviderGroups, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, providerLogo, validateModelId, setSvgIcon } from "./settings-models";
 import type { FetchedModel } from "./settings-models";
@@ -469,34 +469,6 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 				parent.createDiv({ cls: "semlink-guide-fieldlabel", text });
 			};
 
-			fieldLabel(form, t("chatProviderName"));
-			const nameInput = form.createEl("input", {
-				cls: "semlink-guide-keyinput",
-				type: "text",
-				value: provider.name,
-			});
-
-			fieldLabel(form, t("chatBaseUrl"));
-			const baseInput = form.createEl("input", {
-				cls: "semlink-guide-keyinput",
-				type: "text",
-				value: provider.apiBase,
-				placeholder: "https://…",
-			});
-
-			fieldLabel(form, t("chatApiFormat"));
-			// "bare" = POST to the base URL verbatim (stored as wirePath "/",
-			// which chatEndpoint understands); payload format is untouched.
-			const formatSelect = form.createEl("select", { cls: "semlink-guide-keyinput semlink-guide-select" });
-			for (const [value, label] of [
-				["anthropic", t("chatFormatAnthropic")],
-				["openai", t("chatFormatOpenAI")],
-				["bare", t("chatFormatBare")],
-			] as const) {
-				formatSelect.createEl("option", { value, text: label });
-			}
-			formatSelect.value = provider.wirePath === "/" ? "bare" : provider.apiFormat;
-
 			fieldLabel(form, t("apiKey"));
 			// SMS-code-style group: the "获取 Key" button sits inside the input's
 			// right edge and opens the provider console (hidden for custom hosts
@@ -523,6 +495,47 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 					link?.focus();
 				});
 			}
+
+			// ── 高级选项（默认收起，同供应商配置弹窗）：名称 / Endpoint / 协议 ──
+			const advHead = form.createDiv({ cls: "semlink-guide-adv-head" });
+			const chev = advHead.createSpan({ cls: "semlink-guide-adv-chevron" });
+			setIcon(chev, "chevron-right");
+			const advLabel = advHead.createSpan({ cls: "semlink-guide-adv-label", text: t("editorAdvancedShow") });
+			const advBody = form.createDiv({ cls: "semlink-guide-adv-body semlink-hidden" });
+			advHead.addEventListener("click", () => {
+				const open = !advBody.hasClass("semlink-hidden");
+				advBody.toggleClass("semlink-hidden", open);
+				setIcon(chev, open ? "chevron-right" : "chevron-down");
+				advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
+			});
+
+			fieldLabel(advBody, t("chatProviderName"));
+			const nameInput = advBody.createEl("input", {
+				cls: "semlink-guide-keyinput",
+				type: "text",
+				value: provider.name,
+			});
+
+			fieldLabel(advBody, t("editorEndpoint"));
+			const baseInput = advBody.createEl("input", {
+				cls: "semlink-guide-keyinput",
+				type: "text",
+				value: provider.apiBase,
+				placeholder: "https://…",
+			});
+
+			fieldLabel(advBody, t("chatApiFormat"));
+			// "bare" = POST to the base URL verbatim (stored as wirePath "/",
+			// which chatEndpoint understands); payload format is untouched.
+			const formatSelect = advBody.createEl("select", { cls: "semlink-guide-keyinput semlink-guide-select" });
+			for (const [value, label] of [
+				["anthropic", t("chatFormatAnthropic")],
+				["openai", t("chatFormatOpenAI")],
+				["bare", t("chatFormatBare")],
+			] as const) {
+				formatSelect.createEl("option", { value, text: label });
+			}
+			formatSelect.value = provider.wirePath === "/" ? "bare" : provider.apiFormat;
 
 			// Wizard footer: 上一步 (back to the provider list) | 下一步 (validate).
 			const footer = body.createDiv({ cls: "semlink-guide-footer" });
