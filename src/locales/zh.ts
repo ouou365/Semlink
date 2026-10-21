@@ -424,6 +424,7 @@ const zh: Record<keyof typeof en, string> = {
 	guideKeyPlaceholder: "粘贴 API Key（sk-…）",
 	guideGetKey: "获取 Key",
 	guidePrev: "上一步",
+	guidePickOneModel: "请至少选择一个模型",
 	guideReselect: "重新选择供应商",
 	guideNext: "下一步",
 	guideMoreProviders: "更多供应商…",

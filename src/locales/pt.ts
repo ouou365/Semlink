@@ -425,6 +425,7 @@ const t: Record<keyof typeof en, string> = {
 	guideKeyPlaceholder: "Cole a API key (sk-…)",
 	guideGetKey: "Obter chave",
 	guidePrev: "Voltar",
+	guidePickOneModel: "Selecione pelo menos um modelo",
 	guideReselect: "Escolher outro provedor",
 	guideNext: "Avançar",
 	guideMoreProviders: "Mais",

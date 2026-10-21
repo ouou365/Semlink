@@ -423,6 +423,7 @@ const t: Record<keyof typeof en, string> = {
 	guideKeyPlaceholder: "API key 붙여넣기 (sk-…)",
 	guideGetKey: "키 발급받기",
 	guidePrev: "이전",
+	guidePickOneModel: "모델을 하나 이상 선택하세요",
 	guideReselect: "다른 제공자 선택",
 	guideNext: "다음",
 	guideMoreProviders: "더보기",

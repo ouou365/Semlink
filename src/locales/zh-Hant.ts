@@ -423,6 +423,7 @@ const t: Record<keyof typeof en, string> = {
 	guideKeyPlaceholder: "貼上 API Key（sk-…）",
 	guideGetKey: "取得 Key",
 	guidePrev: "上一步",
+	guidePickOneModel: "請至少選擇一個模型",
 	guideReselect: "重新選擇供應商",
 	guideNext: "下一步",
 	guideMoreProviders: "更多供應商…",

@@ -423,6 +423,7 @@ const t: Record<keyof typeof en, string> = {
 	guideKeyPlaceholder: "APIキーを貼り付け (sk-…)",
 	guideGetKey: "キーを取得",
 	guidePrev: "戻る",
+	guidePickOneModel: "モデルを1つ以上選択してください",
 	guideReselect: "別のプロバイダーを選ぶ",
 	guideNext: "次へ",
 	guideMoreProviders: "その他",

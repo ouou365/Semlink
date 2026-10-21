@@ -422,6 +422,7 @@ const en = {
 	guideKeyPlaceholder: "Paste API key (sk-…)",
 	guideGetKey: "Get key",
 	guidePrev: "Back",
+	guidePickOneModel: "Select at least one model",
 	guideReselect: "Choose a different provider",
 	guideNext: "Next",
 	guideMoreProviders: "More",

@@ -11,9 +11,9 @@
 // state lives in `settings.onboarding`, so the guide survives re-renders
 // (time-slot refresh, language switch) and restarts.
 
-import { Modal, setIcon } from "obsidian";
+import { Modal, ToggleComponent, setIcon } from "obsidian";
 import { mountCoffeeCanvas, mountTicketDeck } from "./coffee-canvas";
-import { AddProviderModal, brandLogoOf, buildGuideProviderGroups, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, providerLogo, validateModelId, setSvgIcon } from "./settings-models";
+import { AddProviderModal, brandLogoOf, buildGuideProviderGroups, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, providerLogo, validateModelId, setSvgIcon } from "./settings-models";
 import type { FetchedModel } from "./settings-models";
 import { t } from "./i18n";
 import type SmartVaultPlugin from "../main";
@@ -630,19 +630,16 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		}
 
 		// Sub-state C: pick the model from the validated provider — models
-		// stream in step by step as classification advances; selection
-		// highlights the card, 下一步 confirms and advances. The whole block
-		// (stepper + search + list) pins to the top of the panel.
+		// stream in step by step as classification advances; rows carry a
+		// toggle (settings style), Confirm submits the enabled set. The whole
+		// block (stepper + search + list) pins to the top of the panel.
 		// Curated lists (edited in settings) render as-is — nothing streams in.
 		let streaming = !provider.curated;
 		let filter = "";
-
-		const wanted = (m: ChatModel): boolean => {
-			const kind = m.kind ?? "chat";
-			if (m.enabled !== true || (isChat ? kind !== "chat" : kind !== "embedding")) return false;
-			if (filter && !m.id.toLowerCase().includes(filter)) return false;
-			return true;
-		};
+		const kindWanted = isChat ? "chat" : "embedding";
+		const inScope = (m: ChatModel): boolean =>
+			(m.kind ?? "chat") === kindWanted
+			&& (!filter || m.id.toLowerCase().includes(filter));
 
 		// The classification progress doubles as the search input's
 		// placeholder while models stream in.
@@ -656,59 +653,88 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			filter = searchInput.value.trim().toLowerCase();
 			renderList();
 		});
+
+		// 计数 + 添加模型行（同设置页右栏："N models" 左，"+ Add" 右）
+		const countRow = modelsHost.createDiv({ cls: "semlink-guide-model-count" });
+		const countText = countRow.createSpan({ cls: "semlink-guide-model-count-text" });
+		const addBtn = countRow.createEl("button", {
+			cls: "semlink-guide-model-add",
+			text: "＋ " + t("mtAddModel"),
+		});
+		addBtn.addEventListener("click", () => {
+			new AddModelModal(plugin, provider, kindWanted, (id) => {
+				let model = provider.models.find((x) => x.id === id);
+				if (!model) {
+					model = {
+						id,
+						contextWindow: FALLBACK_CONTEXT,
+						kind: kindWanted,
+						enabled: true,
+					};
+					provider.models.push(model);
+				} else {
+					model.enabled = true;
+				}
+				renderList();
+			}).open();
+		});
+
 		const error = modelsHost.createDiv({ cls: "semlink-guide-error" });
 		if (fetchHint) error.setText(fetchHint);
 		const cards = modelsHost.createDiv({ cls: "semlink-guide-models-cards" });
-		// Fixed action row BELOW the scrollable list — always visible,
-		// created once (renderList only rebuilds the model cards above).
-		const actions = modelsHost.createDiv({ cls: "semlink-guide-model-actions" });
-		// Back：返回第二步的 Key 配置（表单会带上已填的 Key）
-		card(actions, { icon: "←", text: t("guidePrev"), onClick: () => opts.onBackToKey() });
-		card(actions, {
-			icon: "＋",
-			text: t("customModel"),
-			onClick: () => {
-				new AddModelModal(plugin, provider, isChat ? "chat" : "embedding", (id) => {
-					let model = provider.models.find((x) => x.id === id);
-					if (!model) {
-						model = {
-							id,
-							contextWindow: FALLBACK_CONTEXT,
-							kind: isChat ? "chat" : "embedding",
-							enabled: true,
-						};
-						provider.models.push(model);
-					} else {
-						model.enabled = true;
-					}
-					opts.onModelPicked(provider, [model]);
-				}).open();
-			},
+
+		// 底部操作栏（同第二步样式）：左返回、右确认
+		const footer = body.createDiv({ cls: "semlink-guide-footer" });
+		const backBtn = footer.createEl("button", {
+			cls: "semlink-guide-save semlink-guide-secondary",
+			text: t("guidePrev"),
+		});
+		backBtn.addEventListener("click", () => opts.onBackToKey());
+		const confirmBtn = footer.createEl("button", {
+			cls: "semlink-guide-save semlink-guide-primary",
+			text: t("confirm"),
+		});
+		confirmBtn.addEventListener("click", () => {
+			const picked = provider.models
+				.filter((m) => (m.kind ?? "chat") === kindWanted && m.enabled === true)
+				.sort((a, b) => a.id.localeCompare(b.id, undefined, { sensitivity: "base", numeric: true }));
+			if (picked.length === 0) {
+				error.setText(t("guidePickOneModel"));
+				return;
+			}
+			opts.onModelPicked(provider, picked);
 		});
 
-		// Sub-state C: models stream in step by step as classification
-		// advances; clicking a card picks it and immediately advances to the
-		// next step. 添加模型 opens a dialog for manual model-ID entry.
+		// 模型行：logo + 模型 ID/上下文 + 开关（同设置页右栏样式）；点击行
+		// 即切换开关。只展示前 10 个，更多模型可搜索。
 		const renderList = (): void => {
-			const models = provider.models.filter((m) => wanted(m))
+			const models = provider.models.filter((m) => inScope(m))
 				// Alphabetical, natural-number aware (qwen2 < qwen10).
 				.sort((a, b) => a.id.localeCompare(b.id, undefined, { sensitivity: "base", numeric: true }))
-				// 引导页只展示前 10 个，更多模型可搜索或点"获取模型"刷新
 				.slice(0, 10);
+			countText.setText(t("mtShowing").replace("{total}", String(models.length)));
 			const scroll = cards.scrollTop;
 			cards.empty();
 			for (const model of models) {
-				// Recommended pick: the free, high-quality BGE-M3 embedding.
-				const recommended = !isChat && /bge-m3/i.test(model.id);
-				const el = card(cards, {
-					logo: modelBrand(model.id),
-					icon: isChat ? "✦" : "◈",
-					text: model.id,
-					star: recommended,
-					onClick: () => opts.onModelPicked(provider, [model]),
+				const row = cards.createDiv({ cls: "semlink-guide-model-row" });
+				const logoEl = row.createSpan({ cls: "semlink-guide-card-logo" });
+				const brandSvg = modelBrand(model.id);
+				if (brandSvg) setSvgIcon(logoEl, brandSvg);
+				const main = row.createSpan({ cls: "semlink-guide-model-main" });
+				main.createSpan({ cls: "semlink-guide-model-id", text: model.id });
+				if (model.contextWindow > 0) {
+					main.createSpan({ cls: "semlink-guide-model-ctx", text: formatContextWindow(model.contextWindow) });
+				}
+				const toggleWrap = row.createSpan({ cls: "semlink-guide-model-toggle" });
+				new ToggleComponent(toggleWrap).setValue(model.enabled === true)
+					.onChange((v) => {
+						model.enabled = v;
+					});
+				row.addEventListener("click", (e) => {
+					if ((e.target as HTMLElement).closest(".semlink-guide-model-toggle")) return;
+					model.enabled = model.enabled !== true;
+					renderList();
 				});
-				el.addClass("semlink-guide-model-card");
-				el.dataset.modelId = model.id;
 			}
 			if (models.length === 0 && !streaming) {
 				cards.createDiv({
@@ -743,7 +769,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 				kind,
 				enabled,
 			});
-			return wanted(provider.models[provider.models.length - 1]);
+			return inScope(provider.models[provider.models.length - 1]);
 		};
 
 		const stream = async (): Promise<void> => {

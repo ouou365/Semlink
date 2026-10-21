@@ -2818,31 +2818,89 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     height: 100%;
 }
 
-/* Fetch card in loading state: spin the arrow icon. */
-.semlink-guide-model-actions .semlink-guide-card.is-loading .semlink-search-welcome-sug-icon {
-    display: inline-block;
-    animation: semlink-guide-spin 0.9s linear infinite;
-}
-
-@keyframes semlink-guide-spin {
-    to { transform: rotate(360deg); }
-}
-.semlink-guide-model-actions {
+/* 引导第三步：计数 + 添加模型行（同设置页右栏 showing 行） */
+.semlink-guide-model-count {
     display: flex;
-    gap: 8px;
-    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 6px 0 8px;
 }
 
-.semlink-guide-model-actions .semlink-guide-card {
-    flex: 1 1 0;
+.semlink-guide-model-count-text {
+    color: var(--text-muted);
+    font-size: 13px;
 }
+
+.semlink-guide-model-add {
+    flex-shrink: 0;
+    padding: 5px 14px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    background: var(--background-primary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.semlink-guide-model-add:hover {
+    border-color: var(--interactive-accent);
+}
+
+/* 引导第三步：模型行（同设置页右栏模型行：logo + ID/上下文 + 开关） */
+.semlink-guide-model-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.semlink-guide-model-row:hover {
+    background: var(--background-modifier-hover);
+}
+
+.semlink-guide-model-row .semlink-guide-card-logo {
+    width: 22px;
+    height: 22px;
+}
+
+.semlink-guide-model-row .semlink-guide-card-logo svg {
+    width: 22px;
+    height: 22px;
+}
+
+.semlink-guide-model-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.semlink-guide-model-id {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.semlink-guide-model-ctx {
+    font-size: 12px;
+    color: var(--text-faint);
+}
+
+.semlink-guide-model-toggle {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
 .semlink-guide-models-cards::-webkit-scrollbar {
     display: none;
-}
-
-.semlink-guide-model-card .semlink-search-welcome-sug-text {
-    -webkit-line-clamp: 1;
-    font-size: 12px;
 }
 
 /* Live index stats panel on the guide's final step: provider→model recipe
