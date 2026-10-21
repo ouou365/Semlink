@@ -2382,13 +2382,17 @@ export function renderModelsTab(
 		const bottom = scroller.getBoundingClientRect().bottom - padBottom;
 		const top = wrap.getBoundingClientRect().top + scroller.scrollTop;
 		const h = Math.round(bottom - top);
-		if (h > 0) wrap.style.height = `${h}px`;
+		// 高度没变化就不写行内样式：一次冗余写入会再次触发观察回调，
+		// 浏览器报 "ResizeObserver loop completed with undelivered notifications"
+		if (h > 0 && wrap.style.height !== `${h}px`) wrap.style.height = `${h}px`;
 	};
 	fitPaneHeight();
 	st.paneObservers?.forEach((o) => o.disconnect());
 	st.paneObservers = [];
 	if (typeof ResizeObserver !== "undefined") {
-		const ro = new ResizeObserver(() => fitPaneHeight());
+		// 回调推迟到下一帧执行：回调内写高度会改变被观察元素在同一帧内的
+		// 尺寸，同步处理会构成 observer loop —— rAF 打断这个环。
+		const ro = new ResizeObserver(() => window.requestAnimationFrame(() => fitPaneHeight()));
 		const scroller = wrap.closest(
 			".vertical-tab-content, .vertical-tab-content-container, .modal-content",
 		);
