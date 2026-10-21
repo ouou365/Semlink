@@ -348,6 +348,52 @@ function ensureCatalogProvider(plugin: SmartVaultPlugin, name: string): ModelPro
 	return provider;
 }
 
+/** 系列合并卡的二次确认窗口：标题为系列名，列出该系列的成员供应商
+ *  （同网格卡片样式、带配置绿点），点选其中一个才真正创建/进入。 */
+class SeriesPickModal extends Modal {
+	constructor(
+		private plugin: SmartVaultPlugin,
+		private seriesName: string,
+		private members: string[],
+		private onPick: (name: string) => void,
+	) {
+		super(plugin.app);
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(this.seriesName);
+		const { contentEl } = this;
+		const configuredOf = (name: string): boolean =>
+			this.plugin.settings.providers.some((x) => x.name === name && !!x.apiKey.trim());
+		const grid = contentEl.createDiv({ cls: "semlink-guide-provider-grid" });
+		for (const member of this.members) {
+			const card = grid.createDiv({ cls: "semlink-guide-provider-card" });
+			if (configuredOf(member)) {
+				card.createSpan({
+					cls: "semlink-guide-provider-card-dot",
+					attr: { title: t("credentialConfigured") },
+				});
+			}
+			const logo = brandLogoOf(member).svg;
+			if (logo) {
+				const logoEl = card.createDiv({ cls: "semlink-guide-provider-logo" });
+				setSvgIcon(logoEl, logo);
+			} else {
+				card.createDiv({ cls: "semlink-guide-provider-fallback", text: member.charAt(0).toUpperCase() });
+			}
+			card.createDiv({ cls: "semlink-guide-provider-name", text: member });
+			card.addEventListener("click", () => {
+				this.close();
+				this.onPick(member);
+			});
+		}
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 // ──── Steps 1 & 2: provider → validate key → pick a model ────
 
 interface ModelStepOptions {
@@ -412,8 +458,16 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 				}
 				providerCard.createDiv({ cls: "semlink-guide-provider-name", text: item.name });
 				providerCard.addEventListener("click", () => {
-					const p = ensureCatalogProvider(plugin, pickName);
-					if (p) opts.onPickProvider(p);
+					const pick = (name: string): void => {
+						const p = ensureCatalogProvider(plugin, name);
+						if (p) opts.onPickProvider(p);
+					};
+					// 系列合并卡：二次确认窗口里选择具体变体；单供应商直接选
+					if (item.members) {
+						new SeriesPickModal(plugin, item.name, item.members, pick).open();
+					} else {
+						pick(item.name);
+					}
 				});
 			}
 			return;
