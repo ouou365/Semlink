@@ -13,7 +13,7 @@
 
 import { Modal, ToggleComponent, setIcon } from "obsidian";
 import { mountCoffeeCanvas, mountTicketDeck } from "./coffee-canvas";
-import { AddModelModal, AddProviderModal, brandLogoOf, buildGuideProviderGroups, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, providerLogo, setSvgIcon } from "./settings-models";
+import { AddModelModal, brandLogoOf, buildGuideProviderGroups, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, providerLogo, setSvgIcon } from "./settings-models";
 import type { FetchedModel } from "./settings-models";
 import { t } from "./i18n";
 import type SmartVaultPlugin from "../main";
@@ -297,37 +297,6 @@ function renderStepper(
 
 // ──── Shared fragments ────
 
-/** A clickable sug-style card; `logo` may be undefined → fallback initial.
- *  `meta` renders as a right-aligned trailing label (e.g. context size).
- *  `dot` is the settings-list credential dot (green configured / red missing). */
-function card(parent: HTMLElement, opts: { logo?: string; icon?: string; text: string; meta?: string; dot?: "configured" | "missing"; star?: boolean; onClick: () => void }): HTMLElement {
-	const el = parent.createDiv({ cls: "semlink-search-welcome-sug semlink-guide-card" });
-	if (opts.logo) {
-		const logoEl = el.createSpan({ cls: "semlink-guide-card-logo" });
-		setSvgIcon(logoEl, opts.logo);
-	} else {
-		el.createSpan({ cls: "semlink-search-welcome-sug-icon", text: opts.icon ?? "›" });
-	}
-	el.createSpan({ cls: "semlink-search-welcome-sug-text", text: opts.text });
-	if (opts.meta) {
-		el.createSpan({ cls: "semlink-guide-card-meta", text: opts.meta });
-	}
-	if (opts.dot) {
-		el.createSpan({
-			cls: `semlink-provider-dot ${opts.dot === "configured" ? "is-configured" : "is-missing"}`,
-			attr: {
-				title: opts.dot === "configured" ? t("credentialConfigured") : t("credentialMissing"),
-				"aria-label": opts.dot === "configured" ? t("credentialConfigured") : t("credentialMissing"),
-			},
-		});
-	}
-	if (opts.star) {
-		el.createSpan({ cls: "semlink-guide-card-star", text: "⭐" });
-	}
-	el.addEventListener("click", opts.onClick);
-	return el;
-}
-
 /** Step hero above the stepper — same visual language as the plain welcome:
  *  floating emoji badge, bold greeting, muted sub line (reuses the
  *  semlink-search-welcome-* classes). */
@@ -402,72 +371,39 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		// every redraw so the old model list never lingers above the form.
 		modelsHost.empty();
 
-		// Sub-state A: pick a provider — 分组与排序同设置页（系列文件夹 +
-		// 已配置 Key 置顶 + 市场排名），文件夹点击展开成员。
+		// Sub-state A: pick a provider — "Select a provider" 目录弹窗同款卡片
+		// 网格：全部目录条目（已配置 Key 置顶 → 市场排名），不再有 More /
+		// Custom 入口，也不再做系列文件夹折叠。
 		if (!provider) {
-			const list = body.createDiv({ cls: "semlink-guide-options" });
-			let expanded: string | null = null;
-			const redrawList = (): void => {
-				list.empty();
-				// 只展示排序后的前 10 个（其余走"更多供应商"）
-				for (const item of buildGuideProviderGroups(plugin).slice(0, 10)) {
-					const pick = (name: string): void => {
-						const p = ensureCatalogProvider(plugin, name);
-						if (p) opts.onPickProvider(p);
-					};
-					if (item.members) {
-						const isOpen = expanded === item.name;
-						card(list, {
-							logo: brandLogoOf(item.members[0]).svg,
-							text: item.name,
-							meta: `${item.members.length} ${isOpen ? "▴" : "▾"}`,
-							dot: item.configured ? "configured" : undefined,
-							onClick: () => {
-								expanded = isOpen ? null : item.name;
-								redrawList();
-							},
-						});
-						if (isOpen) {
-							for (const member of item.members) {
-								const configured = plugin.settings.providers.some(
-									(x) => x.name === member && !!x.apiKey.trim(),
-								);
-								const memberCard = card(list, {
-									logo: brandLogoOf(member).svg,
-									text: member,
-									dot: configured ? "configured" : undefined,
-									onClick: () => pick(member),
-								});
-								memberCard.addClass("semlink-guide-card-member");
-							}
-						}
-					} else {
-						card(list, {
-							logo: brandLogoOf(item.name).svg,
-							text: item.name,
-							dot: item.configured ? "configured" : undefined,
-							onClick: () => pick(item.name),
-						});
-					}
+			const grid = body.createDiv({ cls: "semlink-guide-provider-grid" });
+			const configuredOf = (name: string): boolean =>
+				plugin.settings.providers.some((x) => x.name === name && !!x.apiKey.trim());
+			const ordered = buildGuideProviderGroups(plugin).flatMap((g) => g.members ?? [g.name]);
+			for (const name of ordered) {
+				const providerCard = grid.createDiv({ cls: "semlink-guide-provider-card" });
+				if (configuredOf(name)) {
+					providerCard.createSpan({
+						cls: "semlink-guide-provider-card-dot",
+						attr: { title: t("credentialConfigured") },
+					});
 				}
-			};
-			redrawList();
-			const more = body.createDiv({ cls: "semlink-guide-options semlink-guide-options-row" });
-			card(more, {
-				icon: "⊞",
-				text: t("guideMoreProviders"),
-				onClick: () => {
-					new AddProviderModal(plugin.app, plugin, "catalog", (p) => opts.onPickProvider(p)).open();
-				},
-			});
-			card(more, {
-				icon: "＋",
-				text: t("customProvider"),
-				onClick: () => {
-					new AddProviderModal(plugin.app, plugin, "custom", (p) => opts.onPickProvider(p)).open();
-				},
-			});
-				return;
+				const logo = brandLogoOf(name).svg;
+				if (logo) {
+					const logoEl = providerCard.createDiv({ cls: "semlink-guide-provider-logo" });
+					setSvgIcon(logoEl, logo);
+				} else {
+					providerCard.createDiv({
+						cls: "semlink-guide-provider-fallback",
+						text: name.charAt(0).toUpperCase(),
+					});
+				}
+				providerCard.createDiv({ cls: "semlink-guide-provider-name", text: name });
+				providerCard.addEventListener("click", () => {
+					const p = ensureCatalogProvider(plugin, name);
+					if (p) opts.onPickProvider(p);
+				});
+			}
+			return;
 		}
 
 		// Sub-state B: confirm details + key; 下一步 validates the key by
