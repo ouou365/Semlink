@@ -778,6 +778,19 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 	},
 	{
 		name: "Qwen",
+		baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode",
+		keysUrl: "https://bailian.console.alibabacloud.com/?apiKey=#!/api-key",
+		apiFormat: "openai",
+		models: [
+			{ id: "qwen3-max", contextWindow: 262144 },
+			{ id: "qwen3-coder-plus", contextWindow: 1048576 },
+			{ id: "qwen-plus", contextWindow: 131072 },
+			{ id: "qwen-turbo", contextWindow: 1048576 },
+			{ id: "qwen3-vl-plus", contextWindow: 131072 },
+		],
+	},
+	{
+		name: "Qwen CN",
 		baseUrl: "https://dashscope.aliyuncs.com/compatible-mode",
 		keysUrl: "https://bailian.console.aliyun.com/?apiKey=#!/api-key",
 		apiFormat: "openai",
@@ -787,6 +800,16 @@ export const CHAT_CATALOG: CatalogEntry[] = [
 			{ id: "qwen-plus", contextWindow: 131072 },
 			{ id: "qwen-turbo", contextWindow: 1048576 },
 			{ id: "qwen3-vl-plus", contextWindow: 131072 },
+		],
+	},
+	{
+		name: "Qwen Token Plan",
+		baseUrl: "https://portal.qwen.ai/v1",
+		keysUrl: "https://chat.qwen.ai",
+		apiFormat: "openai",
+		models: [
+			{ id: "qwen3-coder-plus", contextWindow: 1048576 },
+			{ id: "qwen3-max", contextWindow: 262144 },
 		],
 	},
 	{
@@ -2136,6 +2159,9 @@ const SERIES_FOLDER: Record<string, string> = {
 	"Moonshot": "Moonshot",
 	"Moonshot CN": "Moonshot",
 	"Kimi For Coding": "Moonshot",
+	"Qwen": "Qwen",
+	"Qwen CN": "Qwen",
+	"Qwen Token Plan": "Qwen",
 	"Xiaomi": "Xiaomi",
 	"Xiaomi Token Plan AMS": "Xiaomi",
 	"Xiaomi Token Plan CN": "Xiaomi",
