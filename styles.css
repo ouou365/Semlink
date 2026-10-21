@@ -3225,33 +3225,6 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     text-align: left;
 }
 
-/* 引导第二步顶部的供应商标识区：logo + 名称（居中，明确正在配置哪家） */
-.semlink-guide-provider-head {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    margin: 2px 0 8px;
-}
-
-.semlink-guide-provider-head-logo {
-    display: flex;
-    align-items: center;
-    color: var(--text-normal);
-}
-
-.semlink-guide-provider-head-logo svg {
-    height: 24px;
-    width: auto;
-    max-width: 90px;
-}
-
-.semlink-guide-provider-head-name {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--text-normal);
-}
-
 .semlink-guide-fieldlabel {
     font-size: 11px;
     color: var(--text-faint);
@@ -3313,6 +3286,22 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 
 .semlink-guide-keygroup:focus-within {
     border-color: var(--interactive-accent);
+}
+
+/* Key 输入框内嵌的供应商 logo：低调标识，占输入框左缘 */
+.semlink-guide-keylogo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    margin-left: 10px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.semlink-guide-keylogo svg {
+    width: 18px;
+    height: 18px;
 }
 
 /* 引导第二步的高级选项折叠（同供应商配置弹窗的 Show/Hide advanced options） */

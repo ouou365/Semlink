@@ -491,20 +491,6 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		// Sub-state B: confirm details + key; 下一步 validates the key by
 		// fetching the model list, then advances to the picker.
 		if (!opts.ready) {
-			// 供应商标识区：logo + 名称，明确正在配置哪家
-			const providerHead = body.createDiv({ cls: "semlink-guide-provider-head" });
-			const headLogo = brandLogoOf(provider.name).svg;
-			if (headLogo) {
-				const headLogoEl = providerHead.createSpan({ cls: "semlink-guide-provider-head-logo" });
-				setSvgIcon(headLogoEl, headLogo);
-			} else {
-				providerHead.createDiv({
-					cls: "semlink-guide-provider-fallback",
-					text: provider.name.charAt(0).toUpperCase(),
-				});
-			}
-			providerHead.createSpan({ cls: "semlink-guide-provider-head-name", text: provider.name });
-
 			const form = body.createDiv({ cls: "semlink-guide-form" });
 			const fieldLabel = (parent: HTMLElement, text: string): void => {
 				parent.createDiv({ cls: "semlink-guide-fieldlabel", text: text });
@@ -521,6 +507,12 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			const consoleUrl = CHAT_CATALOG.find((e) => e.name === provider.name)?.keysUrl
 				?? PROVIDER_CONSOLE[provider.name];
 			const keyGroup = form.createDiv({ cls: "semlink-guide-keygroup" });
+			// Key 输入框内嵌供应商 logo：低调标识正在配置哪家，不做独立标题区
+			const keyBrand = brandLogoOf(provider.name).svg;
+			if (keyBrand) {
+				const keyLogo = keyGroup.createSpan({ cls: "semlink-guide-keylogo" });
+				setSvgIcon(keyLogo, keyBrand);
+			}
 			const keyInput = keyGroup.createEl("input", {
 				cls: "semlink-guide-keyinput",
 				type: "password",
