@@ -243,6 +243,12 @@ export function renderOnboarding(
 				void plugin.saveSettings();
 				onFinish();
 			},
+			onBackToKey: () => {
+				// 回到 Key 配置：保留供应商，仅清除已校验标记（第二步会预填 Key）
+				plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), chatReady: false };
+				void plugin.saveSettings();
+				rerender();
+			},
 			onReselect: () => {
 				const p = byId(ob().providerId);
 				if (p && !p.apiKey.trim()) {
@@ -372,6 +378,8 @@ interface ModelStepOptions {
 	onPickProvider: (provider: ModelProvider) => void;
 	onValidated: () => void;
 	onModelPicked: (provider: ModelProvider, models: ChatModel[]) => void;
+	/** 模型步骤的"返回"：回到第二步的 Key 配置（保留供应商，仅清除已校验标记）。 */
+	onBackToKey: () => void;
 	onReselect: () => void;
 	onRestart: () => void;
 }
@@ -628,8 +636,6 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		// Curated lists (edited in settings) render as-is — nothing streams in.
 		let streaming = !provider.curated;
 		let filter = "";
-		let fetchDone = 0;
-		let fetchTotal = 0;
 
 		const wanted = (m: ChatModel): boolean => {
 			const kind = m.kind ?? "chat";
@@ -656,17 +662,8 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		// Fixed action row BELOW the scrollable list — always visible,
 		// created once (renderList only rebuilds the model cards above).
 		const actions = modelsHost.createDiv({ cls: "semlink-guide-model-actions" });
-		const fetchCard = card(actions, { icon: "⇣", text: t("guideFetchModels"), onClick: () => {} });
-		const fetchTextEl = (fetchCard.querySelector(".semlink-search-welcome-sug-text") as HTMLElement) ?? fetchCard;
-		fetchCard.addEventListener("click", () => {
-			if (streaming) return;
-			streaming = true;
-			fetchDone = 0;
-			fetchTotal = 0;
-			fetchCard.addClass("is-loading");
-			error.setText("");
-			void stream();
-		});
+		// Back：返回第二步的 Key 配置（表单会带上已填的 Key）
+		card(actions, { icon: "←", text: t("guidePrev"), onClick: () => opts.onBackToKey() });
 		card(actions, {
 			icon: "＋",
 			text: t("customModel"),
@@ -753,13 +750,11 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			try {
 				await fetchAvailableModels(plugin, provider.apiBase, provider.apiKey, provider.apiFormat,
 					(done, total, model) => {
-						fetchDone = done;
-						fetchTotal = total;
+						// 拉取进度走提示行（原 Fetch models 按钮已改为 Back）
 						if (model && upsert(model)) renderList();
-						else fetchTextEl.setText(`${t("guideFetchModels")} ${fetchDone}/${fetchTotal}`);
+						else error.setText(`${t("guideFetchModels")} ${done}/${total}`);
 					});
 					streaming = false;
-					fetchCard.removeClass("is-loading");
 					// The list now mirrors the endpoint — mark it curated so later
 					// guide runs don't refetch (which would resurrect models the
 					// user removed in settings in the meantime).
@@ -768,7 +763,6 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 					renderList();
 				} catch (e) {
 					streaming = false;
-					fetchCard.removeClass("is-loading");
 					renderList();
 					error.setText(t("guideFetchFailed").replace("{err}", e instanceof Error ? e.message : String(e)));
 				}
