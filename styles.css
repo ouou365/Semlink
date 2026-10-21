@@ -2748,9 +2748,9 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     align-content: stretch;
 }
 
-/* 系列二次确认弹窗：加宽，让 Endpoint 尽量完整显示 */
+/* 系列二次确认弹窗：适度加宽，Endpoint 基本完整显示 */
 .semlink-guide-series-modal {
-    width: min(720px, 92vw);
+    width: min(580px, 92vw);
 }
 
 /* 引导第一步底部的联系链接 */
