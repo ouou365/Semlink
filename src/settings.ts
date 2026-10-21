@@ -224,7 +224,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			card.createDiv({ cls: "semlink-license-card-freeline", text: t("openSidebarDesc") });
 
 			const foot = card.createDiv({ cls: "semlink-license-card-footrow" });
-			foot.createSpan({ cls: "semlink-license-card-lifetime", text: t("licenseLifetime") });
+			foot.createSpan({ cls: "semlink-license-card-lifetime", text: `♾️ ${t("licenseLifetime")}` });
 
 			const de = foot.createEl("button", { cls: "semlink-license-card-deactivate", text: t("licenseDeactivate") });
 			de.addEventListener("click", () => {
