@@ -4701,15 +4701,6 @@ body .semlink-msg-user::selection {
     background: var(--background-modifier-hover);
 }
 
-.semlink-search-model-popup-row.is-active {
-    background: var(--background-modifier-hover);
-}
-
-.semlink-search-model-popup-row.is-active .semlink-search-model-popup-name {
-    color: var(--interactive-accent);
-    font-weight: 600;
-}
-
 .semlink-search-model-popup-name {
     flex: 1 1 auto;
     min-width: 0;

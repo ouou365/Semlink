@@ -3269,10 +3269,7 @@ export class SemanticSearchView extends ItemView {
 			g.models.map((m) => ({ providerId: g.providerId, providerName: g.providerName, model: m })),
 		);
 		flat.forEach((opt, index) => {
-			const isActive = active !== null && active.provider.id === opt.providerId && active.model.id === opt.model.id;
-			const row = popup.createDiv({
-				cls: "semlink-search-model-popup-row" + (isActive ? " is-active" : ""),
-			});
+			const row = popup.createDiv({ cls: "semlink-search-model-popup-row" });
 			// 左侧移动滑块：拖动调整顺序（写入真实 provider.models 并落盘；
 			// 跨供应商拖放不排序——顺序归属各自供应商的数组）
 			const grip = row.createDiv({ cls: "semlink-search-model-popup-grip" });
