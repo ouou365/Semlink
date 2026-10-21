@@ -1861,6 +1861,19 @@ export class SemanticSearchView extends ItemView {
 				const menuEl = (menu as unknown as { menuEl?: HTMLElement }).menuEl;
 				if (menuEl) menuEl.style.left = `${rect.right - menuEl.offsetWidth}px`;
 			});
+			// 设置按钮（语言切换右侧）：不走引导直接打开插件设置页
+			const guideSettingsBtn = rightSide.createEl("button", {
+				cls: "semlink-search-icon-btn clickable-icon",
+				attr: { "aria-label": t("openSettings"), title: t("openSettings") },
+			});
+			setIcon(guideSettingsBtn, "settings");
+			guideSettingsBtn.addEventListener("click", () => {
+				const app = this.app as unknown as {
+					setting: { open(): void; openTabById(id: string): void };
+				};
+				app.setting.open();
+				app.setting.openTabById("semlink");
+			});
 
 			// Modifier class: the guide fills the block top-down so the
 			// stepper can pin to the top while step content scrolls.

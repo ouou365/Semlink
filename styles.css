@@ -3146,31 +3146,6 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     width: 100%;
 }
 
-/* 引导界面右上角的设置按钮 */
-.semlink-guide-settings-btn {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    cursor: pointer;
-    color: var(--text-muted);
-}
-
-.semlink-guide-settings-btn:hover {
-    background: var(--background-modifier-hover);
-    color: var(--text-normal);
-}
-
-.semlink-guide-settings-btn .svg-icon {
-    width: 17px;
-    height: 17px;
-}
-
 /* Inline API-key row (password input + save button). */
 .semlink-guide-keyrow {
     display: flex;
