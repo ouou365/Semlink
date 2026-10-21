@@ -386,34 +386,33 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		modelsHost.empty();
 
 		// Sub-state A: pick a provider — "Select a provider" 目录弹窗同款卡片
-		// 网格：全部目录条目（已配置 Key 置顶 → 市场排名），不再有 More /
-		// Custom 入口，也不再做系列文件夹折叠。
+		// 网格；系列文件夹（Z.AI / MiniMax / Xiaomi 系）按设置页的合并规则
+		// 合并为一张卡（显示系列名，点击落到最热成员），已配置 Key 置顶。
 		if (!provider) {
 			const grid = body.createDiv({ cls: "semlink-guide-provider-grid" });
-			const configuredOf = (name: string): boolean =>
-				plugin.settings.providers.some((x) => x.name === name && !!x.apiKey.trim());
-			const ordered = buildGuideProviderGroups(plugin).flatMap((g) => g.members ?? [g.name]);
-			for (const name of ordered) {
+			const ordered = buildGuideProviderGroups(plugin);
+			for (const item of ordered) {
+				const pickName = item.members?.[0] ?? item.name;
 				const providerCard = grid.createDiv({ cls: "semlink-guide-provider-card" });
-				if (configuredOf(name)) {
+				if (item.configured) {
 					providerCard.createSpan({
 						cls: "semlink-guide-provider-card-dot",
 						attr: { title: t("credentialConfigured") },
 					});
 				}
-				const logo = brandLogoOf(name).svg;
+				const logo = brandLogoOf(pickName).svg;
 				if (logo) {
 					const logoEl = providerCard.createDiv({ cls: "semlink-guide-provider-logo" });
 					setSvgIcon(logoEl, logo);
 				} else {
 					providerCard.createDiv({
 						cls: "semlink-guide-provider-fallback",
-						text: name.charAt(0).toUpperCase(),
+						text: item.name.charAt(0).toUpperCase(),
 					});
 				}
-				providerCard.createDiv({ cls: "semlink-guide-provider-name", text: name });
+				providerCard.createDiv({ cls: "semlink-guide-provider-name", text: item.name });
 				providerCard.addEventListener("click", () => {
-					const p = ensureCatalogProvider(plugin, name);
+					const p = ensureCatalogProvider(plugin, pickName);
 					if (p) opts.onPickProvider(p);
 				});
 			}
