@@ -2736,6 +2736,23 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     align-content: stretch;
 }
 
+/* 引导第一步底部的联系链接 */
+.semlink-guide-contact {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-faint);
+    text-align: center;
+}
+
+.semlink-guide-contact a {
+    color: var(--interactive-accent);
+    text-decoration: none;
+}
+
+.semlink-guide-contact a:hover {
+    text-decoration: underline;
+}
+
 .semlink-guide-provider-grid-vertical .semlink-guide-provider-card {
     width: 100%;
     box-sizing: border-box;

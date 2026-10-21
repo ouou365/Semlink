@@ -427,6 +427,7 @@ const t: Record<keyof typeof en, string> = {
 	guideGetKey: "Obter chave",
 	guidePrev: "Voltar",
 	guidePickOneModel: "Selecione pelo menos um modelo",
+	guideContactHint: "Falta um provedor? Fale comigo:",
 	guideReselect: "Escolher outro provedor",
 	guideNext: "Avançar",
 	guideMoreProviders: "Mais",

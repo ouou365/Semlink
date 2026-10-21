@@ -466,6 +466,15 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			customCard.addEventListener("click", () => {
 				new AddProviderModal(plugin.app, plugin, "custom", (p) => opts.onPickProvider(p)).open();
 			});
+
+			// 联系链接：想加供应商 → 发邮件
+			const contact = body.createDiv({ cls: "semlink-guide-contact" });
+			contact.createSpan({ text: `${t("guideContactHint")} ` });
+			contact.createEl("a", {
+				cls: "semlink-guide-contact-link",
+				text: "support@getsemlink.com",
+				attr: { href: "mailto:support@getsemlink.com" },
+			});
 			return;
 		}
 

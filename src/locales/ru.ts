@@ -426,6 +426,7 @@ const t: Record<keyof typeof en, string> = {
 	guideGetKey: "Получить ключ",
 	guidePrev: "Назад",
 	guidePickOneModel: "Выберите хотя бы одну модель",
+	guideContactHint: "Не хватает провайдера? Напишите мне:",
 	guideReselect: "Выбрать другого провайдера",
 	guideNext: "Далее",
 	guideMoreProviders: "Ещё",

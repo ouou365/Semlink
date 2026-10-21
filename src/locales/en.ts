@@ -424,6 +424,7 @@ const en = {
 	guideGetKey: "Get key",
 	guidePrev: "Back",
 	guidePickOneModel: "Select at least one model",
+	guideContactHint: "Missing a provider? Contact me:",
 	guideReselect: "Choose a different provider",
 	guideNext: "Next",
 	guideMoreProviders: "More",
