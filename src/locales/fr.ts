@@ -54,6 +54,7 @@ const t: Record<keyof typeof en, string> = {
 	footerTerms: "Conditions",
 	footerPrivacy: "Confidentialité",
 	openSidebarDesc: "Discutez avec votre coffre, glissez des notes pour des réponses sourcées.",
+	openSettings: "Paramètres",
 	open: "Ouvrir",
 	provider: "Fournisseur d'embeddings",
 	providerDesc: "Choisissez le service de génération de vecteurs d'embedding",

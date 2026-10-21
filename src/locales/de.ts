@@ -54,6 +54,7 @@ const t: Record<keyof typeof en, string> = {
 	footerTerms: "Nutzungsbedingungen",
 	footerPrivacy: "Datenschutz",
 	openSidebarDesc: "Chatte mit deinem Vault, ziehe Notizen für belegbasierte Antworten hinein.",
+	openSettings: "Einstellungen",
 	open: "Öffnen",
 	provider: "Embedding-Anbieter",
 	providerDesc: "Wähle den Dienst zur Erzeugung der Embedding-Vektoren",

@@ -55,6 +55,7 @@ const zh: Record<keyof typeof en, string> = {
 	footerTerms: "服务条款",
 	footerPrivacy: "隐私政策",
 	openSidebarDesc: "与你的知识库对话，拖入笔记获得有据可依的回答。",
+	openSettings: "设置",
 	open: "打开",
 	provider: "嵌入服务",
 	providerDesc: "选择嵌入向量生成服务",

@@ -56,6 +56,7 @@ const t: Record<keyof typeof en, string> = {
 	footerTerms: "Términos",
 	footerPrivacy: "Privacidad",
 	openSidebarDesc: "Chatea con tu bóveda, arrastra notas para respuestas con fundamento.",
+	openSettings: "Ajustes",
 	open: "Abrir",
 	provider: "Proveedor de embeddings",
 	providerDesc: "Elige el servicio de generación de vectores de embedding",

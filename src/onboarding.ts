@@ -196,6 +196,20 @@ export function renderOnboarding(
 	const rerender = (): void => {
 		root.empty();
 
+		// 右上角设置入口：不走引导直接去插件设置页
+		const settingsBtn = root.createDiv({
+			cls: "semlink-guide-settings-btn",
+			attr: { "aria-label": t("openSettings"), title: t("openSettings") },
+		});
+		setIcon(settingsBtn, "settings");
+		settingsBtn.addEventListener("click", () => {
+			const app = plugin.app as unknown as {
+				setting: { open(): void; openTabById(id: string): void };
+			};
+			app.setting.open();
+			app.setting.openTabById("semlink");
+		});
+
 		renderIntro(root);
 
 		// ONE step, chat-first: the model screen walks Provider → Key →

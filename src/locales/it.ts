@@ -56,6 +56,7 @@ const t: Record<keyof typeof en, string> = {
 	footerTerms: "Termini",
 	footerPrivacy: "Privacy",
 	openSidebarDesc: "Chatta con il tuo vault, trascina le note per risposte documentate.",
+	openSettings: "Impostazioni",
 	open: "Apri",
 	provider: "Provider di embedding",
 	providerDesc: "Scegli il servizio di generazione dei vettori di embedding",

@@ -54,6 +54,7 @@ const t: Record<keyof typeof en, string> = {
 	footerTerms: "이용약관",
 	footerPrivacy: "개인정보 보호",
 	openSidebarDesc: "볼트와 대화하고, 노트를 드래그해 근거 있는 답변을 받으세요.",
+	openSettings: "설정",
 	open: "열기",
 	provider: "임베딩 제공자",
 	providerDesc: "임베딩 벡터 생성 서비스를 선택하세요",

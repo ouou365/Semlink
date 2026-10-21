@@ -54,6 +54,7 @@ const t: Record<keyof typeof en, string> = {
 	footerTerms: "服務條款",
 	footerPrivacy: "隱私政策",
 	openSidebarDesc: "與你的知識庫對話，拖入筆記獲得有據可依的回答。",
+	openSettings: "設定",
 	open: "開啟",
 	provider: "嵌入服務",
 	providerDesc: "選擇嵌入向量產生服務",

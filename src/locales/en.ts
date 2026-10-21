@@ -53,6 +53,7 @@ const en = {
 	footerTerms: "Terms",
 	footerPrivacy: "Privacy",
 	openSidebarDesc: "Advanced chat UI for AI. All models in one place. Private and local.",
+	openSettings: "Settings",
 	open: "Open",
 	provider: "Embedding Provider",
 	providerDesc: "Choose embedding vector generation service",

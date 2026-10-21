@@ -54,6 +54,7 @@ const t: Record<keyof typeof en, string> = {
 	footerTerms: "利用規約",
 	footerPrivacy: "プライバシー",
 	openSidebarDesc: "ヴォールトとチャットし、ノートをドラッグして根拠のある回答を。",
+	openSettings: "設定",
 	open: "開く",
 	provider: "埋め込みプロバイダー",
 	providerDesc: "埋め込みベクトルの生成サービスを選択します",

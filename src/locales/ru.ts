@@ -55,6 +55,7 @@ const t: Record<keyof typeof en, string> = {
 	footerTerms: "Условия",
 	footerPrivacy: "Конфиденциальность",
 	openSidebarDesc: "Общайтесь с базой знаний, перетаскивайте заметки для ответов с опорой на источники.",
+	openSettings: "Настройки",
 	open: "Открыть",
 	provider: "Провайдер эмбеддингов",
 	providerDesc: "Выберите сервис генерации векторных эмбеддингов",
