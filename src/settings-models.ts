@@ -2567,7 +2567,15 @@ export function renderModelsTab(
 	for (const r of rows.filter((x) => !x.folder)) {
 		items.push({ rank: r.rank, name: r.name, row: r });
 	}
-	items.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+	// 已配置 Key 的供应商自动置顶（文件夹看成员：任一成员配了 Key 即视为
+	// 已配置）；置顶组与非置顶组内部仍按原有排名（拖拽顺序/市场排名）
+	const itemConfigured = (item: { node?: FolderNode; row?: Row }): number =>
+		item.node
+			? (item.node.members.some((m) => !!m.live?.apiKey?.trim()) ? 1 : 0)
+			: (item.row?.live?.apiKey?.trim() ? 1 : 0);
+	items.sort((a, b) =>
+		itemConfigured(b) - itemConfigured(a) || a.rank - b.rank || a.name.localeCompare(b.name),
+	);
 
 	// 当前展示顺序：顶层供应商记名称，文件夹记其键 + 展开的成员名序列
 	//（收起时也按成员计入）——拖动重排以此为基准生成新的持久化顺序
