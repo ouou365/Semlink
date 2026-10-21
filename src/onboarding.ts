@@ -215,10 +215,9 @@ export function renderOnboarding(
 			ready: ob().chatReady,
 			modelsHost,
 			onPickProvider: (p) => {
-				// An already-keyed provider jumps straight to the model
-				// picker — no need to re-enter the key.
-				const ready = !!p.apiKey.trim();
-				plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), providerId: p.id, chatReady: ready };
+				// 始终经过第二步的 Key 配置（已填的 Key 会预填，用户确认后
+				// Test & Save 再进模型步骤），即使该供应商早已有 Key。
+				plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), providerId: p.id, chatReady: false };
 				void plugin.saveSettings();
 				rerender();
 			},
