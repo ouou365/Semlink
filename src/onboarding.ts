@@ -546,7 +546,8 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		backBtn.addEventListener("click", opts.onReselect);
 			const nextBtn = footer.createEl("button", {
 				cls: "semlink-guide-save semlink-guide-primary",
-				text: t("guideNext"),
+				// 与供应商配置弹窗一致：校验并保存（ Testing… 为进行中文案）
+				text: t("editorTestSave"),
 			});
 
 			const error = body.createDiv({ cls: "semlink-guide-error" });
@@ -580,7 +581,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 					return;
 				}
 				nextBtn.disabled = true;
-				nextBtn.setText(t("guideValidating"));
+				nextBtn.setText(t("editorTesting"));
 				provider.name = nameInput.value.trim() || provider.name;
 				provider.apiBase = apiBase;
 				if (formatSelect.value === "bare") {
@@ -604,7 +605,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 					opts.onValidated();
 				} finally {
 					nextBtn.disabled = false;
-					nextBtn.setText(t("guideNext"));
+					nextBtn.setText(t("editorTestSave"));
 				}
 			};
 			nextBtn.addEventListener("click", () => void validate());
