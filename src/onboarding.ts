@@ -344,6 +344,7 @@ class SeriesPickModal extends Modal {
 		private onPick: (name: string) => void,
 	) {
 		super(plugin.app);
+		this.modalEl.addClass("semlink-guide-series-modal");
 	}
 
 	onOpen(): void {

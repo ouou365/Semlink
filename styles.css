@@ -2748,6 +2748,11 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     align-content: stretch;
 }
 
+/* 系列二次确认弹窗：加宽，让 Endpoint 尽量完整显示 */
+.semlink-guide-series-modal {
+    width: min(720px, 92vw);
+}
+
 /* 引导第一步底部的联系链接 */
 .semlink-guide-contact {
     margin-top: 4px;
@@ -2837,7 +2842,7 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     flex-shrink: 0;
     font-size: 11px;
     color: var(--text-faint);
-    max-width: 45%;
+    max-width: 58%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
