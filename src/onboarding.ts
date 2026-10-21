@@ -400,7 +400,8 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			let expanded: string | null = null;
 			const redrawList = (): void => {
 				list.empty();
-				for (const item of buildGuideProviderGroups(plugin)) {
+				// 只展示排序后的前 8 个（其余走"更多供应商"）
+				for (const item of buildGuideProviderGroups(plugin).slice(0, 8)) {
 					const pick = (name: string): void => {
 						const p = ensureCatalogProvider(plugin, name);
 						if (p) opts.onPickProvider(p);

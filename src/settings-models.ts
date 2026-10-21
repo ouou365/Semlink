@@ -1995,7 +1995,7 @@ function renderDraftEditor(
 
 /** Catalog entries pinned to the front of the picker grid with a star, in
  *  display order (first = leftmost). */
-const FEATURED_PROVIDERS = ["OpenRouter", "SiliconFlow"];
+const FEATURED_PROVIDERS = ["SiliconFlow"];
 
 /** Step 1 of "Add provider": a 3-column grid of catalog cards (logo + name).
  *  Clicking a card creates the provider pre-filled from that catalog entry
