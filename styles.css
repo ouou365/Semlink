@@ -2714,6 +2714,11 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     align-items: center;
 }
 
+/* 系列文件夹展开后的成员卡：左缩进表示从属 */
+.semlink-guide-card-member {
+    margin-left: 18px;
+}
+
 .semlink-guide-card-logo {
     width: 18px;
     height: 18px;

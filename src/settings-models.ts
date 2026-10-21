@@ -2116,6 +2116,51 @@ const MARKET_RANK: Record<string, number> = {
 	"Xiaomi": 15,
 };
 
+/** 引导页的供应商结构（与设置页同源）：系列文件夹聚合（Z.AI / MiniMax /
+ *  Xiaomi 系，成员按排名排序、首位即文件夹图标），已配置 Key 的项置顶，
+ *  其余按市场排名。设置页与引导页的供应商列表都由这里派生，避免两处
+ *  各养一份名单。 */
+export interface GuideProviderGroup {
+	/** 显示名：单供应商名或系列文件夹名（如 "Z.AI"）。 */
+	name: string;
+	/** 存在即为系列文件夹（成员为目录供应商名，按排名升序）。 */
+	members?: string[];
+	/** 该项（或文件夹任一成员）已配置 API Key。 */
+	configured: boolean;
+}
+
+export function buildGuideProviderGroups(plugin: SmartVaultPlugin): GuideProviderGroup[] {
+	const configuredOf = (name: string): boolean =>
+		plugin.settings.providers.some((x) => x.name === name && !!x.apiKey.trim());
+	const rank = (name: string): number => MARKET_RANK[name] ?? Number.MAX_SAFE_INTEGER;
+	const groups = new Map<string, string[]>();
+	const top: string[] = [];
+	for (const entry of CHAT_CATALOG) {
+		const series = SERIES_FOLDER[entry.name];
+		if (series) {
+			if (!groups.has(series)) groups.set(series, []);
+			groups.get(series)!.push(entry.name);
+		} else {
+			top.push(entry.name);
+		}
+	}
+	const items: GuideProviderGroup[] = [];
+	for (const [name, members] of groups) {
+		members.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+		items.push({ name, members, configured: members.some(configuredOf) });
+	}
+	for (const name of top) {
+		items.push({ name, configured: configuredOf(name) });
+	}
+	const groupRank = (g: GuideProviderGroup): number =>
+		g.members ? rank(g.members[0]) : rank(g.name);
+	return items.sort((a, b) =>
+		Number(b.configured) - Number(a.configured)
+		|| groupRank(a) - groupRank(b)
+		|| a.name.localeCompare(b.name),
+	);
+}
+
 /** 实例模型清单跟随目录精选：目录条目对应的已添加实例，其模型列表在
  *  添加时从旧目录拷贝，目录精选收缩后仍是旧快照——加载时用目录清单
  *  覆盖，同时保留用户已拨过的 enabled 开关（id 仍存在时）。用户手工

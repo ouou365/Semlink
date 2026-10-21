@@ -13,7 +13,7 @@
 
 import { Modal } from "obsidian";
 import { mountCoffeeCanvas, mountTicketDeck } from "./coffee-canvas";
-import { AddProviderModal, brandLogoOf, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, providerLogo, validateModelId, setSvgIcon } from "./settings-models";
+import { AddProviderModal, brandLogoOf, buildGuideProviderGroups, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, providerLogo, validateModelId, setSvgIcon } from "./settings-models";
 import type { FetchedModel } from "./settings-models";
 import { t } from "./i18n";
 import type SmartVaultPlugin from "../main";
@@ -211,8 +211,6 @@ export function renderOnboarding(
 		// ── 对话模型（唯一步骤）── picking completes the guide.
 		renderModelStep(root, plugin, {
 			kind: "chat",
-			// 引导页与设置页内置目录一致：展示全部 CHAT_CATALOG 供应商
-			names: CHAT_CATALOG.map((e) => e.name),
 			providerId: ob().providerId,
 			ready: ob().chatReady,
 			modelsHost,
@@ -364,7 +362,6 @@ function ensureCatalogProvider(plugin: SmartVaultPlugin, name: string): ModelPro
 
 interface ModelStepOptions {
 	kind: "chat" | "embed";
-	names: string[];
 	providerId?: string;
 	ready?: boolean;
 	/** Model-step host container (search + progress/error + cards live here,
@@ -396,29 +393,55 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		// every redraw so the old model list never lingers above the form.
 		modelsHost.empty();
 
-		// Sub-state A: pick a provider.
+		// Sub-state A: pick a provider — 分组与排序同设置页（系列文件夹 +
+		// 已配置 Key 置顶 + 市场排名），文件夹点击展开成员。
 		if (!provider) {
 			const list = body.createDiv({ cls: "semlink-guide-options" });
-			// Configured providers (key filled) float to the top, each
-			// group alphabetical.
-			const isConfigured = (name: string): boolean =>
-				plugin.settings.providers.some((x) => x.name === name && !!x.apiKey.trim());
-			const names = [...opts.names].sort((a, b) => {
-				const ca = isConfigured(a) ? 0 : 1;
-				const cb = isConfigured(b) ? 0 : 1;
-				return ca - cb || a.localeCompare(b);
-			});
-			for (const name of names) {
-				card(list, {
-					logo: brandLogoOf(name).svg,
-					text: name,
-					dot: isConfigured(name) ? "configured" : undefined,
-					onClick: () => {
+			let expanded: string | null = null;
+			const redrawList = (): void => {
+				list.empty();
+				for (const item of buildGuideProviderGroups(plugin)) {
+					const pick = (name: string): void => {
 						const p = ensureCatalogProvider(plugin, name);
 						if (p) opts.onPickProvider(p);
-					},
-				});
-			}
+					};
+					if (item.members) {
+						const isOpen = expanded === item.name;
+						card(list, {
+							logo: brandLogoOf(item.members[0]).svg,
+							text: item.name,
+							meta: `${item.members.length} ${isOpen ? "▴" : "▾"}`,
+							dot: item.configured ? "configured" : undefined,
+							onClick: () => {
+								expanded = isOpen ? null : item.name;
+								redrawList();
+							},
+						});
+						if (isOpen) {
+							for (const member of item.members) {
+								const configured = plugin.settings.providers.some(
+									(x) => x.name === member && !!x.apiKey.trim(),
+								);
+								const memberCard = card(list, {
+									logo: brandLogoOf(member).svg,
+									text: member,
+									dot: configured ? "configured" : undefined,
+									onClick: () => pick(member),
+								});
+								memberCard.addClass("semlink-guide-card-member");
+							}
+						}
+					} else {
+						card(list, {
+							logo: brandLogoOf(item.name).svg,
+							text: item.name,
+							dot: item.configured ? "configured" : undefined,
+							onClick: () => pick(item.name),
+						});
+					}
+				}
+			};
+			redrawList();
 			const more = body.createDiv({ cls: "semlink-guide-options semlink-guide-options-row" });
 			card(more, {
 				icon: "⊞",
