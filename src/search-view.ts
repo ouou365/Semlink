@@ -1873,6 +1873,10 @@ export class SemanticSearchView extends ItemView {
 				this.guideRequested = false;
 				this.messagesEl.empty();
 				this.renderWelcome();
+				// 引导完成：清掉遗留的"先去设置配置供应商"提示，并让模型
+				// 触发器立即显示刚选中的模型（否则要重开视图才刷新）。
+				if (this.hasApiKey()) this.statusEl.setText("");
+				this.updateModelLabel();
 			});
 			this.updateHomeIconVisibility();
 			return;

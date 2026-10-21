@@ -236,7 +236,9 @@ export function renderOnboarding(
 					if ((m.kind ?? "chat") !== "chat") continue;
 					m.enabled = pickedIds.has(m.id);
 				}
-				plugin.settings.activeChatModel = `${p.id}/${models[0].id}`;
+				// 通过 chatClient 选中：内存态 activeModelKey 与设置同步，
+				// 视图里的模型标签立即生效（直接写 settings 不会刷新视图）。
+				plugin.chatClient.setActiveModel(p.id, models[0].id);
 				plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), chatModelPicked: true, done: true };
 				void plugin.saveSettings();
 				onFinish();
