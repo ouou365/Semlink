@@ -13,7 +13,7 @@
 
 import { Modal, ToggleComponent, setIcon } from "obsidian";
 import { mountCoffeeCanvas, mountTicketDeck } from "./coffee-canvas";
-import { AddModelModal, brandLogoOf, buildGuideProviderGroups, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, providerLogo, setSvgIcon } from "./settings-models";
+import { AddModelModal, AddProviderModal, brandLogoOf, buildGuideProviderGroups, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, providerLogo, setSvgIcon } from "./settings-models";
 import type { FetchedModel } from "./settings-models";
 import { t } from "./i18n";
 import type SmartVaultPlugin from "../main";
@@ -456,6 +456,16 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 					}
 				});
 			}
+
+			// 最后一行：自定义供应商（虚线卡，打开自定义供应商表单）
+			const customCard = grid.createDiv({
+				cls: "semlink-guide-provider-card semlink-guide-provider-card-custom",
+			});
+			customCard.createDiv({ cls: "semlink-guide-provider-fallback", text: "＋" });
+			customCard.createDiv({ cls: "semlink-guide-provider-name", text: t("customProvider") });
+			customCard.addEventListener("click", () => {
+				new AddProviderModal(plugin.app, plugin, "custom", (p) => opts.onPickProvider(p)).open();
+			});
 			return;
 		}
 

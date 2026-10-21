@@ -2734,6 +2734,15 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     background: var(--background-modifier-hover);
 }
 
+/* 最后一行的自定义供应商入口：虚线边框、弱化文字 */
+.semlink-guide-provider-card-custom {
+    border-style: dashed;
+}
+
+.semlink-guide-provider-card-custom .semlink-guide-provider-name {
+    color: var(--text-muted);
+}
+
 /* 已配置 Key 的供应商：卡片右上角小绿点 */
 .semlink-guide-provider-card-dot {
     position: absolute;
