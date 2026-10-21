@@ -3225,6 +3225,33 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     text-align: left;
 }
 
+/* 引导第二步顶部的供应商标识区：logo + 名称（居中，明确正在配置哪家） */
+.semlink-guide-provider-head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 2px 0 8px;
+}
+
+.semlink-guide-provider-head-logo {
+    display: flex;
+    align-items: center;
+    color: var(--text-normal);
+}
+
+.semlink-guide-provider-head-logo svg {
+    height: 24px;
+    width: auto;
+    max-width: 90px;
+}
+
+.semlink-guide-provider-head-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-normal);
+}
+
 .semlink-guide-fieldlabel {
     font-size: 11px;
     color: var(--text-faint);

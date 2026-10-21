@@ -13,7 +13,7 @@
 
 import { Modal, ToggleComponent, setIcon } from "obsidian";
 import { mountCoffeeCanvas, mountTicketDeck } from "./coffee-canvas";
-import { AddModelModal, AddProviderModal, brandLogoOf, buildGuideProviderGroups, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, providerLogo, setSvgIcon } from "./settings-models";
+import { AddModelModal, AddProviderModal, brandLogoOf, buildGuideProviderGroups, catalogEndpoint, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, providerLogo, setSvgIcon } from "./settings-models";
 import type { FetchedModel } from "./settings-models";
 import { t } from "./i18n";
 import type SmartVaultPlugin from "../main";
@@ -368,13 +368,14 @@ class SeriesPickModal extends Modal {
 				card.createDiv({ cls: "semlink-guide-provider-fallback", text: member.charAt(0).toUpperCase() });
 			}
 			card.createDiv({ cls: "semlink-guide-provider-name", text: member });
-			// 右侧显示该变体的 Endpoint，确认前能看清连的是哪个端点
+			// 右侧显示完整请求端点（Base URL + 协议路径）
 			const entry = CHAT_CATALOG.find((e) => e.name === member);
 			if (entry) {
+				const endpoint = catalogEndpoint(entry);
 				card.createSpan({
 					cls: "semlink-guide-provider-endpoint",
-					text: entry.baseUrl,
-					attr: { title: entry.baseUrl },
+					text: endpoint,
+					attr: { title: endpoint },
 				});
 			}
 			card.addEventListener("click", () => {
@@ -490,9 +491,23 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		// Sub-state B: confirm details + key; 下一步 validates the key by
 		// fetching the model list, then advances to the picker.
 		if (!opts.ready) {
+			// 供应商标识区：logo + 名称，明确正在配置哪家
+			const providerHead = body.createDiv({ cls: "semlink-guide-provider-head" });
+			const headLogo = brandLogoOf(provider.name).svg;
+			if (headLogo) {
+				const headLogoEl = providerHead.createSpan({ cls: "semlink-guide-provider-head-logo" });
+				setSvgIcon(headLogoEl, headLogo);
+			} else {
+				providerHead.createDiv({
+					cls: "semlink-guide-provider-fallback",
+					text: provider.name.charAt(0).toUpperCase(),
+				});
+			}
+			providerHead.createSpan({ cls: "semlink-guide-provider-head-name", text: provider.name });
+
 			const form = body.createDiv({ cls: "semlink-guide-form" });
 			const fieldLabel = (parent: HTMLElement, text: string): void => {
-				parent.createDiv({ cls: "semlink-guide-fieldlabel", text });
+				parent.createDiv({ cls: "semlink-guide-fieldlabel", text: text });
 			};
 
 			// 标签带供应商名：用户明确知道要填哪家的 Key
