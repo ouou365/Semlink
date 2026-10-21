@@ -4638,6 +4638,7 @@ body .semlink-msg-user::selection {
 }
 
 .semlink-search-model-popup-row {
+    margin: 5px 0px;
     display: flex;
     align-items: center;
     gap: 8px;
