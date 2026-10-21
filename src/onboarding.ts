@@ -39,22 +39,8 @@ export interface OnboardingViewHost {
 	setGuideChrome(active: boolean): void;
 }
 
-/** Curated provider names for the chat-model step — all present in
- *  CHAT_CATALOG and all carrying a brand logo. Alphabetical order. */
-const CHAT_PROVIDERS = [
-	"Anthropic",
-	"DeepSeek",
-	"Google",
-	"Hugging Face",
-	"Kimi For Coding",
-	"MiniMax CN",
-	"OpenAI",
-	"OpenRouter",
-	"SiliconFlow",
-	"Z.AI Coding CN",
-];
-
-/** Console URLs where each curated provider's API key can be created. */
+/** Console URLs where a provider's API key can be created — fallback only
+ *  for catalog entries without keysUrl (e.g. Xiaomi / Z.AI Coding). */
 const PROVIDER_CONSOLE: Record<string, string> = {
 	"SiliconFlow": "https://cloud.siliconflow.cn/i/9BDh114N",
 	"DeepSeek": "https://platform.deepseek.com/api_keys",
@@ -225,7 +211,8 @@ export function renderOnboarding(
 		// ── 对话模型（唯一步骤）── picking completes the guide.
 		renderModelStep(root, plugin, {
 			kind: "chat",
-			names: CHAT_PROVIDERS,
+			// 引导页与设置页内置目录一致：展示全部 CHAT_CATALOG 供应商
+			names: CHAT_CATALOG.map((e) => e.name),
 			providerId: ob().providerId,
 			ready: ob().chatReady,
 			modelsHost,
@@ -491,7 +478,10 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			// right edge and opens the provider console (hidden for custom hosts
 			// without a known console URL). The key prefills when one was
 			// already validated, so 上一步 never forces a re-type.
-			const consoleUrl = PROVIDER_CONSOLE[provider.name];
+			// 获取 Key 地址：优先内置目录的 keysUrl（与设置页编辑器同源），
+			// 目录没有的（Xiaomi / Z.AI Coding 系）退回 PROVIDER_CONSOLE
+			const consoleUrl = CHAT_CATALOG.find((e) => e.name === provider.name)?.keysUrl
+				?? PROVIDER_CONSOLE[provider.name];
 			const keyGroup = form.createDiv({ cls: "semlink-guide-keygroup" });
 			const keyInput = keyGroup.createEl("input", {
 				cls: "semlink-guide-keyinput",
