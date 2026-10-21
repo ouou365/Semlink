@@ -465,7 +465,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseDevices: "裝置",
 	licenseLifetime: "永久授權",
 	licenseBadge: "限時早鳥",
-	licenseCardHeadline: "解鎖無限對話歷史",
+	licenseCardHeadline: "解鎖無限生產力",
 	licenseCardFreeLine: "為 AI 打造的高級聊天介面。所有模型，一處管理。私有且本地。",
 	licenseCardCta: "$3 立即解鎖",
 	licenseCardLifetime: "終身買斷 · 無訂閱",

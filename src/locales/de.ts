@@ -465,7 +465,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseDevices: "Geräte",
 	licenseLifetime: "Dauerlizenz",
 	licenseBadge: "Frühbucher",
-	licenseCardHeadline: "Unbegrenzten Chatverlauf freischalten",
+	licenseCardHeadline: "Unbegrenzte Produktivität freischalten",
 	licenseCardFreeLine: "Fortschrittliche Chat-Oberfläche für KI. Alle Modelle an einem Ort. Privat und lokal.",
 	licenseCardCta: "Für 3 $ freischalten",
 	licenseCardLifetime: "Lebenslang · kein Abo",

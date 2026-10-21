@@ -467,7 +467,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseDevices: "Dispositivos",
 	licenseLifetime: "Licença perpétua",
 	licenseBadge: "Oferta de lançamento",
-	licenseCardHeadline: "Desbloqueie o histórico ilimitado",
+	licenseCardHeadline: "Desbloqueie a produtividade ilimitada",
 	licenseCardFreeLine: "Interface de chat avançada para IA. Todos os modelos em um só lugar. Privado e local.",
 	licenseCardCta: "Desbloquear por 3 $",
 	licenseCardLifetime: "vitalício · sem assinatura",

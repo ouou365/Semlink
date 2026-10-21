@@ -465,7 +465,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseDevices: "デバイス",
 	licenseLifetime: "永久ライセンス",
 	licenseBadge: "アーリーバード",
-	licenseCardHeadline: "無制限のチャット履歴を解放",
+	licenseCardHeadline: "無限の生産性を解放",
 	licenseCardFreeLine: "AI のための高機能チャット UI。すべてのモデルを一箇所に。プライベートでローカル。",
 	licenseCardCta: "$3 で解放",
 	licenseCardLifetime: "買い切り · サブスクなし",
