@@ -2052,6 +2052,12 @@ function renderProviderCatalogGrid(
 			card.createDiv({ cls: "semlink-add-provider-card-fallback", text: entry.name.charAt(0).toUpperCase() });
 		}
 		card.createDiv({ cls: "semlink-add-provider-card-name", text: entry.name });
+		// 右侧显示该供应商的 Endpoint，选之前能看清要连的是哪个端点
+		card.createSpan({
+			cls: "semlink-add-provider-card-endpoint",
+			text: entry.baseUrl,
+			attr: { title: entry.baseUrl },
+		});
 		card.addEventListener("click", () => void (async () => {
 			const provider: ModelProvider = {
 				id: `provider-${Date.now()}`,

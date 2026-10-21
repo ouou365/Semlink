@@ -1273,6 +1273,18 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     white-space: nowrap;
 }
 
+/* 卡片右侧的 Endpoint：弱化显示，悬停 title 看全 */
+.smart-vault-settings .semlink-add-provider-card-endpoint {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-faint);
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Provider editor footer: 取消 / 确定 actions */
 /* 编辑供应商弹窗：内容区自身限高滚动，模型行区域单独限高滚动。
    没有这两条时，字段 + 模型列表 + footer 一旦超过 Obsidian 弹窗的
