@@ -3290,13 +3290,24 @@ export class SemanticSearchView extends ItemView {
 				const from = raw === undefined ? -1 : parseInt(raw, 10);
 				if (!Number.isFinite(from) || from === index || !flat[from]) return;
 				const src = flat[from];
-				if (src.providerId !== opt.providerId) return;
-				const provider = this.plugin.settings.providers.find((p) => p.id === src.providerId);
-				if (!provider) return;
-				const srcIdx = provider.models.indexOf(src.model);
-				if (srcIdx === -1) return;
-				provider.models.splice(srcIdx, 1);
-				provider.models.splice(provider.models.indexOf(opt.model), 0, src.model);
+				const providers = this.plugin.settings.providers;
+				if (src.providerId === opt.providerId) {
+					// 同供应商：在它的 models 数组内把源模型插到目标模型之前
+					const provider = providers.find((p) => p.id === src.providerId);
+					if (!provider) return;
+					const srcIdx = provider.models.indexOf(src.model);
+					if (srcIdx === -1) return;
+					provider.models.splice(srcIdx, 1);
+					provider.models.splice(provider.models.indexOf(opt.model), 0, src.model);
+				} else {
+					// 跨供应商：整体移动源供应商到目标供应商的位置（"落到哪行，
+					// 供应商块就移到那个块之前"），顺序持久化在 providers 数组
+					const srcP = providers.find((p) => p.id === src.providerId);
+					const dstP = providers.find((p) => p.id === opt.providerId);
+					if (!srcP || !dstP) return;
+					providers.splice(providers.indexOf(srcP), 1);
+					providers.splice(providers.indexOf(dstP), 0, srcP);
+				}
 				void this.plugin.saveSettings();
 				this.renderModelPopupContent(popup);
 			});
