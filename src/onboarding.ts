@@ -368,6 +368,15 @@ class SeriesPickModal extends Modal {
 				card.createDiv({ cls: "semlink-guide-provider-fallback", text: member.charAt(0).toUpperCase() });
 			}
 			card.createDiv({ cls: "semlink-guide-provider-name", text: member });
+			// 右侧显示该变体的 Endpoint，确认前能看清连的是哪个端点
+			const entry = CHAT_CATALOG.find((e) => e.name === member);
+			if (entry) {
+				card.createSpan({
+					cls: "semlink-guide-provider-endpoint",
+					text: entry.baseUrl,
+					attr: { title: entry.baseUrl },
+				});
+			}
 			card.addEventListener("click", () => {
 				this.close();
 				this.onPick(member);

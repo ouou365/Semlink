@@ -2831,6 +2831,18 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     white-space: nowrap;
 }
 
+/* 系列确认卡右侧的 Endpoint：弱化显示，悬停 title 看全 */
+.semlink-guide-provider-endpoint {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-faint);
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .semlink-guide-options-row .semlink-guide-card {
     flex: 1 1 0;
     justify-content: center;
