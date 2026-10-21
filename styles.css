@@ -3231,9 +3231,10 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 }
 
 .semlink-guide-fieldlabel {
-    font-size: 11px;
-    color: var(--text-faint);
-    margin-top: 4px;
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 8px;
+    color: var(--text-normal);
 }
 
 .semlink-guide-form .semlink-guide-keyinput {
