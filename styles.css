@@ -2500,7 +2500,7 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     align-items: center;
     gap: 0;
     width: 100%;
-    max-width: 320px;
+    max-width: 520px;
     /* Stretch to the welcome block (flex child of the centered column) so
      * the stepper pins to its top while step content overflows/scrolls. */
     flex: 1 1 0;
@@ -2836,7 +2836,6 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     align-items: center;
     gap: 8px;
     width: 100%;
-    max-width: 320px;
 }
 
 /* Card area inside the sticky block (scrollable, fits 10 single-line cards
