@@ -497,8 +497,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 				parent.createDiv({ cls: "semlink-guide-fieldlabel", text: text });
 			};
 
-			// 标签带供应商名：用户明确知道要填哪家的 Key
-			fieldLabel(form, `${provider.name} ${t("apiKey")}`);
+			fieldLabel(form, t("apiKey"));
 			// SMS-code-style group: the "获取 Key" button sits inside the input's
 			// right edge and opens the provider console (hidden for custom hosts
 			// without a known console URL). The key prefills when one was
