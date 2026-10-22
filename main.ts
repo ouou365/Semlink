@@ -97,7 +97,8 @@ export default class SmartVaultPlugin extends Plugin {
 		} catch { /* leave undefined → sync fallback */ }
 		this.store = new VectorStore(dataDir, browserWorkerUrl);
 		// 向量搜索总开关（设置页 RAG 标签）：实时读设置，关掉即全部语义检索返回空
-		this.store.searchGate = () => this.settings.vectorSearchEnabled !== false;
+		// 向量搜索可用性 = 嵌入模型已配置（无独立开关）
+		this.store.searchGate = () => activeEmbeddingProvider(this.settings).apiKey.trim() !== "";
 		await this.store.init();
 
 		this.queue = new IndexQueue(this.store);

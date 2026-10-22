@@ -10,8 +10,6 @@ const t: Record<keyof typeof en, string> = {
 // ──── Settings Tab ────
 	settingsTitle: "Semlink",
 	settingsTagline: "Turn your Obsidian vault into an Agentic Knowledge Environment.",
-	vectorSearch: "벡터 검색",
-	vectorSearchDesc: "Vault 전체의 시맨틱(벡터) 검색을 활성화합니다. 끄면 검색과 관련 노트가 결과를 반환하지 않습니다.",
 	tabGeneral: "일반",
 	language: "언어",
 	languageDesc: "Semlink UI 언어",

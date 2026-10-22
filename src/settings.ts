@@ -407,33 +407,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			?? embeddingProviders.find((p) => p.id === active.id)
 			?? embeddingProviders[0];
 
-		// ── 向量搜索总开关：关闭后所有语义检索返回空 ──
-		new Setting(containerEl)
-			.setName(t("vectorSearch"))
-			.setDesc(t("vectorSearchDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.vectorSearchEnabled !== false)
-					.onChange(async (value) => {
-						this.plugin.settings.vectorSearchEnabled = value;
-						await this.plugin.saveSettings();
-					})
-			);
 
-
-		// ── 深度重建：清空全部向量并重新嵌入（嵌入模型变更/补齐向量后使用） ──
-		new Setting(containerEl)
-			.setName(t("rebuildIndex"))
-			.setDesc(t("rebuildIndexDesc"))
-			.addButton((btn) => {
-				btn.setButtonText(t("rebuildIndex"));
-				markDestructive(btn).onClick(() => {
-					new ConfirmModal(this.app, t("rebuildIndex"), t("rebuildConfirm"), () => {
-						// 重建索引并直接在引导页数据索引环节可视化进度
-						void this.plugin.rebuildIndexWithGuide();
-					}).open();
-				});
-			});
 
 		// ── 供应商 + 嵌入模型两级选择 ──
 		new Setting(containerEl)
@@ -531,6 +505,19 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				return slider.onChange(async (value) => {
 					this.plugin.settings.embedConcurrency = value;
 					await this.plugin.saveSettings();
+				});
+			});
+		// ── Re-embed all：清空向量并按当前嵌入配置全部重嵌（高级选项最后一条） ──
+		new Setting(advBody)
+			.setName(t("rebuildIndex"))
+			.setDesc(t("rebuildIndexDesc"))
+			.addButton((btn) => {
+				btn.setButtonText(t("rebuildIndex"));
+				markDestructive(btn).onClick(() => {
+					new ConfirmModal(this.app, t("rebuildIndex"), t("rebuildConfirm"), () => {
+						// 重建索引并直接在引导页数据索引环节可视化进度
+						void this.plugin.rebuildIndexWithGuide();
+					}).open();
 				});
 			});
 

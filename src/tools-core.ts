@@ -324,7 +324,7 @@ export class ToolCore {
 		if (!query.trim()) return "Error: missing query";
 		if (!this.deps.store.searchGate()) {
 			return JSON.stringify({
-				error: "Vector search is unavailable (disabled in RAG settings, or no embedding model configured). Use keyword or grep instead.",
+				error: "Vector search is unavailable: no embedding model is configured. Set one up in the RAG settings, or use keyword / grep instead.",
 			});
 		}
 		const results = await this.vectorRaw(query, limit, threshold);

@@ -11,8 +11,6 @@ const zh: Record<keyof typeof en, string> = {
 // ──── Settings Tab ────
 	settingsTitle: "Semlink",
 	settingsTagline: "Turn your Obsidian vault into an Agentic Knowledge Environment.",
-	vectorSearch: "向量搜索",
-	vectorSearchDesc: "启用 Vault 内的语义（向量）检索；关闭后搜索与相关笔记不返回结果。",
 	tabGeneral: "通用",
 	language: "语言",
 	languageDesc: "Semlink 界面显示语言",

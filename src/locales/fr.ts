@@ -10,8 +10,6 @@ const t: Record<keyof typeof en, string> = {
 // ──── Settings Tab ────
 	settingsTitle: "Semlink",
 	settingsTagline: "Turn your Obsidian vault into an Agentic Knowledge Environment.",
-	vectorSearch: "Recherche vectorielle",
-	vectorSearchDesc: "Active la recherche sémantique (vectorielle) dans le coffre. Désactivée, la recherche et les notes similaires ne renvoient aucun résultat.",
 	tabGeneral: "Général",
 	language: "Langue",
 	languageDesc: "Langue de l'interface de Semlink",

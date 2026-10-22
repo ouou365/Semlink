@@ -245,9 +245,6 @@ export interface SmartVaultSettings {
 	mcpApiKey: string;
 	/** MCP 服务总开关：默认开启；用户手动关闭后重启保持关闭。 */
 	mcpEnabled?: boolean;
-	/** RAG tab master switch: when false, every vector search returns empty
-	 *  (search / related notes / MCP + chat tools). Defaults to enabled. */
-	vectorSearchEnabled?: boolean;
 	/** 用户在 MCP 标签接入的外部 MCP 服务器（可增删改；内置 semlink 不在此列）。 */
 	mcpClientServers?: McpClientServer[];
 	chunkSize: number;
