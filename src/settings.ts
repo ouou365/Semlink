@@ -2,7 +2,7 @@
 // Semlink - Settings Tab
 // ========================================
 
-import { App, ButtonComponent, DropdownComponent, Notice, PluginSettingTab, Setting, setIcon } from "obsidian";
+import { App, ButtonComponent, DropdownComponent, Notice, PluginSettingTab, Setting, ToggleComponent, setIcon } from "obsidian";
 import * as QRCode from "qrcode";
 import type SmartVaultPlugin from "../main";
 import type { IndexProgress, ModelProvider, SmartVaultSettings } from "./types";
@@ -465,9 +465,67 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	}
 
 	// ══════════════════════════════════════
-	// Tab: MCP — service port, access key, status & client config
+	// Tab: MCP — server card (Cherry-Studio style) + port/key + client config
 	// ══════════════════════════════════════
 	private renderMcpTab(containerEl: HTMLElement): void {
+		const running = !!this.plugin.mcpServer;
+		const mcpUrl = `http://127.0.0.1:${this.plugin.settings.mcpPort}/mcp`;
+
+		// ── 标题行："MCP 1" + 搜索框 ──
+		const head = containerEl.createDiv({ cls: "semlink-mcp-head" });
+		head.createSpan({ cls: "semlink-mcp-count", text: "MCP 1" });
+		const search = head.createDiv({ cls: "semlink-mcp-search" });
+		setIcon(search.createSpan({ cls: "semlink-mcp-search-icon" }), "search");
+		const searchInput = search.createEl("input", {
+			cls: "semlink-mcp-search-input",
+			attr: { type: "text", placeholder: t("mcpSearchPlaceholder"), spellcheck: "false" },
+		});
+
+		// ── Installed 行：数量 + 重启服务 ──
+		const installedHead = containerEl.createDiv({ cls: "semlink-mcp-installed-head" });
+		installedHead.createSpan({
+			cls: "semlink-mcp-installed-title",
+			text: `${t("mcpInstalled")} 1`,
+		});
+		const restartBtn = installedHead.createEl("button", {
+			cls: "semlink-mcp-icon-btn",
+			attr: { "aria-label": t("restartService"), title: t("restartService") },
+		});
+		setIcon(restartBtn, "refresh-cw");
+		restartBtn.addEventListener("click", async () => {
+			await this.plugin.restartMcpServer();
+			rerenderSettingsTab(this);
+		});
+
+		// ── 服务器卡片：semlink 本体（图标 + 状态点 + 名称 + 地址 + 开关） ──
+		const list = containerEl.createDiv({ cls: "semlink-mcp-list" });
+		const card = list.createDiv({ cls: "semlink-mcp-server" });
+		const iconWrap = card.createDiv({
+			cls: "semlink-mcp-server-icon",
+			attr: { title: running ? t("mcpRunning") : t("mcpStopped") },
+		});
+		setIcon(iconWrap, "plug-zap");
+		iconWrap.createSpan({
+			cls: `semlink-mcp-server-dot${running ? " is-on" : ""}`,
+		});
+		const main = card.createDiv({ cls: "semlink-mcp-server-main" });
+		main.createDiv({ cls: "semlink-mcp-server-name", text: "semlink" });
+		main.createDiv({ cls: "semlink-mcp-server-sub", text: `http · ${mcpUrl}` });
+		new ToggleComponent(card)
+			.setValue(running)
+			.onChange(async (v) => {
+				if (v) await this.plugin.startMcpServer();
+				else await this.plugin.stopMcpServer();
+				rerenderSettingsTab(this);
+			});
+
+		// 搜索框过滤服务器卡片（当前只有 semlink 一个，未来可扩展）
+		searchInput.addEventListener("input", () => {
+			const q = searchInput.value.trim().toLowerCase();
+			card.toggleClass("semlink-hidden", q !== "" && !"semlink".includes(q));
+		});
+
+		// ── 服务配置：端口 / 访问 Key ──
 		new Setting(containerEl)
 			.setName(t("mcpPort"))
 			.setDesc(t("mcpPortDesc"))
@@ -499,22 +557,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// MCP Service status & control
-		new Setting(containerEl)
-			.setName(t("mcpService"))
-			.setDesc(this.plugin.mcpServer ? `${t("mcpRunning")} (${t("mcpPortLabel")} ${this.plugin.mcpServer.port})` : t("mcpStopped"))
-			.addButton((btn) =>
-				btn
-					.setButtonText(this.plugin.mcpServer ? t("restartService") : t("startService"))
-					.onClick(async () => {
-						await this.plugin.restartMcpServer();
-						rerenderSettingsTab(this);
-					})
-			);
-
-		// Client configuration
-		const mcpUrl = `http://127.0.0.1:${this.plugin.settings.mcpPort}/mcp`;
-
+		// ── Client configuration ──
 		new Setting(containerEl)
 			.setName(t("claudeCodeCmd"))
 			.setDesc(t("claudeCodeDesc"))

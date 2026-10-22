@@ -171,6 +171,172 @@
     font-size: 12px;
 }
 
+/* ──── MCP tab: server card list (Cherry-Studio style) ──── */
+.semlink-mcp-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 4px 0 14px;
+}
+
+.semlink-mcp-count {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-normal);
+}
+
+.semlink-mcp-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: min(320px, 50%);
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    background: var(--background-primary);
+}
+
+.semlink-mcp-search:focus-within {
+    border-color: var(--interactive-accent);
+}
+
+.semlink-mcp-search-icon {
+    display: flex;
+    align-items: center;
+    color: var(--text-faint);
+}
+
+.semlink-mcp-search-icon .svg-icon {
+    width: 15px;
+    height: 15px;
+}
+
+.semlink-mcp-search-input {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 100%;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+.semlink-mcp-search-input:focus,
+.semlink-mcp-search-input:focus-visible {
+    box-shadow: none;
+    outline: none;
+}
+
+.semlink-mcp-installed-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 8px;
+}
+
+.semlink-mcp-installed-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-normal);
+}
+
+.semlink-mcp-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    background: var(--background-primary);
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.semlink-mcp-icon-btn:hover {
+    border-color: var(--interactive-accent);
+    color: var(--text-normal);
+}
+
+.semlink-mcp-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    background: var(--background-primary);
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.semlink-mcp-server {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+}
+
+.semlink-mcp-server-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    border-radius: 9px;
+    background: var(--background-secondary);
+    color: var(--text-muted);
+}
+
+.semlink-mcp-server-icon .svg-icon {
+    width: 18px;
+    height: 18px;
+}
+
+/* 运行状态点：挂在图标右下角 */
+.semlink-mcp-server-dot {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-faint);
+    border: 2px solid var(--background-primary);
+}
+
+.semlink-mcp-server-dot.is-on {
+    background: var(--color-green);
+}
+
+.semlink-mcp-server-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.semlink-mcp-server-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.semlink-mcp-server-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Settings tabs */
 /* Flex children must be allowed to shrink below their content size —
    inputs and long nowrap spans otherwise force the settings panel into

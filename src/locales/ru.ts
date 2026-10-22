@@ -104,6 +104,8 @@ const t: Record<keyof typeof en, string> = {
 	mcpService: "Служба MCP",
 	mcpRunning: "Работает",
 	mcpStopped: "Остановлена",
+	mcpSearchPlaceholder: "Поиск MCP-серверов…",
+	mcpInstalled: "Установленные",
 	restartService: "Перезапустить",
 	startService: "Запустить",
 	fullReindex: "Пересоздать все векторы",

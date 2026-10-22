@@ -104,6 +104,8 @@ const zh: Record<keyof typeof en, string> = {
 	mcpService: "MCP 服务",
 	mcpRunning: "运行中",
 	mcpStopped: "未启动",
+	mcpSearchPlaceholder: "搜索 MCP 服务器…",
+	mcpInstalled: "已安装",
 	restartService: "重启服务",
 	startService: "启动服务",
 	fullReindex: "重建全部向量",

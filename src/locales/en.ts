@@ -102,6 +102,8 @@ const en = {
 	mcpService: "MCP Service",
 	mcpRunning: "Running",
 	mcpStopped: "Stopped",
+	mcpSearchPlaceholder: "Search MCP servers…",
+	mcpInstalled: "Installed",
 	restartService: "Restart",
 	startService: "Start",
 	fullReindex: "Rebuild All Vectors",

@@ -103,6 +103,8 @@ const t: Record<keyof typeof en, string> = {
 	mcpService: "MCP 服務",
 	mcpRunning: "執行中",
 	mcpStopped: "未啟動",
+	mcpSearchPlaceholder: "搜尋 MCP 伺服器…",
+	mcpInstalled: "已安裝",
 	restartService: "重新啟動服務",
 	startService: "啟動服務",
 	fullReindex: "重建全部向量",

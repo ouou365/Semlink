@@ -105,6 +105,8 @@ const t: Record<keyof typeof en, string> = {
 	mcpService: "Servizio MCP",
 	mcpRunning: "In esecuzione",
 	mcpStopped: "Arrestato",
+	mcpSearchPlaceholder: "Cerca server MCP…",
+	mcpInstalled: "Installati",
 	restartService: "Riavvia",
 	startService: "Avvia",
 	fullReindex: "Ricostruisci tutti i vettori",
