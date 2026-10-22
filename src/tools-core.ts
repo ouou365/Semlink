@@ -30,14 +30,14 @@ export const TOOL_SPECS: ToolSpec[] = [
 	{
 		name: "search",
 		description:
-			"通用检索入口（默认用这个）：并行执行 BM25 关键词检索与向量语义检索，RRF 融合去重后返回单一排名列表。向量路不可用（未配置嵌入模型 / 向量搜索关闭 / 尚未索引）时自动退化为纯 BM25 结果，meta.sources 如实标注。精确术语建议另用 search_bm25。",
+			"Universal search entry point (use this first): runs BM25 keyword search and vector semantic search in parallel, fuses both ranked lists with Reciprocal Rank Fusion, and returns a single deduplicated ranking. When the vector path is unavailable (no embedding model configured / vector search disabled / nothing indexed yet) it automatically degrades to BM25-only results; meta.sources reports what was actually used. For exact terms prefer search_bm25.",
 		parameters: {
 			type: "object",
 			properties: {
-				query: { type: "string", description: "自然语言查询或关键词组合" },
-				limit: { type: "number", description: "返回结果数量上限（默认 10）" },
-				path: { type: "string", description: "路径前缀过滤（可选）" },
-				alpha: { type: "number", description: "融合权重 0-1：0=纯 BM25，1=纯向量，默认 0.5" },
+				query: { type: "string", description: "Natural-language query or keyword combination" },
+				limit: { type: "number", description: "Max results (default 10)" },
+				path: { type: "string", description: "Path prefix filter (optional)" },
+				alpha: { type: "number", description: "Fusion weight 0-1: 0 = BM25 only, 1 = vector only (default 0.5)" },
 			},
 			required: ["query"],
 		},
@@ -45,14 +45,14 @@ export const TOOL_SPECS: ToolSpec[] = [
 	{
 		name: "search_bm25",
 		description:
-			"纯关键词检索（BM25 打分），零嵌入依赖、永远可用。精确术语、编号、日期、代码标识符等语义检索覆盖不到的内容首选。",
+			"Keyword-only search scored with BM25. No embedding dependency — always available. Best for exact terms, IDs, dates, code identifiers that semantic retrieval can miss.",
 		parameters: {
 			type: "object",
 			properties: {
-				query: { type: "string", description: "关键词组合，空格分隔多个词（取并集打分）" },
-				limit: { type: "number", description: "返回结果数量上限（默认 10）" },
-				path: { type: "string", description: "路径前缀过滤（可选）" },
-				case_sensitive: { type: "boolean", description: "是否区分大小写（默认 false）" },
+				query: { type: "string", description: "Keyword combination, space-separated terms (union scored)" },
+				limit: { type: "number", description: "Max results (default 10)" },
+				path: { type: "string", description: "Path prefix filter (optional)" },
+				case_sensitive: { type: "boolean", description: "Case-sensitive matching (default false)" },
 			},
 			required: ["query"],
 		},
@@ -60,13 +60,13 @@ export const TOOL_SPECS: ToolSpec[] = [
 	{
 		name: "search_vector",
 		description:
-			"纯语义向量检索：自然语言查询返回最相关的笔记片段（路径、标题、预览、相似度）。受向量搜索开关控制；未配置嵌入模型时返回明确的不可用提示。",
+			"Pure semantic vector search: natural-language query returns the most relevant note passages (path, heading, preview, score). Controlled by the vector-search toggle; returns an explicit 'unavailable' message instead of empty results when no embedding model is configured.",
 		parameters: {
 			type: "object",
 			properties: {
-				query: { type: "string", description: "自然语言搜索查询" },
-				limit: { type: "number", description: "返回结果数量上限（默认 10）" },
-				threshold: { type: "number", description: "相似度阈值 0-1（默认 0.3）" },
+				query: { type: "string", description: "Natural-language search query" },
+				limit: { type: "number", description: "Max results (default 10)" },
+				threshold: { type: "number", description: "Similarity threshold 0-1 (default 0.3)" },
 			},
 			required: ["query"],
 		},
@@ -74,32 +74,32 @@ export const TOOL_SPECS: ToolSpec[] = [
 	{
 		name: "ls",
 		description:
-			"列出已索引的笔记（含 created/modified ISO 时间），支持按修改/创建/名称排序、时间区间过滤与前缀过滤，limit/offset 分页。对应 shell 的 ls -la：适合「最近记了哪些笔记」「某目录下有什么」。",
+			"List indexed notes with created/modified ISO timestamps. Supports sorting, date-range filters, path prefix and limit/offset pagination — like ls -la. Best for 'what did I note recently' / 'what's in this folder'.",
 		parameters: {
 			type: "object",
 			properties: {
-				path: { type: "string", description: "路径前缀过滤（可选）" },
-				sort: { type: "string", description: "排序：modified（默认，最新在前）| created | name" },
-				limit: { type: "number", description: "最多返回条数（默认 50）" },
-				offset: { type: "number", description: "跳过前 N 条（默认 0，用于翻页）" },
-				recursive: { type: "boolean", description: "是否包含子目录（默认 true）；false 时仅列出 path 的直接内容" },
-				since: { type: "string", description: "仅返回 modified ≥ 此日期的笔记（YYYY-MM-DD，可选）" },
-				until: { type: "string", description: "仅返回 modified ≤ 此日期的笔记（YYYY-MM-DD，可选）" },
+				path: { type: "string", description: "Path prefix filter (optional)" },
+				sort: { type: "string", description: "modified (default, newest first) | created | name" },
+				limit: { type: "number", description: "Max entries (default 50)" },
+				offset: { type: "number", description: "Skip first N entries (default 0, for pagination)" },
+				recursive: { type: "boolean", description: "Include subfolders (default true); false lists only direct children of path" },
+				since: { type: "string", description: "Only notes modified on/after this date (YYYY-MM-DD, optional)" },
+				until: { type: "string", description: "Only notes modified on/before this date (YYYY-MM-DD, optional)" },
 			},
 		},
 	},
 	{
 		name: "read",
 		description:
-			"读取笔记内容，输出带行号（cat -n 风格）并附带 total_lines/total_chars。offset 支持负数（-20 表示从倒数第 20 行读到结尾，即 tail）；heading 可直接定位某章节。与 grep 组合：grep 返回行号 → read 用 offset/limit 读取。",
+			"Read note content with line numbers (cat -n style) plus total_lines/total_chars metadata. offset supports negative values (-20 = last 20 lines, i.e. tail); heading jumps straight to a section. Compose with grep: grep emits line numbers → feed them into offset/limit here.",
 		parameters: {
 			type: "object",
 			properties: {
-				path: { type: "string", description: "笔记在 Vault 中的路径" },
-				offset: { type: "number", description: "起始行号（1-based）；负数表示从末尾倒数（-20 = 倒数 20 行）" },
-				limit: { type: "number", description: "读取的行数（不传读到结尾）" },
-				heading: { type: "string", description: "按标题定位章节（不需要 # 符号），先取章节再应用 offset/limit" },
-				max_depth: { type: "number", description: "heading 章节包含的子标题最大深度（可选）" },
+				path: { type: "string", description: "Note path in the vault" },
+				offset: { type: "number", description: "Start line (1-based); negative counts from the end (-20 = last 20 lines)" },
+				limit: { type: "number", description: "Number of lines to return (default: to the end)" },
+				heading: { type: "string", description: "Locate a section by heading text (without the # marks); offset/limit apply within the section" },
+				max_depth: { type: "number", description: "Max sub-heading depth to include for heading (optional)" },
 			},
 			required: ["path"],
 		},
@@ -107,17 +107,17 @@ export const TOOL_SPECS: ToolSpec[] = [
 	{
 		name: "grep",
 		description:
-			"在笔记内容中按文本或正则精确搜索，输出「文件:行号:内容」——行号可直接喂给 read 的 offset。适合精确关键词、编号、日期、代码标识符。支持 limit/offset 翻页匹配结果。",
+			"Exact text or regex search across note contents, emitting 'file:line: content' — line numbers feed directly into read's offset. Best for exact keywords, IDs, dates, code identifiers. Supports limit/offset pagination over matching files.",
 		parameters: {
 			type: "object",
 			properties: {
-				pattern: { type: "string", description: "文本或正则表达式" },
-				regex: { type: "boolean", description: "pattern 是否为正则（默认 false，按普通文本匹配）" },
-				path: { type: "string", description: "路径前缀过滤（可选）" },
-				case_sensitive: { type: "boolean", description: "是否区分大小写（默认 false）" },
-				context: { type: "number", description: "每个匹配前后附带的上下文行数（默认 1，最大 3）" },
-				limit: { type: "number", description: "附发明细的文件数上限（默认 10，最大 30）" },
-				offset: { type: "number", description: "跳过前 N 个匹配文件（默认 0，用于翻页）" },
+				pattern: { type: "string", description: "Text or regular expression" },
+				regex: { type: "boolean", description: "Treat pattern as regex (default false: literal text)" },
+				path: { type: "string", description: "Path prefix filter (optional)" },
+				case_sensitive: { type: "boolean", description: "Case-sensitive matching (default false)" },
+				context: { type: "number", description: "Context lines around each match (default 1, max 3)" },
+				limit: { type: "number", description: "Max files with detailed lines (default 10, max 30)" },
+				offset: { type: "number", description: "Skip first N matching files (default 0, for pagination)" },
 			},
 			required: ["pattern"],
 		},
@@ -125,13 +125,13 @@ export const TOOL_SPECS: ToolSpec[] = [
 	{
 		name: "find",
 		description:
-			"按文件名找笔记（对应 shell 的 find -iname）：支持 * 通配与子串匹配，如 \"*ECS*\"。只匹配文件名/路径，不搜索内容。",
+			"Find notes by filename (like find -iname): supports * wildcards and substrings, e.g. '*ECS*'. Matches names/paths only — not content.",
 		parameters: {
 			type: "object",
 			properties: {
-				pattern: { type: "string", description: "文件名通配或子串，如 \"*周报*\"" },
-				path: { type: "string", description: "路径前缀过滤（可选）" },
-				limit: { type: "number", description: "最多返回条数（默认 20）" },
+				pattern: { type: "string", description: "Filename glob or substring, e.g. '*weekly*'" },
+				path: { type: "string", description: "Path prefix filter (optional)" },
+				limit: { type: "number", description: "Max entries (default 20)" },
 			},
 			required: ["pattern"],
 		},
@@ -139,11 +139,11 @@ export const TOOL_SPECS: ToolSpec[] = [
 	{
 		name: "headings",
 		description:
-			"返回笔记的标题大纲：[{level, text, line}]，按文档顺序。比 grep 正则可靠（不受代码块内 # 干扰），line 可直接作为 read 的 offset 锚点。",
+			"Return the note's outline as [{level, text, line}] in document order. More reliable than grepping for '#' (ignores code blocks); line doubles as a precise offset for read.",
 		parameters: {
 			type: "object",
 			properties: {
-				path: { type: "string", description: "笔记在 Vault 中的路径" },
+				path: { type: "string", description: "Note path in the vault" },
 			},
 			required: ["path"],
 		},
@@ -151,11 +151,11 @@ export const TOOL_SPECS: ToolSpec[] = [
 	{
 		name: "links",
 		description:
-			"返回笔记的 wikilinks 双链关系：backlinks（哪些笔记链接到它，附匹配行）+ outlinks（它链接到哪些笔记）。与语义相似检索互补：精确引用关系。",
+			"Return the note's wikilink graph: backlinks (notes linking to it, with the matching line) and outlinks (notes it links to). Complements semantic similarity with exact reference relations.",
 		parameters: {
 			type: "object",
 			properties: {
-				path: { type: "string", description: "笔记在 Vault 中的路径" },
+				path: { type: "string", description: "Note path in the vault" },
 			},
 			required: ["path"],
 		},
@@ -163,22 +163,22 @@ export const TOOL_SPECS: ToolSpec[] = [
 	{
 		name: "active",
 		description:
-			"获取当前正在 Obsidian 中打开的笔记的路径（仅路径）。适合「当前笔记是什么」「针对我正在看的这篇笔记」等问题；需要内容时再用 read。",
+			"Get the path of the note currently open in Obsidian (path only). For 'what am I looking at' / 'about my current note' questions; use read for content.",
 		parameters: { type: "object", properties: {} },
 	},
 	{
 		name: "status",
-		description: "获取当前索引状态与进度（阶段、笔记数、chunk 数、失败数）。",
+		description: "Get current index status and progress (phase, notes, chunks, failures).",
 		parameters: { type: "object", properties: {} },
 	},
 	{
 		name: "reindex",
-		description: "触发重新索引（可指定单个文件；force=true 时清空全量重建）。管理类工具。",
+		description: "Trigger reindexing (single file, or full rebuild with force=true). Admin tool.",
 		parameters: {
 			type: "object",
 			properties: {
-				path: { type: "string", description: "仅重建该文件（可选）" },
-				force: { type: "boolean", description: "清空已有数据后全量重建（默认 false）" },
+				path: { type: "string", description: "Rebuild this file only (optional)" },
+				force: { type: "boolean", description: "Clear existing data and rebuild fully (default false)" },
 			},
 		},
 	},
@@ -311,7 +311,7 @@ export class ToolCore {
 		if (!query.trim()) return "Error: missing query";
 		if (!this.deps.store.searchGate()) {
 			return JSON.stringify({
-				error: "向量搜索不可用：已在 RAG 设置中关闭，或未配置嵌入模型。请改用 search_bm25 / grep。",
+				error: "Vector search is unavailable (disabled in RAG settings, or no embedding model configured). Use search_bm25 or grep instead.",
 			});
 		}
 		const results = await this.vectorRaw(query, limit, threshold);
@@ -685,7 +685,7 @@ export class ToolCore {
 
 	async active(): Promise<string> {
 		const path = this.deps.getActiveNote();
-		if (!path) return "Error: 当前没有打开的笔记。请让用户先打开一篇笔记，或改用 search / grep / find 检索知识库。";
+		if (!path) return "Error: No note is currently open in Obsidian. Ask the user to open one, or use search / grep / find instead.";
 		const n = this.cite?.(path);
 		return JSON.stringify({ path, ...(n ? { n } : {}) });
 	}
