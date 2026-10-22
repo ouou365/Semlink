@@ -18,6 +18,11 @@ import { t } from "./i18n";
 const MAX_TOOL_ITERATIONS = 5;
 /** After this many tool rounds, nudge the model to answer directly. */
 const NUDGE_AFTER_ROUND = 3;
+/** Explicit per-round output budget. DeepSeek-style OpenAI-compatible APIs
+ *  default to ~4K output tokens, which silently truncates long answers
+ *  mid-sentence (finish_reason "length"); always ask for more. Providers
+ *  with a lower cap reject the request — streamWithBudget steps down. */
+const CHAT_MAX_OUTPUT_TOKENS = 16384;
 /**
  * ZCode-style retry: 10 attempts in total (like ZCode's "重新连接中... N/10").
  * The first dispatch has no wait; attempt N (N≥2) waits
@@ -123,7 +128,7 @@ interface OpenAIStreamDelta {
 
 /** One SSE event of an OpenAI-compatible chat stream. */
 interface OpenAIStreamEvent {
-	choices?: Array<{ delta?: OpenAIStreamDelta }>;
+	choices?: Array<{ delta?: OpenAIStreamDelta; finish_reason?: string }>;
 	usage?: OpenAIUsage;
 }
 
@@ -285,6 +290,10 @@ interface OpenAIChatBody {
 	messages: ConversationMessage[];
 	stream: boolean;
 	stream_options: { include_usage: boolean };
+	/** Omitted on purpose for analysis rounds only — every answer-carrying
+	 *  round sets an explicit budget, because DeepSeek-style defaults (4K)
+	 *  truncate long submit_answer arguments mid-sentence. */
+	max_tokens?: number;
 	tools?: OpenAIToolSchema[];
 	tool_choice?: { type: "function"; function: { name: string } };
 }
@@ -351,6 +360,11 @@ export class ChatClient {
 	 *  model saw as [n]. The chat view reads it to make every inline [n]
 	 *  clickable, including hits the source cards filtered out. */
 	latestCiteRegistry: string[] = [];
+	/** Current per-round output-token budget; steps down when a provider
+	 *  rejects CHAT_MAX_OUTPUT_TOKENS (older models cap at 8192/4096), and 0
+	 *  means "omit max_tokens entirely" (provider default). Remembered across
+	 *  rounds so a rejected budget is paid once, not per round. */
+	private outputBudget = CHAT_MAX_OUTPUT_TOKENS;
 
 	constructor(settings: SmartVaultSettings, tools: SemlinkTools | null = null) {
 		this.settings = settings;
@@ -1120,7 +1134,7 @@ export class ChatClient {
 				// onStream is passed for EVERY round — streamOpenAIChat gates
 				// forwarding internally (submit-arg partials, live threshold,
 				// end-of-round one-shot).
-				stream = await this.streamOpenAIChat(
+				stream = await this.streamOpenAIWithBudget(
 					openaiUrl,
 					provider,
 					body,
@@ -1133,7 +1147,7 @@ export class ChatClient {
 				// to the legacy plain-text answer and retry the round once.
 				submitDisabled = true;
 				console.warn("[Semlink] submit_answer rejected, degrading to plain text:", e);
-				stream = await this.streamOpenAIChat(
+				stream = await this.streamOpenAIWithBudget(
 					openaiUrl,
 					provider,
 					{ ...body, tools: undefined, tool_choice: undefined },
@@ -1150,12 +1164,20 @@ export class ChatClient {
 
 			// Forced submit call: the answer arrives as the tool call's
 			// `answer` argument. Deltas were streamed live out of the partial
-			// JSON; this final parse is authoritative.
+			// JSON; this final parse is authoritative. A "length" finish means
+			// the answer was cut mid-generation — continue it to completion.
 			const submitCall = stream.toolCalls.find((tc) => tc?.function?.name === SUBMIT_TOOL_NAME);
 			if (submitCall) {
 				const submitted = this.parseSubmittedAnswer(submitCall.function.arguments || "", stream.content);
-				onStream?.(submitted.answer);
-				return finalize(submitted.answer, submitted.sources);
+				let answer = submitted.answer;
+				if (stream.finishReason === "length" && answer.trim()) {
+					const cont = await this.continueTruncatedAnswer(openaiUrl, provider, model, messages, answer, onStream, signal);
+					usageIn += cont.roundIn;
+					usageOut += cont.roundOut;
+					answer = cont.text;
+				}
+				onStream?.(answer);
+				return finalize(answer, submitted.sources);
 			}
 
 			if (stream.toolCalls.length === 0) {
@@ -1181,8 +1203,15 @@ export class ChatClient {
 				// accept it as final instead of executing a bogus tool.
 				if (name === SUBMIT_TOOL_NAME) {
 					const submitted = this.parseSubmittedAnswer(rawArgs, stream.content);
-					onStream?.(submitted.answer);
-					return finalize(submitted.answer, submitted.sources);
+					let answer = submitted.answer;
+					if (stream.finishReason === "length" && answer.trim()) {
+						const cont = await this.continueTruncatedAnswer(openaiUrl, provider, model, messages, answer, onStream, signal);
+						usageIn += cont.roundIn;
+						usageOut += cont.roundOut;
+						answer = cont.text;
+					}
+					onStream?.(answer);
+					return finalize(answer, submitted.sources);
 				}
 
 				let args: Record<string, unknown> = {};
@@ -1261,7 +1290,7 @@ export class ChatClient {
 		body: OpenAIChatBody,
 		onStream?: (text: string) => void,
 		signal?: AbortSignal,
-	): Promise<{ content: string; toolCalls: OpenAIToolCall[]; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
+	): Promise<{ content: string; toolCalls: OpenAIToolCall[]; finishReason: string; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
 		let resp: Response;
 		try {
 			// SSE streaming: requestUrl buffers the whole body and cannot deliver
@@ -1302,6 +1331,7 @@ export class ChatClient {
 		}
 
 		let content = "";
+		let finishReason = "";
 		let usageTokens = 0;
 		let roundIn = 0;
 		let roundOut = 0;
@@ -1317,7 +1347,9 @@ export class ChatClient {
 		let toolDeltaSeen = false;
 		let liveForward = false;
 		await this.readSSE<OpenAIStreamEvent>(resp, (json) => {
-			const delta = json?.choices?.[0]?.delta;
+			const choice = json?.choices?.[0];
+			const delta = choice?.delta;
+			if (choice?.finish_reason) finishReason = choice.finish_reason;
 			if (typeof delta?.content === "string" && delta.content) {
 				content += delta.content;
 				// Live forward: no-tool rounds stream every delta; tool-attached
@@ -1385,7 +1417,147 @@ export class ChatClient {
 			onStream(content);
 		}
 
-		return { content, toolCalls: calls, usageTokens, cacheHits, roundIn, roundOut };
+		return { content, toolCalls: calls, finishReason, usageTokens, cacheHits, roundIn, roundOut };
+	}
+
+	/** streamOpenAIChat with the output budget attached (unless the caller set
+	 *  its own max_tokens). A 400 complaining about max_tokens means the model
+	 *  caps output lower — step the budget down (16384→8192→4096→omit) and
+	 *  remember, so the failure is paid once per provider, not per round. */
+	private async streamOpenAIWithBudget(
+		url: string,
+		provider: ChatProvider,
+		body: OpenAIChatBody,
+		onStream?: (text: string) => void,
+		signal?: AbortSignal,
+	): Promise<{ content: string; toolCalls: OpenAIToolCall[]; finishReason: string; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
+		const effective: OpenAIChatBody = body.max_tokens !== undefined ? body
+			: this.outputBudget > 0 ? { ...body, max_tokens: this.outputBudget } : body;
+		try {
+			return await this.streamOpenAIChat(url, provider, effective, onStream, signal);
+		} catch (e) {
+			const status = (e as { status?: number } | null)?.status;
+			const msg = String((e as Error)?.message || e || "");
+			if (status === 400 && body.max_tokens === undefined && this.outputBudget > 0 && /max[_ ]?tokens|output|length|context/i.test(msg)) {
+				this.outputBudget = this.outputBudget >= 16384 ? 8192 : this.outputBudget >= 8192 ? 4096 : 0;
+				console.warn(`[Semlink] provider rejected max_tokens, retrying with budget=${this.outputBudget || "default"}:`, msg);
+				return this.streamOpenAIWithBudget(url, provider, body, onStream, signal);
+			}
+			throw e;
+		}
+	}
+
+	/** The submit-round answer hit the provider's output cap mid-argument
+	 *  (finish_reason "length") — the model DID answer, just not fully.
+	 *  Continue with tool-free plain rounds: feed the truncated text back as
+	 *  an assistant message and ask the model to pick up where it stopped.
+	 *  `onStream` keeps receiving the FULL answer so the UI stays live. */
+	private async continueTruncatedAnswer(
+		url: string,
+		provider: ChatProvider,
+		model: string,
+		messages: ConversationMessage[],
+		partial: string,
+		onStream?: (text: string) => void,
+		signal?: AbortSignal,
+	): Promise<{ text: string; roundIn: number; roundOut: number }> {
+		let answer = partial;
+		let totalIn = 0;
+		let totalOut = 0;
+		for (let pass = 0; pass < 2; pass++) {
+			if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+			messages.push({ role: "assistant", content: answer });
+			messages.push({ role: "user", content: t("promptContinue") });
+			const r = await this.streamOpenAIWithBudget(
+				url,
+				provider,
+				{ model, messages, stream: true, stream_options: { include_usage: true } },
+				(text) => onStream?.(answer + text),
+				signal,
+			);
+			totalIn += r.roundIn;
+			totalOut += r.roundOut;
+			answer += r.content;
+			if (r.finishReason !== "length" || !r.content.trim()) break;
+		}
+		return { text: answer, roundIn: totalIn, roundOut: totalOut };
+	}
+
+	/** streamAnthropicChat with the shared output budget. Anthropic requires
+	 *  max_tokens, so the floor is 4096: a 400 about the cap steps 16384 →
+	 *  8192 → 4096 and is remembered via outputBudget for later rounds. */
+	private async streamAnthropicWithBudget(
+		url: string,
+		provider: ChatProvider,
+		body: AnthropicChatBody,
+		onStream?: (text: string) => void,
+		signal?: AbortSignal,
+	): Promise<{
+		contentBlocks: ContentBlock[];
+		toolUses: AnthropicToolUse[];
+		stopReason: string;
+		usageTokens: number;
+		cacheHits: CacheSample[];
+		roundIn: number;
+		roundOut: number;
+		rawToolInputs: Record<string, string>;
+	}> {
+		try {
+			return await this.streamAnthropicChat(url, provider, body, onStream, signal);
+		} catch (e) {
+			const status = (e as { status?: number } | null)?.status;
+			const msg = String((e as Error)?.message || e || "");
+			if (status === 400 && body.max_tokens > 4096 && /max[_ ]?tokens|output|length|context/i.test(msg)) {
+				this.outputBudget = Math.max(4096, Math.floor(body.max_tokens / 2));
+				console.warn(`[Semlink] provider rejected max_tokens, retrying with budget=${this.outputBudget}:`, msg);
+				return this.streamAnthropicWithBudget(url, provider, { ...body, max_tokens: this.outputBudget }, onStream, signal);
+			}
+			throw e;
+		}
+	}
+
+	/** Anthropic counterpart of continueTruncatedAnswer: stop_reason
+	 *  "max_tokens" cut the submit_answer input mid-answer — continue with
+	 *  tool-free plain rounds until complete (or 2 more passes). */
+	private async continueAnthropicTruncated(
+		url: string,
+		provider: ChatProvider,
+		model: string,
+		systemPrompt: string,
+		messages: ConversationMessage[],
+		partial: string,
+		onStream?: (text: string) => void,
+		signal?: AbortSignal,
+	): Promise<{ text: string; roundIn: number; roundOut: number }> {
+		let answer = partial;
+		let totalIn = 0;
+		let totalOut = 0;
+		for (let pass = 0; pass < 2; pass++) {
+			if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+			messages.push({ role: "assistant", content: [{ type: "text", text: answer }] });
+			messages.push({ role: "user", content: t("promptContinue") });
+			const r = await this.streamAnthropicWithBudget(
+				url,
+				provider,
+				{
+					model,
+					max_tokens: this.outputBudget || 4096,
+					system: systemPrompt,
+					messages,
+					stream: true,
+				},
+				(text) => onStream?.(answer + text),
+				signal,
+			);
+			totalIn += r.roundIn;
+			totalOut += r.roundOut;
+			answer += r.contentBlocks
+				.filter((b) => b?.type === "text")
+				.map((b) => String(b.text))
+				.join("");
+			if (r.stopReason !== "max_tokens") break;
+		}
+		return { text: answer, roundIn: totalIn, roundOut: totalOut };
 	}
 
 	// ──── Anthropic format (streaming) ────
@@ -1536,7 +1708,7 @@ export class ChatClient {
 			}
 			const body: AnthropicChatBody = {
 				model,
-				max_tokens: 4096,
+				max_tokens: this.outputBudget || 4096,
 				system: systemPrompt,
 				messages,
 				stream: true,
@@ -1562,7 +1734,7 @@ export class ChatClient {
 				// onStream is passed for EVERY round — streamAnthropicChat gates
 				// forwarding internally (submit-arg partials, live threshold,
 				// end-of-round replay).
-				stream = await this.streamAnthropicChat(
+				stream = await this.streamAnthropicWithBudget(
 					anthropicUrl,
 					provider,
 					body,
@@ -1575,7 +1747,7 @@ export class ChatClient {
 				// to the legacy plain-text answer and retry the round once.
 				submitDisabled = true;
 				console.warn("[Semlink] submit_answer rejected, degrading to plain text:", e);
-				stream = await this.streamAnthropicChat(
+				stream = await this.streamAnthropicWithBudget(
 					anthropicUrl,
 					provider,
 					{ ...body, tools: undefined, tool_choice: undefined },
@@ -1611,6 +1783,14 @@ export class ChatClient {
 						.map((b) => String(b.text))
 						.join("\n")
 						.trim();
+				}
+				// stop_reason "max_tokens" cut the answer mid-generation — the
+				// model DID answer, just not fully. Continue it to completion.
+				if (stream.stopReason === "max_tokens" && submitted.trim()) {
+					const cont = await this.continueAnthropicTruncated(anthropicUrl, provider, model, systemPrompt, messages, submitted, onStream, signal);
+					usageIn += cont.roundIn;
+					usageOut += cont.roundOut;
+					submitted = cont.text;
 				}
 				await this.replay(submitted, onStream);
 				return finalize(submitted, sources);

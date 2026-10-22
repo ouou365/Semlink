@@ -306,6 +306,7 @@ const t: Record<keyof typeof en, string> = {
 	promptAnswerPhase: "(Fase di risposta) Ora produci la risposta ufficiale: se la tua analisi precedente ha menzionato informazioni insufficienti o note da verificare (es. documenti correlati o dettagli di protocollo citati nei frammenti), chiama prima gli strumenti per leggerli; poi fornisci una risposta finale completa e ben organizzata. La risposta finale non deve ripetere l'analisi: dai direttamente la risposta completa.",
 	promptRepeatSkip: "(Chiamata ripetuta rilevata e ignorata. Dai direttamente la tua risposta finale in base alle informazioni già raccolte.)",
 	searchAnswerNowHint: "Dai ora la tua risposta finale in base alle informazioni raccolte finora. Non chiamare altri strumenti.",
+	promptContinue: "La tua risposta precedente è stata interrotta dal limite di lunghezza dell'output prima di essere completata. Continua esattamente da dove si era fermata e scrivi SOLO la parte mancante: non ripetere il testo già scritto e non aggiungere preamboli o formule di chiusura.",
 	searchNoFinalAnswer: "Il modello ha continuato a chiamare strumenti senza produrre una risposta finale. Prova con una domanda più specifica o più semplice.",
 	searchNoMatchAnswer: "Le note sono state recuperate, ma il modello non è riuscito a comporre una risposta finale. Prova a riformulare, oppure consulta le fonti qui sotto.",
 	searchSources: "Fonti",

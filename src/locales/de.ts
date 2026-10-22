@@ -304,6 +304,7 @@ const t: Record<keyof typeof en, string> = {
 	promptAnswerPhase: "(Antwortphase) Erstelle jetzt die offizielle Antwort: Hat deine obige Analyse unzureichende Informationen oder zu prüfende Notizen erwähnt (z. B. verwandte Dokumente oder Protokolldetails aus den Ausschnitten), rufe zuerst Tools auf, um sie zu lesen; gib dann eine vollständige, gut gegliederte finale Antwort aus. Die finale Antwort darf die Analyse nicht wiederholen – gib direkt die vollständige Antwort.",
 	promptRepeatSkip: "(Wiederholten Aufruf erkannt und übersprungen. Bitte gib deine finale Antwort direkt auf Basis der bereits gesammelten Informationen.)",
 	searchAnswerNowHint: "Bitte gib jetzt deine finale Antwort auf Basis der bisher gesammelten Informationen. Rufe keine weiteren Tools mehr auf.",
+	promptContinue: "Deine vorherige Antwort wurde vor dem Abschluss durch das Ausgabelängen-Limit abgeschnitten. Fahre genau an der Abruchstelle fort und schreibe NUR den fehlenden Rest – wiederhole keinen bereits geschriebenen Text und füge keine Einleitung oder Schlussformel hinzu.",
 	searchNoFinalAnswer: "Das Modell hat wiederholt Tools aufgerufen, ohne eine finale Antwort zu liefern. Stelle eine spezifischere oder einfachere Frage.",
 	searchNoMatchAnswer: "Es wurden Notizen gefunden, aber das Modell konnte keine finale Antwort daraus formulieren. Formuliere die Frage um oder prüfe die Quellen unten.",
 	searchSources: "Quellen",

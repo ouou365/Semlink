@@ -303,6 +303,7 @@ const en = {
 	promptAnswerPhase: "(Answer phase) Now produce the official answer: if your analysis above mentioned insufficient information or notes to verify (e.g. related documents or protocol details mentioned in snippets), call tools to read them first; then output a complete, well-organized final answer. The final answer must not repeat the analysis - give the complete answer directly.",
 	promptRepeatSkip: "(Repeated call detected and skipped. Please give your final answer directly based on the information already gathered.)",
 	searchAnswerNowHint: "Please give your final answer now based on the information gathered so far. Do not call any more tools.",
+	promptContinue: "Your previous reply was cut off by the output length limit before you finished. Continue from exactly where it stopped — write ONLY the missing remainder, do not repeat any text already written, and do not add any preamble or closing.",
 	searchNoFinalAnswer: "The model kept calling tools without producing a final answer. Try a more specific or simpler question.",
 	searchNoMatchAnswer: "Notes were retrieved, but the model could not assemble a final answer. Try rephrasing, or check the sources below.",
 	searchSources: "Sources",
