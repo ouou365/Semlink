@@ -716,7 +716,7 @@ export class SemanticSearchView extends ItemView {
 			if (!hasAttachments) {
 				// Retrieval is OPTIONAL — the embedding extension may be
 				// unconfigured or its endpoint unreachable. The chat still
-				// runs context-free, and grep_notes/get_note ground the agent
+				// runs context-free, and grep/read ground the agent
 				// without needing any vectors.
 				try {
 					const embedResult = await this.client.embed([query]);
@@ -747,7 +747,7 @@ export class SemanticSearchView extends ItemView {
 				// model may call Semlink's search/read tools to dig deeper.
 				if (!hasAttachments && results.length === 0) {
 					// 检索无结果 ≠ 结束：空上下文继续对话，Agent 会用
-					// grep_notes/get_note 等不需要向量的工具自行取证。
+					// grep/read 等不需要向量的工具自行取证。
 					loadingEl.createDiv({ cls: "semlink-msg-empty", text: t("searchNoResults") });
 				}
 				// Loading line: animated status text + a "▸" marker on the LEFT
@@ -883,20 +883,20 @@ export class SemanticSearchView extends ItemView {
 				// generation (生成回答中).
 				let hasCalledTool = false;
 
-				// The initial evidence step (search_notes / read_attachments) is
+				// The initial evidence step (search / read) is
 				// known up front — seed the LIVE thinking preview with it.
 				const initialResults = hasAttachments ? [] : results.slice(0, ANSWER_CONTEXT_SIZE);
 				const firstStep: ThinkingStep = hasAttachments
 					? {
 						type: "tool",
-						name: "read_attachments",
+						name: "read",
 						args: { files: [...turnAttachments] },
 						result: `已读取 ${turnAttachments.length} 个拖入的笔记内容，作为本次回答的主要依据。`,
 					}
 					: {
 						type: "tool",
-						name: "search_notes",
-						args: { query, limit: ANSWER_CONTEXT_SIZE, threshold: DEFAULT_THRESHOLD },
+						name: "search",
+						args: { query, limit: ANSWER_CONTEXT_SIZE },
 						result: JSON.stringify(
 							initialResults.map((r) => ({
 								path: r.notePath,
@@ -957,10 +957,10 @@ export class SemanticSearchView extends ItemView {
 				// Current-note awareness: tell the model which note the user is
 				// viewing AND how to use it — phrased as an explicit instruction,
 				// because a bare name line reads like more retrieved content and
-				// the model ends up feeding the question verbatim to search_notes.
+				// the model ends up feeding the question verbatim to search.
 				const activeFile = this.app.workspace.getActiveFile();
 				const currentNoteLine = activeFile
-					? `\n\n用户当前正在浏览的笔记：《${activeFile.basename}》（路径：${activeFile.path}）。当问题涉及"当前笔记""这篇笔记""正在看的笔记"等指代时，直接调用 get_note 读取上述路径来回答，不要把问题原文当作检索词去 search_notes。`
+					? `\n\n用户当前正在浏览的笔记：《${activeFile.basename}》（路径：${activeFile.path}）。当问题涉及"当前笔记""这篇笔记""正在看的笔记"等指代时，直接调用 read 读取上述路径来回答，需要语义检索时用 search，精确检索用 grep。`
 					: "";
 				const fullContext = context + currentNoteLine;
 					try {
@@ -1133,7 +1133,7 @@ export class SemanticSearchView extends ItemView {
 					// against the known path set (initial retrieval + dropped
 					// attachments + tool-read notes). Precision mode kicks in
 					// when a declaration survives validation OR the model
-					// actually opened notes (get_note/get_section): the card
+					// actually opened notes (read): the card
 					// lists declared + opened notes only — bare search hits
 					// the model never used are dropped. Only a turn answered
 					// purely from snippets (nothing declared, nothing opened)
@@ -1143,7 +1143,7 @@ export class SemanticSearchView extends ItemView {
 					// Persist this turn into chat history (incl. context usage so
 					// the ring + tooltip can be restored when re-opening). The
 					// initial retrieval step is prepended here too — otherwise
-					// re-opened history would lose the search_notes evidence.
+					// re-opened history would lose the search evidence.
 					await this.recordAssistantMessage(
 						answer,
 						[firstStep, ...thinking],
