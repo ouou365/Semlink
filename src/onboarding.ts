@@ -653,12 +653,10 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			return;
 		}
 
-		// Sub-state C: pick the model from the validated provider — models
-		// stream in step by step as classification advances; rows carry a
-		// toggle (settings style), Confirm submits the enabled set. The whole
-		// block (stepper + search + list) pins to the top of the panel.
-		// Curated lists (edited in settings) render as-is — nothing streams in.
-		let streaming = !provider.curated;
+		// Sub-state C: pick the model from the validated provider — rows carry
+		// a toggle (settings style), Confirm submits the enabled set. Fetch
+		// pulls the endpoint's list into a check-off dialog. The whole block
+		// (stepper + search + list) pins to the top of the panel.
 		let filter = "";
 		const kindWanted = isChat ? "chat" : "embedding";
 		const inScope = (m: ChatModel): boolean =>
@@ -678,10 +676,11 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			renderList();
 		});
 
-		// 计数 + 添加模型行（同设置页右栏："N models" 左，"+ Add" 右）
+		// 计数 + 按钮行（同设置页右栏："N models" 左，"+ Add / Fetch" 右）
 		const countRow = modelsHost.createDiv({ cls: "semlink-guide-model-count" });
 		const countText = countRow.createSpan({ cls: "semlink-guide-model-count-text" });
-		const addBtn = countRow.createEl("button", {
+		const countBtns = countRow.createSpan({ cls: "semlink-guide-model-count-btns" });
+		const addBtn = countBtns.createEl("button", {
 			cls: "semlink-guide-model-add",
 			text: "＋ " + t("mtAddModel"),
 		});
@@ -705,6 +704,16 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 					void plugin.saveSettings();
 					renderList();
 				},
+			}).open();
+		});
+		const fetchBtn = countBtns.createEl("button", {
+			cls: "semlink-guide-model-add",
+			text: "⇣ " + t("guideFetchModels"),
+		});
+		fetchBtn.addEventListener("click", () => {
+			new GuideFetchModelsModal(plugin, provider, kindWanted, () => {
+				void plugin.saveSettings();
+				renderList();
 			}).open();
 		});
 
@@ -765,7 +774,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 					renderList();
 				});
 			}
-			if (models.length === 0 && !streaming) {
+			if (models.length === 0) {
 				cards.createDiv({
 					cls: "semlink-guide-hint",
 					text: filter ? t("guideSearchNoMatch") : isChat ? t("guideNoChatModel") : t("guideNoEmbed"),
@@ -775,60 +784,116 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		};
 
 		renderList();
+	};
 
-		// Stream the classification: every newly identified model appears in
-		// the list immediately — no need to wait for the full sweep. Known
-		// kinds are cached, so repeat visits only re-probe unknowns.
-		const upsert = (m: FetchedModel): boolean => {
-			// ChatModelKind has no "unknown" — unclassifiable models fall back
-			// to the chat label but stay disabled.
-			const rawKind = m.kind ?? "chat";
-			const kind: ChatModelKind = rawKind === "unknown" ? "chat" : rawKind;
-			const enabled = rawKind === "chat" || rawKind === "embedding";
-			const existing = provider.models.find((x) => x.id === m.id);
-			if (existing) {
-				existing.kind = kind;
-				existing.enabled = enabled;
-				if (m.contextWindow !== undefined) existing.contextWindow = m.contextWindow;
-				return false;
-			}
-			provider.models.push({
-				id: m.id,
-				contextWindow: m.contextWindow ?? FALLBACK_CONTEXT,
-				kind,
-				enabled,
-			});
-			return inScope(provider.models[provider.models.length - 1]);
-		};
+	redraw();
+}
 
-		const stream = async (): Promise<void> => {
-			try {
-				await fetchAvailableModels(plugin, provider.apiBase, provider.apiKey, provider.apiFormat,
-					(done, total, model) => {
-						// 拉取进度走提示行（原 Fetch models 按钮已改为 Back）
-						if (model && upsert(model)) renderList();
-						else error.setText(`${t("guideFetchModels")} ${done}/${total}`);
-					});
-					streaming = false;
-					// The list now mirrors the endpoint — mark it curated so later
-					// guide runs don't refetch (which would resurrect models the
-					// user removed in settings in the meantime).
-					provider.curated = true;
-					await plugin.saveSettings();
-					renderList();
-				} catch (e) {
-					streaming = false;
-					renderList();
-					error.setText(t("guideFetchFailed").replace("{err}", e instanceof Error ? e.message : String(e)));
-				}
-			};
-			// Auto-fetch only for providers the user never curated in settings —
-			// refetching a curated list would silently resurrect models the user
-			// deliberately removed there.
-			if (!provider.curated) {
-				void stream();
-			}
-		};
+/** 引导第三步的"获取模型"弹窗：拉取端点的模型清单（带进度），勾选后加入
+ *  本地列表并启用；确认后标记 curated，之后不再重复拉取。 */
+class GuideFetchModelsModal extends Modal {
+	private models: FetchedModel[] = [];
+	private checked = new Set<string>();
 
-		redraw();
+	constructor(
+		private plugin: SmartVaultPlugin,
+		private provider: ModelProvider,
+		private kindWanted: "chat" | "embedding",
+		private onAdopt: () => void,
+	) {
+		super(plugin.app);
+		this.modalEl.addClass("semlink-guide-series-modal");
 	}
+
+	onOpen(): void {
+		this.titleEl.setText(t("guideFetchModels"));
+		const { contentEl } = this;
+		const status = contentEl.createDiv({ cls: "semlink-guide-error" });
+		status.setText(`${t("guideFetchModels")} …`);
+		const list = contentEl.createDiv({ cls: "semlink-guide-fetch-list" });
+		const footer = contentEl.createDiv({ cls: "semlink-guide-footer" });
+		const cancelBtn = footer.createEl("button", {
+			cls: "semlink-guide-save semlink-guide-secondary",
+			text: t("cancel"),
+		});
+		cancelBtn.addEventListener("click", () => this.close());
+		const confirmBtn = footer.createEl("button", {
+			cls: "semlink-guide-save semlink-guide-primary",
+			text: t("confirm"),
+		});
+		confirmBtn.disabled = true;
+
+		const renderItems = (): void => {
+			list.empty();
+			const sorted = [...this.models].sort((a, b) =>
+				a.id.localeCompare(b.id, undefined, { sensitivity: "base", numeric: true }));
+			for (const m of sorted) {
+				const row = list.createDiv({ cls: "semlink-guide-fetch-row" });
+				const cb = row.createEl("input", { type: "checkbox" });
+				cb.checked = this.checked.has(m.id);
+				const sync = (): void => {
+					if (cb.checked) this.checked.add(m.id);
+					else this.checked.delete(m.id);
+				};
+				cb.addEventListener("change", sync);
+				row.addEventListener("click", (e) => {
+					if ((e.target as HTMLElement).isSameNode(cb)) return;
+					cb.checked = !cb.checked;
+					sync();
+				});
+				const main = row.createSpan({ cls: "semlink-guide-model-main" });
+				main.createSpan({ cls: "semlink-guide-model-id", text: m.id });
+				const ctx = m.contextWindow ?? 0;
+				if (ctx > 0) {
+					main.createSpan({ cls: "semlink-guide-model-ctx", text: formatContextWindow(ctx) });
+				}
+			}
+			confirmBtn.disabled = this.models.length === 0;
+		};
+
+		void (async () => {
+			try {
+				const fetched = await fetchAvailableModels(
+					this.plugin,
+					this.provider.apiBase,
+					this.provider.apiKey,
+					this.provider.apiFormat,
+					(done, total) => {
+						status.setText(`${t("guideFetchModels")} ${done}/${total}`);
+					},
+				);
+				this.models = fetched.filter((m) => (m.kind ?? "chat") === this.kindWanted);
+				for (const m of this.models) this.checked.add(m.id);
+				status.setText(this.models.length === 0 ? t("fetchEmpty") : "");
+				renderItems();
+			} catch (e) {
+				status.setText(t("guideFetchFailed").replace("{err}", e instanceof Error ? e.message : String(e)));
+			}
+		})();
+
+		confirmBtn.addEventListener("click", () => {
+			for (const m of this.models) {
+				if (!this.checked.has(m.id)) continue;
+				const existing = this.provider.models.find((x) => x.id === m.id);
+				if (existing) {
+					existing.enabled = true;
+				} else {
+					this.provider.models.push({
+						id: m.id,
+						contextWindow: m.contextWindow ?? FALLBACK_CONTEXT,
+						kind: this.kindWanted,
+						enabled: true,
+					});
+				}
+			}
+			// 清单已按端点镜像——标记 curated，之后不再自动拉取。
+			this.provider.curated = true;
+			this.close();
+			this.onAdopt();
+		});
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
