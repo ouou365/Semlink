@@ -381,7 +381,9 @@ export class Scheduler {
 				// Save embeddings (UPDATE chunks SET vector = ... WHERE id = ?).
 				// Only embeddable chunks get a vector; sparse chunks stay active/NULL
 				// (excluded from search by the `vector IS NOT NULL` filter).
-				await this.store.saveEmbeddings(embeddableChunks.map((c) => c.id), allEmbeddings);
+				if (allEmbeddings.length > 0) {
+					await this.store.saveEmbeddings(embeddableChunks.map((c) => c.id), allEmbeddings);
+				}
 
 				// Save the document-level (heading) vector in the same transaction.
 				if (docEmbedding && docHeadingText) {

@@ -551,8 +551,10 @@ export class DbEngine {
 	 */
 	saveEmbeddings(chunkIds: string[], embeddings: number[][]): void {
 		for (let i = 0; i < chunkIds.length; i++) {
+			const embedding = embeddings[i];
+			if (!embedding) continue; // 无向量（纯文本索引）→ 保持 vector 为 NULL
 			const vec = new Float32Array(EMBEDDING_DIM);
-			for (let j = 0; j < Math.min(embeddings[i].length, EMBEDDING_DIM); j++) {
+			for (let j = 0; j < Math.min(embedding.length, EMBEDDING_DIM); j++) {
 				vec[j] = embeddings[i][j];
 			}
 			const blob = Buffer.from(vec.buffer);
