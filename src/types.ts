@@ -246,6 +246,8 @@ export interface SmartVaultSettings {
 	/** RAG tab master switch: when false, every vector search returns empty
 	 *  (search / related notes / MCP + chat tools). Defaults to enabled. */
 	vectorSearchEnabled?: boolean;
+	/** 用户在 MCP 标签接入的外部 MCP 服务器（可增删改；内置 semlink 不在此列）。 */
+	mcpClientServers?: McpClientServer[];
 	chunkSize: number;
 	chunkOverlap: number;
 	excludePaths: string;
@@ -305,6 +307,17 @@ export interface LicenseState {
 	freeLimit?: number;
 }
 
+/** 用户在 MCP 标签接入的外部 MCP 服务器（可增删改；内置 semlink 不在此列）。
+ *  http/sse 走 URL，stdio 走命令行；enabled 只是本地启用位。 */
+export interface McpClientServer {
+	id: string;
+	name: string;
+	type: "http" | "sse" | "stdio";
+	url?: string;
+	command?: string;
+	enabled: boolean;
+}
+
 export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	language: "auto",
 	providers: DEFAULT_PROVIDERS.map((p) => ({ ...p, models: p.models.map((m) => ({ ...m })) })),
@@ -312,6 +325,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	activeChatModel: "",
 	mcpPort: 3001,
 	mcpApiKey: "",
+	mcpClientServers: [],
 	chunkSize: 800,
 	chunkOverlap: 100,
 	excludePaths: "templates/\n.git/\nnode_modules/",

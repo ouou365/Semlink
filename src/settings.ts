@@ -5,7 +5,7 @@
 import { App, ButtonComponent, DropdownComponent, Modal, Notice, PluginSettingTab, Setting, ToggleComponent, setIcon } from "obsidian";
 import * as QRCode from "qrcode";
 import type SmartVaultPlugin from "../main";
-import type { IndexProgress, ModelProvider, SmartVaultSettings } from "./types";
+import type { IndexProgress, McpClientServer, ModelProvider, SmartVaultSettings } from "./types";
 import { activeEmbeddingProvider } from "./types";
 import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { mountCoffeeCanvas } from "./coffee-canvas";
@@ -537,8 +537,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	private renderMcpTab(containerEl: HTMLElement): void {
 		const running = !!this.plugin.mcpServer;
 		const mcpUrl = `http://127.0.0.1:${this.plugin.settings.mcpPort}/mcp`;
+		const clientServers = this.plugin.settings.mcpClientServers ?? [];
 
-		// MCP 标签只显示一行 semlink 服务器卡片：右侧开关直接启停服务
+		// ── 内置 semlink 服务器卡片：不可增删改，右侧开关启停服务 ──
 		const list = containerEl.createDiv({ cls: "semlink-mcp-list" });
 		const card = list.createDiv({ cls: "semlink-mcp-server" });
 		const iconWrap = card.createDiv({
@@ -563,11 +564,46 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			if ((e.target as HTMLElement).closest(".semlink-mcp-server-toggle")) return;
 			new EditMcpServerModal(this.app, this.plugin, () => rerenderSettingsTab(this)).open();
 		});
+
+		// ── 外部 MCP 服务器：可增删改（管理层；运行时接入后续扩展） ──
+		const installedHead = containerEl.createDiv({ cls: "semlink-mcp-installed-head" });
+		installedHead.createSpan({
+			cls: "semlink-mcp-installed-title",
+			text: `${t("mcpInstalled")} ${clientServers.length + 1}`,
+		});
+		const newBtn = installedHead.createEl("button", {
+			cls: "semlink-mcp-new-btn",
+			text: "＋ " + t("mcpNew"),
+		});
+		newBtn.addEventListener("click", () => {
+			new McpServerConfigModal(this.app, this.plugin, null, () => rerenderSettingsTab(this)).open();
+		});
+
+		if (clientServers.length > 0) {
+			const clientList = containerEl.createDiv({ cls: "semlink-mcp-list" });
+			for (const s of clientServers) {
+				const c = clientList.createDiv({ cls: "semlink-mcp-server" });
+				const cIcon = c.createDiv({ cls: "semlink-mcp-server-icon" });
+				setIcon(cIcon, "plug-zap");
+				const cMain = c.createDiv({ cls: "semlink-mcp-server-main" });
+				cMain.createDiv({ cls: "semlink-mcp-server-name", text: s.name });
+				cMain.createDiv({
+					cls: "semlink-mcp-server-sub",
+					text: `${s.type} · ${s.type === "stdio" ? s.command : s.url}`,
+				});
+				const cToggle = c.createDiv({ cls: "semlink-mcp-server-toggle" });
+				new ToggleComponent(cToggle).setValue(s.enabled).onChange((v) => {
+					s.enabled = v;
+					void this.plugin.saveSettings();
+				});
+				c.addEventListener("click", (e) => {
+					if ((e.target as HTMLElement).closest(".semlink-mcp-server-toggle")) return;
+					new McpServerConfigModal(this.app, this.plugin, s, () => rerenderSettingsTab(this)).open();
+				});
+			}
+		}
 	}
 
-	// ══════════════════════════════════════
-	// Tab: Bot — Feishu bots bound to Semlink
-	// ══════════════════════════════════════
 	// ══════════════════════════════════════
 	// Tab: Bot — Feishu bots bound to Semlink
 	// ══════════════════════════════════════
@@ -875,6 +911,122 @@ class EditMcpServerModal extends Modal {
 			};
 			void persist();
 		});
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+/** 外部 MCP 服务器的增/改弹窗：Name + Type（http/sse/stdio）+ URL/Command。
+ *  编辑态带 Delete（删除走确认）。内置 semlink 不走这个弹窗。 */
+class McpServerConfigModal extends Modal {
+	constructor(
+		app: App,
+		private plugin: SmartVaultPlugin,
+		/** null = 新增；否则为被编辑的条目。 */
+		private server: McpClientServer | null,
+		private onDone: () => void,
+	) {
+		super(app);
+		this.modalEl.addClass("semlink-mcp-edit-modal");
+	}
+
+	onOpen(): void {
+		const editing = this.server !== null;
+		this.titleEl.setText(editing ? t("editMcpServer") : t("mcpNew"));
+		const { contentEl } = this;
+
+		contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerName") });
+		const nameInput = contentEl.createEl("input", {
+			cls: "semlink-editor-input",
+			attr: { type: "text", spellcheck: "false" },
+		});
+		nameInput.value = this.server?.name ?? "";
+
+		contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerType") });
+		const typeSel = contentEl.createEl("select", { cls: "semlink-editor-select" });
+		for (const [value, label] of [["http", "HTTP"], ["sse", "SSE"], ["stdio", "stdio"]] as const) {
+			typeSel.createEl("option", { value, text: label });
+		}
+		typeSel.value = this.server?.type ?? "http";
+
+		const urlLabel = contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerUrl") });
+		const urlInput = contentEl.createEl("input", {
+			cls: "semlink-editor-input",
+			attr: { type: "text", placeholder: "https://…/mcp", spellcheck: "false" },
+		});
+		urlInput.value = this.server?.url ?? "";
+
+		const cmdLabel = contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerCommand") });
+		const cmdInput = contentEl.createEl("input", {
+			cls: "semlink-editor-input",
+			attr: { type: "text", placeholder: "npx -y @some/mcp", spellcheck: "false" },
+		});
+		cmdInput.value = this.server?.command ?? "";
+
+		// http/sse 显示 URL，stdio 显示 Command（标签与输入框互斥显隐）
+		const syncType = (): void => {
+			const isStdio = typeSel.value === "stdio";
+			urlLabel.toggleClass("semlink-hidden", isStdio);
+			urlInput.toggleClass("semlink-hidden", isStdio);
+			cmdLabel.toggleClass("semlink-hidden", !isStdio);
+			cmdInput.toggleClass("semlink-hidden", !isStdio);
+		};
+		typeSel.addEventListener("change", syncType);
+		syncType();
+
+		const error = contentEl.createDiv({ cls: "semlink-guide-error semlink-hidden" });
+
+		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
+		if (editing) {
+			const delBtn = footer.createEl("button", { cls: "semlink-editor-delete-link", text: t("chatDeleteModel") });
+			delBtn.addEventListener("click", () => {
+				new ConfirmModal(this.app, t("chatDeleteModel"), this.server?.name ?? "", () => {
+					this.plugin.settings.mcpClientServers = (this.plugin.settings.mcpClientServers ?? []).filter((x) => x.id !== this.server!.id);
+					void this.plugin.saveSettings();
+					this.close();
+					this.onDone();
+				}).open();
+			});
+		}
+		const cancelBtn = footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") });
+		cancelBtn.addEventListener("click", () => this.close());
+		const saveBtn = footer.createEl("button", { cls: "semlink-editor-save-btn", text: t("editorSave") });
+		saveBtn.addEventListener("click", () => {
+			const name = nameInput.value.trim();
+			if (!name) {
+				error.setText(t("mcpNameRequired"));
+				error.removeClass("semlink-hidden");
+				return;
+			}
+			const isStdio = typeSel.value === "stdio";
+			const target = isStdio ? cmdInput.value.trim() : urlInput.value.trim();
+			if (!target) {
+				error.setText(isStdio ? t("mcpServerCommand") : t("mcpServerUrl"));
+				error.removeClass("semlink-hidden");
+				return;
+			}
+			const list = this.plugin.settings.mcpClientServers ??= [];
+			if (editing && this.server) {
+				this.server.name = name;
+				this.server.type = typeSel.value as McpClientServer["type"];
+				if (isStdio) { this.server.command = target; delete this.server.url; }
+				else { this.server.url = target; delete this.server.command; }
+			} else {
+				list.push({
+					id: `mcp-${Date.now()}`,
+					name,
+					type: typeSel.value as McpClientServer["type"],
+					...(isStdio ? { command: target } : { url: target }),
+					enabled: true,
+				});
+			}
+			void this.plugin.saveSettings();
+			this.close();
+			this.onDone();
+		});
+		nameInput.focus();
 	}
 
 	onClose(): void {
