@@ -1301,6 +1301,15 @@ export class SemanticSearchView extends ItemView {
 			const n = numbers?.[i];
 			if (n) pathByNumber.set(n, r.notePath);
 		});
+		// 全局注册表兜底：被精确过滤丢弃的纯搜索命中（如 [79]）也能通过
+		// citeRegistry[n-1] 解析到路径，正文引用全部可点击
+		const globalRegistry = this.chatClient.citeRegistry;
+		if (globalRegistry) {
+			globalRegistry.forEach((p, idx) => {
+				const n = idx + 1;
+				if (!pathByNumber.has(n)) pathByNumber.set(n, p);
+			});
+		}
 		if (pathByNumber.size === 0) return;
 		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
 			acceptNode: (node) => {
@@ -1408,7 +1417,9 @@ export class SemanticSearchView extends ItemView {
 	private renderSourceRows(container: HTMLElement, results: SearchResult[], numbers?: number[]): void {
 		for (const [i, r] of results.entries()) {
 			const row = container.createDiv({ cls: "semlink-search-source-row" });
-			row.createSpan({ cls: "semlink-search-source-index", text: `[${numbers ? numbers[i] : i + 1}]` });
+			const num = numbers?.[i];
+			const label = num !== undefined && Number.isFinite(num) ? num : i + 1;
+			row.createSpan({ cls: "semlink-search-source-index", text: `[${label}]` });
 			const title = r.heading || this.basename(r.notePath);
 			row.createSpan({ cls: "semlink-search-source-title", text: title });
 			row.createSpan({ cls: "semlink-search-source-path", text: r.notePath });
@@ -2260,7 +2271,7 @@ export class SemanticSearchView extends ItemView {
 				result: s.type === "tool" ? s.result : undefined,
 			})),
 			sources,
-			sourceNumbers,
+			sourceNumbers: sourceNumbers?.filter((n) => Number.isFinite(n)),
 			elapsedSec,
 			contextTokens,
 			contextBreakdown,
