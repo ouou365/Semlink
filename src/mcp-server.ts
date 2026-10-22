@@ -9,7 +9,7 @@ import { VectorStore } from "./vector-store";
 import { EmbeddingClient } from "./embedding-client";
 import { ProgressTracker } from "./progress";
 import { Scheduler } from "./scheduler";
-import { extractSection, extractHeadings } from "./section-utils";
+import { TOOL_SPECS, ToolCore } from "./tools-core";
 import type { SmartVaultSettings } from "./types";
 
 /** Tool arguments read from tools/call params — only fields this server uses. */
@@ -59,6 +59,7 @@ export class McpServer {
 	private vault: Vault; // Obsidian Vault
 	/** Vault path of the note currently open in Obsidian (or null). */
 	private getActiveNote: () => string | null;
+	private core: ToolCore;
 
 	constructor(
 		store: VectorStore,
@@ -76,6 +77,16 @@ export class McpServer {
 		this.settings = settings;
 		this.vault = vault;
 		this.getActiveNote = getActiveNote;
+		this.core = new ToolCore({
+			store,
+			client,
+			vault,
+			getActiveNote,
+			progress: () => this.progress.current,
+			reindex: async (path, force) => {
+				await this.toolReindex(path, force);
+			},
+		});
 	}
 
 	updateSettings(settings: SmartVaultSettings) {
@@ -254,208 +265,7 @@ export class McpServer {
 	}
 
 	private static handleToolsList() {
-		return {
-			tools: [
-				{
-					name: "search_notes",
-					description: "语义检索 Vault 笔记。使用自然语言查询，返回最相关的笔记片段。",
-					inputSchema: {
-						type: "object",
-						properties: {
-							query: {
-								type: "string",
-								description: "自然语言搜索查询",
-							},
-							limit: {
-								type: "number",
-								description: "返回结果数量上限（默认 10）",
-								default: 10,
-							},
-							threshold: {
-								type: "number",
-								description: "相似度阈值 0-1（默认 0.3）",
-								default: 0.3,
-							},
-						},
-						required: ["query"],
-					},
-				},
-				{
-					name: "get_note",
-					description: "获取笔记的完整内容",
-					inputSchema: {
-						type: "object",
-						properties: {
-							path: {
-								type: "string",
-								description: "笔记在 Vault 中的路径",
-							},
-						},
-						required: ["path"],
-					},
-				},
-				{
-					name: "get_similar_notes",
-					description: "查找与指定笔记语义相似的其他笔记",
-					inputSchema: {
-						type: "object",
-						properties: {
-							path: {
-								type: "string",
-								description: "参考笔记路径",
-							},
-							limit: {
-								type: "number",
-								description: "返回结果数量上限（默认 10）",
-								default: 10,
-							},
-							threshold: {
-									type: "number",
-									description: "相似度阈值 0-1（默认 0.2）",
-									default: 0.2,
-								},
-						},
-						required: ["path"],
-					},
-				},
-				{
-					name: "list_indexed",
-					description: "列出已索引的笔记路径（分页：limit 默认 200，用 offset 翻页；total 为总匹配数，truncated 表示是否还有更多）",
-					inputSchema: {
-						type: "object",
-						properties: {
-							prefix: {
-								type: "string",
-								description: "路径前缀过滤（可选）",
-							},
-							limit: {
-								type: "number",
-								description: "最多返回条数（默认 200）",
-							},
-							offset: {
-								type: "number",
-								description: "跳过前 N 条（默认 0，用于翻页）",
-							},
-						},
-					},
-				},
-				{
-					name: "list_indexed_detailed",
-					description: "列出已索引的笔记，每条附带创建/修改时间（ISO 格式，按修改时间倒序），分页：limit 默认 100，用 offset 翻页；适合「最近/最新」类问题取前几条",
-					inputSchema: {
-						type: "object",
-						properties: {
-							prefix: {
-								type: "string",
-								description: "路径前缀过滤（可选）",
-							},
-							limit: {
-								type: "number",
-								description: "最多返回条数（默认 100）",
-							},
-							offset: {
-								type: "number",
-								description: "跳过前 N 条（默认 0，用于翻页）",
-							},
-						},
-					},
-				},
-				{
-					name: "index_status",
-					description: "获取当前索引状态和进度",
-					inputSchema: {
-						type: "object",
-						properties: {},
-					},
-				},
-				{
-					name: "reindex",
-					description: "触发重新索引（可指定单个文件或全量）",
-					inputSchema: {
-						type: "object",
-						properties: {
-							path: {
-								type: "string",
-								description: "指定文件路径（留空则全量索引）",
-							},
-							force: {
-								type: "boolean",
-								description: "强制重建所有向量（默认 false）",
-								default: false,
-							},
-						},
-					},
-				},
-				{
-					name: "get_section",
-					description: "获取笔记中指定标题下的章节内容。支持按标题名称匹配，返回该标题到下一个同级或更高级标题之间的所有内容。适用于大文件时只读取特定章节。",
-					inputSchema: {
-						type: "object",
-						properties: {
-							path: {
-								type: "string",
-								description: "笔记在 Vault 中的路径",
-							},
-							heading: {
-								type: "string",
-								description: "要读取的标题名称（不需要包含 # 符号）",
-							},
-							maxDepth: {
-								type: "number",
-								description: "包含的子标题最大深度，如目标标题是 ## 级(maxDepth=2)，则只包含 ## 及其内容，不包含 ### 及更深层。不传则包含所有子内容。",
-							},
-						},
-						required: ["path", "heading"],
-					},
-				},
-				{
-					name: "grep_notes",
-					description: "在 Vault 笔记中按文本或正则表达式精确搜索内容，适合精确关键词、编号、日期、代码片段等语义检索覆盖不到的内容。totalFiles 为匹配笔记总数；paths 字段返回匹配文件清单（completeList=true 时即完整清单，最多 200 个），一次调用即可拿到完整清单。limit 仅控制附带行内容的文件数。",
-					inputSchema: {
-						type: "object",
-						properties: {
-							pattern: {
-								type: "string",
-								description: "要搜索的文本或正则表达式",
-							},
-							regex: {
-								type: "boolean",
-								description: "pattern 是否为正则表达式（默认 false，按普通文本匹配）",
-								default: false,
-							},
-							pathFilter: {
-								type: "string",
-								description: "仅搜索路径前缀匹配的笔记，如 'projects/xxx'（可选）",
-							},
-							caseSensitive: {
-								type: "boolean",
-								description: "是否区分大小写（默认 false）",
-								default: false,
-							},
-							limit: {
-								type: "number",
-								description: "附带行内容的文件数（默认 10，最大 30）",
-								default: 10,
-							},
-							contextLines: {
-								type: "number",
-								description: "每个匹配前后附带的上下文行数（默认 1，最大 3）",
-								default: 1,
-							},
-						},
-						required: ["pattern"],
-					},
-				},
-				{
-					name: "get_active_note",
-					description: "获取当前正在 Obsidian 中打开的笔记的路径（仅路径，不含内容）。需要内容时请再用 get_note 按返回的路径读取。没有打开的笔记时返回明确提示。",
-					inputSchema: {
-						type: "object",
-						properties: {},
-					},
-				},
-			],
-		};
+		return { tools: TOOL_SPECS };
 	}
 	/** 设置页展示用：本服务声明的 tools / resources / prompts（纯静态定义）。 */
 	static listCapabilities(): { tools: Array<{ name: string; description: string }>; resources: unknown[]; prompts: unknown[] } {
@@ -465,35 +275,15 @@ export class McpServer {
 
 	private async handleToolsCall(params: ToolCallParams): Promise<unknown> {
 		const toolName = params.name;
+		if (!toolName) throw new Error("Missing tool name");
 		const args: ToolCallArgs = params.arguments || {};
-
-		switch (toolName) {
-			case "search_notes":
-				return await this.toolSearchNotes(args.query as string, args.limit, args.threshold);
-			case "get_note":
-				return await this.toolGetNote(args.path as string);
-			case "get_similar_notes":
-				return await this.toolGetSimilarNotes(args.path as string, args.limit, args.threshold);
-			case "list_indexed":
-				return await this.toolListIndexed(args.prefix, args.limit, args.offset);
-			case "list_indexed_detailed":
-				return await this.toolListIndexedDetailed(args.prefix, args.limit, args.offset);
-			case "index_status":
-				return await this.toolIndexStatus();
-			case "reindex":
-				return await this.toolReindex(args.path, args.force);
-			case "get_section":
-				return await this.toolGetSection(args.path as string, args.heading as string, args.maxDepth);
-			case "grep_notes":
-				return await this.toolGrepNotes(args.pattern as string, args.regex, args.pathFilter, args.caseSensitive, args.limit, args.contextLines);
-			case "get_active_note":
-				return await this.toolGetActiveNote();
-			default:
-				throw new Error(`Unknown tool: ${String(toolName)}`);
-		}
+		this.core.maxChars = 12000;
+		const text = await this.core.execute(toolName, args as Record<string, unknown>);
+		return {
+			content: [{ type: "text", text }],
+			...(text.startsWith("Error:") ? { isError: true } : {}),
+		};
 	}
-
-	// ──── Tool Implementations ────
 
 	private async toolSearchNotes(query: string, limit = 10, threshold = 0.3) {
 		// Embed the query
@@ -803,35 +593,6 @@ export class McpServer {
 				},
 			],
 		};
-	}
-
-	private async toolGetSection(path: string, heading: string, maxDepth?: number) {
-	    try {
-	        const file = this.vault.getAbstractFileByPath(path) as TFile | null;
-	        if (!file) {
-	            return {
-	                content: [{ type: "text", text: "File not found: " + path }],
-	                isError: true,
-	            };
-	        }
-	        const content = await this.vault.read(file);
-	        const section = extractSection(content, heading, maxDepth);
-	        if (!section) {
-	            const headings = extractHeadings(content);
-	            return {
-	                content: [{ type: "text", text: "Heading not found: " + heading + "\n\nAvailable headings:\n" + headings.join("\n") }],
-	                isError: true,
-	            };
-	        }
-	        return {
-	            content: [{ type: "text", text: section }],
-	        };
-	    } catch (e) {
-	        return {
-	            content: [{ type: "text", text: "Error reading section: " + String(e) }],
-	            isError: true,
-	        };
-	    }
 	}
 
 	// ──── Helpers ────
