@@ -121,7 +121,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "Neustart",
 	startService: "Starten",
 	fullReindex: "Indexierung starten",
-	fullReindexDesc: "Baut den Index aus allen Notizen neu auf. Vektoren werden automatisch erzeugt, wenn ein Embedding-Modell konfiguriert ist.",
+	fullReindexDesc: "Führt die Indexierung über den gesamten Vault aus — neue und geänderte Notizen werden verarbeitet, bereits indizierte bleiben unverändert. Vektoren werden automatisch erzeugt, wenn ein Embedding-Modell konfiguriert ist.",
 	startFullIndex: "▶ Index starten",
 	clientConfig: "Client-Konfiguration",
 	claudeDesktopConfig: "MCP-Konfiguration",
