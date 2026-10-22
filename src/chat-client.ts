@@ -698,8 +698,8 @@ export class ChatClient {
 
 	/** Primary free-text argument of a query-bearing tool (for dedup). */
 	private primaryQueryArg(name: string, args: Record<string, unknown>): string {
-		if (name === "search_notes" || name === "get_similar_notes") return String((args?.query as string) ?? "");
-		if (name === "grep_notes") return String((args?.pattern as string) ?? "");
+		if (name === "search_notes" || name === "get_similar_notes" || name === "search" || name === "search_bm25" || name === "search_vector") return String((args?.query as string) ?? "");
+		if (name === "grep_notes" || name === "grep") return String((args?.pattern as string) ?? "");
 		return "";
 	}
 
@@ -2033,9 +2033,9 @@ export class ChatClient {
 	 */
 	private collectUsedNotes(usedNotes: string[], name: string, args: Record<string, unknown>, result: string): void {
 		let paths: string[] = [];
-		if ((name === "get_note" || name === "get_section") && typeof args?.path === "string") {
+		if ((name === "get_note" || name === "get_section" || name === "read") && typeof args?.path === "string") {
 			paths = [args.path];
-		} else if (name === "search_notes" || name === "get_similar_notes" || name === "grep_notes") {
+		} else if (name === "search_notes" || name === "get_similar_notes" || name === "grep_notes" || name === "search" || name === "search_bm25" || name === "search_vector" || name === "grep" || name === "find") {
 			try {
 				const parsed = JSON.parse(result) as { results?: Array<{ path?: string }>; paths?: unknown };
 				if (Array.isArray(parsed?.results)) {

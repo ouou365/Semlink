@@ -214,6 +214,17 @@ export class ToolCore {
 
 	/** 按名称执行工具；永远返回文本（错误也文本化）。 */
 	async execute(name: string, args: Record<string, unknown>): Promise<string> {
+		// 旧会话兼容：历史上下文里模型可能仍按旧名调用，映射到新工具（不对外声明）
+		const legacy: Record<string, string> = {
+			search_notes: "search",
+			get_note: "read",
+			get_section: "read",
+			grep_notes: "grep",
+			list_indexed: "ls",
+			list_indexed_detailed: "ls",
+			get_active_note: "active",
+		};
+		if (legacy[name]) name = legacy[name]!;
 		const a = args;
 		try {
 			switch (name) {
