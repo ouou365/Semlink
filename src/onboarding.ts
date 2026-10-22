@@ -693,7 +693,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		});
 		const fetchBtn = countBtns.createEl("button", {
 			cls: "semlink-guide-model-add",
-			text: "⇣ " + t("guideFetchModels"),
+			text: "Fetch",
 		});
 		fetchBtn.addEventListener("click", () => {
 			new GuideFetchModelsModal(plugin, provider, kindWanted, () => {
