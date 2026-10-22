@@ -274,8 +274,8 @@
     position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
+    gap: 10px;
+    padding: 10px 12px;
 }
 
 .semlink-mcp-server-icon {
@@ -283,26 +283,26 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
     flex-shrink: 0;
-    border-radius: 9px;
+    border-radius: 10px;
     background: var(--background-secondary);
     color: var(--text-muted);
 }
 
 .semlink-mcp-server-icon .svg-icon {
-    width: 18px;
-    height: 18px;
+    width: 17px;
+    height: 17px;
 }
 
-/* 运行状态点：挂在图标右下角 */
+/* 运行状态点：挂在图标左下角 */
 .semlink-mcp-server-dot {
     position: absolute;
-    right: -1px;
+    left: -1px;
     bottom: -1px;
-    width: 10px;
-    height: 10px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     background: var(--text-faint);
     border: 2px solid var(--background-primary);
@@ -317,11 +317,11 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
 }
 
 .semlink-mcp-server-name {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--text-normal);
     overflow: hidden;
@@ -330,7 +330,7 @@
 }
 
 .semlink-mcp-server-sub {
-    font-size: 12px;
+    font-size: 11.5px;
     color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
