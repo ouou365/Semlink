@@ -129,7 +129,7 @@ const t: Record<keyof typeof en, string> = {
 	fullReindexDesc: "Очищает индекс и заново встраивает все заметки. Нужно только после смены модели эмбеддингов или размера чанков.",
 	startFullIndex: "▶ Начать индексацию",
 	clientConfig: "Конфигурация клиентов",
-	claudeDesktopConfig: "Конфигурация для Claude Desktop / Cursor",
+	claudeDesktopConfig: "Конфигурация MCP",
 	claudeDesktopDesc: "Скопируйте JSON ниже в файл конфигурации вашего MCP-клиента",
 	mcpConnectInstruction: "Подключи этот MCP-сервис: {url} и расскажи, что этот MCP умеет",
 	claudeCodeCmd: "Инструкция подключения",

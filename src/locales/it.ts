@@ -130,7 +130,7 @@ const t: Record<keyof typeof en, string> = {
 	fullReindexDesc: "Cancella l’indice e re-incorpora tutte le note. Solo dopo aver cambiato modello di embedding o dimensione dei chunk.",
 	startFullIndex: "▶ Avvia indice",
 	clientConfig: "Configurazione client",
-	claudeDesktopConfig: "Configurazione Claude Desktop / Cursor",
+	claudeDesktopConfig: "Configurazione MCP",
 	claudeDesktopDesc: "Copia il JSON sottostante nel file di configurazione del tuo client MCP",
 	mcpConnectInstruction: "Connetti questo servizio MCP: {url} e dimmi cosa può fare questo MCP",
 	claudeCodeCmd: "Istruzione di connessione",

@@ -128,7 +128,7 @@ const t: Record<keyof typeof en, string> = {
 	fullReindexDesc: "インデックスを消去して全ノートを再埋め込みします。モデルやチャンク設定変更後にのみ使用してください。",
 	startFullIndex: "▶ インデックス開始",
 	clientConfig: "クライアント設定",
-	claudeDesktopConfig: "Claude Desktop / Cursor 設定",
+	claudeDesktopConfig: "MCP設定",
 	claudeDesktopDesc: "下記の JSON を MCP クライアントの設定ファイルにコピーしてください",
 	mcpConnectInstruction: "このMCPサービスに接続してください：{url}。そして、このMCPで何ができるか教えてください",
 	claudeCodeCmd: "接続用指示",

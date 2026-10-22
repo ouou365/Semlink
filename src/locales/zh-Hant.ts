@@ -128,7 +128,7 @@ const t: Record<keyof typeof en, string> = {
 	fullReindexDesc: "清空索引並重新嵌入全部筆記。僅在更換嵌入模型或分片參數後需要。",
 	startFullIndex: "▶ 開始索引",
 	clientConfig: "用戶端設定",
-	claudeDesktopConfig: "Claude Desktop / Cursor 設定",
+	claudeDesktopConfig: "MCP 設定",
 	claudeDesktopDesc: "複製以下 JSON 到 MCP 用戶端設定檔中",
 	mcpConnectInstruction: "請幫我連接這個 MCP 服務：{url}，並告訴我這個MCP能做什麼",
 	claudeCodeCmd: "連接指令",

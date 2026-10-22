@@ -128,7 +128,7 @@ const t: Record<keyof typeof en, string> = {
 	fullReindexDesc: "인덱스를 지우고 모든 노트를 다시 임베딩합니다. 임베딩 모델이나 청크 설정 변경 후에만 필요합니다.",
 	startFullIndex: "▶ 인덱싱 시작",
 	clientConfig: "클라이언트 설정",
-	claudeDesktopConfig: "Claude Desktop / Cursor 설정",
+	claudeDesktopConfig: "MCP 구성",
 	claudeDesktopDesc: "아래 JSON을 MCP 클라이언트 설정 파일에 복사하세요",
 	mcpConnectInstruction: "이 MCP 서비스에 연결해 주세요: {url}. 그리고 이 MCP로 무엇을 할 수 있는지 알려주세요",
 	claudeCodeCmd: "연결 지시문",

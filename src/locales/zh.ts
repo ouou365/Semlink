@@ -129,7 +129,7 @@ const zh: Record<keyof typeof en, string> = {
 	fullReindexDesc: "清空索引并重新嵌入全部笔记。仅在更换嵌入模型或分片参数后需要。",
 	startFullIndex: "▶ 开始索引",
 	clientConfig: "客户端配置",
-	claudeDesktopConfig: "Claude Desktop / Cursor 配置",
+	claudeDesktopConfig: "MCP 配置",
 	claudeDesktopDesc: "复制以下 JSON 到 MCP 客户端配置文件中",
 	mcpConnectInstruction: "请帮我连接这个 MCP 服务：{url}，并告诉我这个MCP能做什么",
 	claudeCodeCmd: "连接指令",

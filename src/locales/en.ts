@@ -127,7 +127,7 @@ const en = {
 	fullReindexDesc: "Clears the index and re-embeds every note. Only needed after changing the embedding model or chunk size.",
 	startFullIndex: "▶ Start Index",
 	clientConfig: "Client Configuration",
-	claudeDesktopConfig: "Claude Desktop / Cursor Config",
+	claudeDesktopConfig: "MCP Config",
 	claudeDesktopDesc: "Copy the JSON below to your MCP client config file",
 	mcpConnectInstruction: "Please connect this MCP service: {url}, and tell me what this MCP can do",
 	claudeCodeCmd: "Connection command",
