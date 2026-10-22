@@ -651,6 +651,8 @@ export class ChatClient {
 	/** 旧会话历史里残留的旧工具名（如 search_notes）会诱导模型继续按旧名
 	 *  调用——发送前统一改写为新名，旧字样不再跨请求传递。 */
 	private normalizeLegacyToolNames(text: string): string {
+		// [NaN] 是模型退化产物（上下文污染后的自我强化模式），发送前必须清除
+		text = text.split("[NaN]").join("");
 		return text
 			.split("search_notes").join("search")
 			.split("get_similar_notes").join("semantic")

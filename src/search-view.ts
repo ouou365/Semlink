@@ -2262,10 +2262,10 @@ export class SemanticSearchView extends ItemView {
 		await this.history.load();
 		const msg: HistoryMessage = {
 			role: "assistant",
-			content,
+			content: content.split("[NaN]").join(""),
 			thinking: thinking?.map((s) => ({
 				type: s.type,
-				text: s.type === "thought" ? s.text : undefined,
+				text: s.type === "thought" ? (s.text ?? "").split("[NaN]").join("") : undefined,
 				name: s.type === "tool" ? s.name : undefined,
 				args: s.type === "tool" ? s.args : undefined,
 				result: s.type === "tool" ? s.result : undefined,
