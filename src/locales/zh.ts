@@ -9,7 +9,7 @@ import type en from "./en";
 
 const zh: Record<keyof typeof en, string> = {
 // ──── Settings Tab ────
-	settingsTitle: "Semlink 设置",
+	settingsTitle: "Semlink",
 	settingsTagline: "把 Obsidian 笔记变成你的第二大脑",
 	tabGeneral: "通用",
 	language: "语言",

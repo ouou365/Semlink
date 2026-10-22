@@ -8,7 +8,7 @@ import type en from "./en";
 
 const t: Record<keyof typeof en, string> = {
 // ──── Settings Tab ────
-	settingsTitle: "Semlink 設定",
+	settingsTitle: "Semlink",
 	settingsTagline: "把 Obsidian 筆記變成你的第二大腦",
 	tabGeneral: "一般",
 	language: "語言",
