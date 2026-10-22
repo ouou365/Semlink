@@ -334,6 +334,18 @@ function ensureCatalogProvider(plugin: SmartVaultPlugin, name: string): ModelPro
 	return provider;
 }
 
+/** 内置目录里已知模型的上下文长度：端点的 /models 一般不报 context，
+ *  目录里登记过的模型（如 deepseek-v4-flash → 1M）用它兜底，未知的再退
+ *  回通用默认值。 */
+function catalogContextWindow(modelId: string): number | undefined {
+	for (const entry of CHAT_CATALOG) {
+		for (const m of entry.models) {
+			if (m.id === modelId) return m.contextWindow;
+		}
+	}
+	return undefined;
+}
+
 /** 系列合并卡的二次确认窗口：标题为系列名，列出该系列的成员供应商
  *  （同网格卡片样式、带配置绿点），点选其中一个才真正创建/进入。 */
 class SeriesPickModal extends Modal {
@@ -878,7 +890,7 @@ class GuideFetchModelsModal extends Modal {
 				});
 				const main = row.createSpan({ cls: "semlink-guide-model-main" });
 				main.createSpan({ cls: "semlink-guide-model-id", text: m.id });
-				const ctx = m.contextWindow ?? 0;
+				const ctx = m.contextWindow ?? catalogContextWindow(m.id) ?? 0;
 				if (ctx > 0) {
 					main.createSpan({ cls: "semlink-guide-model-ctx", text: formatContextWindow(ctx) });
 				}
@@ -898,10 +910,10 @@ class GuideFetchModelsModal extends Modal {
 						progressFill.style.width = `${pct}%`;
 					},
 				);
-				// 拉取完成：进度条隐藏，清单浮现
+				// 拉取完成：进度条隐藏，清单浮现（默认全部不勾选）
 				progress.addClass("semlink-hidden");
 				this.models = fetched.filter((m) => (m.kind ?? "chat") === this.kindWanted);
-				for (const m of this.models) this.checked.add(m.id);
+				this.checked.clear();
 				if (this.models.length === 0) {
 					error.setText(t("fetchEmpty"));
 					error.removeClass("semlink-hidden");
@@ -923,7 +935,8 @@ class GuideFetchModelsModal extends Modal {
 				} else {
 					this.provider.models.push({
 						id: m.id,
-						contextWindow: m.contextWindow ?? FALLBACK_CONTEXT,
+						// 端点没报上下文时查内置目录，再退回 128K 兜底
+						contextWindow: m.contextWindow ?? catalogContextWindow(m.id) ?? FALLBACK_CONTEXT,
 						kind: this.kindWanted,
 						enabled: true,
 					});
