@@ -698,7 +698,7 @@ export class ChatClient {
 
 	/** Primary free-text argument of a query-bearing tool (for dedup). */
 	private primaryQueryArg(name: string, args: Record<string, unknown>): string {
-		if (name === "search_notes" || name === "get_similar_notes" || name === "search" || name === "search_bm25" || name === "search_vector") return String((args?.query as string) ?? "");
+		if (name === "search_notes" || name === "get_similar_notes" || name === "search" || name === "search_bm25" || name === "search_vector" || name === "keyword" || name === "semantic") return String((args?.query as string) ?? "");
 		if (name === "grep_notes" || name === "grep") return String((args?.pattern as string) ?? "");
 		return "";
 	}
@@ -2035,7 +2035,7 @@ export class ChatClient {
 		let paths: string[] = [];
 		if ((name === "get_note" || name === "get_section" || name === "read") && typeof args?.path === "string") {
 			paths = [args.path];
-		} else if (name === "search_notes" || name === "get_similar_notes" || name === "grep_notes" || name === "search" || name === "search_bm25" || name === "search_vector" || name === "grep" || name === "find") {
+		} else if (name === "search_notes" || name === "get_similar_notes" || name === "grep_notes" || name === "search" || name === "search_bm25" || name === "search_vector" || name === "keyword" || name === "semantic" || name === "grep" || name === "find") {
 			try {
 				const parsed = JSON.parse(result) as { results?: Array<{ path?: string }>; paths?: unknown };
 				if (Array.isArray(parsed?.results)) {

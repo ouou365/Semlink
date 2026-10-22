@@ -30,7 +30,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 	{
 		name: "search",
 		description:
-			"Universal search entry point (use this first): runs BM25 keyword search and vector semantic search in parallel, fuses both ranked lists with Reciprocal Rank Fusion, and returns a single deduplicated ranking. When the vector path is unavailable (no embedding model configured / vector search disabled / nothing indexed yet) it automatically degrades to BM25-only results; meta.sources reports what was actually used. For exact terms prefer search_bm25.",
+			"Universal search entry point (use this first): runs BM25 keyword search and vector semantic search in parallel, fuses both ranked lists with Reciprocal Rank Fusion, and returns a single deduplicated ranking. When the vector path is unavailable (no embedding model configured / vector search disabled / nothing indexed yet) it automatically degrades to BM25-only results; meta.sources reports what was actually used. For exact terms prefer keyword.",
 		parameters: {
 			type: "object",
 			properties: {
@@ -43,7 +43,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 		},
 	},
 	{
-		name: "search_bm25",
+		name: "keyword",
 		description:
 			"Keyword-only search scored with BM25. No embedding dependency — always available. Best for exact terms, IDs, dates, code identifiers that semantic retrieval can miss.",
 		parameters: {
@@ -58,7 +58,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 		},
 	},
 	{
-		name: "search_vector",
+		name: "semantic",
 		description:
 			"Pure semantic vector search: natural-language query returns the most relevant note passages (path, heading, preview, score). Controlled by the vector-search toggle; returns an explicit 'unavailable' message instead of empty results when no embedding model is configured.",
 		parameters: {
@@ -220,6 +220,8 @@ export class ToolCore {
 			get_note: "read",
 			get_section: "read",
 			grep_notes: "grep",
+			search_bm25: "keyword",
+			search_vector: "semantic",
 			list_indexed: "ls",
 			list_indexed_detailed: "ls",
 			get_active_note: "active",
@@ -230,9 +232,9 @@ export class ToolCore {
 			switch (name) {
 				case "search":
 					return await this.search(String(a.query ?? ""), Number(a.limit) || 10, a.path as string | undefined, Number(a.alpha) || 0.5);
-				case "search_bm25":
+				case "keyword":
 					return await this.searchBm25(String(a.query ?? ""), Number(a.limit) || 10, a.path as string | undefined, Boolean(a.case_sensitive));
-				case "search_vector":
+				case "semantic":
 					return await this.searchVector(String(a.query ?? ""), Number(a.limit) || 10, Number(a.threshold) || 0.3);
 				case "ls":
 					return await this.ls(a.path as string | undefined, (a.sort as string) ?? "modified", Number(a.limit) || 50, Number(a.offset) || 0, a.recursive !== false, a.since as string | undefined, a.until as string | undefined);
@@ -322,7 +324,7 @@ export class ToolCore {
 		if (!query.trim()) return "Error: missing query";
 		if (!this.deps.store.searchGate()) {
 			return JSON.stringify({
-				error: "Vector search is unavailable (disabled in RAG settings, or no embedding model configured). Use search_bm25 or grep instead.",
+				error: "Vector search is unavailable (disabled in RAG settings, or no embedding model configured). Use keyword or grep instead.",
 			});
 		}
 		const results = await this.vectorRaw(query, limit, threshold);
