@@ -1128,21 +1128,6 @@ export class SemanticSearchView extends ItemView {
 					this.makeCitationsClickable(answerEl, citeNumbers ?? [], usedSources);
 					this.makeVaultPathsClickable(answerEl);
 
-					// Reference sources BELOW the answer, collapsed by default.
-					// With attachments the sources ARE the dropped notes — plus
-					// any notes the model read via tools afterwards (otherwise
-					// protocol/design docs vanish from the sources card).
-					// Sources the model DECLARED in submit_answer are validated
-					// against the known path set (initial retrieval + dropped
-					// attachments + tool-read notes). Precision mode kicks in
-					// when a declaration survives validation OR the model
-					// actually opened notes (read): the card
-					// lists declared + opened notes only — bare search hits
-					// the model never used are dropped. Only a turn answered
-					// purely from snippets (nothing declared, nothing opened)
-					// keeps the full retrieval floor.
-					this.renderSources(loadingEl, usedSources, false, citeNumbers);
-
 					// Persist this turn into chat history (incl. context usage so
 					// the ring + tooltip can be restored when re-opening). The
 					// initial retrieval step is prepended here too — otherwise
@@ -2325,9 +2310,8 @@ export class SemanticSearchView extends ItemView {
 					await MarkdownRenderer.render(this.app, protectHyphens(msg.content), answerEl, "", this);
 					if (msg.sources && msg.sources.length > 0) {
 						const usedSources = msg.sources.map((p) => ({ notePath: p, heading: "", contentPreview: "" }));
-						this.renderSources(bubble, usedSources as SearchResult[], false, msg.sourceNumbers);
 						this.makeCitationsClickable(answerEl, msg.sourceNumbers ?? [], usedSources as SearchResult[]);
-					this.makeVaultPathsClickable(answerEl);
+						this.makeVaultPathsClickable(answerEl);
 					}
 					// Copy / save actions for history answers too.
 					this.appendActions(bubble, msg.content, lastUserQuery);
