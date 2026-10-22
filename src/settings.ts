@@ -571,6 +571,15 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			cls: "semlink-mcp-installed-title",
 			text: `${t("mcpInstalled")} ${clientServers.length + 1}`,
 		});
+		// 分享按钮（New 左侧）：把 semlink MCP 接入第三方客户端的说明
+		const shareBtn = installedHead.createEl("button", {
+			cls: "semlink-mcp-icon-btn",
+			attr: { "aria-label": t("mcpShareTitle"), title: t("mcpShareTitle") },
+		});
+		setIcon(shareBtn, "share-2");
+		shareBtn.addEventListener("click", () => {
+			new McpShareModal(this.app, this.plugin).open();
+		});
 		const newBtn = installedHead.createEl("button", {
 			cls: "semlink-mcp-new-btn",
 			text: "＋ " + t("mcpNew"),
@@ -1027,6 +1036,65 @@ class McpServerConfigModal extends Modal {
 			this.onDone();
 		});
 		nameInput.focus();
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+/** 分享弹窗：把 semlink MCP 集成到第三方客户端（Claude Code 命令 +
+ *  通用 mcpServers JSON），每段带一键复制。 */
+class McpShareModal extends Modal {
+	constructor(app: App, private plugin: SmartVaultPlugin) {
+		super(app);
+		this.modalEl.addClass("semlink-mcp-edit-modal");
+		this.modalEl.addClass("smart-vault-settings");
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(t("mcpShareTitle"));
+		const { contentEl } = this;
+		const mcpUrl = `http://127.0.0.1:${this.plugin.settings.mcpPort}/mcp`;
+		const key = this.plugin.settings.mcpApiKey;
+
+		const copy = (text: string): void => {
+			navigator.clipboard.writeText(text).then(() => new Notice(t("mcpCopied")));
+		};
+
+		const section = (label: string, desc: string, code: string): HTMLElement => {
+			const wrap = contentEl.createDiv({ cls: "semlink-mcp-share-section" });
+			const head = wrap.createDiv({ cls: "semlink-mcp-share-head" });
+			const textCol = head.createDiv({ cls: "semlink-mcp-share-text" });
+			textCol.createDiv({ cls: "semlink-mcp-share-label", text: label });
+			textCol.createDiv({ cls: "semlink-mcp-share-desc", text: desc });
+			const copyBtn = head.createEl("button", {
+				cls: "semlink-mcp-icon-btn",
+				attr: { "aria-label": t("mcpShareCopy"), title: t("mcpShareCopy") },
+			});
+			setIcon(copyBtn, "copy");
+			copyBtn.addEventListener("click", () => copy(code));
+			wrap.createEl("pre", { cls: "semlink-mcp-share-code", text: code });
+			return wrap;
+		};
+
+		section(
+			t("claudeCodeCmd"),
+			t("claudeCodeDesc"),
+			key
+				? `claude mcp add --transport http semlink ${mcpUrl} --header "Authorization: Bearer ${key}"`
+				: `claude mcp add --transport http semlink ${mcpUrl}`,
+		);
+
+		section(
+			t("claudeDesktopConfig"),
+			t("claudeDesktopDesc"),
+			JSON.stringify(
+				{ mcpServers: { semlink: { type: "http", url: mcpUrl, ...(key ? { headers: { Authorization: `Bearer ${key}` } } : {}) } } },
+				null,
+				2,
+			),
+		);
 	}
 
 	onClose(): void {
