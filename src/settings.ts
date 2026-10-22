@@ -539,6 +539,29 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const mcpUrl = `http://127.0.0.1:${this.plugin.settings.mcpPort}/mcp`;
 		const clientServers = this.plugin.settings.mcpClientServers ?? [];
 
+		// ── Installed 行：数量统计 + 分享/New 按钮 ──
+		const installedHead = containerEl.createDiv({ cls: "semlink-mcp-installed-head" });
+		installedHead.createSpan({
+			cls: "semlink-mcp-installed-title",
+			text: `${t("mcpInstalled")} ${clientServers.length + 1}`,
+		});
+		// 分享按钮（New 左侧）：把 semlink MCP 接入第三方客户端的说明
+		const shareBtn = installedHead.createEl("button", {
+			cls: "semlink-mcp-icon-btn",
+			attr: { "aria-label": t("mcpShareTitle"), title: t("mcpShareTitle") },
+		});
+		setIcon(shareBtn, "share-2");
+		shareBtn.addEventListener("click", () => {
+			new McpShareModal(this.app, this.plugin).open();
+		});
+		const newBtn = installedHead.createEl("button", {
+			cls: "semlink-mcp-new-btn",
+			text: "＋ " + t("mcpNew"),
+		});
+		newBtn.addEventListener("click", () => {
+			new McpServerConfigModal(this.app, this.plugin, null, () => rerenderSettingsTab(this)).open();
+		});
+
 		// ── 内置 semlink 服务器卡片：不可增删改，右侧开关启停服务 ──
 		const list = containerEl.createDiv({ cls: "semlink-mcp-list" });
 		const card = list.createDiv({ cls: "semlink-mcp-server" });
@@ -569,28 +592,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		});
 
 		// ── 外部 MCP 服务器：可增删改（管理层；运行时接入后续扩展） ──
-		const installedHead = containerEl.createDiv({ cls: "semlink-mcp-installed-head" });
-		installedHead.createSpan({
-			cls: "semlink-mcp-installed-title",
-			text: `${t("mcpInstalled")} ${clientServers.length + 1}`,
-		});
-		// 分享按钮（New 左侧）：把 semlink MCP 接入第三方客户端的说明
-		const shareBtn = installedHead.createEl("button", {
-			cls: "semlink-mcp-icon-btn",
-			attr: { "aria-label": t("mcpShareTitle"), title: t("mcpShareTitle") },
-		});
-		setIcon(shareBtn, "share-2");
-		shareBtn.addEventListener("click", () => {
-			new McpShareModal(this.app, this.plugin).open();
-		});
-		const newBtn = installedHead.createEl("button", {
-			cls: "semlink-mcp-new-btn",
-			text: "＋ " + t("mcpNew"),
-		});
-		newBtn.addEventListener("click", () => {
-			new McpServerConfigModal(this.app, this.plugin, null, () => rerenderSettingsTab(this)).open();
-		});
-
 		if (clientServers.length > 0) {
 			const clientList = containerEl.createDiv({ cls: "semlink-mcp-list" });
 			for (const s of clientServers) {
