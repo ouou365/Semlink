@@ -13,6 +13,8 @@ const zh: Record<keyof typeof en, string> = {
 	settingsTagline: "Turn your Obsidian vault into an Agentic Environment.",
 	vectorSearch: "向量搜索",
 	vectorSearchDesc: "启用 Vault 内的语义（向量）检索；关闭后搜索与相关笔记不返回结果。",
+	autoEmbed: "自动嵌入",
+	autoEmbedDesc: "索引时同时生成向量；关闭后仅索引文本（关键词检索不受影响）。已有笔记可用重建索引补齐向量。",
 	tabGeneral: "通用",
 	language: "语言",
 	languageDesc: "Semlink 界面显示语言",

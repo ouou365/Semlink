@@ -12,6 +12,8 @@ const t: Record<keyof typeof en, string> = {
 	settingsTagline: "Turn your Obsidian vault into an Agentic Environment.",
 	vectorSearch: "向量搜尋",
 	vectorSearchDesc: "啟用 Vault 內的語意（向量）檢索；關閉後搜尋與相關筆記不回傳結果。",
+	autoEmbed: "自動嵌入",
+	autoEmbedDesc: "索引時同時生成向量；關閉後僅索引文字（關鍵詞檢索不受影響）。已有筆記可用重建索引補齊向量。",
 	tabGeneral: "一般",
 	language: "語言",
 	languageDesc: "Semlink 介面顯示語言",

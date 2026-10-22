@@ -12,6 +12,8 @@ const t: Record<keyof typeof en, string> = {
 	settingsTagline: "Turn your Obsidian vault into an Agentic Environment.",
 	vectorSearch: "ベクトル検索",
 	vectorSearchDesc: "Vault 内のセマンティック（ベクトル）検索を有効にします。オフにすると検索や関連ノートは結果を返しません。",
+	autoEmbed: "自動埋め込み",
+	autoEmbedDesc: "インデックス時にベクトルを生成します。オフの場合はテキストのみ索引化されます（キーワード検索は利用可能）。",
 	tabGeneral: "一般",
 	language: "言語",
 	languageDesc: "Semlink の UI 言語",

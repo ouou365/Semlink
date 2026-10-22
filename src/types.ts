@@ -245,6 +245,8 @@ export interface SmartVaultSettings {
 	mcpApiKey: string;
 	/** MCP 服务总开关：默认开启；用户手动关闭后重启保持关闭。 */
 	mcpEnabled?: boolean;
+	/** 索引时是否同时生成向量（嵌入）。关闭后仅索引文本，关键词检索不受影响。 */
+	autoEmbed?: boolean;
 	/** RAG tab master switch: when false, every vector search returns empty
 	 *  (search / related notes / MCP + chat tools). Defaults to enabled. */
 	vectorSearchEnabled?: boolean;
@@ -328,6 +330,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	mcpPort: 3001,
 	mcpApiKey: "",
 	mcpEnabled: true,
+	autoEmbed: true,
 	mcpClientServers: [],
 	chunkSize: 800,
 	chunkOverlap: 100,

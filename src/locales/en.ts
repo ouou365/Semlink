@@ -11,6 +11,8 @@ const en = {
 	settingsTagline: "Turn your Obsidian vault into an Agentic Environment.",
 	vectorSearch: "Vector search",
 	vectorSearchDesc: "Enable semantic (vector) search across the vault. When off, search and related notes return no results.",
+	autoEmbed: "Auto embed",
+	autoEmbedDesc: "Generate vectors while indexing. When off, only text is indexed (keyword search still works). Existing notes can be backfilled via Re-embed all.",
 	tabGeneral: "General",
 	language: "Language",
 	languageDesc: "UI language for Semlink",

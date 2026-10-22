@@ -5,6 +5,7 @@
 import { App, Vault, TFile, Notice } from "obsidian";
 import { debugLog } from "./log";
 import type { SmartVaultSettings, QueueAction, QueueItem } from "./types";
+import { activeEmbeddingProvider } from "./types";
 import { VectorStore } from "./vector-store";
 import { IndexQueue } from "./index-queue";
 import { EmbeddingClient } from "./embedding-client";
@@ -27,6 +28,8 @@ export class Scheduler {
 	private gate: ActivityGate | null;
 
 	private running = false;
+	/** 本次运行是否执行嵌入（嵌入模型已配置且自动嵌入开关打开）。 */
+	private embedActive = true;
 	private aborted = false;
 	/** 并发嵌入请求数 — 设置页"嵌入参数"可调（默认 2）。串行(1) 对免费档
 	 *  API 最稳；并发过高会触发 429 限流。 */
@@ -188,6 +191,8 @@ export class Scheduler {
 		// change, causing the status bar to flicker. Snapshot the real DB
 		// count up front so we can hold processedNotes steady for updates and
 		// only bump it for genuine "add"s.
+		// 嵌入与索引解耦：本次运行是否带嵌入，由嵌入模型配置与自动嵌入开关决定
+		this.embedActive = activeEmbeddingProvider(this.settings).apiKey.trim() !== "" && this.settings.autoEmbed !== false;
 		this.incrementalBase = 0;
 		if (!scan) {
 			const stats = await this.store.getStats();
@@ -204,10 +209,10 @@ export class Scheduler {
 				// single batch), so it's far cheaper than re-embedding chunks.
 				// Runs once per full scan; a fast no-op when every note already
 				// has a doc vector.
-				await this.backfillDocVectors();
+				if (this.embedActive) await this.backfillDocVectors();
 			}
 
-			this.progress.setPhase("embedding");
+			this.progress.setPhase(this.embedActive ? "embedding" : "chunking");
 
 			while (!this.aborted) {
 				// Check pause state
@@ -310,8 +315,10 @@ export class Scheduler {
 
 		if (chunks.length === 0) return false;
 
-		// Embed the chunks (async network call — yields naturally)
-		this.progress.setPhase("embedding");
+		// Embed the chunks (async network call — yields naturally)。嵌入与索引解耦：
+		// 未配置嵌入模型或关闭自动嵌入时，仅插入文本 chunk（无向量；可被关键词
+		// 检索命中，向量检索由 vector IS NOT NULL 自动排除）。
+		if (this.embedActive) this.progress.setPhase("embedding");
 		this.progress.setNetworkStatus(this.client.networkStatus);
 
 		// Sparse chunks (table separators | | |, dashes ---, whitespace-only)
@@ -322,20 +329,22 @@ export class Scheduler {
 		const embeddableChunks = chunks.filter((c) => !isSparseContent(c.content));
 
 		const texts = embeddableChunks.map((c) => c.content);
-		const embedResult = await this.client.embedAll(texts, (batchIdx, totalBatches) => {
-			this.progress.setFileChunkProgress(`${batchIdx + 1}/${totalBatches}`, notePath);
-		});
-		// Flatten batched embeddings into a single array matching chunks order
 		const allEmbeddings: number[][] = [];
-		for (const batch of embedResult.embeddings) {
-			allEmbeddings.push(...batch);
+		if (this.embedActive) {
+			const embedResult = await this.client.embedAll(texts, (batchIdx, totalBatches) => {
+				this.progress.setFileChunkProgress(`${batchIdx + 1}/${totalBatches}`, notePath);
+			});
+			// Flatten batched embeddings into a single array matching chunks order
+			for (const batch of embedResult.embeddings) {
+				allEmbeddings.push(...batch);
+			}
 		}
 
 		// Build the document-level vector from the note's heading tree. Done
 		// OUTSIDE the transaction because embed() yields (network), and the
 		// transaction below must not span a yield (close() could fire mid-yield
 		// and lose the in-memory DB). Only the DB write goes inside the tx.
-		const docHeadingText = this.buildDocVectorText(content);
+		const docHeadingText = this.embedActive ? this.buildDocVectorText(content) : null;
 		let docEmbedding: number[] | null = null;
 		if (docHeadingText) {
 			try {
@@ -375,7 +384,7 @@ export class Scheduler {
 				await this.store.saveEmbeddings(embeddableChunks.map((c) => c.id), allEmbeddings);
 
 				// Save the document-level (heading) vector in the same transaction.
-				if (docEmbedding) {
+				if (docEmbedding && docHeadingText) {
 					await this.store.saveDocEmbedding(notePath, docEmbedding, mtime, docHeadingText);
 				}
 

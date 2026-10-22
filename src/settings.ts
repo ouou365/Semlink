@@ -352,6 +352,42 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// ── 索引结构：切块参数（改动后需重建索引） ──
+		new Setting(containerEl)
+			.setName(t("chunkSize"))
+			.setDesc(t("chunkSizeDesc"))
+			.addSlider((slider) => {
+				showSliderValue(slider.setLimits(200, 2000, 100).setValue(this.plugin.settings.chunkSize));
+				return slider.onChange(async (value) => {
+					this.plugin.settings.chunkSize = value;
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName(t("chunkOverlap"))
+			.setDesc(t("chunkOverlapDesc"))
+			.addSlider((slider) => {
+				showSliderValue(slider.setLimits(0, 500, 50).setValue(this.plugin.settings.chunkOverlap));
+				return slider.onChange(async (value) => {
+					this.plugin.settings.chunkOverlap = value;
+					await this.plugin.saveSettings();
+				});
+			});
+
+		// ── 深度重建：清空向量并按当前切块参数全部重来 ──
+		new Setting(containerEl)
+			.setName(t("rebuildIndex"))
+			.setDesc(t("rebuildIndexDesc"))
+			.addButton((btn) => {
+				btn.setButtonText(t("rebuildIndex"));
+				markDestructive(btn).onClick(() => {
+					new ConfirmModal(this.app, t("rebuildIndex"), t("rebuildConfirm"), () => {
+						// 重建索引并直接在引导页数据索引环节可视化进度
+						void this.plugin.rebuildIndexWithGuide();
+					}).open();
+				});
+			});
 		new Setting(containerEl)
 			.setName(t("fullReindex"))
 			.setDesc(t("fullReindexDesc"))
@@ -392,6 +428,19 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.vectorSearchEnabled !== false)
 					.onChange(async (value) => {
 						this.plugin.settings.vectorSearchEnabled = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// ── 自动嵌入开关：索引时是否同时生成向量 ──
+		new Setting(containerEl)
+			.setName(t("autoEmbed"))
+			.setDesc(t("autoEmbedDesc"))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.autoEmbed !== false)
+					.onChange(async (value) => {
+						this.plugin.settings.autoEmbed = value;
 						await this.plugin.saveSettings();
 					})
 			);
@@ -461,27 +510,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
 		});
 
-		new Setting(advBody)
-			.setName(t("chunkSize"))
-			.setDesc(t("chunkSizeDesc"))
-			.addSlider((slider) => {
-				showSliderValue(slider.setLimits(200, 2000, 100).setValue(this.plugin.settings.chunkSize));
-				return slider.onChange(async (value) => {
-					this.plugin.settings.chunkSize = value;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(advBody)
-			.setName(t("chunkOverlap"))
-			.setDesc(t("chunkOverlapDesc"))
-			.addSlider((slider) => {
-				showSliderValue(slider.setLimits(0, 500, 50).setValue(this.plugin.settings.chunkOverlap));
-				return slider.onChange(async (value) => {
-					this.plugin.settings.chunkOverlap = value;
-					await this.plugin.saveSettings();
-				});
-			});
 
 		new Setting(advBody)
 			.setName(t("batchSize"))
@@ -516,19 +544,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			});
 
-		// ── Re-embed (force full rebuild) ──
-		new Setting(advBody)
-			.setName(t("rebuildIndex"))
-			.setDesc(t("rebuildIndexDesc"))
-			.addButton((btn) => {
-				btn.setButtonText(t("rebuildIndex"));
-				markDestructive(btn).onClick(() => {
-					new ConfirmModal(this.app, t("rebuildIndex"), t("rebuildConfirm"), () => {
-						// 重建索引并直接在引导页数据索引环节可视化进度
-						void this.plugin.rebuildIndexWithGuide();
-					}).open();
-				});
-			});
 	}
 
 	// ══════════════════════════════════════
