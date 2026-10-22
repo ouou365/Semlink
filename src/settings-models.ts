@@ -2206,9 +2206,8 @@ const MARKET_RANK: Record<string, number> = {
 };
 
 /** 引导页的供应商结构（与设置页同源）：系列文件夹聚合（Z.AI / MiniMax /
- *  Xiaomi 系，成员按排名排序、首位即文件夹图标），已配置 Key 的项置顶，
- *  其余按市场排名。设置页与引导页的供应商列表都由这里派生，避免两处
- *  各养一份名单。 */
+ *  Xiaomi 系，成员按排名排序、首位即文件夹图标）。排序只看市场排名——
+ *  是否已配置只影响绿点角标，不参与排序。 */
 export interface GuideProviderGroup {
 	/** 显示名：单供应商名或系列文件夹名（如 "Z.AI"）。 */
 	name: string;
@@ -2243,9 +2242,9 @@ export function buildGuideProviderGroups(plugin: SmartVaultPlugin): GuideProvide
 	}
 	const groupRank = (g: GuideProviderGroup): number =>
 		g.members ? rank(g.members[0]) : rank(g.name);
+	// 排序只看市场排名：配置状态不参与（绿点角标已足够提示）
 	return items.sort((a, b) =>
-		Number(b.configured) - Number(a.configured)
-		|| groupRank(a) - groupRank(b)
+		groupRank(a) - groupRank(b)
 		|| a.name.localeCompare(b.name),
 	);
 }
