@@ -353,8 +353,20 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			);
 
 
-		// ── 索引结构：切块参数（改动后需重建索引） ──
-		new Setting(containerEl)
+		// ── 高级选项：切块参数（改动后需重建索引） ──
+		const advHead = containerEl.createDiv({ cls: "semlink-editor-adv-head" });
+		const chev = advHead.createDiv({ cls: "semlink-editor-adv-chevron" });
+		setIcon(chev, "chevron-right");
+		const advLabel = advHead.createSpan({ cls: "semlink-editor-adv-label", text: t("editorAdvancedShow") });
+		const advBody = containerEl.createDiv({ cls: "semlink-editor-adv-body semlink-hidden" });
+		advHead.addEventListener("click", () => {
+			const open = !advBody.hasClass("semlink-hidden");
+			advBody.toggleClass("semlink-hidden", open);
+			setIcon(chev, open ? "chevron-right" : "chevron-down");
+			advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
+		});
+
+		new Setting(advBody)
 			.setName(t("chunkSize"))
 			.setDesc(t("chunkSizeDesc"))
 			.addSlider((slider) => {
@@ -365,7 +377,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(containerEl)
+		new Setting(advBody)
 			.setName(t("chunkOverlap"))
 			.setDesc(t("chunkOverlapDesc"))
 			.addSlider((slider) => {
