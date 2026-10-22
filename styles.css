@@ -3086,6 +3086,28 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     align-items: center;
 }
 
+/* 引导模型行左侧的移动滑块 */
+.semlink-guide-model-grip {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--text-faint);
+    cursor: grab;
+}
+
+.semlink-guide-model-grip:hover {
+    color: var(--text-muted);
+}
+
+.semlink-guide-model-grip:active {
+    cursor: grabbing;
+}
+
+.semlink-guide-model-grip .svg-icon {
+    width: 13px;
+    height: 13px;
+}
+
 .semlink-guide-models-cards::-webkit-scrollbar {
     display: none;
 }

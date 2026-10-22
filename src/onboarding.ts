@@ -743,18 +743,45 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			opts.onModelPicked(provider, picked);
 		});
 
-		// 模型行：logo + 模型 ID/上下文 + 开关（同设置页右栏样式）；点击行
-		// 即切换开关。只展示前 10 个，更多模型可搜索。
+		// 模型行：滑块 + logo + 模型 ID/上下文 + 开关（同设置页右栏样式）。
+		// 左侧滑块拖动排序（写入 provider.models）；点击行打开编辑弹窗
+		// （复用设置页的模型编辑弹窗，含删除）。只展示前 10 个，可搜索。
 		const renderList = (): void => {
 			const models = provider.models.filter((m) => inScope(m))
-				// Alphabetical, natural-number aware (qwen2 < qwen10).
-				.sort((a, b) => a.id.localeCompare(b.id, undefined, { sensitivity: "base", numeric: true }))
 				.slice(0, 10);
 			countText.setText(t("mtShowing").replace("{total}", String(models.length)));
 			const scroll = cards.scrollTop;
 			cards.empty();
 			for (const model of models) {
 				const row = cards.createDiv({ cls: "semlink-guide-model-row" });
+				// 左侧移动滑块：拖动调整顺序（顺序持久化在 provider.models）
+				const grip = row.createDiv({
+					cls: "semlink-guide-model-grip",
+					attr: { title: t("modelDrag") },
+				});
+				setIcon(grip, "grip-vertical");
+				grip.addEventListener("click", (e) => e.stopPropagation());
+				row.draggable = true;
+				row.addEventListener("dragstart", (e) => {
+					e.dataTransfer?.setData("text/semlink-guide-model", String(provider.models.indexOf(model)));
+					if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+				});
+				row.addEventListener("dragover", (e) => {
+					e.preventDefault();
+					if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+				});
+				row.addEventListener("drop", (e) => {
+					e.preventDefault();
+					const raw = e.dataTransfer?.getData("text/semlink-guide-model");
+					const from = raw === undefined ? -1 : parseInt(raw, 10);
+					if (!Number.isFinite(from) || from < 0 || provider.models[from] === model) return;
+					const src = provider.models[from];
+					if (!src) return;
+					provider.models.splice(from, 1);
+					provider.models.splice(provider.models.indexOf(model), 0, src);
+					void plugin.saveSettings();
+					renderList();
+				});
 				const logoEl = row.createSpan({ cls: "semlink-guide-card-logo" });
 				const brandSvg = modelBrand(model.id);
 				if (brandSvg) setSvgIcon(logoEl, brandSvg);
@@ -769,9 +796,26 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 						model.enabled = v;
 					});
 				row.addEventListener("click", (e) => {
+					// 开关与滑块的点击不触发行编辑
 					if ((e.target as HTMLElement).closest(".semlink-guide-model-toggle")) return;
-					model.enabled = model.enabled !== true;
-					renderList();
+					if ((e.target as HTMLElement).closest(".semlink-guide-model-grip")) return;
+					// 编辑弹窗复用设置页模型列表的（含删除）
+					new AddModelModal(plugin.app, {
+						title: t("mtModelEdit"),
+						initial: { id: model.id, contextWindow: model.contextWindow },
+						onSubmit: (id, contextWindow) => {
+							model.id = id;
+							model.contextWindow = contextWindow;
+							void plugin.saveSettings();
+							renderList();
+						},
+						onDelete: () => {
+							const idx = provider.models.indexOf(model);
+							if (idx !== -1) provider.models.splice(idx, 1);
+							void plugin.saveSettings();
+							renderList();
+						},
+					}).open();
 				});
 			}
 			if (models.length === 0) {
