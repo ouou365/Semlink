@@ -478,14 +478,15 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 				new AddProviderModal(plugin.app, plugin, "custom", (p) => opts.onPickProvider(p)).open();
 			});
 
-			// 联系链接：想加供应商 → 发邮件
+			// 联系链接：点"Contact me/请联系我"唤起邮件客户端
 			const contact = body.createDiv({ cls: "semlink-guide-contact" });
 			contact.createSpan({ text: `${t("guideContactHint")} ` });
 			contact.createEl("a", {
 				cls: "semlink-guide-contact-link",
-				text: "support@getsemlink.com",
+				text: t("guideContactLink"),
 				attr: { href: "mailto:support@getsemlink.com" },
 			});
+			contact.createSpan({ text: " support@getsemlink.com" });
 			return;
 		}
 
