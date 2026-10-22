@@ -412,12 +412,22 @@ export class ToolCore {
 
 	/** 查询分词：空白与中英文标点切分，最多 8 个词。 */
 	private tokenize(query: string): string[] {
-		return query
+		const raw = query
 			.toLowerCase()
-			.split(/[\s,，。；;-‑–—]+/u)
+			.split(/[s,，。；;-‑–—]+/u)
 			.map((t) => t.trim())
 			.filter((t) => t.length > 0)
 			.slice(0, 8);
+		// CJK 长词拆 2-gram（无空格语言的实用检索方案）；ASCII 词整词保留
+		const out: string[] = [];
+		for (const t of raw) {
+			if (/^[ -]+$/.test(t) || t.length <= 3) {
+				out.push(t);
+				continue;
+			}
+			for (let i = 0; i + 2 <= t.length; i++) out.push(t.slice(i, i + 2));
+		}
+		return [...new Set(out)].slice(0, 16);
 	}
 
 

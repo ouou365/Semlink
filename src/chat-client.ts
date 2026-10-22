@@ -1156,7 +1156,7 @@ export class ChatClient {
 
 			// Interim text the model produced while deciding to call tools.
 			if (stream.content?.trim()) {
-				const step: ThinkingStep = { type: "thought", text: stream.content.trim() };
+				const step: ThinkingStep = { type: "thought", text: this.normalizeLegacyToolNames(stream.content.trim()) };
 				thinking.push(step);
 				onThinking?.(step);
 			}
