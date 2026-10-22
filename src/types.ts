@@ -243,6 +243,9 @@ export interface SmartVaultSettings {
 	modelKindCache?: Record<string, Record<string, string>>;
 	mcpPort: number;
 	mcpApiKey: string;
+	/** RAG tab master switch: when false, every vector search returns empty
+	 *  (search / related notes / MCP + chat tools). Defaults to enabled. */
+	vectorSearchEnabled?: boolean;
 	chunkSize: number;
 	chunkOverlap: number;
 	excludePaths: string;

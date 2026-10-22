@@ -369,6 +369,19 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	// Tab: Embedding — model, chunking params, rebuild
 	// ══════════════════════════════════════
 	private renderEmbeddingTab(containerEl: HTMLElement): void {
+		// ── 向量搜索总开关：关闭后所有语义检索返回空 ──
+		new Setting(containerEl)
+			.setName(t("vectorSearch"))
+			.setDesc(t("vectorSearchDesc"))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.vectorSearchEnabled !== false)
+					.onChange(async (value) => {
+						this.plugin.settings.vectorSearchEnabled = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// Embedding model — one dropdown entry per (provider, model) combo,
 		// e.g. "SiliconFlow/BAAI/bge-m3"; picking one sets the active
 		// embedding model key.

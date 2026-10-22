@@ -345,7 +345,11 @@ export class VectorStore {
 	}
 	async loadVectorCache(): Promise<void> { await this.call("loadVectorCache"); }
 
+	/** 向量搜索总开关（设置页 RAG 标签注入）：关闭时所有语义检索直接返回空。 */
+	searchGate: () => boolean = () => true;
+
 	async search(queryEmbedding: number[], limit = 10, threshold = 0.3): Promise<SearchResult[]> {
+		if (!this.searchGate()) return [];
 		if (this.fallback) {
 			// Sync mode: time-slice the scan so the main thread (and the UI's
 			// elapsed counter / dots) keeps breathing between slices.
@@ -358,6 +362,7 @@ export class VectorStore {
 	 *  (see DbEngine.searchRelatedNotes). Runs in the worker; in sync-fallback
 	 *  mode it runs synchronously without time-slicing (rare, degraded path). */
 	async searchRelatedNotes(notePath: string, limit = 10, threshold = 0.2, maxProbes = 6): Promise<SearchResult[]> {
+		if (!this.searchGate()) return [];
 		return await this.call<SearchResult[]>("searchRelatedNotes", [notePath, limit, threshold, maxProbes]);
 	}
 
