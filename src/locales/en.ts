@@ -8,7 +8,7 @@
 const en = {
 // ──── Settings Tab ────
 	settingsTitle: "Semlink",
-	settingsTagline: "Turn your Obsidian vault into an Agentic Environment.",
+	settingsTagline: "Turn your Obsidian vault into an Agentic Knowledge Environment.",
 	vectorSearch: "Vector search",
 	vectorSearchDesc: "Enable semantic (vector) search across the vault. When off, search and related notes return no results.",
 	autoEmbed: "Auto embed",

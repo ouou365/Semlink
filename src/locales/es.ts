@@ -11,7 +11,7 @@ import type en from "./en";
 const t: Record<keyof typeof en, string> = {
 // ──── Settings Tab ────
 	settingsTitle: "Semlink",
-	settingsTagline: "Turn your Obsidian vault into an Agentic Environment.",
+	settingsTagline: "Turn your Obsidian vault into an Agentic Knowledge Environment.",
 	vectorSearch: "Búsqueda vectorial",
 	vectorSearchDesc: "Activa la búsqueda semántica (vectorial) en el vault. Al desactivarla, la búsqueda y las notas relacionadas no devuelven resultados.",
 	autoEmbed: "Embedding automático",

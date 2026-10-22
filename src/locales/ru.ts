@@ -10,7 +10,7 @@ import type en from "./en";
 const t: Record<keyof typeof en, string> = {
 // ──── Settings Tab ────
 	settingsTitle: "Semlink",
-	settingsTagline: "Turn your Obsidian vault into an Agentic Environment.",
+	settingsTagline: "Turn your Obsidian vault into an Agentic Knowledge Environment.",
 	vectorSearch: "Векторный поиск",
 	vectorSearchDesc: "Включает семантический (векторный) поиск по хранилищу. Когда выключено, поиск и похожие заметки не возвращают результатов.",
 	autoEmbed: "Авто-эмбеддинг",
