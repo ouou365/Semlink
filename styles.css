@@ -297,16 +297,9 @@
     height: 17px;
 }
 
-/* 运行状态点：只在运行中出现，绿色，挂在图标左下角 */
-.semlink-mcp-server-dot {
-    position: absolute;
-    left: -1px;
-    bottom: -1px;
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--color-green);
-    border: 2px solid var(--background-primary);
+/* 运行中：Semlink 图标变紫 */
+.semlink-mcp-server-icon.is-running {
+    color: var(--interactive-accent);
 }
 
 .semlink-mcp-server-main {
