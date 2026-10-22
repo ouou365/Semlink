@@ -544,7 +544,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			cls: "semlink-mcp-server-icon",
 			attr: { title: running ? t("mcpRunning") : t("mcpStopped") },
 		});
-		setIcon(iconWrap, "plug-zap");
+		setIcon(iconWrap, "semlink-logo");
 		iconWrap.createSpan({ cls: `semlink-mcp-server-dot${running ? " is-on" : ""}` });
 		const main = card.createDiv({ cls: "semlink-mcp-server-main" });
 		main.createDiv({ cls: "semlink-mcp-server-name", text: "semlink" });
