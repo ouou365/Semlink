@@ -407,7 +407,20 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(containerEl)
+		// ── 高级选项（默认收起）：分块 / 批量 / 延迟 / 并发 / 重建索引 ──
+		const advHead = containerEl.createDiv({ cls: "semlink-editor-adv-head" });
+		const chev = advHead.createSpan({ cls: "semlink-editor-adv-chevron" });
+		setIcon(chev, "chevron-right");
+		const advLabel = advHead.createSpan({ cls: "semlink-editor-adv-label", text: t("editorAdvancedShow") });
+		const advBody = containerEl.createDiv({ cls: "semlink-editor-adv-body semlink-hidden" });
+		advHead.addEventListener("click", () => {
+			const open = !advBody.hasClass("semlink-hidden");
+			advBody.toggleClass("semlink-hidden", open);
+			setIcon(chev, open ? "chevron-right" : "chevron-down");
+			advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
+		});
+
+		new Setting(advBody)
 			.setName(t("chunkSize"))
 			.setDesc(t("chunkSizeDesc"))
 			.addSlider((slider) => {
@@ -418,7 +431,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(containerEl)
+		new Setting(advBody)
 			.setName(t("chunkOverlap"))
 			.setDesc(t("chunkOverlapDesc"))
 			.addSlider((slider) => {
@@ -429,7 +442,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(containerEl)
+		new Setting(advBody)
 			.setName(t("batchSize"))
 			.setDesc(t("batchSizeDesc"))
 			.addSlider((slider) => {
@@ -440,7 +453,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(containerEl)
+		new Setting(advBody)
 			.setName(t("requestDelay"))
 			.setDesc(t("requestDelayDesc"))
 			.addSlider((slider) => {
@@ -451,7 +464,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(containerEl)
+		new Setting(advBody)
 			.setName(t("embedConcurrency"))
 			.setDesc(t("embedConcurrencyDesc"))
 			.addSlider((slider) => {
@@ -463,7 +476,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			});
 
 		// ── Re-embed (force full rebuild) ──
-		new Setting(containerEl)
+		new Setting(advBody)
 			.setName(t("rebuildIndex"))
 			.setDesc(t("rebuildIndexDesc"))
 			.addButton((btn) => {
