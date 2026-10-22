@@ -737,6 +737,8 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			countText.setText(t("mtShowing").replace("{total}", String(models.length)));
 			const scroll = cards.scrollTop;
 			cards.empty();
+			// 行图标统一用供应商品牌图标（不再按模型 ID 逐个匹配）
+			const providerSvg = brandLogoOf(provider.name).svg;
 			for (const model of models) {
 				const row = cards.createDiv({ cls: "semlink-guide-model-row" });
 				// 左侧移动滑块：拖动调整顺序（顺序持久化在 provider.models）
@@ -768,8 +770,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 					renderList();
 				});
 				const logoEl = row.createSpan({ cls: "semlink-guide-card-logo" });
-				const brandSvg = modelBrand(model.id);
-				if (brandSvg) setSvgIcon(logoEl, brandSvg);
+				if (providerSvg) setSvgIcon(logoEl, providerSvg);
 				const main = row.createSpan({ cls: "semlink-guide-model-main" });
 				main.createSpan({ cls: "semlink-guide-model-id", text: model.id });
 				if (model.contextWindow > 0) {
