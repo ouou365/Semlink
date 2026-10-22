@@ -841,12 +841,10 @@ class EditMcpServerModal extends Modal {
 			const url = `http://127.0.0.1:${port}/mcp`;
 			return JSON.stringify(
 				{
-					mcpServers: {
-						semlink: {
-							type: "http",
-							url,
-							...(apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : {}),
-						},
+					semlink: {
+						type: "http",
+						url,
+						...(apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : {}),
 					},
 				},
 				null,
@@ -1114,7 +1112,7 @@ class McpShareModal extends Modal {
 			t("claudeDesktopConfig"),
 			t("claudeDesktopDesc"),
 			JSON.stringify(
-				{ mcpServers: { semlink: { type: "http", url: mcpUrl, ...(key ? { headers: { Authorization: `Bearer ${key}` } } : {}) } } },
+				{ semlink: { type: "http", url: mcpUrl, ...(key ? { headers: { Authorization: `Bearer ${key}` } } : {}) } },
 				null,
 				2,
 			),
