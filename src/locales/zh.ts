@@ -106,7 +106,7 @@ const zh: Record<keyof typeof en, string> = {
 	mcpRunning: "运行中",
 	mcpStopped: "未启动",
 	mcpSearchPlaceholder: "搜索 MCP 服务器…",
-	mcpInstalled: "已安装",
+	mcpInstalled: "MCP 服务器",
 	editMcpServer: "编辑 MCP 服务器",
 	editMcpServerDesc: "修改当前 MCP 配置，保存后返回列表。",
 	mcpPortInvalid: "端口无效（1-65535）",

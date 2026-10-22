@@ -105,7 +105,7 @@ const t: Record<keyof typeof en, string> = {
 	mcpRunning: "실행 중",
 	mcpStopped: "중지됨",
 	mcpSearchPlaceholder: "MCP 서버 검색…",
-	mcpInstalled: "설치됨",
+	mcpInstalled: "MCP 서버",
 	editMcpServer: "MCP 서버 편집",
 	editMcpServerDesc: "현재 MCP 구성을 수정한 후 저장하면 목록으로 돌아갑니다.",
 	mcpPortInvalid: "잘못된 포트(1-65535)",

@@ -541,7 +541,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const installedHead = containerEl.createDiv({ cls: "semlink-mcp-installed-head" });
 		installedHead.createSpan({
 			cls: "semlink-mcp-installed-title",
-			text: `${t("mcpInstalled")} ${clientServers.length + 1}`,
+			text: t("mcpInstalled"),
 		});
 		const newBtn = installedHead.createEl("button", {
 			cls: "semlink-mcp-new-btn",

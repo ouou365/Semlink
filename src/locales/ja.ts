@@ -105,7 +105,7 @@ const t: Record<keyof typeof en, string> = {
 	mcpRunning: "実行中",
 	mcpStopped: "停止中",
 	mcpSearchPlaceholder: "MCPサーバーを検索…",
-	mcpInstalled: "インストール済み",
+	mcpInstalled: "MCPサーバー",
 	editMcpServer: "MCPサーバーを編集",
 	editMcpServerDesc: "現在のMCP設定を変更し、保存するとリストに戻ります。",
 	mcpPortInvalid: "ポートが無効です（1-65535）",

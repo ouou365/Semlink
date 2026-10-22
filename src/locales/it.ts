@@ -107,7 +107,7 @@ const t: Record<keyof typeof en, string> = {
 	mcpRunning: "In esecuzione",
 	mcpStopped: "Arrestato",
 	mcpSearchPlaceholder: "Cerca server MCP…",
-	mcpInstalled: "Installati",
+	mcpInstalled: "Server MCP",
 	editMcpServer: "Modifica server MCP",
 	editMcpServerDesc: "Modifica la configurazione MCP corrente, poi salva per tornare all'elenco.",
 	mcpPortInvalid: "Porta non valida (1-65535)",

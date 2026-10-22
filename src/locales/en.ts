@@ -104,7 +104,7 @@ const en = {
 	mcpRunning: "Running",
 	mcpStopped: "Stopped",
 	mcpSearchPlaceholder: "Search MCP servers…",
-	mcpInstalled: "Installed",
+	mcpInstalled: "MCP Server",
 	editMcpServer: "Edit MCP server",
 	editMcpServerDesc: "Modify the current MCP configuration, then save to return to the list.",
 	mcpPortInvalid: "Invalid port (1-65535)",

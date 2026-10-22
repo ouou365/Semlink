@@ -105,7 +105,7 @@ const t: Record<keyof typeof en, string> = {
 	mcpRunning: "執行中",
 	mcpStopped: "未啟動",
 	mcpSearchPlaceholder: "搜尋 MCP 伺服器…",
-	mcpInstalled: "已安裝",
+	mcpInstalled: "MCP 伺服器",
 	editMcpServer: "編輯 MCP 伺服器",
 	editMcpServerDesc: "修改目前 MCP 設定，儲存後返回列表。",
 	mcpPortInvalid: "連接埠無效（1-65535）",
