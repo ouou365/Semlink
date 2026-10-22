@@ -582,6 +582,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		new ToggleComponent(toggleWrap)
 			.setValue(running)
 			.onChange(async (v) => {
+				// 开关状态持久化：重启 Obsidian 后保持用户选择
+				this.plugin.settings.mcpEnabled = v;
+				await this.plugin.saveSettings();
 				if (v) await this.plugin.startMcpServer();
 				else await this.plugin.stopMcpServer();
 				rerenderSettingsTab(this);
@@ -1065,7 +1068,7 @@ class McpShareModal extends Modal {
 		const key = this.plugin.settings.mcpApiKey;
 
 		const copy = (text: string): void => {
-			navigator.clipboard.writeText(text).then(() => new Notice(t("mcpCopied")));
+			void navigator.clipboard.writeText(text).then(() => new Notice(t("mcpCopied")));
 		};
 
 		const section = (label: string, desc: string, code: string): HTMLElement => {

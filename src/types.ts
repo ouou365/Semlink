@@ -243,6 +243,8 @@ export interface SmartVaultSettings {
 	modelKindCache?: Record<string, Record<string, string>>;
 	mcpPort: number;
 	mcpApiKey: string;
+	/** MCP 服务总开关：默认开启；用户手动关闭后重启保持关闭。 */
+	mcpEnabled?: boolean;
 	/** RAG tab master switch: when false, every vector search returns empty
 	 *  (search / related notes / MCP + chat tools). Defaults to enabled. */
 	vectorSearchEnabled?: boolean;
@@ -325,6 +327,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	activeChatModel: "",
 	mcpPort: 3001,
 	mcpApiKey: "",
+	mcpEnabled: true,
 	mcpClientServers: [],
 	chunkSize: 800,
 	chunkOverlap: 100,

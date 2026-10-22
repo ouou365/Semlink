@@ -170,8 +170,8 @@ export default class SmartVaultPlugin extends Plugin {
 		// Show initial status bar with existing index data
 		await this.updateInitialStatusBar();
 
-		// Start MCP server
-		if (activeEmbeddingProvider(this.settings).apiKey) {
+		// Start MCP server：默认开启；用户手动关闭后（mcpEnabled=false）保持关闭
+		if (this.settings.mcpEnabled !== false) {
 			await this.startMcpServer();
 		}
 
@@ -383,9 +383,12 @@ export default class SmartVaultPlugin extends Plugin {
 	async toggleMcpServer() {
 		if (this.mcpServer) {
 			await this.stopMcpServer();
+			this.settings.mcpEnabled = false;
 		} else {
 			await this.startMcpServer();
+			this.settings.mcpEnabled = true;
 		}
+		await this.saveSettings();
 	}
 
 	// ──── Feishu Bots ────
