@@ -414,7 +414,7 @@ export class ToolCore {
 	private tokenize(query: string): string[] {
 		return query
 			.toLowerCase()
-			.split(/[\s,，。；;、]+/)
+			.split(/[\s,，。；;-‑–—]+/u)
 			.map((t) => t.trim())
 			.filter((t) => t.length > 0)
 			.slice(0, 8);
