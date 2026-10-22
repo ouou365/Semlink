@@ -123,7 +123,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "Reiniciar",
 	startService: "Iniciar",
 	fullReindex: "Iniciar indexação",
-	fullReindexDesc: "Executa a indexação em todo o vault: notas novas e alteradas são processadas; as já indexadas permanecem inalteradas. Os vetores são gerados automaticamente quando um modelo de embedding está configurado.",
+	fullReindexDesc: "Executa a indexação: notas novas e alteradas são processadas; as já indexadas permanecem inalteradas. Os vetores são gerados automaticamente quando um modelo de embedding está configurado.",
 	startFullIndex: "▶ Iniciar indexação",
 	clientConfig: "Configuração de clientes",
 	claudeDesktopConfig: "Configuração MCP",

@@ -121,7 +121,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "再起動",
 	startService: "開始",
 	fullReindex: "インデックスを開始",
-	fullReindexDesc: "Vault全体のインデックスを実行します。新規・変更されたノートのみ処理され、既に索引化済みのものはそのまま維持されます。埋め込みモデルが設定されていればベクトルも自動生成されます。",
+	fullReindexDesc: "インデックスを実行します。新規・変更されたノートのみ処理され、既に索引化済みのものはそのまま維持されます。埋め込みモデルが設定されていればベクトルも自動生成されます。",
 	startFullIndex: "▶ インデックス開始",
 	clientConfig: "クライアント設定",
 	claudeDesktopConfig: "MCP設定",

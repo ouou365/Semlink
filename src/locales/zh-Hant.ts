@@ -121,7 +121,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "重新啟動服務",
 	startService: "啟動服務",
 	fullReindex: "開始索引",
-	fullReindexDesc: "對整個 Vault 執行索引：只處理新增和有變化的筆記，已索引的保持不變。已配置嵌入模型時會自動生成向量。",
+	fullReindexDesc: "執行索引：只處理新增和有變化的筆記，已索引的保持不變。已配置嵌入模型時會自動生成向量。",
 	startFullIndex: "▶ 開始索引",
 	clientConfig: "用戶端設定",
 	claudeDesktopConfig: "MCP 設定",

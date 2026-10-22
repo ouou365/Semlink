@@ -120,7 +120,7 @@ const en = {
 	restartService: "Restart",
 	startService: "Start",
 	fullReindex: "Start Index",
-	fullReindexDesc: "Run indexing across the vault — new and changed notes are processed, notes already indexed are left as-is. Vectors are generated automatically when an embedding model is configured.",
+	fullReindexDesc: "Run indexing — new and changed notes are processed, notes already indexed are left as-is. Vectors are generated automatically when an embedding model is configured.",
 	startFullIndex: "▶ Start Index",
 	clientConfig: "Client Configuration",
 	claudeDesktopConfig: "MCP Config",

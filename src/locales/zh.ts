@@ -122,7 +122,7 @@ const zh: Record<keyof typeof en, string> = {
 	restartService: "重启服务",
 	startService: "启动服务",
 	fullReindex: "开始索引",
-	fullReindexDesc: "对整个 Vault 运行索引：只处理新增和有变化的笔记，已索引的保持不变。已配置嵌入模型时会自动生成向量。",
+	fullReindexDesc: "运行索引：只处理新增和有变化的笔记，已索引的保持不变。已配置嵌入模型时会自动生成向量。",
 	startFullIndex: "▶ 开始索引",
 	clientConfig: "客户端配置",
 	claudeDesktopConfig: "MCP 配置",
