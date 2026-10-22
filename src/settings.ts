@@ -345,6 +345,20 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					})
 			);
 
+		new Setting(containerEl)
+			.setName(t("fullReindex"))
+			.setDesc(t("fullReindexDesc"))
+			.addButton((btn) => {
+				this.indexBtn = btn;
+				this.indexBtnCurrentState = "none";
+				this.applyIndexBtnState(this.plugin.progress.current);
+				this.indexBtnUnsubscribe = this.plugin.progress.onProgress((event) => {
+					if (event.type === "progress") {
+						this.applyIndexBtnState(event.progress);
+					}
+				});
+			});
+
 
 		// ── 高级选项：切块参数（改动后需重建索引） ──
 		const advHead = containerEl.createDiv({ cls: "semlink-editor-adv-head" });
@@ -381,19 +395,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(containerEl)
-			.setName(t("fullReindex"))
-			.setDesc(t("fullReindexDesc"))
-			.addButton((btn) => {
-				this.indexBtn = btn;
-				this.indexBtnCurrentState = "none";
-				this.applyIndexBtnState(this.plugin.progress.current);
-				this.indexBtnUnsubscribe = this.plugin.progress.onProgress((event) => {
-					if (event.type === "progress") {
-						this.applyIndexBtnState(event.progress);
-					}
-				});
-			});
 	}
 
 	// ══════════════════════════════════════
