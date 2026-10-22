@@ -9,6 +9,7 @@ import type { IndexProgress, ModelProvider, SmartVaultSettings } from "./types";
 import { activeEmbeddingProvider } from "./types";
 import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { mountCoffeeCanvas } from "./coffee-canvas";
+import { McpServer } from "./mcp-server";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
 import { LicenseModal } from "./license-modal";
@@ -833,6 +834,20 @@ class EditMcpServerModal extends Modal {
 		};
 		formBtn.addEventListener("click", () => setView(false));
 		jsonBtn.addEventListener("click", () => setView(true));
+
+		// ── 能力清单：tools / resources / prompts ──
+		const caps = McpServer.listCapabilities();
+		const capsEl = contentEl.createDiv({ cls: "semlink-mcp-edit-caps" });
+		capsEl.createDiv({ cls: "semlink-mcp-edit-caps-title", text: `Tools ${caps.tools.length}` });
+		for (const tool of caps.tools) {
+			const row = capsEl.createDiv({ cls: "semlink-mcp-cap-row" });
+			row.createSpan({ cls: "semlink-mcp-cap-name", text: tool.name });
+			row.createSpan({ cls: "semlink-mcp-cap-desc", text: tool.description });
+		}
+		capsEl.createDiv({
+			cls: "semlink-mcp-cap-empty",
+			text: `Resources · ${caps.resources.length}      Prompts · ${caps.prompts.length}`,
+		});
 
 		// ── Footer：右侧 Save / Cancel ──
 		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });

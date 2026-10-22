@@ -204,7 +204,7 @@ export class McpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = this.handleToolsList();
+					result = McpServer.handleToolsList();
 					break;
 				case "tools/call":
 					result = await this.handleToolsCall(params || {});
@@ -253,7 +253,7 @@ export class McpServer {
 		};
 	}
 
-	private handleToolsList() {
+	private static handleToolsList() {
 		return {
 			tools: [
 				{
@@ -456,6 +456,11 @@ export class McpServer {
 				},
 			],
 		};
+	}
+	/** 设置页展示用：本服务声明的 tools / resources / prompts（纯静态定义）。 */
+	static listCapabilities(): { tools: Array<{ name: string; description: string }>; resources: unknown[]; prompts: unknown[] } {
+		const list = McpServer.handleToolsList();
+		return { tools: list.tools.map((t) => ({ name: t.name, description: t.description ?? "" })), resources: [], prompts: [] };
 	}
 
 	private async handleToolsCall(params: ToolCallParams): Promise<unknown> {
