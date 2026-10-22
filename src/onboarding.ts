@@ -350,17 +350,9 @@ class SeriesPickModal extends Modal {
 	onOpen(): void {
 		this.titleEl.setText(this.seriesName);
 		const { contentEl } = this;
-		const configuredOf = (name: string): boolean =>
-			this.plugin.settings.providers.some((x) => x.name === name && !!x.apiKey.trim());
 		const grid = contentEl.createDiv({ cls: "semlink-guide-provider-grid semlink-guide-provider-grid-vertical" });
 		for (const member of this.members) {
 			const card = grid.createDiv({ cls: "semlink-guide-provider-card" });
-			if (configuredOf(member)) {
-				card.createSpan({
-					cls: "semlink-guide-provider-card-dot",
-					attr: { title: t("credentialConfigured") },
-				});
-			}
 			const logo = brandLogoOf(member).svg;
 			if (logo) {
 				const logoEl = card.createDiv({ cls: "semlink-guide-provider-logo" });
@@ -437,12 +429,6 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			for (const item of ordered) {
 				const pickName = item.members?.[0] ?? item.name;
 				const providerCard = grid.createDiv({ cls: "semlink-guide-provider-card" });
-				if (item.configured) {
-					providerCard.createSpan({
-						cls: "semlink-guide-provider-card-dot",
-						attr: { title: t("credentialConfigured") },
-					});
-				}
 				const logo = brandLogoOf(pickName).svg;
 				if (logo) {
 					const logoEl = providerCard.createDiv({ cls: "semlink-guide-provider-logo" });
@@ -486,7 +472,6 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 				text: t("guideContactLink"),
 				attr: { href: "mailto:support@getsemlink.com" },
 			});
-			contact.createSpan({ text: " support@getsemlink.com" });
 			return;
 		}
 
