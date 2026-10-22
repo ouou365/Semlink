@@ -120,7 +120,7 @@ const en = {
 	restartService: "Restart",
 	startService: "Start",
 	fullReindex: "Start Index",
-	fullReindexDesc: "Rebuild the index from all notes. Vectors are generated too when auto-embed is on — use after changing chunk size or the embedding model.",
+	fullReindexDesc: "Rebuild the index from all notes. Vectors are generated automatically when an embedding model is configured.",
 	startFullIndex: "▶ Start Index",
 	clientConfig: "Client Configuration",
 	claudeDesktopConfig: "MCP Config",

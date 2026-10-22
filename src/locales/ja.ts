@@ -121,7 +121,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "再起動",
 	startService: "開始",
 	fullReindex: "インデックスを開始",
-	fullReindexDesc: "全ノートからインデックスを再構築します。自動埋め込みが有効な場合はベクトルも生成されます。チャンクサイズや埋め込みモデル変更後に使用してください。",
+	fullReindexDesc: "全ノートのインデックスを再構築します。埋め込みモデルが設定されていればベクトルも自動生成されます。",
 	startFullIndex: "▶ インデックス開始",
 	clientConfig: "クライアント設定",
 	claudeDesktopConfig: "MCP設定",

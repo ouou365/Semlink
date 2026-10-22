@@ -122,7 +122,7 @@ const zh: Record<keyof typeof en, string> = {
 	restartService: "重启服务",
 	startService: "启动服务",
 	fullReindex: "开始索引",
-	fullReindexDesc: "重建全部笔记的索引；自动嵌入开启时会同时生成向量。修改分块参数或嵌入模型后使用。",
+	fullReindexDesc: "重建全部笔记的索引；已配置嵌入模型时会自动生成向量。",
 	startFullIndex: "▶ 开始索引",
 	clientConfig: "客户端配置",
 	claudeDesktopConfig: "MCP 配置",

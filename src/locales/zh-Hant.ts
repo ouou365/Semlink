@@ -121,7 +121,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "重新啟動服務",
 	startService: "啟動服務",
 	fullReindex: "開始索引",
-	fullReindexDesc: "重建全部筆記的索引；自動嵌入開啟時會同時生成向量。修改分塊參數或嵌入模型後使用。",
+	fullReindexDesc: "重建全部筆記的索引；已配置嵌入模型時會自動生成向量。",
 	startFullIndex: "▶ 開始索引",
 	clientConfig: "用戶端設定",
 	claudeDesktopConfig: "MCP 設定",

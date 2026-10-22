@@ -121,7 +121,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "재시작",
 	startService: "시작",
 	fullReindex: "인덱싱 시작",
-	fullReindexDesc: "모든 노트의 인덱스를 재구축합니다. 자동 임베딩이 켜져 있으면 벡터도 생성됩니다. 청크 크기 또는 임베딩 모델 변경 후 사용하세요.",
+	fullReindexDesc: "모든 노트의 인덱스를 재구축합니다. 임베딩 모델이 구성되어 있으면 벡터가 자동 생성됩니다.",
 	startFullIndex: "▶ 인덱싱 시작",
 	clientConfig: "클라이언트 설정",
 	claudeDesktopConfig: "MCP 구성",

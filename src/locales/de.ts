@@ -121,7 +121,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "Neustart",
 	startService: "Starten",
 	fullReindex: "Indexierung starten",
-	fullReindexDesc: "Baut den Index aus allen Notizen neu auf. Bei aktiviertem Auto-Embedding werden auch Vektoren erzeugt – nach Änderungen an Chunk-Größe oder Embedding-Modell verwenden.",
+	fullReindexDesc: "Baut den Index aus allen Notizen neu auf. Vektoren werden automatisch erzeugt, wenn ein Embedding-Modell konfiguriert ist.",
 	startFullIndex: "▶ Index starten",
 	clientConfig: "Client-Konfiguration",
 	claudeDesktopConfig: "MCP-Konfiguration",

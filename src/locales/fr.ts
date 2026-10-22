@@ -121,7 +121,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "Redémarrer",
 	startService: "Démarrer",
 	fullReindex: "Lancer l'indexation",
-	fullReindexDesc: "Reconstruit l'index de toutes les notes. Les vecteurs sont aussi générés si l'auto-embedding est actif — à utiliser après avoir modifié la taille des chunks ou le modèle d'embedding.",
+	fullReindexDesc: "Reconstruit l'index de toutes les notes. Les vecteurs sont générés automatiquement lorsqu'un modèle d'embedding est configuré.",
 	startFullIndex: "▶ Lancer l'index",
 	clientConfig: "Configuration client",
 	claudeDesktopConfig: "Configuration MCP",
