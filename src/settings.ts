@@ -531,38 +531,13 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	}
 
 	// ══════════════════════════════════════
-	// Tab: MCP — server card (Cherry-Studio style) + port/key + client config
+	// Tab: MCP — single semlink server card with a run toggle
 	// ══════════════════════════════════════
 	private renderMcpTab(containerEl: HTMLElement): void {
 		const running = !!this.plugin.mcpServer;
 		const mcpUrl = `http://127.0.0.1:${this.plugin.settings.mcpPort}/mcp`;
 
-		// ── 标题行："MCP 1" + 搜索框 ──
-		const head = containerEl.createDiv({ cls: "semlink-mcp-head" });
-		head.createSpan({ cls: "semlink-mcp-count", text: "MCP 1" });
-		const search = head.createDiv({ cls: "semlink-mcp-search" });
-		setIcon(search.createSpan({ cls: "semlink-mcp-search-icon" }), "search");
-		const searchInput = search.createEl("input", {
-			cls: "semlink-mcp-search-input",
-			attr: { type: "text", placeholder: t("mcpSearchPlaceholder"), spellcheck: "false" },
-		});
-
-		// ── Installed 行：数量 + 重启服务 ──
-		const installedHead = containerEl.createDiv({ cls: "semlink-mcp-installed-head" });
-		installedHead.createSpan({
-			cls: "semlink-mcp-installed-title",
-			text: `${t("mcpInstalled")} 1`,
-		});
-		const restartBtn = installedHead.createEl("button", {
-			cls: "semlink-mcp-icon-btn",
-			attr: { "aria-label": t("restartService"), title: t("restartService") },
-		});
-		setIcon(restartBtn, "refresh-cw");
-		restartBtn.addEventListener("click", () => {
-			void this.plugin.restartMcpServer().then(() => rerenderSettingsTab(this));
-		});
-
-		// ── 服务器卡片：semlink 本体（图标 + 状态点 + 名称 + 地址 + 开关） ──
+		// MCP 标签只显示一行 semlink 服务器卡片：右侧开关直接启停服务
 		const list = containerEl.createDiv({ cls: "semlink-mcp-list" });
 		const card = list.createDiv({ cls: "semlink-mcp-server" });
 		const iconWrap = card.createDiv({
@@ -570,9 +545,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			attr: { title: running ? t("mcpRunning") : t("mcpStopped") },
 		});
 		setIcon(iconWrap, "plug-zap");
-		iconWrap.createSpan({
-			cls: `semlink-mcp-server-dot${running ? " is-on" : ""}`,
-		});
+		iconWrap.createSpan({ cls: `semlink-mcp-server-dot${running ? " is-on" : ""}` });
 		const main = card.createDiv({ cls: "semlink-mcp-server-main" });
 		main.createDiv({ cls: "semlink-mcp-server-name", text: "semlink" });
 		main.createDiv({ cls: "semlink-mcp-server-sub", text: `http · ${mcpUrl}` });
@@ -582,87 +555,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				if (v) await this.plugin.startMcpServer();
 				else await this.plugin.stopMcpServer();
 				rerenderSettingsTab(this);
-			});
-
-		// 搜索框过滤服务器卡片（当前只有 semlink 一个，未来可扩展）
-		searchInput.addEventListener("input", () => {
-			const q = searchInput.value.trim().toLowerCase();
-			card.toggleClass("semlink-hidden", q !== "" && !"semlink".includes(q));
-		});
-
-		// ── 服务配置：端口 / 访问 Key ──
-		new Setting(containerEl)
-			.setName(t("mcpPort"))
-			.setDesc(t("mcpPortDesc"))
-			.addText((text) =>
-				text
-					.setPlaceholder("3001")
-					.setValue(String(this.plugin.settings.mcpPort))
-					.onChange(async (value) => {
-						const port = parseInt(value, 10);
-						if (!isNaN(port) && port > 0 && port < 65536) {
-							this.plugin.settings.mcpPort = port;
-							await this.plugin.saveSettings();
-							rerenderSettingsTab(this);
-						}
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t("mcpAccessKey"))
-			.setDesc(t("mcpAccessKeyDesc"))
-			.addText((text) =>
-				text
-					.setPlaceholder(t("mcpAccessKeyPlaceholder"))
-					.setValue(this.plugin.settings.mcpApiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.mcpApiKey = value;
-						await this.plugin.saveSettings();
-						rerenderSettingsTab(this);
-					})
-			);
-
-		// ── Client configuration ──
-		new Setting(containerEl)
-			.setName(t("claudeCodeCmd"))
-			.setDesc(t("claudeCodeDesc"))
-			.addTextArea((text) => {
-				const cmd = this.plugin.settings.mcpApiKey
-					? `claude mcp add --transport http semlink ${mcpUrl} --header "Authorization: Bearer ${this.plugin.settings.mcpApiKey}"`
-					: `claude mcp add --transport http semlink ${mcpUrl}`;
-				text.setValue(cmd).then((t) => {
-					t.inputEl.rows = 2;
-					t.inputEl.readOnly = true;
-					t.inputEl.addClass("semlink-monospace");
-				});
-			});
-
-		const configJson = JSON.stringify(
-			{
-				mcpServers: {
-					semlink: {
-						type: "http",
-						url: mcpUrl,
-						...(this.plugin.settings.mcpApiKey
-							? { headers: { Authorization: `Bearer ${this.plugin.settings.mcpApiKey}` } }
-							: {}),
-					},
-				},
-			},
-			null,
-			2,
-		);
-
-		new Setting(containerEl)
-			.setName(t("claudeDesktopConfig"))
-			.setDesc(t("claudeDesktopDesc"))
-			.addTextArea((text) => {
-				text.setValue(configJson).then((t) => {
-					const textarea = t.inputEl;
-					textarea.rows = 12;
-					textarea.readOnly = true;
-					textarea.addClass("semlink-monospace");
-				});
 			});
 	}
 
