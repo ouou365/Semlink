@@ -3355,6 +3355,13 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     margin: 0 auto;
 }
 
+/* RAG 标签的咖啡杯索引可视化：居中，下方留一点呼吸 */
+.semlink-rag-coffee {
+    display: flex;
+    justify-content: center;
+    margin: 10px 0 14px;
+}
+
 /* Barista status line under the cup — reflects the brewing phase. */
 .semlink-guide-index-stamp {
     margin-top: 4px;

@@ -68,6 +68,7 @@ const t: Record<keyof typeof en, string> = {
 	apiBaseDesc: "Région du service API SiliconFlow",
 	apiBaseCN: "Chine (siliconflow.cn)",
 	apiBaseGlobal: "Mondial (siliconflow.com)",
+	embeddingProvider: "Fournisseur d'embeddings",
 	embeddingModel: "Modèle d'embedding",
 	rebuildIndex: "Tout ré-embedder",
 	rebuildIndexDesc: "Efface tous les vecteurs et ré-embedde chaque note (à utiliser après avoir modifié les filtres de chunks ou pour corriger un problème d'index)",

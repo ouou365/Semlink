@@ -68,6 +68,7 @@ const t: Record<keyof typeof en, string> = {
 	apiBaseDesc: "SiliconFlow API 服務區域",
 	apiBaseCN: "中國大陸 (siliconflow.cn)",
 	apiBaseGlobal: "全球 (siliconflow.com)",
+	embeddingProvider: "嵌入供應商",
 	embeddingModel: "嵌入模型",
 	rebuildIndex: "重新嵌入",
 	rebuildIndexDesc: "清空所有向量並重新嵌入全部筆記（套用新的分塊過濾規則或修復索引問題時使用）",

@@ -68,6 +68,7 @@ const t: Record<keyof typeof en, string> = {
 	apiBaseDesc: "SiliconFlow API のサービスリージョン",
 	apiBaseCN: "中国 (siliconflow.cn)",
 	apiBaseGlobal: "グローバル (siliconflow.com)",
+	embeddingProvider: "埋め込みプロバイダ",
 	embeddingModel: "埋め込みモデル",
 	rebuildIndex: "すべて再埋め込み",
 	rebuildIndexDesc: "すべてのベクトルを消去し、全ノートを再埋め込みします（チャンクフィルター変更後やインデックス不具合の修正に使用）",

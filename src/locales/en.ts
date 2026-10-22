@@ -67,6 +67,7 @@ const en = {
 	apiBaseDesc: "SiliconFlow API service region",
 	apiBaseCN: "China (siliconflow.cn)",
 	apiBaseGlobal: "Global (siliconflow.com)",
+	embeddingProvider: "Embedding Provider",
 	embeddingModel: "Embedding Model",
 	rebuildIndex: "Re-embed all",
 	rebuildIndexDesc: "Clear all vectors and re-embed every note (use after changing chunk filters or to fix index issues)",

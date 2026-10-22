@@ -69,6 +69,7 @@ const t: Record<keyof typeof en, string> = {
 	apiBaseDesc: "Регион сервиса API SiliconFlow",
 	apiBaseCN: "Китай (siliconflow.cn)",
 	apiBaseGlobal: "Глобальный (siliconflow.com)",
+	embeddingProvider: "Провайдер эмбеддингов",
 	embeddingModel: "Модель эмбеддингов",
 	rebuildIndex: "Пересоздать эмбеддинги",
 	rebuildIndexDesc: "Удалить все векторы и заново векторизовать каждую заметку (используйте после изменения фильтров чанков или для исправления проблем с индексом)",

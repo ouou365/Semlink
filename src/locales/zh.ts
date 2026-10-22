@@ -69,6 +69,7 @@ const zh: Record<keyof typeof en, string> = {
 	apiBaseDesc: "SiliconFlow API 服务区域",
 	apiBaseCN: "中国大陆 (siliconflow.cn)",
 	apiBaseGlobal: "全球 (siliconflow.com)",
+	embeddingProvider: "嵌入供应商",
 	embeddingModel: "嵌入模型",
 	rebuildIndex: "重新嵌入",
 	rebuildIndexDesc: "清空所有向量并重新嵌入全部笔记（应用新的分块过滤规则或修复索引问题时使用）",

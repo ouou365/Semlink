@@ -8,6 +8,7 @@ import type SmartVaultPlugin from "../main";
 import type { IndexProgress, ModelProvider, SmartVaultSettings } from "./types";
 import { activeEmbeddingProvider } from "./types";
 import { AddFeishuBotModal } from "./feishu-bot-modal";
+import { mountCoffeeCanvas } from "./coffee-canvas";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
 import { LicenseModal } from "./license-modal";
@@ -369,6 +370,18 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	// Tab: Embedding — model, chunking params, rebuild
 	// ══════════════════════════════════════
 	private renderEmbeddingTab(containerEl: HTMLElement): void {
+		// 嵌入供应商：配置了 Key 且带有嵌入模型的供应商
+		const embeddingProviders = this.plugin.settings.providers.filter(
+			(p) => !!p.apiKey.trim() && p.models.some((m) => (m.kind ?? "chat") === "embedding"),
+		);
+		const active = activeEmbeddingProvider(this.plugin.settings);
+		const currentKey = this.plugin.settings.embeddingModelKey
+			|| `${active.id}::${active.model}`;
+		const activeProvider =
+			embeddingProviders.find((p) => p.id === currentKey.split("::")[0])
+			?? embeddingProviders.find((p) => p.id === active.id)
+			?? embeddingProviders[0];
+
 		// ── 向量搜索总开关：关闭后所有语义检索返回空 ──
 		new Setting(containerEl)
 			.setName(t("vectorSearch"))
@@ -382,30 +395,57 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Embedding model — one dropdown entry per (provider, model) combo,
-		// e.g. "SiliconFlow/BAAI/bge-m3"; picking one sets the active
-		// embedding model key.
+		// ── 供应商 + 嵌入模型两级选择 ──
+		new Setting(containerEl)
+			.setName(t("embeddingProvider"))
+			.addDropdown((dropdown) => {
+				for (const p of embeddingProviders) dropdown.addOption(p.id, p.name);
+				if (activeProvider) dropdown.setValue(activeProvider.id);
+				dropdown.onChange(async (value) => {
+					// 切换供应商：嵌入模型落到该供应商的第一个嵌入模型
+					const p = embeddingProviders.find((x) => x.id === value);
+					const model = p?.models.find((m) => (m.kind ?? "chat") === "embedding");
+					if (p && model) {
+						this.plugin.settings.embeddingModelKey = `${p.id}::${model.id}`;
+						await this.plugin.saveSettings();
+						rerenderSettingsTab(this);
+					}
+				});
+			});
+
 		new Setting(containerEl)
 			.setName(t("embeddingModel"))
 			.addDropdown((dropdown) => {
-				const options = embeddingModelComboOptions(this.plugin.settings);
-				const active = activeEmbeddingProvider(this.plugin.settings);
-				const currentKey = this.plugin.settings.embeddingModelKey
-					|| `${active.id}::${active.model}`;
-				// Keep a custom (non-catalog) model selectable, but only while
-				// its provider has a key — unconfigured services must not be
-				// selectable here.
-				if (active.apiKey.trim() && !(currentKey in options)) {
-					options[currentKey] = `${active.name}/${active.model}`;
+			const options: Record<string, string> = {};
+			for (const m of activeProvider?.models.filter((m) => (m.kind ?? "chat") === "embedding") ?? []) {
+				options[`${activeProvider.id}::${m.id}`] = m.id;
+			}
+				// 自定义（非目录）模型在选中态保持可选
+				if (activeProvider && !(currentKey in options)) {
+					options[currentKey] = currentKey.split("::").slice(1).join("::");
 				}
 				dropdown
 					.addOptions(options)
-					.setValue(currentKey)
+					.setValue(currentKey in options ? currentKey : Object.keys(options)[0] ?? "")
 					.onChange(async (value) => {
 						this.plugin.settings.embeddingModelKey = value;
 						await this.plugin.saveSettings();
 					});
 			});
+
+		// ── 咖啡杯索引可视化：液面 = 嵌入进度，完成时庆祝 ──
+		const coffeeHost = containerEl.createDiv({ cls: "semlink-rag-coffee" });
+		const coffee = mountCoffeeCanvas(coffeeHost, { modelName: active.model });
+		const applyCoffee = (p: IndexProgress): void => {
+			const total = Math.max(p.totalChunks, 0);
+			const pct = total > 0 ? Math.min(100, Math.round((p.embeddedChunks / total) * 100)) : 0;
+			coffee.setLevel(pct, p.phase === "embedding");
+			if (p.phase === "completed" && total > 0) coffee.celebrate();
+		};
+		applyCoffee(this.plugin.progress.current);
+		this.indexBtnUnsubscribe = this.plugin.progress.onProgress((event) => {
+			if (event.type === "progress") applyCoffee(event.progress);
+		});
 
 		// ── 高级选项（默认收起）：分块 / 批量 / 延迟 / 并发 / 重建索引 ──
 		const advHead = containerEl.createDiv({ cls: "semlink-editor-adv-head" });
@@ -518,9 +558,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			attr: { "aria-label": t("restartService"), title: t("restartService") },
 		});
 		setIcon(restartBtn, "refresh-cw");
-		restartBtn.addEventListener("click", async () => {
-			await this.plugin.restartMcpServer();
-			rerenderSettingsTab(this);
+		restartBtn.addEventListener("click", () => {
+			void this.plugin.restartMcpServer().then(() => rerenderSettingsTab(this));
 		});
 
 		// ── 服务器卡片：semlink 本体（图标 + 状态点 + 名称 + 地址 + 开关） ──
@@ -796,25 +835,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	}
 }
 
-/** One combined option per (embedding provider, model) pair, keyed
- *  `${providerId}::${modelId}` and labelled like
- *  `SiliconFlow/BAAI/bge-m3`. The models come from the unified provider
- *  list, filtered to kind-tagged "embedding" entries. Only providers with a
- *  key AND a base URL are listed. */
-function embeddingModelComboOptions(settings: SmartVaultSettings): Record<string, string> {
-	const options: Record<string, string> = {};
-	for (const p of settings.providers) {
-		if (!p.apiKey || !p.apiKey.trim()) continue;
-		if (!p.apiBase || !p.apiBase.trim()) continue;
-		const seen = new Set<string>();
-		for (const model of embeddingModelsOf(p)) {
-			if (seen.has(model)) continue;
-			seen.add(model);
-			options[`${p.id}::${model}`] = `${p.name}/${model}`;
-		}
-	}
-	return options;
-}
 
 /** The embedding models configured for a provider: its kind-tagged
  *  "embedding" entries that are enabled. */

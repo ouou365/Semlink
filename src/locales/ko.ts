@@ -68,6 +68,7 @@ const t: Record<keyof typeof en, string> = {
 	apiBaseDesc: "SiliconFlow API 서비스 리전",
 	apiBaseCN: "중국 (siliconflow.cn)",
 	apiBaseGlobal: "글로벌 (siliconflow.com)",
+	embeddingProvider: "임베딩 공급자",
 	embeddingModel: "임베딩 모델",
 	rebuildIndex: "전체 재임베딩",
 	rebuildIndexDesc: "모든 벡터를 지우고 모든 노트를 다시 임베딩합니다 (청크 필터 변경 후 또는 인덱스 문제 해결에 사용)",
