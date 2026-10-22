@@ -231,6 +231,7 @@
 .semlink-mcp-installed-head {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 10px;
     margin: 0 0 8px;
 }
