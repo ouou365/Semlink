@@ -1303,9 +1303,9 @@ export class SemanticSearchView extends ItemView {
 		});
 		// 全局注册表兜底：被精确过滤丢弃的纯搜索命中（如 [79]）也能通过
 		// citeRegistry[n-1] 解析到路径，正文引用全部可点击
-		const globalRegistry = this.chatClient.citeRegistry;
-		if (globalRegistry) {
-			globalRegistry.forEach((p, idx) => {
+		const globalRegistry = this.chatClient.latestCiteRegistry;
+		if (globalRegistry.length > 0) {
+			globalRegistry.forEach((p: string, idx: number) => {
 				const n = idx + 1;
 				if (!pathByNumber.has(n)) pathByNumber.set(n, p);
 			});
@@ -1324,8 +1324,8 @@ export class SemanticSearchView extends ItemView {
 		while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
 		for (const node of textNodes) {
 			const text = node.textContent ?? "";
-			if (!/[d{1,3}]/.test(text)) continue;
-			const re = /[(d{1,3})]/g;
+			if (!/\[\d{1,3}\]/.test(text)) continue;
+			const re = /\[(\d{1,3})\]/g;
 			const parts: Array<{ text?: string; n?: number }> = [];
 			let last = 0;
 			let m: RegExpExecArray | null;

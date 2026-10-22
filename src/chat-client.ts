@@ -347,6 +347,10 @@ export class ChatClient {
 	/** Fired once per successfully completed chat request with the summed
 	 *  token usage (Pro usage dashboard). Wired by main.ts to UsageStore. */
 	onUsage: ((u: UsageSample) => void) | null = null;
+	/** Citation registry of the most recent turn: paths[n-1] is the note the
+	 *  model saw as [n]. The chat view reads it to make every inline [n]
+	 *  clickable, including hits the source cards filtered out. */
+	latestCiteRegistry: string[] = [];
 
 	constructor(settings: SmartVaultSettings, tools: SemlinkTools | null = null) {
 		this.settings = settings;
@@ -560,6 +564,9 @@ export class ChatClient {
 		// their global [n], opened notes announce theirs.
 		const citeReg = createCiteRegistry();
 		const citeRegistry = citeReg.paths;
+		// Exposed for the chat view: lets the renderer resolve ANY [n] in the
+		// answer to its path (source cards only carry the filtered subset).
+		this.latestCiteRegistry = citeRegistry;
 		for (const p of contextNotePaths) citeReg.register(p);
 		if (this.tools) {
 			this.tools.maxResultChars = depth === "enhanced" ? 8000 : 4000;
