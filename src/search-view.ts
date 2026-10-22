@@ -1126,6 +1126,7 @@ export class SemanticSearchView extends ItemView {
 					await MarkdownRenderer.render(this.app, protectHyphens(answer), answerEl, "", this);
 					// 正文里的 [n] 引用变成可点击链接（打开对应笔记）
 					this.makeCitationsClickable(answerEl, citeNumbers ?? [], usedSources);
+					this.makeVaultPathsClickable(answerEl);
 
 					// Reference sources BELOW the answer, collapsed by default.
 					// With attachments the sources ARE the dropped notes — plus
@@ -1346,6 +1347,62 @@ export class SemanticSearchView extends ItemView {
 			}
 			node.replaceWith(frag);
 		}
+	}
+
+	/** 正文里明确写出的 Vault 路径（…/*.md）转成可点击链接，点击打开笔记。
+	 *  只处理文本节点（跳过代码/链接），路径必须在 Vault 中真实存在才转换。 */
+	private makeVaultPathsClickable(root: HTMLElement): void {
+		const source = "[A-Za-z0-9\u2011\u2013\u2014\u4e00-\u9fff（）()．·._\\-/]+\\.md";
+		const candidate = new RegExp(source);
+		const global = new RegExp(source, "g");
+		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+			acceptNode: (node) => {
+				const parent = node.parentElement;
+				if (!parent) return NodeFilter.FILTER_REJECT;
+				const tag = parent.tagName;
+				if (tag === "CODE" || tag === "PRE" || tag === "A") return NodeFilter.FILTER_REJECT;
+				return candidate.test(node.textContent ?? "") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+			},
+		});
+		const textNodes: Text[] = [];
+		while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+		for (const node of textNodes) {
+			const text = node.textContent ?? "";
+			const parts: Array<{ text?: string; path?: string }> = [];
+			let last = 0;
+			let m: RegExpExecArray | null;
+			while ((m = global.exec(text))) {
+				const file = this.resolveVaultFile(m[0]);
+				if (!file) continue;
+				if (m.index > last) parts.push({ text: text.slice(last, m.index) });
+				parts.push({ path: m[0] });
+				last = m.index + m[0].length;
+			}
+			global.lastIndex = 0;
+			if (parts.length === 0) continue;
+			if (last < text.length) parts.push({ text: text.slice(last) });
+			const frag = document.createDocumentFragment();
+			for (const part of parts) {
+				if (part.text !== undefined) {
+					frag.appendChild(document.createTextNode(part.text));
+					continue;
+				}
+				const link = document.createElement("span");
+				link.className = "semlink-cite-link";
+				link.setText(part.path!);
+				link.addEventListener("click", () => {
+					void this.openNote(part.path!, "");
+				});
+				frag.appendChild(link);
+			}
+			node.replaceWith(frag);
+		}
+	}
+
+	/** 解析路径到 Vault 文件：兼容连字符变体（‑ 与 - 互换）后再尝试。 */
+	private resolveVaultFile(raw: string): TFile | null {
+		const tryPath = (p: string): TFile | null => (this.app.vault.getAbstractFileByPath(p) as TFile | null) ?? null;
+		return tryPath(raw) ?? tryPath(raw.replace(/\u2011/g, "-")) ?? tryPath(raw.replace(/-/g, "\u2011"));
 	}
 
 	private renderSourceRows(container: HTMLElement, results: SearchResult[], numbers?: number[]): void {
@@ -2259,6 +2316,7 @@ export class SemanticSearchView extends ItemView {
 						const usedSources = msg.sources.map((p) => ({ notePath: p, heading: "", contentPreview: "" }));
 						this.renderSources(bubble, usedSources as SearchResult[], false, msg.sourceNumbers);
 						this.makeCitationsClickable(answerEl, msg.sourceNumbers ?? [], usedSources as SearchResult[]);
+					this.makeVaultPathsClickable(answerEl);
 					}
 					// Copy / save actions for history answers too.
 					this.appendActions(bubble, msg.content, lastUserQuery);
