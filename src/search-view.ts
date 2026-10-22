@@ -743,13 +743,11 @@ export class SemanticSearchView extends ItemView {
 				}
 			} else {
 				// Answer mode: feed the retrieved notes to the chat model and
-				// show its answer, with the source cards folded underneath. The
-				// model may call Semlink's search/read tools to dig deeper.
-				if (!hasAttachments && results.length === 0) {
-					// 检索无结果 ≠ 结束：空上下文继续对话，Agent 会用
-					// grep/read 等不需要向量的工具自行取证。
-					loadingEl.createDiv({ cls: "semlink-msg-empty", text: t("searchNoResults") });
-				}
+				// show its answer. The model may call Semlink's search/read
+				// tools to dig deeper.
+				// 检索无结果 ≠ 结束：空上下文继续对话，Agent 会用
+				// grep/read 等不需要向量的工具自行取证——不显示误导性的
+				// 「没有找到相关笔记」提示。
 				// Loading line: animated status text + a "▸" marker on the LEFT
 				// (via ::before, same as the thinking summary). Clicking the
 				// whole line toggles the live thinking preview below. The

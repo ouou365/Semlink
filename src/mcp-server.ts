@@ -333,12 +333,12 @@ export class McpServer {
 		}
 	}
 
-	/** The note currently open in Obsidian — path only (content via get_note). */
+	/** The note currently open in Obsidian — path only (content via read). */
 	private async toolGetActiveNote() {
 		const path = this.getActiveNote();
 		if (!path) {
 			return {
-				content: [{ type: "text", text: "当前没有打开的笔记。请先打开一篇笔记，或改用 search_notes / grep_notes 检索知识库。" }],
+				content: [{ type: "text", text: "No note is currently open in Obsidian. Open a note first, or use search / grep / ls to query the knowledge base." }],
 				isError: true,
 			};
 		}
@@ -400,7 +400,7 @@ export class McpServer {
 		};
 	}
 
-	/** list_indexed_detailed: paths + created/modified times, newest
+	/** ls (detailed): paths + created/modified times, newest
 	 *  modification first. Paginated (limit/offset) so a large vault never
 	 *  produces an oversized response. */
 	private async toolListIndexedDetailed(prefix?: string, limit = 100, offset = 0) {

@@ -968,7 +968,7 @@ export class DbEngine {
 
 	/**
 	 * Substring search over chunk content via SQL LIKE — far faster than
-	 * scanning every vault file (used by grep_notes). Returns matching note
+	 * scanning every vault file (used by the grep tool). Returns matching note
 	 * paths with a count of matching chunks per note.
 	 */
 	textSearch(pattern: string, limit = 200, pathFilter?: string): Array<{ path: string; matchCount: number; preview: string }> {

@@ -402,7 +402,7 @@ export class VectorStore {
 		return results;
 	}
 
-	/** Fast substring search over indexed chunk content (for grep_notes). */
+	/** Fast substring search over indexed chunk content (for the grep tool). */
 	async textSearch(pattern: string, limit = 200, pathFilter?: string): Promise<Array<{ path: string; matchCount: number; preview: string }>> {
 		return await this.call<Array<{ path: string; matchCount: number; preview: string }>>("textSearch", [pattern, limit, pathFilter]);
 	}

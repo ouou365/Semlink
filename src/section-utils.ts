@@ -2,7 +2,7 @@
 // Semlink - Section Extraction Helpers
 // ========================================
 // Shared markdown section utilities used by both the MCP server and the chat
-// tool registry (get_section).
+// tool registry (read).
 
 const HEADING_RE = /^(#{1,6})\s+(.+)$/;
 

@@ -6,7 +6,7 @@
 // Provider → Key → Model (the stepper mirrors that sub-progress). Embedding
 // and data indexing are an EXTENSION, configured later in Settings when
 // needed — the agent answers without vectors and can ground itself via
-// grep_notes/get_note, which need no embeddings. Each key is validated by
+// grep/read, which need no embeddings. Each key is validated by
 // fetching the provider's model list before the model picker shows. All
 // state lives in `settings.onboarding`, so the guide survives re-renders
 // (time-slot refresh, language switch) and restarts.
