@@ -1103,9 +1103,7 @@ class McpShareModal extends Modal {
 		section(
 			t("claudeCodeCmd"),
 			t("claudeCodeDesc"),
-			key
-				? `claude mcp add --transport http semlink ${mcpUrl} --header "Authorization: Bearer ${key}"`
-				: `claude mcp add --transport http semlink ${mcpUrl}`,
+			t("mcpConnectInstruction").replace("{url}", mcpUrl),
 		);
 
 		section(

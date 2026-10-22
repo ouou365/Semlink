@@ -130,8 +130,9 @@ const t: Record<keyof typeof en, string> = {
 	clientConfig: "クライアント設定",
 	claudeDesktopConfig: "Claude Desktop / Cursor 設定",
 	claudeDesktopDesc: "下記の JSON を MCP クライアントの設定ファイルにコピーしてください",
-	claudeCodeCmd: "Claude Code コマンド",
-	claudeCodeDesc: "ターミナルで以下のコマンドを実行すると接続できます",
+	mcpConnectInstruction: "このMCPサービスに接続してください：{url}。そして、このMCPで何ができるか教えてください",
+	claudeCodeCmd: "接続用指示",
+	claudeCodeDesc: "AIツールに送れば、セットアップは自動で完了します。",
 
 // ──── Status Bar ────
 	statusInit: "Semlink: 初期化中...",

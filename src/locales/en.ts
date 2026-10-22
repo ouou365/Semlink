@@ -129,8 +129,9 @@ const en = {
 	clientConfig: "Client Configuration",
 	claudeDesktopConfig: "Claude Desktop / Cursor Config",
 	claudeDesktopDesc: "Copy the JSON below to your MCP client config file",
-	claudeCodeCmd: "Claude Code Command",
-	claudeCodeDesc: "Run the command below in terminal to connect",
+	mcpConnectInstruction: "Please connect this MCP service: {url}, and tell me what this MCP can do",
+	claudeCodeCmd: "Connection command",
+	claudeCodeDesc: "Send it to your AI tool — it completes the setup automatically.",
 
 // ──── Status Bar ────
 	statusInit: "Semlink: Initializing...",

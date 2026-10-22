@@ -130,8 +130,9 @@ const t: Record<keyof typeof en, string> = {
 	clientConfig: "클라이언트 설정",
 	claudeDesktopConfig: "Claude Desktop / Cursor 설정",
 	claudeDesktopDesc: "아래 JSON을 MCP 클라이언트 설정 파일에 복사하세요",
-	claudeCodeCmd: "Claude Code 명령어",
-	claudeCodeDesc: "터미널에서 아래 명령어를 실행해 연결하세요",
+	mcpConnectInstruction: "이 MCP 서비스에 연결해 주세요: {url}. 그리고 이 MCP로 무엇을 할 수 있는지 알려주세요",
+	claudeCodeCmd: "연결 지시문",
+	claudeCodeDesc: "AI 도구에 보내면 설치가 자동으로 완료됩니다.",
 
 // ──── Status Bar ────
 	statusInit: "Semlink: 초기화 중...",

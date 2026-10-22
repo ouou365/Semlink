@@ -131,8 +131,9 @@ const zh: Record<keyof typeof en, string> = {
 	clientConfig: "客户端配置",
 	claudeDesktopConfig: "Claude Desktop / Cursor 配置",
 	claudeDesktopDesc: "复制以下 JSON 到 MCP 客户端配置文件中",
-	claudeCodeCmd: "Claude Code 命令",
-	claudeCodeDesc: "在终端运行以下命令连接",
+	mcpConnectInstruction: "请帮我连接这个 MCP 服务：{url}，并告诉我这个MCP能做什么",
+	claudeCodeCmd: "连接指令",
+	claudeCodeDesc: "发给你的 AI 工具，自动完成安装",
 
 // ──── Status Bar ────
 	statusInit: "Semlink: 初始化中...",
