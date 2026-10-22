@@ -3078,8 +3078,7 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     flex-direction: column;
     gap: 6px;
     width: 100%;
-    /* 约等于 5 个模型行的高度：更多模型在列表内滚动查看 */
-    max-height: 270px;
+    max-height: 415px;
     overflow-y: auto;
     /* Vertical-only padding: headroom for the hover lift, so the first
      * card's top border isn't clipped by the overflow. Horizontal stays 0
