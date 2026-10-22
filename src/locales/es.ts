@@ -11,7 +11,7 @@ import type en from "./en";
 const t: Record<keyof typeof en, string> = {
 // ──── Settings Tab ────
 	settingsTitle: "Semlink",
-	settingsTagline: "Turn your Obsidian vault into an Agentic Knowledge Environment.",
+	settingsTagline: "Turn your Obsidian vault into an Agentic Knowledge Workspace.",
 	tabGeneral: "General",
 	language: "Idioma",
 	languageDesc: "Idioma de la interfaz de Semlink",
