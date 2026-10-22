@@ -123,7 +123,7 @@ const t: Record<keyof typeof en, string> = {
 	restartService: "Riavvia",
 	startService: "Avvia",
 	fullReindex: "Avvia indicizzazione",
-	fullReindexDesc: "Esegue l'indicizzazione: vengono elaborate le note nuove e modificate, quelle già indicizzate restano invariate. I vettori vengono generati automaticamente quando è configurato un modello di embedding.",
+	fullReindexDesc: "Vectors are generated automatically when an embedding model is configured.",
 	startFullIndex: "▶ Avvia indice",
 	clientConfig: "Configurazione client",
 	claudeDesktopConfig: "Configurazione MCP",
