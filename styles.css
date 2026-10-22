@@ -3233,8 +3233,13 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 .semlink-guide-fieldlabel {
     font-weight: 700;
     font-size: 14px;
-    margin-bottom: 8px;
+    margin: 12px 0 8px;
     color: var(--text-normal);
+}
+
+/* 每组第一个标签不额外下压（否则脱离表单顶部/折叠区顶部） */
+.semlink-guide-fieldlabel:first-child {
+    margin-top: 0;
 }
 
 .semlink-guide-form .semlink-guide-keyinput {
