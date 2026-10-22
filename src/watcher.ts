@@ -117,17 +117,9 @@ export class VaultWatcher {
 	}
 
 	/** Start the scheduler in incremental mode (no full scan) */
-	private noKeyNoticeShown = false;
 	private ensureSchedulerRunning() {
-		if (!activeEmbeddingProvider(this.settings).apiKey) {
-			if (!this.noKeyNoticeShown) {
-				this.noKeyNoticeShown = true;
-				new Notice(`Semlink: ${t("noticeNoApiKey")}`, 6000);
-			}
-			return;
-		}
+		// 文件变化触发的增量索引不依赖嵌入 Key：无 Key 时调度器仅索引文本
 		if (!this.scheduler.isRunning) {
-			this.noKeyNoticeShown = false;
 			this.scheduler.runIncremental();
 		}
 	}

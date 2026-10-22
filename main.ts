@@ -489,12 +489,6 @@ export default class SmartVaultPlugin extends Plugin {
 			return;
 		}
 
-		const hasApiKey = !!activeEmbeddingProvider(this.settings).apiKey;
-
-		if (!hasApiKey) {
-			new Notice(`Semlink: ${t("noticeNoApiKey")}`);
-			return;
-		}
 
 		new Notice(`Semlink: ${t("noticeStartIndex")}`);
 		void this.scheduler.run();
