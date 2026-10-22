@@ -639,13 +639,27 @@ export class ChatClient {
 				const text = h.segments
 					.map((s) => (s.type === "file" ? `[[${s.value}]]` : s.value))
 					.join("");
-				conv.push({ role: "user", content: text || h.content });
+				conv.push({ role: "user", content: this.normalizeLegacyToolNames(text) || h.content });
 			} else {
-				conv.push({ role: h.role, content: h.content || "" });
+				conv.push({ role: h.role, content: this.normalizeLegacyToolNames(h.content || "") });
 			}
 		}
 		conv.push({ role: "user", content: question });
 		return conv;
+	}
+
+	/** 旧会话历史里残留的旧工具名（如 search_notes）会诱导模型继续按旧名
+	 *  调用——发送前统一改写为新名，旧字样不再跨请求传递。 */
+	private normalizeLegacyToolNames(text: string): string {
+		return text
+			.split("search_notes").join("search")
+			.split("get_similar_notes").join("semantic")
+			.split("get_section").join("read")
+			.split("get_note").join("read")
+			.split("grep_notes").join("grep")
+			.split("list_indexed_detailed").join("ls")
+			.split("list_indexed").join("ls")
+			.split("get_active_note").join("active");
 	}
 
 	/**
