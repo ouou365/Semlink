@@ -833,22 +833,27 @@ class GuideFetchModelsModal extends Modal {
 	) {
 		super(plugin.app);
 		this.modalEl.addClass("semlink-guide-series-modal");
+		// 复用供应商编辑弹窗的样式域（footer 与按钮的观感与编辑模型一致）
+		this.modalEl.addClass("smart-vault-settings");
 	}
 
 	onOpen(): void {
 		this.titleEl.setText(t("guideFetchModels"));
 		const { contentEl } = this;
-		const status = contentEl.createDiv({ cls: "semlink-guide-error" });
-		status.setText(`${t("guideFetchModels")} …`);
+		// 进度条：拉取中显示填充比例，完成后隐藏
+		const progress = contentEl.createDiv({ cls: "semlink-fetch-progress" });
+		const progressFill = progress.createDiv({ cls: "semlink-fetch-progress-fill" });
+		const error = contentEl.createDiv({ cls: "semlink-guide-error semlink-hidden" });
 		const list = contentEl.createDiv({ cls: "semlink-guide-fetch-list" });
-		const footer = contentEl.createDiv({ cls: "semlink-guide-footer" });
+		// 底部按钮与编辑模型弹窗一致：右侧 Cancel / Confirm
+		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
 		const cancelBtn = footer.createEl("button", {
-			cls: "semlink-guide-save semlink-guide-secondary",
+			cls: "semlink-editor-cancel-btn",
 			text: t("cancel"),
 		});
 		cancelBtn.addEventListener("click", () => this.close());
 		const confirmBtn = footer.createEl("button", {
-			cls: "semlink-guide-save semlink-guide-primary",
+			cls: "semlink-editor-save-btn",
 			text: t("confirm"),
 		});
 		confirmBtn.disabled = true;
@@ -889,15 +894,23 @@ class GuideFetchModelsModal extends Modal {
 					this.provider.apiKey,
 					this.provider.apiFormat,
 					(done, total) => {
-						status.setText(`${t("guideFetchModels")} ${done}/${total}`);
+						const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+						progressFill.style.width = `${pct}%`;
 					},
 				);
+				// 拉取完成：进度条隐藏，清单浮现
+				progress.addClass("semlink-hidden");
 				this.models = fetched.filter((m) => (m.kind ?? "chat") === this.kindWanted);
 				for (const m of this.models) this.checked.add(m.id);
-				status.setText(this.models.length === 0 ? t("fetchEmpty") : "");
+				if (this.models.length === 0) {
+					error.setText(t("fetchEmpty"));
+					error.removeClass("semlink-hidden");
+				}
 				renderItems();
 			} catch (e) {
-				status.setText(t("guideFetchFailed").replace("{err}", e instanceof Error ? e.message : String(e)));
+				progress.addClass("semlink-hidden");
+				error.setText(t("guideFetchFailed").replace("{err}", e instanceof Error ? e.message : String(e)));
+				error.removeClass("semlink-hidden");
 			}
 		})();
 

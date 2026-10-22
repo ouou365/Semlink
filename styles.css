@@ -3179,6 +3179,23 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     margin: 0;
 }
 
+/* 获取模型弹窗的拉取进度条 */
+.semlink-fetch-progress {
+    height: 6px;
+    border-radius: 4px;
+    background: var(--background-modifier-border);
+    overflow: hidden;
+    margin: 10px 0 12px;
+}
+
+.semlink-fetch-progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 4px;
+    background: var(--interactive-accent);
+    transition: width 0.15s ease;
+}
+
 .semlink-guide-model-add {
     flex-shrink: 0;
     padding: 5px 14px;
