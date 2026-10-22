@@ -3432,10 +3432,10 @@ export class SemanticSearchView extends ItemView {
 				}
 				ctx.restore();
 			}
-			if (alive && t < 2800) requestAnimationFrame(tick);
+			if (alive && t < 2800) window.requestAnimationFrame(tick);
 			else canvas.remove();
 		};
-		requestAnimationFrame(tick);
+		window.requestAnimationFrame(tick);
 	}
 
 	private hideModelPopup(): void {

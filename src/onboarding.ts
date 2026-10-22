@@ -12,12 +12,11 @@
 // (time-slot refresh, language switch) and restarts.
 
 import { Modal, ToggleComponent, setIcon } from "obsidian";
-import { mountCoffeeCanvas, mountTicketDeck } from "./coffee-canvas";
 import { AddModelModal, AddProviderModal, brandLogoOf, buildGuideProviderGroups, catalogEndpoint, CHAT_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, providerLogo, setSvgIcon } from "./settings-models";
 import type { FetchedModel } from "./settings-models";
 import { t } from "./i18n";
 import type SmartVaultPlugin from "../main";
-import type { ChatApiFormat, ChatModel, ChatModelKind, ModelProvider } from "./types";
+import type { ChatApiFormat, ChatModel, ModelProvider } from "./types";
 
 /** Live index stats for the guide's final step (mapped from IndexProgress). */
 export interface IndexStatsView {
@@ -58,104 +57,6 @@ const PROVIDER_CONSOLE: Record<string, string> = {
  *  mirrors the settings page's generic default. */
 const FALLBACK_CONTEXT = 128000;
 
-/** Model id → brand logo (lobehub/lobe-icons, same set as PROVIDER_LOGOS).
- *  First matching pattern wins; OpenRouter-style `vendor/model` ids match on
- *  the substring. Unmatched ids fall back to a generic glyph. */
-const MODEL_BRANDS: Array<[RegExp, string]> = [
-	[/deepseek/i, "deepseek"],
-	[/glm|zhipu|chatglm/i, "zai"],
-	[/qwen|qwq/i, "qwentokenplan"],
-	[/kimi|moonshot/i, "moonshotaicn"],
-	[/gpt|chatgpt|davinci|text-embedding|(^|\/)o[0-9]/i, "openai"],
-	[/claude/i, "anthropic"],
-	[/gemini|gemma/i, "google"],
-	[/grok/i, "xai"],
-	[/mimo/i, "xiaomi"],
-	[/minimax|abab/i, "minimax"],
-	[/mistral|codestral|devstral|pixtral/i, "mistral"],
-	[/llama/i, "meta"],
-	[/bge|baai/i, "baai"],
-	[/hunyuan/i, "hunyuan"],
-	[/nova/i, "amazonbedrock"],
-	[/ernie/i, "baidu"],
-	[/command/i, "cohere"],
-	[/hermes/i, "nousresearch"],
-	[/longcat/i, "meituan"],
-	[/mercury/i, "inception"],
-	[/kat-coder/i, "kwaipilot"],
-	[/granite/i, "ibm"],
-	[/lfm/i, "liquid"],
-	[/palmyra/i, "writer"],
-	[/laguna/i, "poolside"],
-	[/aion/i, "aionlabs"],
-	[/trinity/i, "arcee"],
-	[/morph/i, "morph"],
-];
-
-/** Vendor segment (the part before "/" in `vendor/model` ids) → brand logo
- *  key — the fallback when no model-name pattern matches. Substring match. */
-const VENDOR_BRANDS: Array<[string, string]> = [
-	["bytedance", "bytedance"],
-	["doubao", "doubao"],
-	["deepseek", "deepseek"],
-	["anthropic", "anthropic"],
-	["openai", "openai"],
-	["google", "google"],
-	["meta", "meta"],
-	["mistral", "mistral"],
-	["qwen", "qwentokenplan"],
-	["moonshot", "moonshotai"],
-	["kimi", "moonshotaicn"],
-	["minimax", "minimax"],
-	["zhipu", "zai"],
-	["thudm", "zai"],
-	["zai", "zai"],
-	["xiaomi", "xiaomi"],
-	["mimo", "xiaomi"],
-	["nvidia", "nvidia"],
-	["together", "together"],
-	["baai", "baai"],
-	["inclusionai", "antling"],
-	["microsoft", "microsoft"],
-	["tencent", "hunyuan"],
-	["hunyuan", "hunyuan"],
-	["amazon", "amazonbedrock"],
-	["baidu", "baidu"],
-	["cohere", "cohere"],
-	["stepfun", "stepfun"],
-	["upstage", "upstage"],
-	["liquid", "liquid"],
-	["meituan", "meituan"],
-	["nousresearch", "nousresearch"],
-	["openrouter", "openrouter"],
-	["relace", "relace"],
-	["poolside", "poolside"],
-	["kwaipilot", "kwaipilot"],
-	["inception", "inception"],
-	["ibm", "ibm"],
-	["aionlabs", "aionlabs"],
-	["arcee", "arcee"],
-	["morph", "morph"],
-];
-
-/** Brand logo SVG for a model id — official `-color` variant when available,
- *  mono otherwise (same source as provider icons). */
-function modelBrand(modelId: string): string | undefined {
-	// The vendor segment (before "/") is the strongest signal — it names the
-	// company actually serving the model, even when the model name mentions a
-	// base family (e.g. aion-rp-llama-* → AionLabs, not Meta).
-	if (modelId.includes("/")) {
-		const vendor = modelId.split("/")[0]?.toLowerCase().replace(/[^a-z0-9]/g, "");
-		for (const [suffix, key] of VENDOR_BRANDS) {
-			if (vendor.includes(suffix)) return brandLogoOf(key).svg;
-		}
-	}
-	// Fall back to the model-name patterns (gpt-*, claude-*, glm-* …).
-	for (const [re, key] of MODEL_BRANDS) {
-		if (re.test(modelId)) return brandLogoOf(key).svg;
-	}
-	return undefined;
-}
 
 /** The guide only shows for genuinely-new setups: never finished and no
  *  provider carries a key yet (existing users are never bothered). */
