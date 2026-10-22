@@ -1124,6 +1124,8 @@ export class SemanticSearchView extends ItemView {
 					// headings, lists, code, links, etc.).
 					const answerEl = loadingEl.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
 					await MarkdownRenderer.render(this.app, protectHyphens(answer), answerEl, "", this);
+					// 正文里的 [n] 引用变成可点击链接（打开对应笔记）
+					this.makeCitationsClickable(answerEl, citeNumbers ?? [], usedSources);
 
 					// Reference sources BELOW the answer, collapsed by default.
 					// With attachments the sources ARE the dropped notes — plus
@@ -1290,6 +1292,62 @@ export class SemanticSearchView extends ItemView {
 	/** One-line source rows (title + path), numbered like paper references.
 	 *  With `numbers`, row [n] is the model's own citation number — gaps are
 	 *  honest (uncited notes have no card). */
+	/** 让答案正文中的 [n] 引用变成可点击：点击打开对应笔记。只处理文本
+	 *  节点（跳过代码/链接），没有对应来源的 [n] 保持原样不误伤。 */
+	private makeCitationsClickable(root: HTMLElement, numbers: number[], sources: SearchResult[]): void {
+		const pathByNumber = new Map<number, string>();
+		sources.forEach((r, i) => {
+			const n = numbers?.[i];
+			if (n) pathByNumber.set(n, r.notePath);
+		});
+		if (pathByNumber.size === 0) return;
+		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+			acceptNode: (node) => {
+				const parent = node.parentElement;
+				if (!parent) return NodeFilter.FILTER_REJECT;
+				const tag = parent.tagName;
+				if (tag === "CODE" || tag === "PRE" || tag === "A") return NodeFilter.FILTER_REJECT;
+				return NodeFilter.FILTER_ACCEPT;
+			},
+		});
+		const textNodes: Text[] = [];
+		while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+		for (const node of textNodes) {
+			const text = node.textContent ?? "";
+			if (!/[d{1,3}]/.test(text)) continue;
+			const re = /[(d{1,3})]/g;
+			const parts: Array<{ text?: string; n?: number }> = [];
+			let last = 0;
+			let m: RegExpExecArray | null;
+			while ((m = re.exec(text))) {
+				if (m.index > last) parts.push({ text: text.slice(last, m.index) });
+				parts.push({ n: parseInt(m[1], 10) });
+				last = m.index + m[0].length;
+			}
+			if (last < text.length) parts.push({ text: text.slice(last) });
+			const frag = document.createDocumentFragment();
+			for (const part of parts) {
+				if (part.text !== undefined) {
+					frag.appendChild(document.createTextNode(part.text));
+					continue;
+				}
+				const target = part.n !== undefined ? pathByNumber.get(part.n) : undefined;
+				if (!target) {
+					frag.appendChild(document.createTextNode(`[${part.n}]`));
+					continue;
+				}
+				const link = document.createElement("span");
+				link.className = "semlink-cite-link";
+				link.setText(`[${part.n}]`);
+				link.addEventListener("click", () => {
+					void this.openNote(target, "");
+				});
+				frag.appendChild(link);
+			}
+			node.replaceWith(frag);
+		}
+	}
+
 	private renderSourceRows(container: HTMLElement, results: SearchResult[], numbers?: number[]): void {
 		for (const [i, r] of results.entries()) {
 			const row = container.createDiv({ cls: "semlink-search-source-row" });
@@ -2200,6 +2258,7 @@ export class SemanticSearchView extends ItemView {
 					if (msg.sources && msg.sources.length > 0) {
 						const usedSources = msg.sources.map((p) => ({ notePath: p, heading: "", contentPreview: "" }));
 						this.renderSources(bubble, usedSources as SearchResult[], false, msg.sourceNumbers);
+						this.makeCitationsClickable(answerEl, msg.sourceNumbers ?? [], usedSources as SearchResult[]);
 					}
 					// Copy / save actions for history answers too.
 					this.appendActions(bubble, msg.content, lastUserQuery);

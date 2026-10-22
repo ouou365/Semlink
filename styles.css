@@ -327,6 +327,16 @@
     white-space: nowrap;
 }
 
+/* 答案正文里的 [n] 引用链接：可点击打开对应笔记 */
+.semlink-cite-link {
+    color: var(--interactive-accent);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.semlink-cite-link:hover {
+    text-decoration: underline;
+}
 .semlink-mcp-server-sub {
     font-size: 11.5px;
     color: var(--text-muted);
