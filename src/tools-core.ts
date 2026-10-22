@@ -225,7 +225,7 @@ export class ToolCore {
 			get_active_note: "active",
 		};
 		if (legacy[name]) name = legacy[name]!;
-		const a = args;
+		const a = args as Record<string, string | number | boolean | undefined>;
 		try {
 			switch (name) {
 				case "search":
@@ -340,30 +340,32 @@ export class ToolCore {
 		);
 	}
 
-	/** BM25-lite 原始结果：分词 → 每个词 LIKE 取候选 → idf·饱和tf 累计打分。 */
+	/** BM25 检索：先查索引 chunk（毫秒级），未命中则兜底扫描 Vault 文件——
+	 *  BM25 兜底必须兜得住：内容还没索引时也能按文件词频返回结果。 */
 	private async bm25Raw(query: string, limit: number, path?: string, caseSensitive = false): Promise<SearchResultLike[]> {
-		const tokens = query
-			.toLowerCase()
-			.split(/[\s,，。；;]+/)
-			.map((t) => t.trim())
-			.filter((t) => t.length > 0)
-			.slice(0, 8);
+		const indexed = await this.bm25Indexed(query, limit, path, caseSensitive);
+		if (indexed.length > 0) return indexed.slice(0, limit);
+		return await this.bm25FileScan(query, limit, path, caseSensitive);
+	}
+
+	/** 索引快路径：分词 → 每个词 LIKE 取候选 → idf·饱和tf 累计打分。 */
+	private async bm25Indexed(query: string, limit: number, path?: string, caseSensitive = false): Promise<SearchResultLike[]> {
+		const tokens = this.tokenize(query);
 		if (tokens.length === 0) return [];
 		const scores = new Map<string, { score: number; preview: string | null }>();
 		for (const token of tokens) {
-			let hits: Array<{ path: string; matchCount: number; preview: string | null }> = [];
+			let hits: Array<{ path: string; matchCount: number; preview: string }> = [];
 			try {
-				hits = await this.deps.store.textSearch(caseSensitive ? token : token, Math.min(limit * 3, 200), path);
+				hits = await this.deps.store.textSearch(token, Math.min(limit * 3, 200), path);
 			} catch {
-				return [];
+				return []; // 索引不可用 → 交给文件扫描兜底
 			}
 			const df = Math.max(hits.length, 1);
 			const idf = Math.log(1 + 200 / df);
 			for (const h of hits) {
 				const tf = h.matchCount > 0 ? h.matchCount / (h.matchCount + 1.2) : 0;
 				const prev = scores.get(h.path);
-				const add = idf * tf;
-				scores.set(h.path, { score: (prev?.score ?? 0) + add, preview: prev?.preview ?? h.preview ?? null });
+				scores.set(h.path, { score: (prev?.score ?? 0) + idf * tf, preview: prev?.preview ?? h.preview });
 			}
 		}
 		return [...scores.entries()]
@@ -371,6 +373,51 @@ export class ToolCore {
 			.sort((a, b) => b.score - a.score)
 			.slice(0, limit);
 	}
+
+	/** 文件扫描兜底：并发读取笔记内容，按命中词数与词覆盖打分。 */
+	private async bm25FileScan(query: string, limit: number, path?: string, caseSensitive = false): Promise<SearchResultLike[]> {
+		const tokens = this.tokenize(query);
+		if (tokens.length === 0) return [];
+		const res = new RegExp(tokens.map((t) => this.escapeRegExp(t)).join("|"), caseSensitive ? "g" : "gi");
+		const base = path ? path.replace(/\/+$/, "") : "";
+		const files = this.deps.vault.getFiles().filter((f) => {
+			if (!/\.(md|txt|markdown)$/i.test(f.path)) return false;
+			return !base || f.path.startsWith(base);
+		});
+		const scored: SearchResultLike[] = [];
+		const CONCURRENCY = 32;
+		for (let i = 0; i < files.length; i += CONCURRENCY) {
+			const batch = await Promise.all(
+				files.slice(i, i + CONCURRENCY).map(async (file) => {
+					try {
+						if (file.stat.size > 5 * 1024 * 1024) return null;
+						const content = await this.deps.vault.cachedRead(file);
+						const matches = content.match(res);
+						if (!matches || matches.length === 0) return null;
+						const distinct = new Set(matches.map((m) => m.toLowerCase())).size;
+						const tf = matches.length / (matches.length + 1.2);
+						const firstLine = content.split("\n").find((l) => res.test(l)) ?? "";
+						return { path: file.path, preview: firstLine.trim().slice(0, 150), score: distinct + tf };
+					} catch {
+						return null;
+					}
+				}),
+			);
+			for (const r of batch) if (r) scored.push(r);
+		}
+		return scored.sort((a, b) => b.score - a.score).slice(0, limit);
+	}
+
+	/** 查询分词：空白与中英文标点切分，最多 8 个词。 */
+	private tokenize(query: string): string[] {
+		return query
+			.toLowerCase()
+			.split(/[\s,，。；;、]+/)
+			.map((t) => t.trim())
+			.filter((t) => t.length > 0)
+			.slice(0, 8);
+	}
+
 
 	/** 向量原始结果：embed → store.search。 */
 	private async vectorRaw(query: string, limit: number, threshold: number, path?: string): Promise<SearchResultLike[]> {
