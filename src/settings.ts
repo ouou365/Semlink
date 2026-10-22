@@ -561,8 +561,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			attr: { title: running ? t("mcpRunning") : t("mcpStopped") },
 		});
 		setIcon(iconWrap, "semlink-logo");
-		// 运行中图标变紫，关闭时保持灰色（不显示状态点）
-		if (running) iconWrap.addClass("is-running");
+		// 运行中显示绿色状态点（右下角）；图标始终为 Semlink 紫
+		if (running) {
+			iconWrap.createSpan({ cls: "semlink-mcp-server-dot" });
+		}
 		const main = card.createDiv({ cls: "semlink-mcp-server-main" });
 		main.createDiv({ cls: "semlink-mcp-server-name", text: "semlink" });
 		main.createDiv({ cls: "semlink-mcp-server-sub", text: `http · ${mcpUrl}` });
