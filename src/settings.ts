@@ -327,18 +327,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName(t("excludePaths"))
 			.setDesc(t("excludePathsDesc"))
-			.addTextArea((text) =>
-				text
-					.setPlaceholder("templates/\n.git/\nnode_modules/")
-					.setValue(this.plugin.settings.excludePaths)
-					.onChange(async (value) => {
-						this.plugin.settings.excludePaths = value;
-						await this.plugin.saveSettings();
-					})
-			)
-			.then((setting) => {
-				(setting.controlEl.querySelector("textarea") as HTMLTextAreaElement).rows = 4;
-			});
+			.addButton((btn) =>
+				btn.setButtonText(t("edit")).onClick(() => {
+					new ExcludePathsModal(this.app, this.plugin).open();
+				})
+			);
 
 		new Setting(containerEl)
 			.setName(t("autoIndex"))
@@ -1104,6 +1097,37 @@ class McpShareModal extends Modal {
 				2,
 			),
 		);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+/** 排除路径编辑弹窗：Index 面板的「编辑」按钮打开，每行一个前缀。 */
+class ExcludePathsModal extends Modal {
+	constructor(app: App, private plugin: SmartVaultPlugin) {
+		super(app);
+		this.modalEl.addClass("semlink-mcp-edit-modal");
+		this.modalEl.addClass("smart-vault-settings");
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(t("excludePaths"));
+		const { contentEl } = this;
+		contentEl.createDiv({ cls: "semlink-mcp-edit-desc", text: t("excludePathsDesc") });
+		const textarea = contentEl.createEl("textarea", { cls: "semlink-editor-input" });
+		textarea.rows = 8;
+		textarea.value = this.plugin.settings.excludePaths;
+		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
+		const cancelBtn = footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") });
+		cancelBtn.addEventListener("click", () => this.close());
+		const saveBtn = footer.createEl("button", { cls: "semlink-editor-save-btn", text: t("editorSave") });
+		saveBtn.addEventListener("click", () => {
+			this.plugin.settings.excludePaths = textarea.value;
+			void this.plugin.saveSettings().then(() => this.close());
+		});
+		textarea.focus();
 	}
 
 	onClose(): void {
