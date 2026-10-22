@@ -2974,21 +2974,29 @@ export function renderModelsTab(
 			};
 			const markOverflowNames = (): void => {
 				const names = Array.from(rh.querySelectorAll<HTMLElement>(".semlink-mt-model-name"));
-				// 先只读：一次性量出所有溢出行（单次布局），再统一写入——
-				// 读写交替会在大列表上造成近千次强制重排，直接卡死主线程
-				const overflow = names
-					.map((name) => ({ name, shift: name.scrollWidth - name.clientWidth }))
-					.filter((x) => x.shift > 2);
-				if (overflow.length === 0) return;
-				for (const { name, shift } of overflow) {
-					name.addClass("is-overflow");
+				// 精确测量：插入探针 span 量文本真实宽度，与容器宽度比较。
+				// 之前的 scrollWidth - clientWidth 会有误判（短名被标成溢出）。
+				// 读写分离：全部插入（写）→ 统一量宽（读）→ 统一清理+标记（写），
+				// 整个过程只有两次布局。
+				const probes: Array<{ name: HTMLElement; probe: HTMLElement; text: string; boxW: number; textW: number }> = [];
+				for (const name of names) {
 					const text = name.textContent ?? "";
+					if (!text) continue;
+					const probe = name.createSpan({ cls: "semlink-mt-model-name-text", text });
+					probes.push({ name, probe, text, boxW: name.clientWidth, textW: probe.getBoundingClientRect().width });
+				}
+				let marked = 0;
+				for (const { name, probe, text, boxW, textW } of probes) {
+					probe.remove();
+					if (boxW <= 0 || textW <= boxW + 2) continue;
+					marked++;
+					name.addClass("is-overflow");
 					name.setText("");
 					const track = name.createSpan({ cls: "semlink-mt-model-name-track" });
 					track.createSpan({ cls: "semlink-mt-model-name-text", text });
 					track.createSpan({ cls: "semlink-mt-model-name-text", text });
-					// 恒速 60px/s；轨宽用第一次量出的溢出宽度 + 2ch 间隔近似
-					name.style.setProperty("--marquee-dur", `${((shift + 16) / 60).toFixed(2)}s`);
+					// 恒速 60px/s；轨宽 = 文本宽 + 2ch 间隔
+					name.style.setProperty("--marquee-dur", `${((textW + 16) / 60).toFixed(2)}s`);
 				}
 			};
 			buildChunk();
