@@ -2701,6 +2701,7 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 /* Conversation area (middle, scrollable). Doubled class specificity
    replaces !important: beats Obsidian's global selection-disable rules. */
 .semlink-search-messages.semlink-search-messages {
+    position: relative;
     flex: 1 1 0;
     overflow-y: auto;
     display: flex;
@@ -5774,3 +5775,11 @@ body .semlink-msg-user::selection {
 .semlink-model-price-row .setting-item-control input{width:6.5rem}
 .semlink-model-price-row .setting-item-name{font-size:.8rem;color:var(--text-muted)}
 .semlink-model-price-row .setting-item-description{font-size:.72rem}
+
+/* 引导完成彩带：覆盖消息区的临时画布，不拦截点击 */
+.semlink-welcome-confetti {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    pointer-events: none;
+}

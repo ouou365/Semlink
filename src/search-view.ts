@@ -1890,6 +1890,8 @@ export class SemanticSearchView extends ItemView {
 				// 触发器立即显示刚选中的模型（否则要重开视图才刷新）。
 				if (this.hasApiKey()) this.statusEl.setText("");
 				this.updateModelLabel();
+				// 完成引导的彩带庆祝 🎉（跳过引导不触发）
+				this.showWelcomeConfetti();
 			});
 			this.updateHomeIconVisibility();
 			return;
@@ -3369,6 +3371,71 @@ export class SemanticSearchView extends ItemView {
 		app.setting.open();
 		app.setting.openTabById("semlink");
 		app.setting.activeTab?.openModelTab?.();
+	}
+
+	/** 引导完成后的彩带庆祝 🎉：临时画布上撒彩色纸屑，约 2.8 秒后自毁。
+	 *  纯手写 rAF 粒子（无第三方依赖），挂在消息区之上、不拦截点击。 */
+	private showWelcomeConfetti(): void {
+		const host = this.messagesEl;
+		const canvas = host.createEl("canvas", { cls: "semlink-welcome-confetti" });
+		const dpr = Math.min(2, window.devicePixelRatio || 1);
+		const w = host.clientWidth || 400;
+		const h = host.clientHeight || 600;
+		canvas.style.width = `${w}px`;
+		canvas.style.height = `${h}px`;
+		canvas.width = Math.round(w * dpr);
+		canvas.height = Math.round(h * dpr);
+		const ctx = canvas.getContext("2d");
+		if (!ctx) {
+			canvas.remove();
+			return;
+		}
+		ctx.scale(dpr, dpr);
+
+		const colors = ["#7c3aed", "#a78bfa", "#f472b6", "#fbbf24", "#34d399", "#60a5fa"];
+		const parts = Array.from({ length: 140 }, () => ({
+			x: w / 2 + (Math.random() - 0.5) * 90,
+			y: h * 0.32,
+			vx: (Math.random() - 0.5) * 9,
+			vy: -(Math.random() * 8 + 4),
+			rot: Math.random() * Math.PI * 2,
+			vr: (Math.random() - 0.5) * 0.3,
+			w: 5 + Math.random() * 6,
+			h: 3 + Math.random() * 4,
+			color: colors[Math.floor(Math.random() * colors.length)],
+			circle: Math.random() < 0.3,
+		}));
+
+		const started = performance.now();
+		const tick = (): void => {
+			const t = performance.now() - started;
+			ctx.clearRect(0, 0, w, h);
+			let alive = false;
+			for (const p of parts) {
+				p.vy += 0.22;
+				p.x += p.vx;
+				p.y += p.vy;
+				p.rot += p.vr;
+				p.vx *= 0.99;
+				if (p.y < h + 20) alive = true;
+				ctx.save();
+				ctx.translate(p.x, p.y);
+				ctx.rotate(p.rot);
+				ctx.globalAlpha = Math.max(0, 1 - t / 2600);
+				ctx.fillStyle = p.color;
+				if (p.circle) {
+					ctx.beginPath();
+					ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2);
+					ctx.fill();
+				} else {
+					ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+				}
+				ctx.restore();
+			}
+			if (alive && t < 2800) requestAnimationFrame(tick);
+			else canvas.remove();
+		};
+		requestAnimationFrame(tick);
 	}
 
 	private hideModelPopup(): void {
