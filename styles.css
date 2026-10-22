@@ -337,6 +337,67 @@
     white-space: nowrap;
 }
 
+.semlink-mcp-server-toggle {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+/* ──── Edit MCP server modal ──── */
+.semlink-mcp-edit-modal {
+    width: min(560px, 92vw);
+}
+
+.semlink-mcp-edit-desc {
+    color: var(--text-muted);
+    font-size: 12.5px;
+    margin-bottom: 12px;
+}
+
+.semlink-mcp-edit-segrow {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+}
+
+/* Form / JSON 分段控件 */
+.semlink-mcp-edit-seg {
+    display: inline-flex;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.semlink-mcp-edit-seg button {
+    border: none;
+    background: transparent;
+    padding: 5px 14px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.semlink-mcp-edit-seg button.is-active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.semlink-mcp-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: left;
+}
+
+.semlink-mcp-edit-form .semlink-editor-input {
+    margin-bottom: 12px;
+}
+
+.semlink-mcp-edit-json textarea {
+    width: 100%;
+    resize: vertical;
+}
+
 /* Settings tabs */
 /* Flex children must be allowed to shrink below their content size —
    inputs and long nowrap spans otherwise force the settings panel into

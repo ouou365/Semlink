@@ -2,7 +2,7 @@
 // Semlink - Settings Tab
 // ========================================
 
-import { App, ButtonComponent, DropdownComponent, Notice, PluginSettingTab, Setting, ToggleComponent, setIcon } from "obsidian";
+import { App, ButtonComponent, DropdownComponent, Modal, Notice, PluginSettingTab, Setting, ToggleComponent, setIcon } from "obsidian";
 import * as QRCode from "qrcode";
 import type SmartVaultPlugin from "../main";
 import type { IndexProgress, ModelProvider, SmartVaultSettings } from "./types";
@@ -549,15 +549,24 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const main = card.createDiv({ cls: "semlink-mcp-server-main" });
 		main.createDiv({ cls: "semlink-mcp-server-name", text: "semlink" });
 		main.createDiv({ cls: "semlink-mcp-server-sub", text: `http · ${mcpUrl}` });
-		new ToggleComponent(card)
+		const toggleWrap = card.createDiv({ cls: "semlink-mcp-server-toggle" });
+		new ToggleComponent(toggleWrap)
 			.setValue(running)
 			.onChange(async (v) => {
 				if (v) await this.plugin.startMcpServer();
 				else await this.plugin.stopMcpServer();
 				rerenderSettingsTab(this);
 			});
+		// 点击卡片（避开开关）打开配置编辑弹窗
+		card.addEventListener("click", (e) => {
+			if ((e.target as HTMLElement).closest(".semlink-mcp-server-toggle")) return;
+			new EditMcpServerModal(this.app, this.plugin, () => rerenderSettingsTab(this)).open();
+		});
 	}
 
+	// ══════════════════════════════════════
+	// Tab: Bot — Feishu bots bound to Semlink
+	// ══════════════════════════════════════
 	// ══════════════════════════════════════
 	// Tab: Bot — Feishu bots bound to Semlink
 	// ══════════════════════════════════════
@@ -735,4 +744,125 @@ function embeddingModelsOf(p: ModelProvider): string[] {
 		.filter((m) => (m.kind ?? "chat") === "embedding" && m.enabled === true)
 		.map((m) => m.id)
 		.filter((id) => id.length > 0);
+}
+
+/** "Edit MCP server" 配置弹窗（参照 Cherry Studio）：Form/JSON 双视图。
+ *  Form 视图可编辑端口与访问 Key；JSON 视图为生成的客户端接入配置。
+ *  保存后若服务正在运行则自动重启使新配置生效。 */
+class EditMcpServerModal extends Modal {
+	constructor(
+		app: App,
+		private plugin: SmartVaultPlugin,
+		private onSaved: () => void,
+	) {
+		super(app);
+		this.modalEl.addClass("semlink-mcp-edit-modal");
+		this.modalEl.addClass("smart-vault-settings");
+	}
+
+	onOpen(): void {
+		this.titleEl.setText(t("editMcpServer"));
+		const { contentEl } = this;
+		contentEl.createDiv({ cls: "semlink-mcp-edit-desc", text: t("editMcpServerDesc") });
+
+		let port = this.plugin.settings.mcpPort;
+		let apiKey = this.plugin.settings.mcpApiKey;
+		const buildJson = (): string => {
+			const url = `http://127.0.0.1:${port}/mcp`;
+			return JSON.stringify(
+				{
+					mcpServers: {
+						semlink: {
+							type: "http",
+							url,
+							...(apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : {}),
+						},
+					},
+				},
+				null,
+				2,
+			);
+		};
+
+		// ── Form / JSON 切换（右上角分段控件） ──
+		const segRow = contentEl.createDiv({ cls: "semlink-mcp-edit-segrow" });
+		const seg = segRow.createDiv({ cls: "semlink-mcp-edit-seg" });
+		const formBtn = seg.createEl("button", { cls: "is-active", text: "Form" });
+		const jsonBtn = seg.createEl("button", { text: "JSON" });
+
+		const formView = contentEl.createDiv({ cls: "semlink-mcp-edit-form" });
+		const jsonView = contentEl.createDiv({ cls: "semlink-mcp-edit-json semlink-hidden" });
+		const jsonArea = jsonView.createEl("textarea", { cls: "semlink-monospace" });
+		jsonArea.rows = 12;
+		jsonArea.readOnly = true;
+		jsonArea.value = buildJson();
+
+		const syncJson = (): void => {
+			jsonArea.value = buildJson();
+		};
+
+		// ── Form 字段：端口 / 访问 Key ──
+		formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpPort") });
+		const portInput = formView.createEl("input", {
+			cls: "semlink-editor-input",
+			attr: { type: "text", placeholder: "3001", spellcheck: "false" },
+		});
+		portInput.value = String(port);
+		portInput.addEventListener("input", () => {
+			const parsed = parseInt(portInput.value, 10);
+			port = isNaN(parsed) || parsed <= 0 || parsed >= 65536 ? this.plugin.settings.mcpPort : parsed;
+			syncJson();
+		});
+
+		formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpAccessKey") });
+		const keyInput = formView.createEl("input", {
+			cls: "semlink-editor-input",
+			attr: { type: "text", spellcheck: "false" },
+		});
+		keyInput.value = apiKey;
+		keyInput.addEventListener("input", () => {
+			apiKey = keyInput.value;
+			syncJson();
+		});
+
+		const setView = (json: boolean): void => {
+			formView.toggleClass("semlink-hidden", json);
+			jsonView.toggleClass("semlink-hidden", !json);
+			formBtn.toggleClass("is-active", !json);
+			jsonBtn.toggleClass("is-active", json);
+		};
+		formBtn.addEventListener("click", () => setView(false));
+		jsonBtn.addEventListener("click", () => setView(true));
+
+		// ── Footer：右侧 Save / Cancel ──
+		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
+		const cancelBtn = footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") });
+		cancelBtn.addEventListener("click", () => this.close());
+		const saveBtn = footer.createEl("button", { cls: "semlink-editor-save-btn", text: t("editorSave") });
+
+		const error = contentEl.createDiv({ cls: "semlink-guide-error semlink-hidden" });
+
+		saveBtn.addEventListener("click", () => {
+			const parsed = parseInt(portInput.value, 10);
+			if (isNaN(parsed) || parsed <= 0 || parsed >= 65536) {
+				error.setText(t("mcpPortInvalid"));
+				error.removeClass("semlink-hidden");
+				return;
+			}
+			const persist = async (): Promise<void> => {
+				this.plugin.settings.mcpPort = parsed;
+				this.plugin.settings.mcpApiKey = keyInput.value;
+				await this.plugin.saveSettings();
+				// 端口/Key 变更需要重启才生效；没在运行则不主动拉起
+				if (this.plugin.mcpServer) await this.plugin.restartMcpServer();
+				this.close();
+				this.onSaved();
+			};
+			void persist();
+		});
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
 }
