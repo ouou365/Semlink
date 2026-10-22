@@ -192,7 +192,7 @@ export class Scheduler {
 		// count up front so we can hold processedNotes steady for updates and
 		// only bump it for genuine "add"s.
 		// 嵌入与索引解耦：本次运行是否带嵌入，由嵌入模型配置与自动嵌入开关决定
-		this.embedActive = activeEmbeddingProvider(this.settings).apiKey.trim() !== "" && this.settings.autoEmbed !== false;
+		this.embedActive = activeEmbeddingProvider(this.settings).apiKey.trim() !== "";
 		this.incrementalBase = 0;
 		if (!scan) {
 			const stats = await this.store.getStats();

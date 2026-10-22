@@ -12,8 +12,6 @@ const t: Record<keyof typeof en, string> = {
 	settingsTagline: "Turn your Obsidian vault into an Agentic Knowledge Environment.",
 	vectorSearch: "벡터 검색",
 	vectorSearchDesc: "Vault 전체의 시맨틱(벡터) 검색을 활성화합니다. 끄면 검색과 관련 노트가 결과를 반환하지 않습니다.",
-	autoEmbed: "자동 임베딩",
-	autoEmbedDesc: "인덱싱 중 벡터를 생성합니다. 끄면 텍스트만 인덱싱됩니다(키워드 검색은 계속 사용 가능).",
 	tabGeneral: "일반",
 	language: "언어",
 	languageDesc: "Semlink UI 언어",

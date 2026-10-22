@@ -14,8 +14,6 @@ const t: Record<keyof typeof en, string> = {
 	settingsTagline: "Turn your Obsidian vault into an Agentic Knowledge Environment.",
 	vectorSearch: "Búsqueda vectorial",
 	vectorSearchDesc: "Activa la búsqueda semántica (vectorial) en el vault. Al desactivarla, la búsqueda y las notas relacionadas no devuelven resultados.",
-	autoEmbed: "Embedding automático",
-	autoEmbedDesc: "Genera vectores durante la indexación. Al desactivarla, solo se indexa texto (la búsqueda por palabras clave sigue funcionando).",
 	tabGeneral: "General",
 	language: "Idioma",
 	languageDesc: "Idioma de la interfaz de Semlink",

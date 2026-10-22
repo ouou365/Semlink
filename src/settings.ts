@@ -352,18 +352,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// ── 自动嵌入开关：索引时是否同时生成向量 ──
-		new Setting(containerEl)
-			.setName(t("autoEmbed"))
-			.setDesc(t("autoEmbedDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.autoEmbed !== false)
-					.onChange(async (value) => {
-						this.plugin.settings.autoEmbed = value;
-						await this.plugin.saveSettings();
-					})
-			);
 
 		// ── 索引结构：切块参数（改动后需重建索引） ──
 		new Setting(containerEl)
