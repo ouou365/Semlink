@@ -539,20 +539,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const mcpUrl = `http://127.0.0.1:${this.plugin.settings.mcpPort}/mcp`;
 		const clientServers = this.plugin.settings.mcpClientServers ?? [];
 
-		// ── Installed 行：数量统计 + 分享/New 按钮 ──
+		// ── Installed 行：数量统计 + New 按钮 ──
 		const installedHead = containerEl.createDiv({ cls: "semlink-mcp-installed-head" });
 		installedHead.createSpan({
 			cls: "semlink-mcp-installed-title",
 			text: `${t("mcpInstalled")} ${clientServers.length + 1}`,
-		});
-		// 分享按钮（New 左侧）：把 semlink MCP 接入第三方客户端的说明
-		const shareBtn = installedHead.createEl("button", {
-			cls: "semlink-mcp-icon-btn",
-			attr: { "aria-label": t("mcpShareTitle"), title: t("mcpShareTitle") },
-		});
-		setIcon(shareBtn, "share-2");
-		shareBtn.addEventListener("click", () => {
-			new McpShareModal(this.app, this.plugin).open();
 		});
 		const newBtn = installedHead.createEl("button", {
 			cls: "semlink-mcp-new-btn",
@@ -577,6 +568,16 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const main = card.createDiv({ cls: "semlink-mcp-server-main" });
 		main.createDiv({ cls: "semlink-mcp-server-name", text: "semlink" });
 		main.createDiv({ cls: "semlink-mcp-server-sub", text: `http · ${mcpUrl}` });
+		// 分享按钮：开关左侧，把 semlink MCP 接入第三方客户端的说明
+		const shareBtn = card.createEl("button", {
+			cls: "semlink-mcp-icon-btn",
+			attr: { "aria-label": t("mcpShareTitle"), title: t("mcpShareTitle") },
+		});
+		setIcon(shareBtn, "share-2");
+		shareBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			new McpShareModal(this.app, this.plugin).open();
+		});
 		const toggleWrap = card.createDiv({ cls: "semlink-mcp-server-toggle" });
 		new ToggleComponent(toggleWrap)
 			.setValue(running)
@@ -585,9 +586,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				else await this.plugin.stopMcpServer();
 				rerenderSettingsTab(this);
 			});
-		// 点击卡片（避开开关）打开配置编辑弹窗
+		// 点击卡片（避开开关与分享按钮）打开配置编辑弹窗
 		card.addEventListener("click", (e) => {
 			if ((e.target as HTMLElement).closest(".semlink-mcp-server-toggle")) return;
+			if ((e.target as HTMLElement).closest(".semlink-mcp-icon-btn")) return;
 			new EditMcpServerModal(this.app, this.plugin, () => rerenderSettingsTab(this)).open();
 		});
 

@@ -236,10 +236,6 @@
 }
 
 /* 分享 / New 按钮组推到行最右侧（分享的 auto 外边距把整组顶过去） */
-.semlink-mcp-installed-head .semlink-mcp-icon-btn {
-    margin-left: auto;
-}
-
 .semlink-mcp-installed-title {
     font-size: 14px;
     font-weight: 700;
