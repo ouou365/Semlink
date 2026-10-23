@@ -23,7 +23,7 @@ import { join } from "path";
 const MAX_SHARES = 50;
 
 interface StoredRegistry {
-	shares?: Array<{ token: string; sessionId: string }>;
+	shares?: Array<{ token: string; sessionId: string; enabled?: boolean }>;
 }
 
 export class ShareServer {
@@ -35,6 +35,9 @@ export class ShareServer {
 	private tokens = new Map<string, string>();
 	/** token -> sessionId (reverse lookup for request-driven rendering). */
 	private sessions = new Map<string, string>();
+	/** Tokens currently serving 200s; a paused share stays registered but
+	 *  answers 404 until re-enabled. Missing from the set = enabled. */
+	private paused = new Set<string>();
 	/** token -> rendered page HTML (in-memory cache only). */
 	private pages = new Map<string, string>();
 	/** In-flight render promises, so concurrent hits render once. */
@@ -65,10 +68,11 @@ export class ShareServer {
 		try {
 			if (!existsSync(this.registryPath)) return;
 			const raw = JSON.parse(readFileSync(this.registryPath, "utf-8")) as StoredRegistry;
-			for (const { token, sessionId } of raw.shares ?? []) {
+			for (const { token, sessionId, enabled } of raw.shares ?? []) {
 				if (typeof token === "string" && typeof sessionId === "string") {
 					this.tokens.set(sessionId, token);
 					this.sessions.set(token, sessionId);
+					if (enabled === false) this.paused.add(token);
 				}
 			}
 		} catch (e) {
@@ -79,7 +83,11 @@ export class ShareServer {
 	private persistRegistry(): void {
 		try {
 			if (!existsSync(this.dataDir)) mkdirSync(this.dataDir, { recursive: true });
-			const shares = [...this.tokens.entries()].map(([sessionId, token]) => ({ token, sessionId }));
+			const shares = [...this.tokens.entries()].map(([sessionId, token]) => ({
+				token,
+				sessionId,
+				enabled: !this.paused.has(token),
+			}));
 			writeFileSync(this.registryPath, JSON.stringify({ shares }, null, 2), "utf-8");
 		} catch (e) {
 			console.warn("[Semlink] failed to persist share registry:", e);
@@ -133,6 +141,7 @@ export class ShareServer {
 			// share URLs themselves) survives the restart by design.
 			this.pages.clear();
 			this.pending.clear();
+			this.paused.clear();
 			if (!this.server) {
 				resolve();
 				return;
@@ -157,6 +166,7 @@ export class ShareServer {
 			token = randomBytes(12).toString("hex");
 			this.tokens.set(sessionId, token);
 			this.sessions.set(token, sessionId);
+			this.paused.delete(token);
 			while (this.tokens.size > MAX_SHARES) {
 				const oldest = this.tokens.keys().next().value as string | undefined;
 				if (oldest === undefined) break;
@@ -178,11 +188,41 @@ export class ShareServer {
 	revokeSession(sessionId: string): boolean {
 		const token = this.tokens.get(sessionId);
 		if (!token) return false;
+		return this.revokeToken(token);
+	}
+
+	/** Remove one share by token (settings-page management). */
+	revokeToken(token: string): boolean {
+		const sessionId = this.sessions.get(token);
+		if (!sessionId) return false;
 		this.tokens.delete(sessionId);
 		this.sessions.delete(token);
+		this.paused.delete(token);
 		this.pages.delete(token);
 		this.persistRegistry();
 		return true;
+	}
+
+	/** Pause (404 while paused, registry kept) or resume a share. */
+	setShareEnabled(token: string, enabled: boolean): boolean {
+		if (!this.sessions.has(token)) return false;
+		if (enabled) this.paused.delete(token);
+		else {
+			this.paused.add(token);
+			this.pages.delete(token);
+		}
+		this.persistRegistry();
+		return true;
+	}
+
+	/** All registered shares for the settings page (title resolution is the
+	 *  caller's job — it owns the chat-history store). */
+	listShares(): Array<{ token: string; sessionId: string; enabled: boolean }> {
+		return [...this.tokens.entries()].map(([sessionId, token]) => ({
+			token,
+			sessionId,
+			enabled: !this.paused.has(token),
+		}));
 	}
 
 	/** Candidate URLs, one per non-internal IPv4 interface (multi-NIC hosts
@@ -205,7 +245,7 @@ export class ShareServer {
 		const cached = this.pages.get(token);
 		if (cached !== undefined) return cached;
 		const sessionId = this.sessions.get(token);
-		if (!sessionId) return null;
+		if (!sessionId || this.paused.has(token)) return null;
 		const inflight = this.pending.get(token);
 		if (inflight) return inflight;
 		const job = this.render(sessionId)

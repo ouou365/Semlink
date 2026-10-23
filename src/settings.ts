@@ -18,7 +18,7 @@ import { LANGUAGES, t } from "./i18n";
 import { ConfirmModal } from "./confirm-modal";
 import { markDestructive, rerenderSettingsTab, showSliderValue } from "./ui-compat";
 
-type SettingsTab = "general" | "model" | "mcp" | "index" | "embedding" | "bot";
+type SettingsTab = "general" | "model" | "mcp" | "index" | "embedding" | "share" | "bot";
 
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
@@ -140,6 +140,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			case "mcp":
 				this.renderMcpTab(panelEl);
 				break;
+			case "share":
+				this.renderShareTab(panelEl);
+				break;
 			case "index":
 				this.renderIndexTab(panelEl);
 				break;
@@ -159,6 +162,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			{ id: "model", label: t("tabModel") },
 			{ id: "embedding", label: t("tabEmbedding") },
 			{ id: "mcp", label: t("tabMcp") },
+			{ id: "share", label: t("tabShare") },
 			{ id: "index", label: t("tabIndex") },
 			// Bot tab deliberately not listed: the Feishu bot is unpublished
 			// (freemium-design v3.6). renderBotTab stays available for re-enable.
@@ -623,6 +627,61 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	// ══════════════════════════════════════
 	// Tab: Bot — Feishu bots bound to Semlink
 	// ══════════════════════════════════════
+	/** Tab: Share — manage the conversations published to the LAN. Each row:
+	 *  conversation title, share URL, an on/off pause switch and a delete
+	 *  button. Paused links 404 but survive; deleted links are gone for good. */
+	private renderShareTab(containerEl: HTMLElement): void {
+		new Setting(containerEl).setName(t("tabShare")).setHeading();
+		const intro = containerEl.createDiv({ cls: "semlink-share-tab-hint", text: t("shareTabHint") });
+
+		const server = this.plugin.shareServer;
+		const shares = server.listShares();
+		if (shares.length === 0) {
+			intro.addClass("semlink-share-tab-empty");
+			intro.setText(t("shareEmpty"));
+			return;
+		}
+
+		const list = containerEl.createDiv({ cls: "semlink-share-manage-list" });
+		void (async () => {
+			const sessions = await this.plugin.historyStore.load();
+			const titleOf = (sessionId: string): string => {
+				const st = sessions.find((x) => x.id === sessionId);
+				return st?.title || st?.messages.find((m) => m.role === "user")?.content || t("shareUntitled");
+			};
+			// Sorted: live shares first, then paused; newest session first.
+			const rows = shares
+				.map((entry) => ({ ...entry, title: titleOf(entry.sessionId) }))
+				.sort((a, b) => Number(b.enabled) - Number(a.enabled) || b.sessionId.localeCompare(a.sessionId));
+			list.empty();
+			for (const row of rows) {
+				const item = list.createDiv({ cls: "semlink-share-manage-item" + (row.enabled ? "" : " is-paused") });
+				const info = item.createDiv({ cls: "semlink-share-manage-info" });
+				info.createDiv({ cls: "semlink-share-manage-title", text: row.title });
+				const short = `…/s/${row.token.slice(0, 8)}…`;
+				info.createDiv({ cls: "semlink-share-manage-url", text: short });
+
+				const toggleWrap = item.createDiv({ cls: "semlink-share-manage-toggle" });
+				new ToggleComponent(toggleWrap)
+					.setValue(row.enabled)
+					.onChange(async (on) => {
+						server.setShareEnabled(row.token, on);
+						item.toggleClass("is-paused", !on);
+						new Notice(on ? t("shareResumed") : t("sharePaused"));
+					});
+
+				const delBtn = item.createEl("button", { cls: "semlink-share-manage-delete", attr: { "aria-label": t("shareDelete") } });
+				setIcon(delBtn, "trash-2");
+				delBtn.addEventListener("click", () => {
+					server.revokeToken(row.token);
+					new Notice(t("shareDeleted"));
+					item.remove();
+					if (list.children.length === 0) rerenderSettingsTab(this);
+				});
+			}
+		})();
+	}
+
 	private renderBotTab(containerEl: HTMLElement): void {
 		new Setting(containerEl).setName(t("botSection")).setHeading();
 
