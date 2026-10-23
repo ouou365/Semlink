@@ -252,7 +252,6 @@ const t: Record<keyof typeof en, string> = {
 	shareHint: "在同一區網內的裝置瀏覽器開啟以下位址即可檢視本對話。分享為唯讀，重啟 Obsidian 後位址仍然有效；若本機 IP 變化（如更換 Wi-Fi），位址會隨之改變。",
 	shareCopy: "複製位址",
 	shareCopied: "位址已複製",
-	shareGenerating: "正在產生分享頁面…",
 	shareNothing: "目前沒有可分享的對話。",
 	shareFailed: "分享失敗——詳情見開發者控制台。",
 	shareThinking: "思考過程",

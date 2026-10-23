@@ -251,7 +251,6 @@ const en = {
 	shareHint: "Open an address below in any browser on a device in the same network. The share is read-only and keeps working across Obsidian restarts — if this computer's IP changes (e.g. different Wi-Fi), the address changes with it.",
 	shareCopy: "Copy address",
 	shareCopied: "Address copied",
-	shareGenerating: "Preparing the share page…",
 	shareNothing: "No conversation to share yet.",
 	shareFailed: "Share failed — see developer console for details.",
 	shareThinking: "Thinking process",

@@ -253,7 +253,6 @@ const zh: Record<keyof typeof en, string> = {
 	shareHint: "在同一局域网内的设备浏览器打开以下地址即可查看本对话。分享为只读，重启 Obsidian 后地址仍然有效；若本机 IP 变化（如更换 Wi-Fi），地址会随之改变。",
 	shareCopy: "复制地址",
 	shareCopied: "地址已复制",
-	shareGenerating: "正在生成分享页面…",
 	shareNothing: "当前没有可分享的对话。",
 	shareFailed: "分享失败——详情见开发者控制台。",
 	shareThinking: "思考过程",

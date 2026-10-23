@@ -252,7 +252,6 @@ const t: Record<keyof typeof en, string> = {
 	shareHint: "같은 네트워크의 기기 브라우저에서 아래 주소를 열면 이 대화를 볼 수 있습니다. 공유는 읽기 전용이며 Obsidian을 재시작해도 주소는 유효합니다. 다만 PC의 IP가 바뀌면(Wi-Fi 변경 등) 주소도 함께 바뀝니다.",
 	shareCopy: "주소 복사",
 	shareCopied: "주소가 복사되었습니다",
-	shareGenerating: "공유 페이지를 준비하는 중…",
 	shareNothing: "공유할 대화가 없습니다.",
 	shareFailed: "공유 실패 — 자세한 내용은 개발자 콘솔을 참고하세요.",
 	shareThinking: "생각 과정",

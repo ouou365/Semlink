@@ -254,7 +254,6 @@ const t: Record<keyof typeof en, string> = {
 	shareHint: "Abra um dos endereços no navegador de um dispositivo da mesma rede para ver esta conversa. O compartilhamento é somente leitura e sobrevive ao reinício do Obsidian; se o IP deste computador mudar (ex. outra rede Wi-Fi), o endereço muda junto.",
 	shareCopy: "Copiar endereço",
 	shareCopied: "Endereço copiado",
-	shareGenerating: "Preparando a página de compartilhamento…",
 	shareNothing: "Nenhuma conversa para compartilhar.",
 	shareFailed: "Falha ao compartilhar — detalhes no console do desenvolvedor.",
 	shareThinking: "Processo de raciocínio",

@@ -252,7 +252,6 @@ const t: Record<keyof typeof en, string> = {
 	shareHint: "同じネットワーク上のデバイスのブラウザで下記アドレスを開くと、この会話を閲覧できます。共有は読み取り専用で、Obsidian を再起動してもアドレスは有効です。ただし PC の IP が変わると（Wi-Fi の変更など）アドレスも変わります。",
 	shareCopy: "アドレスをコピー",
 	shareCopied: "アドレスをコピーしました",
-	shareGenerating: "共有ページを準備しています…",
 	shareNothing: "共有できる会話がありません。",
 	shareFailed: "共有に失敗しました——詳細は開発者コンソールを参照。",
 	shareThinking: "思考プロセス",

@@ -1420,7 +1420,6 @@ export class SemanticSearchView extends ItemView {
 			new Notice(t("shareNothing"));
 			return;
 		}
-		new Notice(t("shareGenerating"));
 		try {
 			const sessionId = this.currentSessionId;
 			// Lock what the sharer sees INTO the link: UI language + light/dark.

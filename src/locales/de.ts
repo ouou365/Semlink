@@ -252,7 +252,6 @@ const t: Record<keyof typeof en, string> = {
 	shareHint: "Öffne eine der Adressen im Browser eines Geräts im selben Netzwerk, um diese Unterhaltung zu lesen. Die Freigabe ist schreibgeschützt und überlebt einen Neustart von Obsidian — ändert sich die IP dieses Rechners (z. B. anderes WLAN), ändert sich die Adresse mit.",
 	shareCopy: "Adresse kopieren",
 	shareCopied: "Adresse kopiert",
-	shareGenerating: "Freigabeseite wird vorbereitet…",
 	shareNothing: "Keine Unterhaltung zum Teilen vorhanden.",
 	shareFailed: "Freigabe fehlgeschlagen — Details in der Entwicklerkonsole.",
 	shareThinking: "Denkprozess",
