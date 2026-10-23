@@ -10,7 +10,7 @@ import type en from "./en";
 const zh: Record<keyof typeof en, string> = {
 // ──── Settings Tab ────
 	settingsTitle: "Semlink",
-	settingsTagline: "把你的 Obsidian Vault 变成智能体知识工作空间。",
+	settingsTagline: "让你的 Obsidian Vault 思考、协作、行动。",
 	tabGeneral: "通用",
 	language: "语言",
 	languageDesc: "Semlink 界面显示语言",

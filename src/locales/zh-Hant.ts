@@ -9,7 +9,7 @@ import type en from "./en";
 const t: Record<keyof typeof en, string> = {
 // ──── Settings Tab ────
 	settingsTitle: "Semlink",
-	settingsTagline: "把你的 Obsidian Vault 變成智慧代理知識工作空間。",
+	settingsTagline: "讓你的 Obsidian Vault 思考、協作、行動。",
 	tabGeneral: "一般",
 	language: "語言",
 	languageDesc: "Semlink 介面顯示語言",
