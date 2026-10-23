@@ -113,8 +113,10 @@ body{margin:0;padding:40px 14px 60px;font:15px/1.7 -apple-system,"Segoe UI","Pin
 
 /* ── Card head: brand left, theme toggle + install right ── */
 .pc-head{display:flex;align-items:center;gap:14px;padding:18px 28px 14px;border-bottom:1px dashed var(--line)}
-.pc-head .brand-mark{width:34px;height:34px;flex:none;color:var(--brand)}
 .pc-head .head-text{min-width:0;flex:1}
+.pc-head .brand-row{display:flex;align-items:center;gap:7px;margin:0 0 7px}
+.pc-head .brand-logo{width:20px;height:20px;flex:none;color:var(--brand)}
+.pc-head .brand-name{font-weight:700;font-size:13.5px;letter-spacing:.2px;color:var(--ink)}
 .pc-head .head-text h1{font-size:20px;line-height:1.3;margin:0 0 5px;font-weight:700;color:var(--brand-ink)}
 .pc-head .head-text .meta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
 .pc-head .head-text .meta .dot{width:3px;height:3px;border-radius:50%;background:var(--faint)}
@@ -188,7 +190,7 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 <style>${css}</style></head><body data-theme="${theme}">
 <div class="postcard">
 <header class="pc-head">
-${logoSvg.replace("<svg ", '<svg class="brand-mark" ')}<div class="head-text"><h1>${safeTitle}</h1><div class="meta"><span>${dateLabel}</span><span class="dot"></span><span data-ui="meta">${esc(t("shareFooter"))}</span></div></div>
+<div class="head-text"><div class="brand-row">${logoSvg.replace("<svg ", '<svg class="brand-logo" ')}<span class="brand-name">Semlink</span></div><h1>${safeTitle}</h1><div class="meta"><span>${dateLabel}</span><span class="dot"></span><span data-ui="meta">${esc(t("shareFooter"))}</span></div></div>
 <nav>
 <button class="theme-btn" id="themeToggle" aria-label="Toggle theme"><span id="themeIconMoon" style="display:inline-flex">${moonIcon}</span><span id="themeIconSun" style="display:inline-flex">${sunIcon}</span></button>
 <a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer" aria-label="${esc(t("shareDownloadCta"))}" title="${esc(t("shareDownloadCta"))}">${downloadIcon}</a>
