@@ -409,8 +409,10 @@ ${this.answer}
 body{margin:0;padding:24px 12px 48px;font:15px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#f6f5f2;color:#26221c}
 main{max-width:760px;margin:0 auto}
 header.brand{display:flex;align-items:center;gap:9px;margin-bottom:18px}
-header.brand svg{width:24px;height:24px;flex:none}
-header.brand .name{font-weight:700;font-size:16px;letter-spacing:.2px;color:#5b3fa8}
+/* Brand purple (#7c3aed, same as the plugin's accent) \u2014 the logo strokes
+   use currentColor, so the color is inherited from here. */
+header.brand svg{width:24px;height:24px;flex:none;color:#7c3aed}
+header.brand .name{font-weight:700;font-size:16px;letter-spacing:.2px;color:#7c3aed}
 header.brand .sub{font-size:12.5px;color:#a39c8e;margin-left:2px;padding-left:10px;border-left:1px solid #ddd8cd}
 h1{font-size:19px;line-height:1.4;margin:0 0 20px;color:#5b3fa8}
 .msg{margin:0 0 14px}
