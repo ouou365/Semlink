@@ -2,7 +2,7 @@
 
 **Português** | [English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md) | [Deutsch](README_de.md) | [Français](README_fr.md) | [Español](README_es.md) | [Italiano](README_it.md) | [Русский](README_ru.md)
 
-Um plugin do Obsidian que transforma anos de notas em um segundo cérebro: um agente de IA transparente que vive onde você escreve, busca tudo o que você já anotou, raciocina sobre isso com ferramentas reais e responde com citações numeradas nas quais você pode clicar.
+Um plugin do Obsidian que transforma anos de notas em um espaço de conhecimento agêntico: um agente de IA transparente que vive onde você escreve, busca tudo o que você já anotou, raciocina sobre isso com ferramentas reais e responde com citações numeradas nas quais você pode clicar.
 
 **Agente dentro do seu Vault • Raciocínio + chamadas de ferramentas visíveis • Citações clicáveis • Índice SQLite local — sem servidor • Qualquer provedor compatível com OpenAI/Anthropic • MCP para Claude e Cursor • 11 idiomas • Núcleo grátis, Pro com pagamento único**
 

@@ -2,7 +2,7 @@
 
 **繁體中文** | [English](README.md) | [简体中文](README_CN.md) | [日本語](README_ja.md) | [한국어](README_ko.md) | [Deutsch](README_de.md) | [Français](README_fr.md) | [Español](README_es.md) | [Português](README_pt.md) | [Italiano](README_it.md) | [Русский](README_ru.md)
 
-一個把多年筆記變成「第二大腦」的 Obsidian 外掛：一個透明的 AI 智慧代理住進你寫作的地方，搜尋你記過的每一個字，用真正的工具推理，並給出可點擊的編號引用。
+一個把多年筆記變成智慧代理知識工作區的 Obsidian 外掛：一個透明的 AI 智慧代理住進你寫作的地方，搜尋你記過的每一個字，用真正的工具推理，並給出可點擊的編號引用。
 
 **智慧代理住在庫內 • 思考與工具呼叫可見 • 引用可點擊 • 本機 SQLite 索引，沒有伺服器 • 任意 OpenAI/Anthropic 相容供應商 • 內建 MCP 給 Claude 和 Cursor • 11 種語言 • 核心免費，Pro 一次買斷**
 
