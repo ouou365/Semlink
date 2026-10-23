@@ -522,6 +522,7 @@ export class ChatClient {
 			vectorLine +
 			depthHint +
 			t("promptNoFabricate") +
+			t("promptVersionPrecedence") +
 			"\n" + t("promptGrounding") +
 			contextBlock +
 			"\n\n" + t("promptLangRule");
