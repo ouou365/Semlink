@@ -9,6 +9,7 @@
 // text delivered through an onStream callback.
 
 import type { SmartVaultSettings, ChatProvider, ChatModel, ContextBreakdown, HistoryMessage } from "./types";
+import { activeEmbeddingProvider } from "./types";
 import { debugLog } from "./log";
 import type { SemlinkTools } from "./chat-tools";
 import { createCiteRegistry } from "./cite-cards";
@@ -506,9 +507,19 @@ export class ChatClient {
 		const contextBlock = context.trim()
 			? "\n\n" + t("promptContextHead") + "\n" + context
 			: "";
+		// Vector availability, stated UP FRONT so the model never wastes a
+		// tool round probing semantic: without an embedding model, semantic
+		// always errors and search silently degrades to BM25-only. Same
+		// predicate as store.searchGate (main.ts) — evaluated live, so a
+		// config change applies from the very next question.
+		const vectorAvailable = activeEmbeddingProvider(this.settings).apiKey.trim() !== "";
+		const vectorLine = vectorAvailable
+			? "\n" + t("promptVectorAvailable")
+			: "\n" + t("promptVectorUnavailable");
 		const shared =
 			t("promptGrepGuide") +
 			t("promptToolGuide") +
+			vectorLine +
 			depthHint +
 			t("promptNoFabricate") +
 			"\n" + t("promptGrounding") +
