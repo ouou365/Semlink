@@ -58,6 +58,8 @@ export async function renderSharePage(
 		holder.remove();
 	}
 	const safeTitle = esc(title);
+	const day = new Date();
+	const dateLabel = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
 	return `<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -65,37 +67,77 @@ export async function renderSharePage(
 <style>
 :root{color-scheme:light}
 *{box-sizing:border-box}
-body{margin:0;padding:24px 12px 48px;font:15px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:linear-gradient(180deg,#eff6ff 0%,#fff 100%);color:#26221c}
-main{max-width:760px;margin:0 auto}
-header.brand{display:flex;align-items:center;gap:10px;margin-bottom:18px}
-/* Mirrors the getsemlink.com header: purple logo mark (#8b6cef, --blue on
-   the site) + dark bold wordmark, install CTA pinned right — the logo
-   strokes use currentColor. */
+body{margin:0;font:15px/1.7 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#0f172a;background:#fff}
+/* Hero band (site: linear-gradient #eff6ff→#fff) confined to the top so the
+   long thread below reads on clean white. */
+.hero{background:linear-gradient(180deg,#eff6ff 0%,rgba(239,246,255,0) 100%);padding:20px 16px 30px}
+.wrap{max-width:780px;margin:0 auto}
+main{max-width:780px;margin:0 auto;padding:6px 16px 48px}
+
+/* ── Brand row (mirrors the site header) ── */
+header.brand{display:flex;align-items:center;gap:10px}
 header.brand svg{width:30px;height:30px;flex:none;color:#8b6cef}
 header.brand .name{font-weight:700;font-size:20px;letter-spacing:.2px;color:#0f172a}
-header.brand .sub{font-size:12.5px;color:#a39c8e;margin-left:2px;padding-left:10px;border-left:1px solid #ddd8cd}
-header.brand .cta{margin-left:auto;display:inline-flex;align-items:center;gap:.5rem;border:none;cursor:pointer;text-decoration:none;font-weight:600;font-size:.95rem;padding:.72rem 1.25rem;border-radius:.8rem;background:#8b6cef;color:#fff}
-header.brand .cta:hover{background:#6745d9}
-h1{font-size:19px;line-height:1.4;margin:0 0 20px;color:#5b3fa8}
-.msg{margin:0 0 14px}
-.msg.user{display:flex;justify-content:flex-end}
-.msg.user .bubble{background:#7c5cd6;color:#fff;border-radius:14px 14px 4px 14px;padding:9px 13px;max-width:85%;white-space:pre-wrap;word-break:break-word}
-.msg.assistant .bubble{background:#fff;border:1px solid #e7e2d8;border-radius:4px 14px 14px 14px;padding:12px 15px;overflow-wrap:break-word}
-.msg.assistant .bubble.md h1,.msg.assistant .bubble.md h2,.msg.assistant .bubble.md h3{font-size:1.05em;margin:1em 0 .4em}
-.msg.assistant .bubble.md p{margin:.5em 0}
-.msg.assistant .bubble.md pre{background:#f2efe9;padding:10px;border-radius:8px;overflow:auto}
-.msg.assistant .bubble.md code{background:#f2efe9;padding:1px 5px;border-radius:4px}
-.msg.assistant .bubble.md pre code{background:none;padding:0}
-.msg.assistant .bubble.md table{border-collapse:collapse;max-width:100%}
-.msg.assistant .bubble.md td,.msg.assistant .bubble.md th{border:1px solid #ddd;padding:4px 8px}
-details.thinking{margin-bottom:8px;font-size:13px;color:#7a7365}
-details.thinking summary{cursor:pointer;user-select:none}
-details.thinking .step{padding:3px 0;border-top:1px dashed #eee}
-footer{margin-top:28px;text-align:center;font-size:12px;color:#a39c8e}
-</style></head><body><main>
+header.brand .sub{font-size:12.5px;color:#94a3b8;margin-left:4px;padding-left:11px;border-left:1px solid #d7dfeb}
+header.brand .cta{margin-left:auto;display:inline-flex;align-items:center;gap:.5rem;border:none;cursor:pointer;text-decoration:none;font-weight:600;font-size:.92rem;padding:.66rem 1.2rem;border-radius:.8rem;background:linear-gradient(135deg,#8b6cef,#6745d9);color:#fff;box-shadow:0 2px 10px rgba(103,69,217,.28)}
+header.brand .cta:hover{filter:brightness(1.06)}
+
+/* ── Conversation title block ── */
+.head{margin:34px 0 22px}
+h1{font-size:23px;line-height:1.35;margin:0 0 8px;font-weight:700;color:#0f172a}
+.head .meta{display:flex;align-items:center;gap:8px;font-size:13px;color:#64748b}
+.head .meta .dot{width:3px;height:3px;border-radius:50%;background:#cbd5e1}
+
+/* ── Thread ── */
+.thread{display:flex;flex-direction:column;gap:16px}
+.msg{display:flex}
+.msg.user{justify-content:flex-end}
+.msg.user .bubble{background:linear-gradient(135deg,#8b6cef,#6745d9);color:#fff;border-radius:16px 16px 5px 16px;padding:11px 15px;max-width:82%;white-space:pre-wrap;word-break:break-word;font-weight:500;box-shadow:0 3px 12px rgba(103,69,217,.22)}
+.msg.assistant{flex-direction:column}
+.msg.assistant .bubble{background:#fff;border:1px solid #e8edf3;border-radius:5px 16px 16px 16px;padding:18px 20px;overflow-wrap:break-word;box-shadow:0 1px 3px rgba(15,23,42,.05),0 8px 24px -18px rgba(15,23,42,.12)}
+
+/* Markdown inside an assistant bubble */
+.msg.assistant .bubble.md h1,.msg.assistant .bubble.md h2{font-size:1.08em;margin:1.1em 0 .45em;color:#0f172a}
+.msg.assistant .bubble.md h3,.msg.assistant .bubble.md h4{font-size:1em;margin:1em 0 .4em;color:#0f172a}
+.msg.assistant .bubble.md p{margin:.55em 0}
+.msg.assistant .bubble.md ul,.msg.assistant .bubble.md ol{margin:.55em 0;padding-left:1.4em}
+.msg.assistant .bubble.md li{margin:.3em 0}
+.msg.assistant .bubble.md li::marker{color:#8b6cef}
+.msg.assistant .bubble.md strong{color:#0f172a}
+.msg.assistant .bubble.md a{color:#6745d9}
+.msg.assistant .bubble.md pre{background:#0f172a;color:#e2e8f0;padding:13px 15px;border-radius:10px;overflow:auto;font-size:13px}
+.msg.assistant .bubble.md code{background:#f1f5f9;color:#4338ca;padding:1.5px 6px;border-radius:5px;font-size:.92em}
+.msg.assistant .bubble.md pre code{background:none;color:inherit;padding:0}
+.msg.assistant .bubble.md blockquote{margin:.6em 0;padding:.1em 0 .1em 12px;border-left:3px solid #d9d2f5;color:#475569}
+.msg.assistant .bubble.md table{border-collapse:collapse;max-width:100%;font-size:.95em;margin:.7em 0}
+.msg.assistant .bubble.md th{background:#f8fafc}
+.msg.assistant .bubble.md td,.msg.assistant .bubble.md th{border:1px solid #e2e8f0;padding:6px 10px;text-align:left}
+.msg.assistant .bubble.md hr{border:none;border-top:1px solid #e8edf3;margin:1.2em 0}
+
+/* Thinking steps folded inside the assistant card */
+details.thinking{background:#f6f8fb;border:1px solid #eef1f6;border-radius:10px;padding:8px 13px;margin:0 0 12px;font-size:13px;color:#64748b}
+details.thinking summary{cursor:pointer;user-select:none;font-weight:600;color:#475569;list-style-position:inside}
+details.thinking[open] summary{margin-bottom:2px}
+details.thinking .step{padding:5px 0;border-top:1px dashed #e5eaf1;line-height:1.55}
+
+footer{max-width:780px;margin:34px auto 0;padding:16px 16px 0;text-align:center;font-size:12.5px;color:#94a3b8;border-top:1px solid #eef1f6}
+
+@media(max-width:620px){
+	.hero{padding:14px 12px 22px}
+	main{padding:4px 12px 40px}
+	header.brand .sub{display:none}
+	h1{font-size:19px}
+	.msg.user .bubble{max-width:92%}
+	.msg.assistant .bubble{padding:14px 15px}
+}
+</style></head><body>
+<div class="hero"><div class="wrap">
 <header class="brand">${logoSvg}<span class="name">Semlink</span><span class="sub">${esc(t("shareBrandSub"))}</span><a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer">${esc(t("shareDownloadCta"))}</a></header>
-<h1>${safeTitle}</h1>
+<section class="head"><h1>${safeTitle}</h1><div class="meta"><span>${dateLabel}</span><span class="dot"></span><span>Semlink</span></div></section>
+</div></div>
+<main><div class="thread">
 ${parts.join("\n")}
-<footer>Shared from Semlink</footer>
-</main></body></html>`;
+</div></main>
+<footer>${esc(t("shareBrandSub"))} · Semlink · <a style="color:#6745d9;text-decoration:none" href="https://getsemlink.com/" target="_blank" rel="noreferrer">getsemlink.com</a></footer>
+</body></html>`;
 }
