@@ -257,7 +257,7 @@ const t: Record<keyof typeof en, string> = {
 	shareFailed: "共有に失敗しました——詳細は開発者コンソールを参照。",
 	shareThinking: "思考プロセス",
 	citeToggle: "回答内の引用マーカーの表示を切り替える",
-	shareBrandSub: "Turn your Obsidian vault into an Agentic Knowledge Workspace.",
+	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	shareRevoke: "共有を停止",
 	shareRevoked: "共有を停止しました。アドレスは無効になりました。",
 	shareOpenBrowser: "ブラウザで開く",

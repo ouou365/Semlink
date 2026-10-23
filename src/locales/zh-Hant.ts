@@ -257,7 +257,7 @@ const t: Record<keyof typeof en, string> = {
 	shareFailed: "分享失敗——詳情見開發者控制台。",
 	shareThinking: "思考過程",
 	citeToggle: "顯示或隱藏回答中的引用標記",
-	shareBrandSub: "Turn your Obsidian vault into an Agentic Knowledge Workspace.",
+	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	shareRevoke: "關閉共享",
 	shareRevoked: "共享已關閉，位址已失效。",
 	shareOpenBrowser: "在瀏覽器開啟",

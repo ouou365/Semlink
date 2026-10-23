@@ -8,7 +8,7 @@
 const en = {
 // ──── Settings Tab ────
 	settingsTitle: "Semlink",
-	settingsTagline: "Turn your Obsidian vault into an Agentic Knowledge Workspace.",
+	settingsTagline: "Let your Obsidian Vault think, collaborate and act.",
 	tabGeneral: "General",
 	language: "Language",
 	languageDesc: "UI language for Semlink",
@@ -256,7 +256,7 @@ const en = {
 	shareFailed: "Share failed — see developer console for details.",
 	shareThinking: "Thinking process",
 	citeToggle: "Show or hide citation markers in the answer",
-	shareBrandSub: "Turn your Obsidian vault into an Agentic Knowledge Workspace.",
+	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	shareRevoke: "Stop sharing",
 	shareRevoked: "Sharing stopped — the address no longer works.",
 	shareOpenBrowser: "Open in browser",
