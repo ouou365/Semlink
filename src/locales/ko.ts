@@ -269,7 +269,7 @@ const t: Record<keyof typeof en, string> = {
 	shareResumed: "공유 재개 — 주소가 다시 작동합니다",
 	shareDelete: "공유 중지 후 삭제",
 	shareDeleted: "공유가 삭제되었습니다",
-	shareDownloadCta: "설치 — 무료",
+	shareDownloadCta: "설치",
 	searchCopied: "클립보드에 복사되었습니다",
 	searchCopyFailed: "복사 실패",
 	saveModalTitle: "답변 저장",

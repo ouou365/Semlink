@@ -269,7 +269,7 @@ const t: Record<keyof typeof en, string> = {
 	shareResumed: "共有を再開しました — アドレスが再度機能しています",
 	shareDelete: "共有を停止して削除",
 	shareDeleted: "共有を削除しました",
-	shareDownloadCta: "インストール — 無料",
+	shareDownloadCta: "インストール",
 	searchCopied: "クリップボードにコピーしました",
 	searchCopyFailed: "コピーに失敗しました",
 	saveModalTitle: "回答を保存",

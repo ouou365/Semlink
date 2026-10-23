@@ -268,7 +268,7 @@ const en = {
 	shareResumed: "Share resumed — the address works again",
 	shareDelete: "Stop sharing and delete",
 	shareDeleted: "Share deleted",
-	shareDownloadCta: "Install — it's free",
+	shareDownloadCta: "Install",
 	searchCopied: "Copied to clipboard",
 	searchCopyFailed: "Copy failed",
 	saveModalTitle: "Save Answer",

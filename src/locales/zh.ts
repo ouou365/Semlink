@@ -270,7 +270,7 @@ const zh: Record<keyof typeof en, string> = {
 	shareResumed: "共享已恢复 — 地址重新可访问",
 	shareDelete: "停止共享并删除",
 	shareDeleted: "共享已删除",
-	shareDownloadCta: "安装 — 免费",
+	shareDownloadCta: "安装",
 	searchCopied: "已复制到剪贴板",
 	searchCopyFailed: "复制失败",
 	saveModalTitle: "保存回答",

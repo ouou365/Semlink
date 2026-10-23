@@ -269,7 +269,7 @@ const t: Record<keyof typeof en, string> = {
 	shareResumed: "共享已恢復 — 位址重新可存取",
 	shareDelete: "停止共享並刪除",
 	shareDeleted: "共享已刪除",
-	shareDownloadCta: "安裝 — 免費",
+	shareDownloadCta: "安裝",
 	searchCopied: "已複製到剪貼簿",
 	searchCopyFailed: "複製失敗",
 	saveModalTitle: "儲存回答",

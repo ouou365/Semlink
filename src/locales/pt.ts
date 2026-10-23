@@ -271,7 +271,7 @@ const t: Record<keyof typeof en, string> = {
 	shareResumed: "Compartilhamento retomado — o endereço voltou a funcionar",
 	shareDelete: "Parar e excluir",
 	shareDeleted: "Compartilhamento excluído",
-	shareDownloadCta: "Instalar — é grátis",
+	shareDownloadCta: "Instalar",
 	searchCopied: "Copiado para a área de transferência",
 	searchCopyFailed: "Falha ao copiar",
 	saveModalTitle: "Salvar resposta",

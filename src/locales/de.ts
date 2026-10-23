@@ -269,7 +269,7 @@ const t: Record<keyof typeof en, string> = {
 	shareResumed: "Freigabe fortgesetzt — die Adresse funktioniert wieder",
 	shareDelete: "Teilen beenden und löschen",
 	shareDeleted: "Freigabe gelöscht",
-	shareDownloadCta: "Installieren — kostenlos",
+	shareDownloadCta: "Installieren",
 	searchCopied: "In die Zwischenablage kopiert",
 	searchCopyFailed: "Kopieren fehlgeschlagen",
 	saveModalTitle: "Antwort speichern",

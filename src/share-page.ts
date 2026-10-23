@@ -123,15 +123,13 @@ body{margin:0;padding:40px 14px 60px;font:15px/1.7 -apple-system,"Segoe UI","Pin
 html[data-theme="dark"] .pc-head .theme-btn{color:var(--faint)}
 html[data-theme="dark"] .pc-head .theme-btn:hover{color:var(--brand);background:rgba(139,108,239,.18)}
 .pc-head .theme-btn svg{width:17px;height:17px}
-.pc-head .cta{display:inline-flex;align-items:center;gap:.5rem;border:none;cursor:pointer;text-decoration:none;font-weight:600;font-size:.92rem;padding:.58rem 1.1rem;border-radius:.8rem;background:linear-gradient(135deg,var(--brand),var(--brand-dark));color:#fff;box-shadow:0 2px 10px rgba(103,69,217,.28);flex:none}
-.pc-head .cta:hover{filter:brightness(1.06)}
+/* White button on the white card — separated by a brand border, inverts on hover. */
+.pc-head .cta{display:inline-flex;align-items:center;gap:.5rem;cursor:pointer;text-decoration:none;font-weight:600;font-size:.92rem;padding:.52rem 1.05rem;border-radius:.8rem;border:1px solid var(--brand);background:var(--card);color:var(--brand-dark);flex:none}
+.pc-head .cta:hover{background:var(--brand);color:#fff;border-color:var(--brand)}
 
 /* ── Card body: title, stamp, thread ── */
 .pc-body{position:relative;padding:32px 36px 10px}
-/* Postage-stamp logo: dashed frame, slight tilt, top-right of the card. */
-.stamp{position:absolute;top:26px;right:30px;width:54px;height:62px;display:flex;align-items:center;justify-content:center;background:var(--page);border:1px dashed var(--faint);border-radius:8px;transform:rotate(3deg);opacity:.9}
-.stamp svg{width:34px;height:34px;color:var(--brand)}
-.head{margin:0 0 22px;padding-right:78px}
+.head{margin:0 0 22px}
 h1{font-size:23px;line-height:1.35;margin:0 0 8px;font-weight:700;color:var(--brand-ink)}
 .head .meta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
 .head .meta .dot{width:3px;height:3px;border-radius:50%;background:var(--faint)}
@@ -182,13 +180,10 @@ details.thinking .step{padding:5px 0;border-top:1px dashed var(--step-line);line
 	.pc-foot{margin:20px 18px 0}
 	h1{font-size:19px;padding-right:0}
 	.head{padding-right:0}
-	.stamp{width:44px;height:52px;top:20px;right:18px}
-	.stamp svg{width:28px;height:28px}
 	.msg.user .bubble{max-width:92%}
 	.msg.assistant .bubble{padding:14px 15px}
 }
 `;
-	const stampLogo = logoSvg.replace("<svg ", '<svg class="stampsvg" ');
 	return `<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -204,7 +199,6 @@ ${logoSvg.replace("<svg ", '<svg class="logo" ')}<span class="name">Semlink</spa
 </nav>
 </header>
 <div class="pc-body">
-<div class="stamp" aria-hidden="true">${stampLogo}</div>
 <section class="head"><h1>${safeTitle}</h1><div class="meta"><span>${dateLabel}</span><span class="dot"></span><span>Semlink</span></div></section>
 <div class="thread">
 ${parts.join("\n")}

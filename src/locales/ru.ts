@@ -270,7 +270,7 @@ const t: Record<keyof typeof en, string> = {
 	shareResumed: "Доступ возобновлён — адрес снова работает",
 	shareDelete: "Прекратить доступ и удалить",
 	shareDeleted: "Доступ удалён",
-	shareDownloadCta: "Установить — это бесплатно",
+	shareDownloadCta: "Установить",
 	searchCopied: "Скопировано в буфер обмена",
 	searchCopyFailed: "Не удалось скопировать",
 	saveModalTitle: "Сохранить ответ",
