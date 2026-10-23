@@ -118,6 +118,9 @@ export class SemanticSearchView extends ItemView {
 	// Send-button state machine: idle(send) → loading(spin) → stop(abort).
 	private searchBtnEl!: HTMLButtonElement;
 	private isGenerating = false;
+	/** Citation-marker visibility, toggled per view from the actions row.
+	 *  Default OFF — answers read clean; the toggle reveals [n] markers. */
+	private showCitations = false;
 	/** Input tall mode (half-screen editor for long prompts). */
 	private inputExpanded = false;
 	private expandBtnEl: HTMLElement | null = null;
@@ -1246,7 +1249,8 @@ export class SemanticSearchView extends ItemView {
 				if (!pathByNumber.has(n)) pathByNumber.set(n, p);
 			});
 		}
-		if (pathByNumber.size === 0) return;
+		// No early return on an empty map: markers must STILL be wrapped so
+		// the show-sources toggle can hide them uniformly.
 		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
 			acceptNode: (node) => {
 				const parent = node.parentElement;
@@ -1277,18 +1281,19 @@ export class SemanticSearchView extends ItemView {
 					frag.appendChild(document.createTextNode(part.text));
 					continue;
 				}
+				// Every marker becomes .semlink-cite-ref — hidden by default and
+				// revealed by the "show sources" toggle (CSS on the view root).
+				// Resolvable ones additionally become clickable links.
 				const target = part.n !== undefined ? pathByNumber.get(part.n) : undefined;
-				if (!target) {
-					frag.appendChild(document.createTextNode(`[${part.n}]`));
-					continue;
+				const ref = document.createElement("span");
+				ref.className = target ? "semlink-cite-ref semlink-cite-link" : "semlink-cite-ref";
+				ref.setText(`[${part.n}]`);
+				if (target) {
+					ref.addEventListener("click", () => {
+						void this.openNote(target, "");
+					});
 				}
-				const link = document.createElement("span");
-				link.className = "semlink-cite-link";
-				link.setText(`[${part.n}]`);
-				link.addEventListener("click", () => {
-					void this.openNote(target, "");
-				});
-				frag.appendChild(link);
+				frag.appendChild(ref);
 			}
 			node.replaceWith(frag);
 		}
@@ -1379,6 +1384,28 @@ export class SemanticSearchView extends ItemView {
 		});
 		setIcon(shareBtn, "share");
 		shareBtn.addEventListener("click", () => void this.shareSession());
+		const citeBtn = actionsEl.createEl("button", {
+			cls: "semlink-msg-action",
+			attr: { "aria-label": t("citeToggle"), "aria-pressed": String(this.showCitations) },
+		});
+		setIcon(citeBtn, "quote");
+		citeBtn.addClass("semlink-cite-toggle");
+		if (this.showCitations) citeBtn.addClass("is-active");
+		citeBtn.addEventListener("click", () => {
+			this.setCitationsVisible(!this.showCitations, citeBtn);
+		});
+	}
+
+	/** Toggle citation-marker visibility for the WHOLE view: CSS class on the
+	 *  view root flips every rendered marker at once (past answers and future
+	 *  ones), no re-render needed. */
+	private setCitationsVisible(visible: boolean, btn?: HTMLElement): void {
+		this.showCitations = visible;
+		this.contentEl.toggleClass("semlink-show-citations", visible);
+		if (btn) {
+			btn.toggleClass("is-active", visible);
+			btn.setAttr("aria-pressed", String(visible));
+		}
 	}
 
 	/** Share the CURRENT conversation to the LAN: render the whole session

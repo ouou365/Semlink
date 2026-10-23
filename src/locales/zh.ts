@@ -257,6 +257,7 @@ const zh: Record<keyof typeof en, string> = {
 	shareNothing: "当前没有可分享的对话。",
 	shareFailed: "分享失败——详情见开发者控制台。",
 	shareThinking: "思考过程",
+	citeToggle: "显示或隐藏回答中的引用标记",
 	searchCopied: "已复制到剪贴板",
 	searchCopyFailed: "复制失败",
 	saveModalTitle: "保存回答",

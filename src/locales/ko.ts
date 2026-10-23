@@ -256,6 +256,7 @@ const t: Record<keyof typeof en, string> = {
 	shareNothing: "공유할 대화가 없습니다.",
 	shareFailed: "공유 실패 — 자세한 내용은 개발자 콘솔을 참고하세요.",
 	shareThinking: "생각 과정",
+	citeToggle: "답변의 인용 표시 토글",
 	searchCopied: "클립보드에 복사되었습니다",
 	searchCopyFailed: "복사 실패",
 	saveModalTitle: "답변 저장",

@@ -257,6 +257,7 @@ const t: Record<keyof typeof en, string> = {
 	shareNothing: "Нет диалога для доступа.",
 	shareFailed: "Не удалось открыть доступ — подробности в консоли разработчика.",
 	shareThinking: "Процесс размышления",
+	citeToggle: "Показать или скрыть маркеры цитирования в ответе",
 	searchCopied: "Скопировано в буфер обмена",
 	searchCopyFailed: "Не удалось скопировать",
 	saveModalTitle: "Сохранить ответ",

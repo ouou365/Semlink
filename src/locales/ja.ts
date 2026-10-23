@@ -256,6 +256,7 @@ const t: Record<keyof typeof en, string> = {
 	shareNothing: "共有できる会話がありません。",
 	shareFailed: "共有に失敗しました——詳細は開発者コンソールを参照。",
 	shareThinking: "思考プロセス",
+	citeToggle: "回答内の引用マーカーの表示を切り替える",
 	searchCopied: "クリップボードにコピーしました",
 	searchCopyFailed: "コピーに失敗しました",
 	saveModalTitle: "回答を保存",

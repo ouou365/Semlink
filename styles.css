@@ -5841,3 +5841,18 @@ body .semlink-msg-user::selection {
 	left: -99999px;
 	top: 0;
 }
+
+/* ── Citation-marker visibility toggle ── */
+/* Default OFF: markers are hidden; the "show sources" action reveals them
+   via .semlink-show-citations on the view root — no re-render needed. */
+.semlink-cite-ref {
+	display: none;
+}
+.semlink-show-citations .semlink-cite-ref {
+	display: inline;
+}
+.semlink-msg-action.is-active {
+	color: var(--text-accent);
+	background: var(--background-modifier-hover);
+	border-color: var(--text-accent);
+}

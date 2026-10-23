@@ -258,6 +258,7 @@ const t: Record<keyof typeof en, string> = {
 	shareNothing: "Nessuna conversazione da condividere.",
 	shareFailed: "Condivisione non riuscita — dettagli nella console per sviluppatori.",
 	shareThinking: "Processo di pensiero",
+	citeToggle: "Mostra o nascondi i marcatori di citazione nella risposta",
 	searchCopied: "Copiato negli appunti",
 	searchCopyFailed: "Copia non riuscita",
 	saveModalTitle: "Salva risposta",

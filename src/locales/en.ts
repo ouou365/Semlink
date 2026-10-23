@@ -255,6 +255,7 @@ const en = {
 	shareNothing: "No conversation to share yet.",
 	shareFailed: "Share failed — see developer console for details.",
 	shareThinking: "Thinking process",
+	citeToggle: "Show or hide citation markers in the answer",
 	searchCopied: "Copied to clipboard",
 	searchCopyFailed: "Copy failed",
 	saveModalTitle: "Save Answer",
