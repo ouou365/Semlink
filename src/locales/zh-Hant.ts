@@ -261,7 +261,6 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoked: "共享已關閉，位址已失效。",
 	shareOpenBrowser: "在瀏覽器開啟",
 	shareFooter: "透過 Semlink 分享",
-	shareAIDisclaimer: "AI 生成,注意核實",
 	tabShare: "分享",
 	shareTabHint: "管理區網內公開存取的對話網頁。暫停的連結會顯示「未找到」但保留位址；刪除的連結永久失效。",
 	shareEmpty: "目前沒有共享的對話。開啟聊天，點擊回答下方的分享按鈕即可發佈。",

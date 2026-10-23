@@ -261,7 +261,6 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoked: "Freigabe beendet — die Adresse funktioniert nicht mehr.",
 	shareOpenBrowser: "Im Browser öffnen",
 	shareFooter: "Geteilt über Semlink",
-	shareAIDisclaimer: "KI-generiert — bitte überprüfen",
 	tabShare: "Teilen",
 	shareTabHint: "Im lokalen Netzwerk veröffentlichte Unterhaltungen verwalten. Pausierte Links liefern „nicht gefunden“, behalten aber ihre Adresse; gelöschte Links sind endgültig weg.",
 	shareEmpty: "Es werden keine Unterhaltungen geteilt. Öffne einen Chat und drücke den Teilen-Button unter einer Antwort, um sie zu veröffentlichen.",
