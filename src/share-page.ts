@@ -72,10 +72,16 @@ export async function renderSharePage(
 	const langOptions = LANGUAGES.map(
 		(l) => `<option value="${l.value}"${l.value === getLang() ? " selected" : ""}>${l.label}</option>`,
 	).join("");
+	// Inline SVG favicon (brand purple) — no external request, works on the
+	// LAN; Safari ignores SVG favicons and simply shows its default icon.
+	const favicon = "data:image/svg+xml," + encodeURIComponent(
+		logoSvg.replace("<svg ", '<svg color="#8b6cef" '),
+	);
 	return `<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${safeTitle}</title>
+<link rel="icon" type="image/svg+xml" href="${favicon}">
 <style>
 :root{color-scheme:light}
 *{box-sizing:border-box}
