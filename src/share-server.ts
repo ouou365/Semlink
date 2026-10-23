@@ -186,8 +186,10 @@ export class ShareServer {
 	}
 
 	/** Candidate URLs, one per non-internal IPv4 interface (multi-NIC hosts
-	 *  may expose several); falls back to localhost for loopback-only dev. */
-	urls(token: string): string[] {
+	 *  may expose several); falls back to localhost for loopback-only dev.
+	 *  `query` carries the locked display preferences (?lang=..&theme=..)
+	 *  — the server itself ignores it, the embedded page script consumes it. */
+	urls(token: string, query?: string): string[] {
 		const ips: string[] = [];
 		for (const list of Object.values(networkInterfaces())) {
 			for (const ni of list ?? []) {
@@ -195,7 +197,8 @@ export class ShareServer {
 			}
 		}
 		if (ips.length === 0) ips.push("127.0.0.1");
-		return [...new Set(ips)].map((ip) => `http://${ip}:${this.port}/s/${token}`);
+		const suffix = query ? `?${query}` : "";
+		return [...new Set(ips)].map((ip) => `http://${ip}:${this.port}/s/${token}${suffix}`);
 	}
 
 	private async page(token: string): Promise<string | null> {
