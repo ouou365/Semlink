@@ -242,6 +242,9 @@ export interface SmartVaultSettings {
 	 *  probe-based classification survives Obsidian restarts. */
 	modelKindCache?: Record<string, Record<string, string>>;
 	mcpPort: number;
+	/** LAN share page port; persisted so share URLs survive
+	 *  restarts (bumped automatically when the port is taken). */
+	sharePort: number;
 	mcpApiKey: string;
 	/** MCP 服务总开关：默认开启；用户手动关闭后重启保持关闭。 */
 	mcpEnabled?: boolean;
@@ -323,6 +326,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	embeddingModelKey: "siliconflow-cn::BAAI/bge-m3",
 	activeChatModel: "",
 	mcpPort: 3001,
+	sharePort: 43900,
 	mcpApiKey: "",
 	mcpEnabled: true,
 	mcpClientServers: [],

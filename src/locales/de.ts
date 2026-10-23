@@ -249,7 +249,7 @@ const t: Record<keyof typeof en, string> = {
 	searchSave: "Speichern",
 	shareLabel: "Diese Unterhaltung im LAN teilen",
 	shareTitle: "Im LAN teilen",
-	shareHint: "Öffne eine der Adressen im Browser eines Geräts im selben Netzwerk, um diese Unterhaltung zu lesen. Die Freigabe ist schreibgeschützt und endet mit dem Neustart von Obsidian.",
+	shareHint: "Öffne eine der Adressen im Browser eines Geräts im selben Netzwerk, um diese Unterhaltung zu lesen. Die Freigabe ist schreibgeschützt und überlebt einen Neustart von Obsidian — ändert sich die IP dieses Rechners (z. B. anderes WLAN), ändert sich die Adresse mit.",
 	shareCopy: "Adresse kopieren",
 	shareCopied: "Adresse kopiert",
 	shareGenerating: "Freigabeseite wird vorbereitet…",

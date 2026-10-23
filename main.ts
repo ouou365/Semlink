@@ -17,6 +17,8 @@ import { Scheduler } from "./src/scheduler";
 import { ProgressTracker } from "./src/progress";
 import { McpServer } from "./src/mcp-server";
 import { ShareServer } from "./src/share-server";
+import { ChatHistoryStore } from "./src/chat-history";
+import { renderSharePage } from "./src/share-page";
 import { VaultWatcher } from "./src/watcher";
 import { SmartVaultSettingTab } from "./src/settings";
 import { ProgressModal } from "./src/progress-modal";
@@ -40,9 +42,12 @@ export default class SmartVaultPlugin extends Plugin {
 	scheduler!: Scheduler;
 	progress!: ProgressTracker;
 	mcpServer: McpServer | null = null;
-	/** LAN share server for conversation snapshots (lazy-started on first
-	 *  share; snapshots live in memory only). */
-	shareServer = new ShareServer();
+	/** LAN share server for conversation snapshots. Token↔session pairs
+	 *  persist in data/share-registry.json and the port in settings, so a
+	 *  share URL keeps working across restarts (unchanged IP); page HTML is
+	 *  re-rendered from chat history on request. */
+	shareServer: ShareServer;
+	historyStore!: ChatHistoryStore;
 	watcher!: VaultWatcher;
 	pluginDir: string = "";
 
@@ -109,6 +114,10 @@ export default class SmartVaultPlugin extends Plugin {
 		this.client = new EmbeddingClient(this.settings);
 		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault, () => this.app.workspace.getActiveFile()?.path ?? null);
 		this.chatClient = new ChatClient(this.settings, this.chatTools);
+		// Single shared chat-history store: the search view writes to it and
+		// the LAN share server renders from it, so re-opened share URLs see
+		// the latest saved messages without cache drift.
+		this.historyStore = new ChatHistoryStore(dataDir);
 		// Persist the active chat model whenever it changes (search-view picker
 		// or the General settings dropdown).
 		this.chatClient.setModelChangeHandler(() => {
@@ -196,8 +205,29 @@ export default class SmartVaultPlugin extends Plugin {
 
 		// Semantic Search sidebar view
 		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SemanticSearchView(
-			leaf, this.store, this.client, this.app.vault, this.chatClient, dataDir, this,
+			leaf, this.store, this.client, this.app.vault, this.chatClient, this.historyStore, this,
 		));
+
+		// LAN share server: persisted share URLs keep working after a restart
+		// — with the registry non-empty the server comes up on plugin load
+		// (port from settings, auto-bumped when taken and re-persisted); a
+		// request for an uncached token re-renders the page from history.
+		this.shareServer = new ShareServer(dataDir, async (sessionId) => {
+			const sessions = await this.historyStore.load();
+			const session = sessions.find((s) => s.id === sessionId);
+			if (!session || session.messages.length === 0) return null;
+			const firstUser = session.messages.find((m) => m.role === "user");
+			const title = (firstUser?.content || session.title || t("shareTitle")).replace(/\s+/g, " ").trim();
+			return renderSharePage(this.app, session.messages, title, this);
+		});
+		if (this.shareServer.hasShares()) {
+			void this.shareServer.start(this.settings.sharePort).then(() => {
+				if (this.shareServer.port !== this.settings.sharePort) {
+					this.settings.sharePort = this.shareServer.port;
+					void this.saveSettings();
+				}
+			}).catch((e) => console.warn("[Semlink] share server failed to start:", e));
+		}
 
 		// Register the custom Semlink logo as a named Obsidian icon so that both
 		// the left ribbon button and the right sidebar tab use the same brand

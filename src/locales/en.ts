@@ -248,7 +248,7 @@ const en = {
 	searchSave: "Save",
 	shareLabel: "Share conversation to LAN",
 	shareTitle: "Share to LAN",
-	shareHint: "Open an address below in any browser on a device in the same network. The share is read-only and ends when Obsidian restarts.",
+	shareHint: "Open an address below in any browser on a device in the same network. The share is read-only and keeps working across Obsidian restarts — if this computer's IP changes (e.g. different Wi-Fi), the address changes with it.",
 	shareCopy: "Copy address",
 	shareCopied: "Address copied",
 	shareGenerating: "Preparing the share page…",

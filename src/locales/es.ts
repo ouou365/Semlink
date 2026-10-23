@@ -251,7 +251,7 @@ const t: Record<keyof typeof en, string> = {
 	searchSave: "Guardar",
 	shareLabel: "Compartir esta conversación en la LAN",
 	shareTitle: "Compartir en LAN",
-	shareHint: "Abre una de las direcciones en el navegador de un dispositivo de la misma red para ver esta conversación. El recurso compartido es de solo lectura y caduca al reiniciar Obsidian.",
+	shareHint: "Abre una de las direcciones en el navegador de un dispositivo de la misma red para ver esta conversación. El recurso compartido es de solo lectura y sobrevive al reinicio de Obsidian; si cambia la IP de este equipo (p. ej. otra red Wi-Fi), la dirección cambia con ella.",
 	shareCopy: "Copiar dirección",
 	shareCopied: "Dirección copiada",
 	shareGenerating: "Preparando la página para compartir…",

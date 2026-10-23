@@ -250,7 +250,7 @@ const zh: Record<keyof typeof en, string> = {
 	searchSave: "保存",
 	shareLabel: "局域网分享此对话",
 	shareTitle: "局域网分享",
-	shareHint: "在同一局域网内的设备浏览器打开以下地址即可查看本对话。分享为只读，重启 Obsidian 后失效。",
+	shareHint: "在同一局域网内的设备浏览器打开以下地址即可查看本对话。分享为只读，重启 Obsidian 后地址仍然有效；若本机 IP 变化（如更换 Wi-Fi），地址会随之改变。",
 	shareCopy: "复制地址",
 	shareCopied: "地址已复制",
 	shareGenerating: "正在生成分享页面…",
