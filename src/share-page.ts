@@ -80,6 +80,7 @@ export async function renderSharePage(
 		slogan: allLangs("shareBrandSub"),
 		cta: allLangs("shareDownloadCta"),
 		thinking: allLangs("shareThinking"),
+		footer: allLangs("shareFooter"),
 	} as Partial<Record<string, Partial<Record<string, string>>>>;
 	const uiJson = JSON.stringify(ui).replace(/</g, "\\u003c");
 	// Inline SVG favicon (brand purple) — no external request, works on the
@@ -209,7 +210,7 @@ ${logoSvg.replace("<svg ", '<svg class="logo" ')}<span class="name">Semlink</spa
 ${parts.join("\n")}
 </div>
 </div>
-<footer class="pc-foot">${logoSvg.replace("<svg ", "<svg style=\"width:16px;height:16px\" ")}<span data-ui="slogan">${esc(t("shareBrandSub"))}</span><span>·</span><span>Semlink</span></footer>
+<footer class="pc-foot">${logoSvg.replace("<svg ", "<svg style=\"width:16px;height:16px\" ")}<span data-ui="footer">${esc(t("shareFooter"))}</span></footer>
 </div>
 <script>
 (function(){
