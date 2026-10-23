@@ -128,9 +128,9 @@ html[data-theme="dark"] .pc-head .theme-btn:hover{color:var(--brand);background:
 .pc-head .theme-btn svg{width:17px;height:17px}
 /* Install CTA: the APP ICON itself — brand-purple squircle with the white
    Semlink cube, reading as "the app you can get", not a file download. */
-.pc-head .cta{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;padding:0;border:none;cursor:pointer;text-decoration:none;border-radius:12px;background:linear-gradient(135deg,var(--brand),var(--brand-dark));color:#fff;flex:none;box-shadow:0 3px 10px rgba(103,69,217,.30)}
-.pc-head .cta:hover{filter:brightness(1.07)}
-.pc-head .cta svg{width:18px;height:18px}
+.pc-head .cta{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:none;cursor:pointer;text-decoration:none;border-radius:50%;background:transparent;color:var(--muted);flex:none}
+.pc-head .cta:hover{background:rgba(139,108,239,.14);color:var(--brand)}
+.pc-head .cta svg{width:19px;height:19px}
 
 /* ── Card body: title, stamp, thread ── */
 .pc-body{position:relative;padding:10px 36px 10px}
