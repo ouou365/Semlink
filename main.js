@@ -420,14 +420,14 @@ body{margin:0;padding:40px 14px 60px;font:15px/1.7 -apple-system,"Segoe UI","Pin
 .postcard{position:relative;max-width:840px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 12px 28px -12px rgba(15,23,42,.10),0 32px 72px -32px rgba(15,23,42,.16)}
 
 /* \u2500\u2500 Card head: brand left, theme toggle + install right \u2500\u2500 */
-.pc-head{display:flex;align-items:center;gap:14px;padding:18px 28px 14px;border-bottom:1px dashed var(--line)}
-.pc-head .head-text{min-width:0;flex:1}
-.pc-head .brand-row{display:flex;align-items:center;gap:7px;margin:0 0 7px}
+.pc-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px 36px 0}
+
+.pc-head .brand-row{display:flex;align-items:center;gap:7px}
 .pc-head .brand-logo{width:20px;height:20px;flex:none;color:var(--brand)}
 .pc-head .brand-name{font-weight:700;font-size:13.5px;letter-spacing:.2px;color:var(--ink)}
-.pc-head .head-text h1{font-size:20px;line-height:1.3;margin:0 0 5px;font-weight:700;color:var(--brand-ink)}
-.pc-head .head-text .meta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
-.pc-head .head-text .meta .dot{width:3px;height:3px;border-radius:50%;background:var(--faint)}
+
+
+
 .pc-head nav{display:flex;align-items:center;gap:.7rem;flex:none}
 .pc-head .theme-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:none;cursor:pointer;border-radius:50%;background:transparent;color:var(--muted)}
 .pc-head .theme-btn:hover{background:rgba(139,108,239,.14);color:var(--brand)}
@@ -441,7 +441,11 @@ html[data-theme="dark"] .pc-head .theme-btn:hover{color:var(--brand);background:
 .pc-head .cta svg{width:22px;height:22px}
 
 /* \u2500\u2500 Card body: title, stamp, thread \u2500\u2500 */
-.pc-body{position:relative;padding:22px 36px 10px}
+.pc-body{position:relative;padding:10px 36px 10px}
+.head{margin:0 0 20px;padding:4px 0 18px;border-bottom:1px dashed var(--line)}
+.head h1{font-size:23px;line-height:1.35;margin:0 0 8px;font-weight:700;color:var(--brand-ink)}
+.head .meta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.head .meta .dot{width:3px;height:3px;border-radius:50%;background:var(--faint)}
 
 
 
@@ -482,7 +486,7 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 @media(max-width:620px){
 	body{padding:16px 8px 40px}
 	.postcard{border-radius:16px}
-	.pc-head{padding:16px 18px;flex-wrap:wrap;row-gap:10px}
+	.pc-head{padding:16px 18px 0}
 	.pc-body{padding:24px 18px 6px}
 	.pc-foot{margin:20px 18px 0}
 	h1{font-size:17px}
@@ -493,13 +497,14 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 </style></head><body data-theme="${i}">
 <div class="postcard">
 <header class="pc-head">
-<div class="head-text"><div class="brand-row">${Qa.replace("<svg ",'<svg class="brand-logo" ')}<span class="brand-name">Semlink</span></div><h1>${f}</h1><div class="meta"><span>${A}</span><span class="dot"></span><span data-ui="meta">${s(x("shareFooter"))}</span></div></div>
+<div class="brand-row">${Qa.replace("<svg ",'<svg class="brand-logo" ')}<span class="brand-name">Semlink</span></div>
 <nav>
 <button class="theme-btn" id="themeToggle" aria-label="Toggle theme"><span id="themeIconMoon" style="display:inline-flex"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span><span id="themeIconSun" style="display:inline-flex"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></span></button>
 <a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer" aria-label="${s(x("shareDownloadCta"))}" title="${s(x("shareDownloadCta"))}">${Qa.replace("<svg ",'<svg class="cta-logo" ')}</a>
 </nav>
 </header>
 <div class="pc-body">
+<section class="head"><h1>${f}</h1><div class="meta"><span>${A}</span><span class="dot"></span><span data-ui="meta">${s(x("shareFooter"))}</span></div></section>
 <div class="thread">
 ${e.join(`
 `)}
