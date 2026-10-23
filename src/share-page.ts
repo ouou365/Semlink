@@ -128,7 +128,9 @@ html[data-theme="dark"] .pc-head .theme-btn:hover{color:var(--brand);background:
 
 /* ── Card body: title, stamp, thread ── */
 .pc-body{position:relative;padding:32px 36px 10px}
-.head{margin:0 0 22px;padding-bottom:18px;border-bottom:1px dashed var(--line)}
+.head{display:flex;align-items:center;gap:15px;margin:0 0 22px;padding-bottom:18px;border-bottom:1px dashed var(--line)}
+.head .title-logo{width:42px;height:42px;flex:none;color:var(--brand)}
+.head .head-text{min-width:0;flex:1}
 h1{font-size:23px;line-height:1.35;margin:0 0 8px;font-weight:700;color:var(--brand-ink)}
 .head .meta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
 .head .meta .dot{width:3px;height:3px;border-radius:50%;background:var(--faint)}
@@ -181,6 +183,7 @@ details.thinking .step{padding:5px 0;border-top:1px dashed var(--step-line);line
 	.pc-foot{margin:20px 18px 0}
 	h1{font-size:19px;padding-right:0}
 	.head{padding-right:0}
+	.head .title-logo{width:34px;height:34px}
 	.msg.user .bubble{max-width:92%}
 	.msg.assistant .bubble{padding:14px 15px}
 }
@@ -199,7 +202,7 @@ details.thinking .step{padding:5px 0;border-top:1px dashed var(--step-line);line
 </nav>
 </header>
 <div class="pc-body">
-<section class="head"><h1>${safeTitle}</h1><div class="meta"><span>${dateLabel}</span><span class="dot"></span><span data-ui="ai">${esc(t("shareAIDisclaimer"))}</span></div></section>
+<section class="head">${logoSvg.replace("<svg ", '<svg class="title-logo" ')}<div class="head-text"><h1>${safeTitle}</h1><div class="meta"><span>${dateLabel}</span><span class="dot"></span><span data-ui="ai">${esc(t("shareAIDisclaimer"))}</span></div></div></section>
 <div class="thread">
 ${parts.join("\n")}
 </div>
