@@ -138,6 +138,6 @@ footer{max-width:780px;margin:34px auto 0;padding:16px 16px 0;text-align:center;
 <main><div class="thread">
 ${parts.join("\n")}
 </div></main>
-<footer>${esc(t("shareBrandSub"))} · Semlink · <a style="color:#6745d9;text-decoration:none" href="https://getsemlink.com/" target="_blank" rel="noreferrer">getsemlink.com</a></footer>
+<footer>${esc(t("shareBrandSub"))} · Semlink</footer>
 </body></html>`;
 }
