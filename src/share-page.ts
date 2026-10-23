@@ -6,6 +6,10 @@
 // off-screen), thinking steps folded into <details>. No external resources —
 // the LAN page must open without internet access.
 //
+// The page is styled as a POSTCARD: one floating card on a warm paper
+// background, a postage-stamp logo top-right, dashed mid-lines, and a
+// sign-off footer.
+//
 // Display language and color theme are LOCKED INTO the share URL
 // (?lang=..&theme=..): the page embeds every language's UI labels and both
 // themes, and a tiny script applies the query on load — the visitor sees
@@ -86,51 +90,48 @@ export async function renderSharePage(
 	// Sun/moon toggle icons, inlined like everything else.
 	const moonIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
 	const sunIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
-	return `<!DOCTYPE html>
-<html lang="zh"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${safeTitle}</title>
-<link rel="icon" type="image/svg+xml" href="${favicon}">
-<style>
+	const css = `
 :root{color-scheme:light}
 *{box-sizing:border-box}
 :root{
-	--bg:#f6f5f2;--card:#ffffff;--ink:#0f172a;--muted:#64748b;--faint:#94a3b8;
-	--line:#e8edf3;--line-soft:#eef1f6;--brand:#8b6cef;--brand-dark:#6745d9;
-	--code-bg:#f1f5f9;--code-ink:#4338ca;--quote-line:#d9d2f5;--quote-ink:#475569;
-	--table-line:#e2e8f0;--table-head:#f8fafc;--step-line:#e5eaf1;
+	--page:#eae7e0;--card:#ffffff;--ink:#0f172a;--muted:#64748b;--faint:#94a3b8;
+	--line:#e5e1d8;--line-soft:#eef1f6;--brand:#8b6cef;--brand-dark:#6745d9;--brand-ink:#6745d9;
+	--code-bg:#f6f7fa;--code-ink:#4338ca;--quote-line:#d9d2f5;--quote-ink:#475569;
+	--table-line:#e6e9f0;--table-head:#f8f9fc;--step-line:#e5eaf1;--bubble:#f7f8fa;
 }
 html[data-theme="dark"]{
 	color-scheme:dark;
-	--bg:#17171c;--card:#232329;--ink:#e8e8ec;--muted:#8b8fa0;--faint:#6b6f7e;
-	--line:#2c2c34;--line-soft:#26262d;--code-bg:#1d1d24;--code-ink:#c4b5fd;
-	--quote-line:#3d3a52;--quote-ink:#a6a4b8;--table-line:#2c2c34;--table-head:#1d1d24;--step-line:#2c2c34;
+	--page:#101014;--card:#232329;--ink:#e8e8ec;--muted:#8b8fa0;--faint:#6b6f7e;
+	--line:#2c2c34;--line-soft:#26262d;--brand:#8b6cef;--brand-dark:#a98ef2;--brand-ink:#b3a0f5;
+	--code-bg:#1d1d24;--code-ink:#c4b5fd;--quote-line:#3d3a52;--quote-ink:#a6a4b8;
+	--table-line:#2c2c34;--table-head:#1d1d24;--step-line:#2c2c34;--bubble:#2a2a31;
 }
-body{margin:0;font:15px/1.7 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:var(--bg)}
-/* Warm paper background; the brand row shares it — no separate bar. */
-.wrap{max-width:780px;margin:0 auto;padding:0 16px}
-main{max-width:780px;margin:0 auto;padding:0 16px 48px}
+body{margin:0;padding:40px 14px 60px;font:15px/1.7 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:var(--page)}
 
-/* ── Brand row: transparent, fused with the title block below ── */
-header.brand{padding:18px 0 0}
-header.brand .wrap{display:flex;align-items:center;gap:10px;flex-wrap:wrap;row-gap:10px}
-header.brand svg{width:28px;height:28px;flex:none;color:var(--brand)}
-header.brand .name{font-weight:700;font-size:19px;letter-spacing:.2px;color:var(--ink)}
-header.brand .sub{font-size:12.5px;color:var(--faint);margin-left:4px;padding-left:11px;border-left:1px solid var(--line);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;min-width:0}
-header.brand nav{margin-left:auto;display:flex;align-items:center;gap:.7rem;flex:none}
-/* Day/night toggle: quiet round ghost button next to the install CTA. */
-header.brand .theme-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:none;cursor:pointer;border-radius:50%;background:transparent;color:var(--muted)}
-header.brand .theme-btn:hover{background:rgba(139,108,239,.14);color:var(--brand)}
-html[data-theme="dark"] header.brand .theme-btn{color:var(--faint)}
-html[data-theme="dark"] header.brand .theme-btn:hover{color:var(--brand);background:rgba(139,108,239,.18)}
-header.brand .theme-btn svg{width:17px;height:17px}
-/* Install CTA — the one loud element on the page. */
-header.brand .cta{display:inline-flex;align-items:center;gap:.5rem;border:none;cursor:pointer;text-decoration:none;font-weight:600;font-size:.92rem;padding:.58rem 1.1rem;border-radius:.8rem;background:linear-gradient(135deg,var(--brand),var(--brand-dark));color:#fff;box-shadow:0 2px 10px rgba(103,69,217,.28);flex:none}
-header.brand .cta:hover{filter:brightness(1.06)}
+/* ── The postcard: one floating card, generous radius, soft layered shadow ── */
+.postcard{position:relative;max-width:840px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 12px 28px -12px rgba(15,23,42,.10),0 32px 72px -32px rgba(15,23,42,.16)}
 
-/* ── Conversation title block ── */
-.head{margin:34px 0 22px}
-h1{font-size:23px;line-height:1.35;margin:0 0 8px;font-weight:700;color:var(--ink)}
+/* ── Card head: brand left, theme toggle + install right ── */
+.pc-head{display:flex;align-items:center;gap:10px;padding:20px 28px;border-bottom:1px dashed var(--line)}
+.pc-head svg.logo{width:28px;height:28px;flex:none;color:var(--brand)}
+.pc-head .name{font-weight:700;font-size:19px;letter-spacing:.2px;color:var(--ink)}
+.pc-head .sub{font-size:12.5px;color:var(--faint);margin-left:4px;padding-left:11px;border-left:1px solid var(--line);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;min-width:0}
+.pc-head nav{margin-left:auto;display:flex;align-items:center;gap:.7rem;flex:none}
+.pc-head .theme-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:none;cursor:pointer;border-radius:50%;background:transparent;color:var(--muted)}
+.pc-head .theme-btn:hover{background:rgba(139,108,239,.14);color:var(--brand)}
+html[data-theme="dark"] .pc-head .theme-btn{color:var(--faint)}
+html[data-theme="dark"] .pc-head .theme-btn:hover{color:var(--brand);background:rgba(139,108,239,.18)}
+.pc-head .theme-btn svg{width:17px;height:17px}
+.pc-head .cta{display:inline-flex;align-items:center;gap:.5rem;border:none;cursor:pointer;text-decoration:none;font-weight:600;font-size:.92rem;padding:.58rem 1.1rem;border-radius:.8rem;background:linear-gradient(135deg,var(--brand),var(--brand-dark));color:#fff;box-shadow:0 2px 10px rgba(103,69,217,.28);flex:none}
+.pc-head .cta:hover{filter:brightness(1.06)}
+
+/* ── Card body: title, stamp, thread ── */
+.pc-body{position:relative;padding:32px 36px 10px}
+/* Postage-stamp logo: dashed frame, slight tilt, top-right of the card. */
+.stamp{position:absolute;top:26px;right:30px;width:54px;height:62px;display:flex;align-items:center;justify-content:center;background:var(--page);border:1px dashed var(--faint);border-radius:8px;transform:rotate(3deg);opacity:.9}
+.stamp svg{width:34px;height:34px;color:var(--brand)}
+.head{margin:0 0 22px;padding-right:78px}
+h1{font-size:23px;line-height:1.35;margin:0 0 8px;font-weight:700;color:var(--brand-ink)}
 .head .meta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
 .head .meta .dot{width:3px;height:3px;border-radius:50%;background:var(--faint)}
 
@@ -140,7 +141,7 @@ h1{font-size:23px;line-height:1.35;margin:0 0 8px;font-weight:700;color:var(--in
 .msg.user{justify-content:flex-end}
 .msg.user .bubble{background:linear-gradient(135deg,#8b6cef,#6745d9);color:#fff;border-radius:16px 16px 5px 16px;padding:11px 15px;max-width:82%;white-space:pre-wrap;word-break:break-word;font-weight:500;box-shadow:0 3px 12px rgba(103,69,217,.22)}
 .msg.assistant{flex-direction:column}
-.msg.assistant .bubble{background:var(--card);border:1px solid var(--line);border-radius:5px 16px 16px 16px;padding:18px 20px;overflow-wrap:break-word;box-shadow:0 1px 3px rgba(15,23,42,.05),0 8px 24px -18px rgba(15,23,42,.12)}
+.msg.assistant .bubble{background:var(--bubble);border:1px solid var(--line);border-radius:5px 16px 16px 16px;padding:18px 20px;overflow-wrap:break-word}
 
 /* Markdown inside an assistant bubble */
 .msg.assistant .bubble.md h1,.msg.assistant .bubble.md h2{font-size:1.08em;margin:1.1em 0 .45em;color:var(--ink)}
@@ -163,34 +164,53 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 .msg.assistant .bubble.md hr{border:none;border-top:1px solid var(--line);margin:1.2em 0}
 
 /* Thinking steps folded inside the assistant card */
-details.thinking{background:var(--code-bg);border:1px solid var(--line-soft);border-radius:10px;padding:8px 13px;margin:0 0 12px;font-size:13px;color:var(--muted)}
+details.thinking{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 13px;margin:0 0 12px;font-size:13px;color:var(--muted)}
 details.thinking summary{cursor:pointer;user-select:none;font-weight:600;color:var(--muted);list-style-position:inside}
 details.thinking[open] summary{margin-bottom:2px}
 details.thinking .step{padding:5px 0;border-top:1px dashed var(--step-line);line-height:1.55}
 
-footer{max-width:780px;margin:34px auto 0;padding:16px 16px 0;text-align:center;font-size:12.5px;color:var(--faint);border-top:1px solid var(--line-soft)}
+/* ── Card foot: postcard sign-off above the dashed mid-line ── */
+.pc-foot{display:flex;align-items:center;justify-content:center;gap:7px;margin:26px 36px 0;padding:16px 2px 22px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--faint)}
+.pc-foot svg{width:16px;height:16px;color:var(--brand)}
 
 @media(max-width:620px){
-	header.brand .sub{display:none}
-	h1{font-size:19px}
+	body{padding:16px 8px 40px}
+	.postcard{border-radius:16px}
+	.pc-head{padding:16px 18px;flex-wrap:wrap;row-gap:10px}
+	.pc-body{padding:24px 18px 6px}
+	.pc-foot{margin:20px 18px 0}
+	h1{font-size:19px;padding-right:0}
+	.head{padding-right:0}
+	.stamp{width:44px;height:52px;top:20px;right:18px}
+	.stamp svg{width:28px;height:28px}
 	.msg.user .bubble{max-width:92%}
 	.msg.assistant .bubble{padding:14px 15px}
 }
-</style></head><body data-theme="${theme}">
-<header class="brand"><div class="wrap">
-${logoSvg}<span class="name">Semlink</span><span class="sub" data-ui="slogan">${esc(t("shareBrandSub"))}</span>
+`;
+	const stampLogo = logoSvg.replace("<svg ", '<svg class="stampsvg" ');
+	return `<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${safeTitle}</title>
+<link rel="icon" type="image/svg+xml" href="${favicon}">
+<style>${css}</style></head><body data-theme="${theme}">
+<div class="postcard">
+<header class="pc-head">
+${logoSvg.replace("<svg ", '<svg class="logo" ')}<span class="name">Semlink</span><span class="sub" data-ui="slogan">${esc(t("shareBrandSub"))}</span>
 <nav>
 <button class="theme-btn" id="themeToggle" aria-label="Toggle theme"><span id="themeIconMoon" style="display:inline-flex">${moonIcon}</span><span id="themeIconSun" style="display:inline-flex">${sunIcon}</span></button>
 <a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer" data-ui="cta">${esc(t("shareDownloadCta"))}</a>
 </nav>
-</div></header>
-<div class="wrap">
+</header>
+<div class="pc-body">
+<div class="stamp" aria-hidden="true">${stampLogo}</div>
 <section class="head"><h1>${safeTitle}</h1><div class="meta"><span>${dateLabel}</span><span class="dot"></span><span>Semlink</span></div></section>
-</div>
-<main><div class="thread">
+<div class="thread">
 ${parts.join("\n")}
-</div></main>
-<footer><span data-ui="slogan">${esc(t("shareBrandSub"))}</span> · Semlink</footer>
+</div>
+</div>
+<footer class="pc-foot">${logoSvg.replace("<svg ", "<svg style=\"width:16px;height:16px\" ")}<span data-ui="slogan">${esc(t("shareBrandSub"))}</span><span>·</span><span>Semlink</span></footer>
+</div>
 <script>
 (function(){
 	var UI = ${uiJson};
