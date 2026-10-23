@@ -263,6 +263,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoked: "Condivisione interrotta: l'indirizzo non funziona più.",
 	shareOpenBrowser: "Apri nel browser",
 	shareFooter: "Condiviso con Semlink",
+	shareAIDisclaimer: "Generato da IA — verificare i dati",
 	tabShare: "Condivisione",
 	shareTabHint: "Gestisci le conversazioni pubblicate sulla rete locale. I link in pausa restituiscono «non trovato» ma conservano l'indirizzo; i link eliminati spariscono per sempre.",
 	shareEmpty: "Nessuna conversazione in condivisione. Apri una chat e premi il pulsante di condivisione sotto una risposta per pubblicarla.",

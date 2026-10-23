@@ -261,6 +261,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoked: "共有を停止しました。アドレスは無効になりました。",
 	shareOpenBrowser: "ブラウザで開く",
 	shareFooter: "Semlink で共有",
+	shareAIDisclaimer: "AI生成のため、内容をご確認ください",
 	tabShare: "共有",
 	shareTabHint: "LAN 内に公開している会話ページを管理します。一時停止したリンクは「見つかりません」になりますが、アドレスは保持されます。削除したリンクは完全に無効になります。",
 	shareEmpty: "共有中の会話はありません。チャットを開き、回答下の共有ボタンから公開できます。",

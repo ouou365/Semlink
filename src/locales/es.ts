@@ -263,6 +263,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoked: "Uso compartido detenido: la dirección ya no funciona.",
 	shareOpenBrowser: "Abrir en el navegador",
 	shareFooter: "Compartido con Semlink",
+	shareAIDisclaimer: "Generado por IA — verifique los datos",
 	tabShare: "Compartir",
 	shareTabHint: "Administra las conversaciones publicadas en tu red local. Los enlaces en pausa devuelven «no encontrado» pero conservan su dirección; los enlaces eliminados desaparecen para siempre.",
 	shareEmpty: "No hay conversaciones compartidas. Abre un chat y pulsa el botón de compartir bajo una respuesta para publicarla.",
