@@ -89,7 +89,7 @@ export async function renderSharePage(
 	// Sun/moon toggle + download icons, inlined like everything else.
 	const moonIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
 	const sunIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
-	const downloadIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+	const homeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
 	const css = `
 :root{color-scheme:light}
 *{box-sizing:border-box}
@@ -198,7 +198,7 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 <div class="brand-row">${logoSvg.replace("<svg ", '<svg class="brand-logo" ')}<span class="brand-name">Semlink</span></div>
 <nav>
 <button class="theme-btn" id="themeToggle" aria-label="Toggle theme"><span id="themeIconMoon" style="display:inline-flex">${moonIcon}</span><span id="themeIconSun" style="display:inline-flex">${sunIcon}</span></button>
-<a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer" aria-label="${esc(t("shareDownloadCta"))}" title="${esc(t("shareDownloadCta"))}">${downloadIcon}</a>
+<a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer" aria-label="${esc(t("shareDownloadCta"))}" title="${esc(t("shareDownloadCta"))}">${homeIcon}</a>
 </nav>
 </header>
 <div class="pc-body">
