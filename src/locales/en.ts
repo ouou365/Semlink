@@ -254,7 +254,6 @@ const en = {
 	shareNothing: "No conversation to share yet.",
 	shareFailed: "Share failed — see developer console for details.",
 	citeToggle: "Show or hide citation markers in the answer",
-	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	shareRevoke: "Stop sharing",
 	shareRevoked: "Sharing stopped — the address no longer works.",
 	shareOpenBrowser: "Open in browser",

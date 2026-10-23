@@ -257,7 +257,6 @@ const t: Record<keyof typeof en, string> = {
 	shareNothing: "No hay ninguna conversación que compartir.",
 	shareFailed: "Error al compartir — consulta la consola de desarrollador.",
 	citeToggle: "Mostrar u ocultar los marcadores de cita en la respuesta",
-	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	shareRevoke: "Dejar de compartir",
 	shareRevoked: "Uso compartido detenido: la dirección ya no funciona.",
 	shareOpenBrowser: "Abrir en el navegador",
