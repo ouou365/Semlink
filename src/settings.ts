@@ -642,7 +642,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			return;
 		}
 
-		const list = containerEl.createDiv({ cls: "semlink-share-manage-list" });
+		const list = containerEl.createDiv({ cls: "semlink-mcp-list" });
 		void (async () => {
 			const sessions = await this.plugin.historyStore.load();
 			const titleOf = (sessionId: string): string => {
@@ -655,22 +655,16 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				.sort((a, b) => Number(b.enabled) - Number(a.enabled) || b.sessionId.localeCompare(a.sessionId));
 			list.empty();
 			for (const row of rows) {
-				const item = list.createDiv({ cls: "semlink-share-manage-item" + (row.enabled ? "" : " is-paused") });
-				const info = item.createDiv({ cls: "semlink-share-manage-info" });
-				info.createDiv({ cls: "semlink-share-manage-title", text: row.title });
-				const short = `…/s/${row.token.slice(0, 8)}…`;
-				info.createDiv({ cls: "semlink-share-manage-url", text: short });
+				// Same card anatomy as the MCP tab: icon, title+sub main, then
+				// delete + toggle pinned to the right edge.
+				const item = list.createDiv({ cls: "semlink-mcp-server" + (row.enabled ? "" : " is-paused") });
+				const icon = item.createDiv({ cls: "semlink-mcp-server-icon" });
+				setIcon(icon, "share-2");
+				const main = item.createDiv({ cls: "semlink-mcp-server-main" });
+				main.createDiv({ cls: "semlink-mcp-server-name", text: row.title });
+				main.createDiv({ cls: "semlink-mcp-server-sub", text: `…/s/${row.token.slice(0, 8)}…` });
 
-				const toggleWrap = item.createDiv({ cls: "semlink-share-manage-toggle" });
-				new ToggleComponent(toggleWrap)
-					.setValue(row.enabled)
-					.onChange(async (on) => {
-						server.setShareEnabled(row.token, on);
-						item.toggleClass("is-paused", !on);
-						new Notice(on ? t("shareResumed") : t("sharePaused"));
-					});
-
-				const delBtn = item.createEl("button", { cls: "semlink-share-manage-delete", attr: { "aria-label": t("shareDelete") } });
+				const delBtn = item.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareDelete") } });
 				setIcon(delBtn, "trash-2");
 				delBtn.addEventListener("click", () => {
 					server.revokeToken(row.token);
@@ -678,6 +672,15 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					item.remove();
 					if (list.children.length === 0) rerenderSettingsTab(this);
 				});
+
+				const toggleWrap = item.createDiv({ cls: "semlink-mcp-server-toggle" });
+				new ToggleComponent(toggleWrap)
+					.setValue(row.enabled)
+					.onChange(async (on) => {
+						server.setShareEnabled(row.token, on);
+						item.toggleClass("is-paused", !on);
+						new Notice(on ? t("shareResumed") : t("sharePaused"));
+					});
 			}
 		})();
 	}

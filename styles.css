@@ -5873,49 +5873,7 @@ body .semlink-msg-user::selection {
 	border-color: var(--text-error, #c54444);
 }
 
-/* ── Settings: share management tab ── */
-.semlink-share-tab-hint {
-	margin: 4px 0 14px;
-	font-size: 12.5px;
-	line-height: 1.55;
-	color: var(--text-muted);
-}
-.semlink-share-tab-empty {
-	padding: 10px 0;
-	font-size: 13px;
-	color: var(--text-muted);
-}
-.semlink-share-manage-list {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-.semlink-share-manage-item {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding: 10px 14px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 10px;
-	background: var(--background-secondary);
-}
-
-.semlink-share-manage-item.is-paused {
+/* Share rows (MCP card anatomy) in the paused state. */
+.semlink-mcp-server.is-paused {
 	opacity: 0.62;
-}
-.semlink-share-manage-delete {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 30px;
-	height: 30px;
-	padding: 0;
-	border: none;
-	border-radius: 7px;
-	background: transparent;
-	color: var(--text-error, #c54444);
-	cursor: pointer;
-}
-.semlink-share-manage-delete:hover {
-	background: var(--background-modifier-error, rgba(197, 68, 68, 0.12));
 }
