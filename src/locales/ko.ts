@@ -260,6 +260,7 @@ const t: Record<keyof typeof en, string> = {
 	shareBrandSub: "대화 공유",
 	shareRevoke: "공유 중지",
 	shareRevoked: "공유가 중지되어 주소가 더 이상 작동하지 않습니다.",
+	shareOpenBrowser: "브라우저에서 열기",
 	shareDownloadCta: "설치 — 무료",
 	searchCopied: "클립보드에 복사되었습니다",
 	searchCopyFailed: "복사 실패",

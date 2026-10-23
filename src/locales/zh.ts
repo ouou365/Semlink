@@ -261,6 +261,7 @@ const zh: Record<keyof typeof en, string> = {
 	shareBrandSub: "对话记录分享",
 	shareRevoke: "关闭共享",
 	shareRevoked: "共享已关闭，地址已失效。",
+	shareOpenBrowser: "在浏览器打开",
 	shareDownloadCta: "安装 — 免费",
 	searchCopied: "已复制到剪贴板",
 	searchCopyFailed: "复制失败",

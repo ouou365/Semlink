@@ -262,6 +262,7 @@ const t: Record<keyof typeof en, string> = {
 	shareBrandSub: "Conversa compartilhada",
 	shareRevoke: "Parar de compartilhar",
 	shareRevoked: "Compartilhamento interrompido — o endereço não funciona mais.",
+	shareOpenBrowser: "Abrir no navegador",
 	shareDownloadCta: "Instalar — é grátis",
 	searchCopied: "Copiado para a área de transferência",
 	searchCopyFailed: "Falha ao copiar",

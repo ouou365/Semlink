@@ -260,6 +260,7 @@ const t: Record<keyof typeof en, string> = {
 	shareBrandSub: "對話記錄分享",
 	shareRevoke: "關閉共享",
 	shareRevoked: "共享已關閉，位址已失效。",
+	shareOpenBrowser: "在瀏覽器開啟",
 	shareDownloadCta: "安裝 — 免費",
 	searchCopied: "已複製到剪貼簿",
 	searchCopyFailed: "複製失敗",

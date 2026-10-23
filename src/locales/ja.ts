@@ -260,6 +260,7 @@ const t: Record<keyof typeof en, string> = {
 	shareBrandSub: "会話の共有",
 	shareRevoke: "共有を停止",
 	shareRevoked: "共有を停止しました。アドレスは無効になりました。",
+	shareOpenBrowser: "ブラウザで開く",
 	shareDownloadCta: "インストール — 無料",
 	searchCopied: "クリップボードにコピーしました",
 	searchCopyFailed: "コピーに失敗しました",

@@ -1426,11 +1426,11 @@ export class SemanticSearchView extends ItemView {
 			const html = await renderSharePage(this.app, this.currentMessages, this.firstQuestion || t("shareTitle"), this);
 			await this.plugin.shareServer.ensureStarted(this.plugin.settings.sharePort);
 			const token = this.plugin.shareServer.register(sessionId, html);
-			new ShareModal(
-				this.app,
-				this.plugin.shareServer.urls(token),
-				() => this.plugin.shareServer.revokeSession(sessionId),
-			).open();
+			new ShareModal(this.app, {
+				urls: this.plugin.shareServer.urls(token),
+				previewUrl: this.plugin.shareServer.localhostUrl(token),
+				onRevoke: () => this.plugin.shareServer.revokeSession(sessionId),
+			}).open();
 		} catch (e) {
 			console.error("[Semlink] share failed:", e);
 			new Notice(t("shareFailed"));
