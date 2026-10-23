@@ -78,8 +78,8 @@ main{max-width:780px;margin:0 auto;padding:6px 16px 48px}
 header.brand{display:flex;align-items:center;gap:10px}
 header.brand svg{width:30px;height:30px;flex:none;color:#8b6cef}
 header.brand .name{font-weight:700;font-size:20px;letter-spacing:.2px;color:#0f172a}
-header.brand .sub{font-size:12.5px;color:#94a3b8;margin-left:4px;padding-left:11px;border-left:1px solid #d7dfeb}
-header.brand .cta{margin-left:auto;display:inline-flex;align-items:center;gap:.5rem;border:none;cursor:pointer;text-decoration:none;font-weight:600;font-size:.92rem;padding:.66rem 1.2rem;border-radius:.8rem;background:linear-gradient(135deg,#8b6cef,#6745d9);color:#fff;box-shadow:0 2px 10px rgba(103,69,217,.28)}
+header.brand .sub{font-size:12.5px;color:#94a3b8;margin-left:4px;padding-left:11px;border-left:1px solid #d7dfeb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;min-width:0}
+header.brand .cta{margin-left:auto;display:inline-flex;align-items:center;gap:.5rem;border:none;cursor:pointer;text-decoration:none;font-weight:600;font-size:.92rem;padding:.66rem 1.2rem;border-radius:.8rem;background:linear-gradient(135deg,#8b6cef,#6745d9);color:#fff;box-shadow:0 2px 10px rgba(103,69,217,.28);flex:none}
 header.brand .cta:hover{filter:brightness(1.06)}
 
 /* ── Conversation title block ── */

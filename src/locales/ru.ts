@@ -258,7 +258,7 @@ const t: Record<keyof typeof en, string> = {
 	shareFailed: "Не удалось открыть доступ — подробности в консоли разработчика.",
 	shareThinking: "Процесс размышления",
 	citeToggle: "Показать или скрыть маркеры цитирования в ответе",
-	shareBrandSub: "Общий диалог",
+	shareBrandSub: "Turn your Obsidian vault into an Agentic Knowledge Workspace.",
 	shareRevoke: "Прекратить доступ",
 	shareRevoked: "Доступ прекращён — адрес больше не работает.",
 	shareOpenBrowser: "Открыть в браузере",

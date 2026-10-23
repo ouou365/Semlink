@@ -257,7 +257,7 @@ const t: Record<keyof typeof en, string> = {
 	shareFailed: "Échec du partage — détails dans la console développeur.",
 	shareThinking: "Processus de réflexion",
 	citeToggle: "Afficher ou masquer les marqueurs de citation dans la réponse",
-	shareBrandSub: "Conversation partagée",
+	shareBrandSub: "Turn your Obsidian vault into an Agentic Knowledge Workspace.",
 	shareRevoke: "Arrêter le partage",
 	shareRevoked: "Partage arrêté — l'adresse ne fonctionne plus.",
 	shareOpenBrowser: "Ouvrir dans le navigateur",

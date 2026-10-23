@@ -256,7 +256,7 @@ const en = {
 	shareFailed: "Share failed — see developer console for details.",
 	shareThinking: "Thinking process",
 	citeToggle: "Show or hide citation markers in the answer",
-	shareBrandSub: "Shared conversation",
+	shareBrandSub: "Turn your Obsidian vault into an Agentic Knowledge Workspace.",
 	shareRevoke: "Stop sharing",
 	shareRevoked: "Sharing stopped — the address no longer works.",
 	shareOpenBrowser: "Open in browser",
