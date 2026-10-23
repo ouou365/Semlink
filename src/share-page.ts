@@ -79,6 +79,7 @@ export async function renderSharePage(
 		cta: allLangs("shareDownloadCta"),
 		meta: allLangs("shareFooter"),
 		slogan: allLangs("shareBrandSub"),
+		footer: allLangs("shareFooter"),
 	} as Partial<Record<string, Partial<Record<string, string>>>>;
 	const uiJson = JSON.stringify(ui).replace(/</g, "\\u003c");
 	// Inline SVG favicon (brand purple) — no external request, works on the
@@ -117,6 +118,7 @@ body{margin:0;padding:40px 14px 60px;font:15px/1.7 -apple-system,"Segoe UI","Pin
 .pc-head .brand-row{display:flex;align-items:center;gap:7px}
 .pc-head .brand-logo{width:20px;height:20px;flex:none;color:var(--brand)}
 .pc-head .brand-name{font-weight:700;font-size:13.5px;letter-spacing:.2px;color:var(--ink)}
+.pc-head .sub{font-size:12.5px;color:var(--faint);margin-left:4px;padding-left:11px;border-left:1px solid var(--line);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;min-width:0}
 
 
 
@@ -173,7 +175,7 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 .pc-foot{display:flex;align-items:center;justify-content:center;gap:9px;margin:26px 36px 0;padding:16px 2px 22px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--faint)}
 .pc-foot .foot-logo{width:20px;height:20px;flex:none;color:var(--brand)}
 .pc-foot .foot-name{font-weight:700;font-size:13.5px;color:var(--ink)}
-.pc-foot .foot-slogan{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pc-foot .foot-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 @media(max-width:620px){
 	body{padding:16px 8px 40px}
@@ -195,7 +197,7 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 <style>${css}</style></head><body data-theme="${theme}">
 <div class="postcard">
 <header class="pc-head">
-<div class="brand-row">${logoSvg.replace("<svg ", '<svg class="brand-logo" ')}<span class="brand-name">Semlink</span></div>
+<div class="brand-row">${logoSvg.replace("<svg ", '<svg class="brand-logo" ')}<span class="brand-name">Semlink</span><span class="sub" data-ui="slogan">${esc(t("shareBrandSub"))}</span></div>
 <nav>
 <button class="theme-btn" id="themeToggle" aria-label="Toggle theme"><span id="themeIconMoon" style="display:inline-flex">${moonIcon}</span><span id="themeIconSun" style="display:inline-flex">${sunIcon}</span></button>
 <a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer" aria-label="${esc(t("shareDownloadCta"))}" title="${esc(t("shareDownloadCta"))}">${homeIcon}</a>
@@ -207,7 +209,7 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 ${parts.join("\n")}
 </div>
 </div>
-<footer class="pc-foot">${logoSvg.replace("<svg ", '<svg class="foot-logo" ')}<span class="foot-name">Semlink</span><span class="foot-slogan" data-ui="slogan">${esc(t("shareBrandSub"))}</span></footer>
+<footer class="pc-foot">${logoSvg.replace("<svg ", '<svg class="foot-logo" ')}<span class="foot-name">Semlink</span><span class="foot-text" data-ui="footer">${esc(t("shareFooter"))}</span></footer>
 </div>
 <script>
 (function(){
