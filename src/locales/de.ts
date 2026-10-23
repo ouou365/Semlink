@@ -254,7 +254,6 @@ const t: Record<keyof typeof en, string> = {
 	shareCopied: "Adresse kopiert",
 	shareNothing: "Keine Unterhaltung zum Teilen vorhanden.",
 	shareFailed: "Freigabe fehlgeschlagen — Details in der Entwicklerkonsole.",
-	shareThinking: "Denkprozess",
 	citeToggle: "Zitationsmarken in der Antwort ein-/ausblenden",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	shareRevoke: "Freigabe beenden",

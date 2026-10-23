@@ -255,7 +255,6 @@ const zh: Record<keyof typeof en, string> = {
 	shareCopied: "地址已复制",
 	shareNothing: "当前没有可分享的对话。",
 	shareFailed: "分享失败——详情见开发者控制台。",
-	shareThinking: "思考过程",
 	citeToggle: "显示或隐藏回答中的引用标记",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	shareRevoke: "关闭共享",

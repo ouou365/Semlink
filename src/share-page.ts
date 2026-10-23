@@ -46,26 +46,25 @@ export async function renderSharePage(
 				parts.push(`<div class="msg user"><div class="bubble">${esc(m.content)}</div></div>`);
 				continue;
 			}
-			let thinkHtml = "";
-			if (m.thinking && m.thinking.length > 0) {
-				const steps = m.thinking.map((s) => {
-					if (s.type === "tool") {
-						const a = (s.args ?? {}) as Record<string, unknown>;
-						const briefRaw = [a.query, a.pattern, a.path, a.files]
-							.find((v): v is string => typeof v === "string" && v.length > 0);
-						const brief = (briefRaw ?? "").slice(0, 120);
-						return `<div class="step">🔧 ${esc(s.name ?? "")}${brief ? ` — ${esc(brief)}` : ""}</div>`;
-					}
-					const text = (s.text ?? "").trim();
-					return text ? `<div class="step">${esc(text.slice(0, 500))}</div>` : "";
-				}).join("");
-				thinkHtml = steps
-					? `<details class="thinking"><summary data-ui="thinking">${esc(t("shareThinking"))}</summary>${steps}</details>`
-					: "";
-			}
 			const wrap = holder.createDiv({ cls: "answer markdown-rendered" });
 			await MarkdownRenderer.render(app, m.content, wrap, "", component);
-			parts.push(`<div class="msg assistant"><div class="bubble md">${thinkHtml}${wrap.innerHTML}</div></div>`);
+			// Shared pages stay clean: no thinking transcript, no inline [n]
+			// citation markers (the sources live in the vault, not here).
+			const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT, {
+				acceptNode: (node) => {
+					const parent = node.parentElement;
+					if (!parent) return NodeFilter.FILTER_REJECT;
+					const tag = parent.tagName;
+					if (tag === "CODE" || tag === "PRE" || tag === "A") return NodeFilter.FILTER_REJECT;
+					return /\[\d{1,3}\]/.test(node.nodeValue ?? "") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+				},
+			});
+			const marked: Text[] = [];
+			while (walker.nextNode()) marked.push(walker.currentNode as Text);
+			for (const node of marked) {
+				node.nodeValue = (node.nodeValue ?? "").replace(/\s?\[\d{1,3}\]/g, "");
+			}
+			parts.push(`<div class="msg assistant"><div class="bubble md">${wrap.innerHTML}</div></div>`);
 			wrap.remove();
 		}
 	} finally {
@@ -78,7 +77,6 @@ export async function renderSharePage(
 	// finds its strings, even after this plugin's own UI language changed.
 	const ui = {
 		cta: allLangs("shareDownloadCta"),
-		thinking: allLangs("shareThinking"),
 		meta: allLangs("shareFooter"),
 		slogan: allLangs("shareBrandSub"),
 	} as Partial<Record<string, Partial<Record<string, string>>>>;
@@ -99,14 +97,14 @@ export async function renderSharePage(
 	--page:#eae7e0;--card:#ffffff;--ink:#0f172a;--muted:#64748b;--faint:#94a3b8;
 	--line:#e5e1d8;--line-soft:#eef1f6;--brand:#8b6cef;--brand-dark:#6745d9;--brand-ink:#6745d9;
 	--code-bg:#f6f7fa;--code-ink:#4338ca;--quote-line:#d9d2f5;--quote-ink:#475569;
-	--table-line:#e6e9f0;--table-head:#f8f9fc;--step-line:#e5eaf1;--bubble:#f7f8fa;
+	--table-line:#e6e9f0;--table-head:#f8f9fc;--bubble:#f7f8fa;
 }
 html[data-theme="dark"]{
 	color-scheme:dark;
 	--page:#101014;--card:#232329;--ink:#e8e8ec;--muted:#8b8fa0;--faint:#6b6f7e;
 	--line:#2c2c34;--line-soft:#26262d;--brand:#8b6cef;--brand-dark:#a98ef2;--brand-ink:#b3a0f5;
 	--code-bg:#1d1d24;--code-ink:#c4b5fd;--quote-line:#3d3a52;--quote-ink:#a6a4b8;
-	--table-line:#2c2c34;--table-head:#1d1d24;--step-line:#2c2c34;--bubble:#2a2a31;
+	--table-line:#2c2c34;--table-head:#1d1d24;--bubble:#2a2a31;
 }
 body{margin:0;padding:40px 14px 60px;font:15px/1.7 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:var(--page)}
 
@@ -162,12 +160,6 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 .msg.assistant .bubble.md th{background:var(--table-head)}
 .msg.assistant .bubble.md td,.msg.assistant .bubble.md th{border:1px solid var(--table-line);padding:6px 10px;text-align:left}
 .msg.assistant .bubble.md hr{border:none;border-top:1px solid var(--line);margin:1.2em 0}
-
-/* Thinking steps folded inside the assistant card */
-details.thinking{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 13px;margin:0 0 12px;font-size:13px;color:var(--muted)}
-details.thinking summary{cursor:pointer;user-select:none;font-weight:600;color:var(--muted);list-style-position:inside}
-details.thinking[open] summary{margin-bottom:2px}
-details.thinking .step{padding:5px 0;border-top:1px dashed var(--step-line);line-height:1.55}
 
 /* ── Card foot: postcard sign-off above the dashed mid-line ── */
 .pc-foot{display:flex;align-items:center;justify-content:center;gap:9px;margin:26px 36px 0;padding:16px 2px 22px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--faint)}

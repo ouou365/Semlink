@@ -256,7 +256,6 @@ const t: Record<keyof typeof en, string> = {
 	shareCopied: "Indirizzo copiato",
 	shareNothing: "Nessuna conversazione da condividere.",
 	shareFailed: "Condivisione non riuscita — dettagli nella console per sviluppatori.",
-	shareThinking: "Processo di pensiero",
 	citeToggle: "Mostra o nascondi i marcatori di citazione nella risposta",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	shareRevoke: "Interrompi condivisione",

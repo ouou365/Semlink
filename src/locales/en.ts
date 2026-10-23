@@ -253,7 +253,6 @@ const en = {
 	shareCopied: "Address copied",
 	shareNothing: "No conversation to share yet.",
 	shareFailed: "Share failed — see developer console for details.",
-	shareThinking: "Thinking process",
 	citeToggle: "Show or hide citation markers in the answer",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	shareRevoke: "Stop sharing",
