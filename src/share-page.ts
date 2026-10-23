@@ -65,7 +65,7 @@ export async function renderSharePage(
 			}
 			const wrap = holder.createDiv({ cls: "answer markdown-rendered" });
 			await MarkdownRenderer.render(app, m.content, wrap, "", component);
-			parts.push(`<div class="msg assistant">${thinkHtml}<div class="bubble md">${wrap.innerHTML}</div></div>`);
+			parts.push(`<div class="msg assistant"><div class="bubble md">${thinkHtml}${wrap.innerHTML}</div></div>`);
 			wrap.remove();
 		}
 	} finally {
