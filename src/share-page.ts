@@ -85,10 +85,10 @@ export async function renderSharePage(
 <style>
 :root{color-scheme:light}
 *{box-sizing:border-box}
-body{margin:0;font:15px/1.7 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#0f172a;background:#fff}
-/* Hero band (site: linear-gradient #eff6ff→#fff) confined to the top so the
-   long thread below reads on clean white. */
-.hero{background:linear-gradient(180deg,#eff6ff 0%,rgba(239,246,255,0) 100%);padding:6px 16px 30px}
+body{margin:0;font:15px/1.7 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#0f172a;background:#f6f5f2}
+/* Warm paper background across the whole page; white header/cards float on
+   top of it. */
+.hero{padding:6px 16px 30px}
 .wrap{max-width:780px;margin:0 auto}
 main{max-width:780px;margin:0 auto;padding:6px 16px 48px}
 
