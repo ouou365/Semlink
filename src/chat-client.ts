@@ -500,13 +500,19 @@ export class ChatClient {
 	 *  - "proactive": verify-first — treat referenced docs as reading
 	 *    signals, actively read related notes before answering (default). */
 	private buildSystemPrompt(agentMode: AgentMode, depthHint: string, context: string): string {
+		// Agentic turns start with NO preset snippets — omit the context block
+		// entirely instead of showing an empty "initially retrieved notes"
+		// header. The model gathers its own evidence via tools.
+		const contextBlock = context.trim()
+			? "\n\n" + t("promptContextHead") + "\n" + context
+			: "";
 		const shared =
 			t("promptGrepGuide") +
 			t("promptToolGuide") +
 			depthHint +
 			t("promptNoFabricate") +
 			"\n" + t("promptGrounding") +
-			"\n\n" + t("promptContextHead") + "\n" + context +
+			contextBlock +
 			"\n\n" + t("promptLangRule");
 		
 		if (agentMode === "classic") {

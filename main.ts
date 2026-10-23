@@ -11,7 +11,7 @@ import { migrateLegacyCatalogBases, sanitizeProviderOrder, syncCatalogModels } f
 import { VectorStore } from "./src/vector-store";
 import { IndexQueue } from "./src/index-queue";
 import { EmbeddingClient } from "./src/embedding-client";
-import { ChatClient, inferAgentDepth, buildNoteContext } from "./src/chat-client";
+import { ChatClient, inferAgentDepth } from "./src/chat-client";
 import { SemlinkTools } from "./src/chat-tools";
 import { Scheduler } from "./src/scheduler";
 import { ProgressTracker } from "./src/progress";
@@ -435,13 +435,11 @@ export default class SmartVaultPlugin extends Plugin {
 	}
 
 	/** Shared QA pipeline used by Feishu bots — mirrors the sidebar search
-	 *  view's runSearch exactly (same context builder, same depth heuristic,
-	 *  same native history array) so both surfaces answer identically. */
+	 *  view's runSearch (agentic: no upfront retrieval; the model gathers
+	 *  evidence via its own tool calls, same depth heuristic, same native
+	 *  history array) so both surfaces answer identically. */
 	private buildFeishuAskHandler(): FeishuAskHandler {
 		return async (question, onToken, history, signal, onThinking) => {
-			const embedResult = await this.client.embed([question]);
-			const results = await this.store.search(embedResult.embeddings[0], 10, 0.3);
-			const context = buildNoteContext(results.slice(0, 5));
 			// Same as the sidebar: prior turns as a native message array
 			// (chat-client expands them; sliding-window truncation applies).
 			const historyMessages: HistoryMessage[] = (history || []).map((t) => ({
@@ -456,7 +454,7 @@ export default class SmartVaultPlugin extends Plugin {
 				: undefined;
 			// Same depth heuristic as the sidebar (介绍/分析/总结 → enhanced).
 			const chatResult = await this.chatClient.chat(
-				context,
+				"",
 				question,
 				historyMessages,
 				onToolCall,
@@ -467,9 +465,9 @@ export default class SmartVaultPlugin extends Plugin {
 				undefined,
 				undefined,
 				undefined,
-				// Seed the citation registry with the context order — same
-				// single numbering system as the sidebar chat.
-				results.slice(0, 5).map((r) => r.notePath),
+				// No preset context — the registry starts empty and gets its
+				// numbers from the agent's own tool calls, same as the sidebar.
+				[],
 			);
 			// Honor an abort signal by rejecting (the bot treats this as stopped).
 			if (signal?.aborted) throw new DOMException("Aborted", "AbortError");

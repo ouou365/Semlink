@@ -11,7 +11,7 @@ import { App, ItemView, MarkdownRenderer, MarkdownView, WorkspaceLeaf, TFile, Va
 import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
-import { inferAgentDepth, buildNoteContext } from "./chat-client";
+	import { inferAgentDepth } from "./chat-client";
 import { buildCitedCards } from "./cite-cards";
 import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
 import { ChatHistoryStore } from "./chat-history";
@@ -86,9 +86,6 @@ const HISTORY_GROUP_KEYS: Record<string, string> = {
 	lastMonth: "historyGroupLastMonth",
 	earlier: "historyGroupEarlier",
 };
-
-/** Number of top results fed into the chat model as context. */
-const ANSWER_CONTEXT_SIZE = 5;
 
 export class SemanticSearchView extends ItemView {
 	private store: VectorStore;
@@ -712,12 +709,14 @@ export class SemanticSearchView extends ItemView {
 			// the attached documents first, not trigger retrieval.
 			const hasAttachments = turnAttachments.length > 0;
 			const attachCtx = hasAttachments ? await this.buildAttachmentContext(turnAttachments) : "";
+			// Agentic answering: NO upfront retrieval — the agent decides
+			// itself whether/what to search via its tools. Retrieval here is
+			// ONLY for the provider-less mode where the result list IS the
+			// output (no chat model to drive tools).
 			let results: SearchResult[] = [];
-			if (!hasAttachments) {
+			if (!hasAttachments && !this.chatClient.isConfigured()) {
 				// Retrieval is OPTIONAL — the embedding extension may be
-				// unconfigured or its endpoint unreachable. The chat still
-				// runs context-free, and grep/read ground the agent
-				// without needing any vectors.
+				// unconfigured or its endpoint unreachable.
 				try {
 					const embedResult = await this.client.embed([query]);
 					results = await this.store.search(
@@ -872,48 +871,35 @@ export class SemanticSearchView extends ItemView {
 					answerAnim = window.setInterval(render, 1000);
 					render();
 				};
-				// Keep the "思考了 X 秒（搜索中）" counter running through the
-				// first model round-trip; the round-start / tool / stream
-				// callbacks swap in their own status labels.
-				startDots(t("searchSearchingStatus"));
+				// Agentic mode: no retrieval phase — the wait before the first
+				// model round is model thinking. Round-start / tool / stream
+				// callbacks swap in their own status labels from here.
+				startDots(t("searchModelThinking"));
 				// Whether any tool has been called yet — decides whether the
 				// next round is "thinking" (模型思考中) or the final answer
 				// generation (生成回答中).
 				let hasCalledTool = false;
 
-				// The initial evidence step (search / read) is
-				// known up front — seed the LIVE thinking preview with it.
-				const initialResults = hasAttachments ? [] : results.slice(0, ANSWER_CONTEXT_SIZE);
-				const firstStep: ThinkingStep = hasAttachments
+				// The only up-front evidence step is dropped attachments (read
+				// in full before the model sees them). Agentic turns start
+				// with an empty step list — the model's own tool calls appear
+				// as they happen.
+				const firstStep: ThinkingStep | null = hasAttachments
 					? {
 						type: "tool",
 						name: "read",
 						args: { files: [...turnAttachments] },
 						result: `已读取 ${turnAttachments.length} 个拖入的笔记内容，作为本次回答的主要依据。`,
 					}
-					: {
-						type: "tool",
-						name: "search",
-						args: { query, limit: ANSWER_CONTEXT_SIZE },
-						result: JSON.stringify(
-							initialResults.map((r) => ({
-								path: r.notePath,
-								heading: r.heading,
-								preview: r.contentPreview,
-								score: r.score,
-							})),
-							null,
-							2,
-						),
-					};
+					: null;
 
 				// Live thinking preview while generating: auto-expanded so the
 				// user watches progress instead of staring at a static status
-				// line while retrieval is heavy. Clicking the loading line still
+				// line while the agent works. Clicking the loading line still
 				// toggles it manually; it folds back up the moment answer text
 				// starts streaming. Renders the same steps the finished
 				// answer's thinking section will show.
-				const liveSteps: ThinkingStep[] = [firstStep];
+				const liveSteps: ThinkingStep[] = firstStep ? [firstStep] : [];
 				const liveBody = loadingEl.createDiv({ cls: "semlink-thinking-live-body" });
 				// Steps rendered so far. New steps are APPENDED (never a full
 				// re-render) so an expanded tool call stays expanded while the
@@ -949,9 +935,10 @@ export class SemanticSearchView extends ItemView {
 					}
 				});
 
-				const context = hasAttachments
-					? attachCtx
-					: this.buildContext(results.slice(0, ANSWER_CONTEXT_SIZE)) + attachCtx;
+				// Agentic mode: no preset snippets — the context only carries
+				// what the USER explicitly pinned (dropped attachments) plus
+				// current-note awareness; everything else is the agent's job.
+				const context = attachCtx;
 				// Current-note awareness: tell the model which note the user is
 				// viewing AND how to use it — phrased as an explicit instruction,
 				// because a bare name line reads like more retrieved content and
@@ -1079,7 +1066,6 @@ export class SemanticSearchView extends ItemView {
 					// cited as [4]. Renumbering here would break the contract.
 					const knownPaths = new Set<string>([
 						...turnAttachments,
-						...initialResults.map((r) => r.notePath),
 						...result.usedNotes,
 					]);
 					const readNotes = result.readNotes || [];
@@ -1094,18 +1080,18 @@ export class SemanticSearchView extends ItemView {
 					for (const p of declared) {
 						if (!usedNotes.includes(p)) usedNotes.push(p);
 					}
-					let sourceContext = initialResults;
+					// No preset retrieval: every source the model touched came
+					// through its own tool calls, so sourceContext stays empty
+					// and cards render as plain path rows.
+					const sourceContext: SearchResult[] = [];
 					let sourcePaths: string[];
 					let citeNumbers: number[] | undefined;
 					if (citeEntries.length > 0) {
 						sourcePaths = citeEntries.map((e) => e.path);
 						citeNumbers = citeEntries.map((e) => e.n);
-						const citedSet = new Set<string>(sourcePaths);
-						sourceContext = initialResults.filter((r) => citedSet.has(r.notePath));
 					} else if (!hasAttachments && (declared.length > 0 || readNotes.length > 0)) {
 						const keep = new Set<string>(declared);
 						for (const p of readNotes) keep.add(p);
-						sourceContext = initialResults.filter((r) => keep.has(r.notePath));
 						sourcePaths = [...keep];
 					} else {
 						sourcePaths = usedNotes;
@@ -1116,7 +1102,7 @@ export class SemanticSearchView extends ItemView {
 							usedNotes,
 						)
 						: this.buildOrderedSources(sourceContext, sourcePaths);
-					this.renderThinking(loadingEl, [firstStep, ...thinking], elapsedSec);
+					this.renderThinking(loadingEl, firstStep ? [firstStep, ...thinking] : thinking, elapsedSec);
 					this.updateContextInfo(result.contextTokens, result.contextBreakdown, result.cacheHitRate);
 					// Render the answer as markdown (Obsidian's renderer handles
 					// headings, lists, code, links, etc.).
@@ -1127,12 +1113,10 @@ export class SemanticSearchView extends ItemView {
 					this.makeVaultPathsClickable(answerEl);
 
 					// Persist this turn into chat history (incl. context usage so
-					// the ring + tooltip can be restored when re-opening). The
-					// initial retrieval step is prepended here too — otherwise
-					// re-opened history would lose the search evidence.
+					// the ring + tooltip can be restored when re-opening).
 					await this.recordAssistantMessage(
 						answer,
-						[firstStep, ...thinking],
+						firstStep ? [firstStep, ...thinking] : thinking,
 						sourcePaths,
 						elapsedSec,
 						citeNumbers,
@@ -1166,9 +1150,6 @@ export class SemanticSearchView extends ItemView {
 							const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
 							this.renderThinking(loadingEl, liveSteps, elapsedSec);
 						}
-						// Fall back to the raw results (expanded) so the user still
-						// gets something useful when the chat call fails.
-						this.renderSources(loadingEl, results, true);
 					}
 				}
 			}
@@ -1184,12 +1165,6 @@ export class SemanticSearchView extends ItemView {
 			this.activeAskController = null;
 			this.setSendButtonState("idle");
 		}
-	}
-
-	/** Build the note-context prompt for the chat model from search results.
-	 *  Shared with the Feishu bot so both surfaces feed identical context. */
-	private buildContext(results: SearchResult[]): string {
-		return buildNoteContext(results);
 	}
 
 	/**
@@ -1248,29 +1223,6 @@ export class SemanticSearchView extends ItemView {
 			}
 		}
 		return Array.from(byPath.values());
-	}
-
-	/** Render a collapsible "reference sources" section inside an assistant bubble.
-	 *  `numbers` carries each row's TRUE citation number (the per-turn registry
-	 *  number the model cited) — omitted rows fall back to position numbering
-	 *  for the legacy/result-list paths. */
-	private renderSources(container: HTMLElement, results: SearchResult[], open: boolean, numbers?: number[]): void {
-		// No sources → no card (e.g. the chat failed before any retrieval).
-		if (results.length === 0) return;
-		// The sources card is its own card OUTSIDE the assistant bubble (the
-		// bubble is the merged thinking+answer card) — append to the turn
-		// container so it sits below the bubble as an independent card.
-		const turn = container.closest(".semlink-msg-turn") || container;
-		const details = turn.createEl("details", { cls: "semlink-search-sources" });
-		if (open) details.setAttr("open", "");
-
-		details.createEl("summary", {
-			cls: "semlink-search-sources-summary",
-			text: `${t("searchSources")} (${results.length})`,
-		});
-
-		const list = details.createDiv({ cls: "semlink-search-sources-list" });
-		this.renderSourceRows(list, results, numbers);
 	}
 
 	/** One-line source rows (title + path), numbered like paper references.
@@ -1397,29 +1349,13 @@ export class SemanticSearchView extends ItemView {
 		return tryPath(raw) ?? tryPath(raw.replace(/\u2011/g, "-")) ?? tryPath(raw.replace(/-/g, "\u2011"));
 	}
 
-	private renderSourceRows(container: HTMLElement, results: SearchResult[], numbers?: number[]): void {
-		for (const [i, r] of results.entries()) {
-			const row = container.createDiv({ cls: "semlink-search-source-row" });
-			const num = numbers?.[i];
-			const label = num !== undefined && Number.isFinite(num) ? num : i + 1;
-			row.createSpan({ cls: "semlink-search-source-index", text: `[${label}]` });
-			const title = r.heading || this.basename(r.notePath);
-			row.createSpan({ cls: "semlink-search-source-title", text: title });
-			row.createSpan({ cls: "semlink-search-source-path", text: r.notePath });
-			row.addEventListener("click", () => {
-				void this.openNote(r.notePath, r.contentPreview);
-			});
-		}
-	}
-
 	/**
 	 * Append copy / save action buttons to an assistant bubble.
 	 * Used for both live answers and restored history messages.
 	 */
 	private appendActions(container: HTMLElement, content: string, questionForSave: string): void {
-		// Actions sit BELOW the reference sources card, outside the merged
-		// thinking+answer bubble — append to the turn container (same as
-		// renderSources).
+		// Actions sit below the merged thinking+answer bubble — append to the
+		// turn container.
 		const turn = container.closest(".semlink-msg-turn") || container;
 		const actionsEl = turn.createDiv({ cls: "semlink-msg-actions" });
 		const copyBtn = actionsEl.createEl("button", {
