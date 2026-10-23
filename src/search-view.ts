@@ -2317,7 +2317,17 @@ export class SemanticSearchView extends ItemView {
 						this.updateContextInfo(msg.contextTokens, msg.contextBreakdown, msg.cacheHitRate);
 					}
 				}
+			// Keep the view pinned to the newest content WHILE the session
+			// renders — the final scroll below would otherwise land at a
+			// stale bottom and clip the action buttons.
+			this.scrollToBottom();
 		}
+		this.scrollToBottom();
+		// After the last await, layout can still settle (code highlight,
+		// image decode, font swap) — re-pin on the next frames so the bottom
+		// row ends up fully visible.
+		requestAnimationFrame(() => this.scrollToBottom());
+		window.setTimeout(() => this.scrollToBottom(), 80);
 		this.scrollToBottom();
 		// scrollToBottom may not fire a scroll event when the session is
 		// shorter than the viewport — re-check the subtitle row manually.
