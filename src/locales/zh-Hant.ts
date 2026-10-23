@@ -300,6 +300,7 @@ const t: Record<keyof typeof en, string> = {
 	promptDepthEnhanced: "讀取筆記時可以適度使用 read 讀取整篇筆記以取得完整資訊，注意控制讀取的筆記數量。",
 	promptDepthStandard: "讀取筆記時請優先使用 read 只讀取相關章節，避免用 read 讀取整篇長筆記，以控制上下文佔用。",
 	promptGrepGuide: "對於「列出/找出所有提到某關鍵字的筆記」這類問題，grep 一次呼叫即可完成：totalFiles 是符合總數，paths 欄位就是完整檔案清單（completeList 為 true 時），直接列出即可，不要再次呼叫工具、不要用更大的 limit 或不同措辭重複檢索。",
+	promptPrimarySource: "原文紀律：大綱/提取/摘要類檔案都是衍生件——不能替代原文。要判斷某份源文件是否包含某內容（某條款、附錄、要求）時，先定位原文全本並讀取相關部分再下結論；使用者提到某附錄/章節時，原文檔名可能只含文件系列名而不含該章節名（如「2022年修改通報」檔案裡包含其附錄 12）。用一個關鍵字 find 找不到時，換更寬的關鍵字重試：文件系列名、發布機構、年份（如「修改通報」「技術規則」）。只有確認庫內沒有原文時，才基於衍生件回答，並明確說明這一侷限。",
 	promptToolGuide: "所有證據都由你自行收集——工具結果是本輪唯一的筆記來源。search 回傳的是截斷片段：窮舉性或準確性要求高的問題，先 read 讀取相關筆記驗證再回答。涉及「最近/最新/何時記錄/最近修改」等時間判斷的問題用 ls（已按修改時間倒序，取前幾條即可）；需要全庫概覽或列舉筆記用 ls；精確關鍵字、編號、日期、程式碼片段用 grep；語義/含義查找用 search（關鍵字+向量混合）。",
 	promptVectorAvailable: "向量檢索狀態：可用——semantic 可正常使用，search 會融合 BM25 與向量兩路結果。",
 	promptVectorUnavailable: "向量檢索狀態：不可用（未配置嵌入模型）——不要呼叫 semantic；search 僅按關鍵字比對（BM25）。檢索請用 search / keyword / grep。",

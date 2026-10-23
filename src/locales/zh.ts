@@ -301,6 +301,7 @@ const zh: Record<keyof typeof en, string> = {
 	promptDepthEnhanced: "读取笔记时可以适当使用 read 读取整篇笔记以获得完整信息，注意控制读取的笔记数量。",
 	promptDepthStandard: "读取笔记时请优先使用 read 只读取相关章节，避免用 read 读取整篇长笔记，以控制上下文占用。",
 	promptGrepGuide: "对于「列出/找到所有提到某关键词的笔记」这类问题，grep 一次调用即可完成：totalFiles 是匹配总数，paths 字段就是完整文件清单（completeList 为 true 时），直接列出即可，不要再次调用工具、不要用更大 limit 或不同措辞重复检索。",
+	promptPrimarySource: "原文纪律：大纲/提取/摘要类文件都是派生件——不能替代原文。要判断某份源文档是否包含某内容（某条款、附录、要求）时，先定位原文全本并读取相关部分再下结论；用户提到某附录/章节时，原文文件名可能只含文档系列名而不含该章节名（如「2022年修改通报」文件里包含其附录 12）。用一个关键词 find 找不到时，换更宽的关键词重试：文档系列名、发布机构、年份（如「修改通报」「技术规则」）。只有确认库内没有原文时，才基于派生件回答，并明确说明这一局限。",
 	promptToolGuide: "所有证据都由你自行收集——工具结果是本轮唯一的笔记来源。search 返回的是截断片段：穷举性或准确性要求高的问题，先 read 读取相关笔记验证再回答。涉及「最近/最新/何时记录/最近修改」等时间判断的问题用 ls（已按修改时间倒序，取前几条即可）；需要全库概览或列举笔记用 ls；精确关键词、编号、日期、代码片段用 grep；语义/含义查找用 search（关键词+向量混合）。",
 	promptVectorAvailable: "向量检索状态：可用——semantic 可正常使用，search 会融合 BM25 与向量两路结果。",
 	promptVectorUnavailable: "向量检索状态：不可用（未配置嵌入模型）——不要调用 semantic；search 仅按关键词匹配（BM25）。检索请用 search / keyword / grep。",

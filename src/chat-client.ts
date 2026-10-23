@@ -518,6 +518,7 @@ export class ChatClient {
 			: "\n" + t("promptVectorUnavailable");
 		const shared =
 			t("promptGrepGuide") +
+			t("promptPrimarySource") +
 			t("promptToolGuide") +
 			vectorLine +
 			depthHint +
