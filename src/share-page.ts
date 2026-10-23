@@ -88,9 +88,10 @@ export async function renderSharePage(
 	const favicon = "data:image/svg+xml," + encodeURIComponent(
 		logoSvg.replace("<svg ", '<svg color="#8b6cef" '),
 	);
-	// Sun/moon toggle icons, inlined like everything else.
+	// Sun/moon toggle + download icons, inlined like everything else.
 	const moonIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
 	const sunIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
+	const downloadIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
 	const css = `
 :root{color-scheme:light}
 *{box-sizing:border-box}
@@ -123,9 +124,10 @@ body{margin:0;padding:40px 14px 60px;font:15px/1.7 -apple-system,"Segoe UI","Pin
 html[data-theme="dark"] .pc-head .theme-btn{color:var(--faint)}
 html[data-theme="dark"] .pc-head .theme-btn:hover{color:var(--brand);background:rgba(139,108,239,.18)}
 .pc-head .theme-btn svg{width:17px;height:17px}
-/* White button on the white card — separated by a brand border, inverts on hover. */
-.pc-head .cta{display:inline-flex;align-items:center;gap:.5rem;cursor:pointer;text-decoration:none;font-weight:600;font-size:.92rem;padding:.52rem 1.05rem;border-radius:.8rem;border:1px solid var(--brand);background:var(--card);color:var(--brand-dark);flex:none}
-.pc-head .cta:hover{background:var(--brand);color:#fff;border-color:var(--brand)}
+/* Install CTA: round brand-purple icon button, same size as the theme toggle. */
+.pc-head .cta{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:none;cursor:pointer;text-decoration:none;border-radius:50%;background:var(--brand);color:#fff;flex:none;box-shadow:0 2px 8px rgba(103,69,217,.28)}
+.pc-head .cta:hover{background:var(--brand-dark)}
+.pc-head .cta svg{width:17px;height:17px}
 
 /* ── Card body: title, stamp, thread ── */
 .pc-body{position:relative;padding:32px 36px 10px}
@@ -195,7 +197,7 @@ details.thinking .step{padding:5px 0;border-top:1px dashed var(--step-line);line
 ${logoSvg.replace("<svg ", '<svg class="logo" ')}<span class="name">Semlink</span><span class="sub" data-ui="slogan">${esc(t("shareBrandSub"))}</span>
 <nav>
 <button class="theme-btn" id="themeToggle" aria-label="Toggle theme"><span id="themeIconMoon" style="display:inline-flex">${moonIcon}</span><span id="themeIconSun" style="display:inline-flex">${sunIcon}</span></button>
-<a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer" data-ui="cta">${esc(t("shareDownloadCta"))}</a>
+<a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer" aria-label="${esc(t("shareDownloadCta"))}" title="${esc(t("shareDownloadCta"))}">${downloadIcon}</a>
 </nav>
 </header>
 <div class="pc-body">
