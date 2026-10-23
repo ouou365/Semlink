@@ -259,6 +259,8 @@ const t: Record<keyof typeof en, string> = {
 	shareThinking: "Процесс размышления",
 	citeToggle: "Показать или скрыть маркеры цитирования в ответе",
 	shareBrandSub: "Общий диалог",
+	shareRevoke: "Прекратить доступ",
+	shareRevoked: "Доступ прекращён — адрес больше не работает.",
 	searchCopied: "Скопировано в буфер обмена",
 	searchCopyFailed: "Не удалось скопировать",
 	saveModalTitle: "Сохранить ответ",

@@ -258,6 +258,8 @@ const t: Record<keyof typeof en, string> = {
 	shareThinking: "Processus de réflexion",
 	citeToggle: "Afficher ou masquer les marqueurs de citation dans la réponse",
 	shareBrandSub: "Conversation partagée",
+	shareRevoke: "Arrêter le partage",
+	shareRevoked: "Partage arrêté — l'adresse ne fonctionne plus.",
 	searchCopied: "Copié dans le presse-papiers",
 	searchCopyFailed: "Échec de la copie",
 	saveModalTitle: "Enregistrer la réponse",

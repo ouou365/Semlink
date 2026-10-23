@@ -1422,10 +1422,15 @@ export class SemanticSearchView extends ItemView {
 		}
 		new Notice(t("shareGenerating"));
 		try {
+			const sessionId = this.currentSessionId;
 			const html = await renderSharePage(this.app, this.currentMessages, this.firstQuestion || t("shareTitle"), this);
 			await this.plugin.shareServer.ensureStarted(this.plugin.settings.sharePort);
-			const token = this.plugin.shareServer.register(this.currentSessionId, html);
-			new ShareModal(this.app, this.plugin.shareServer.urls(token)).open();
+			const token = this.plugin.shareServer.register(sessionId, html);
+			new ShareModal(
+				this.app,
+				this.plugin.shareServer.urls(token),
+				() => this.plugin.shareServer.revokeSession(sessionId),
+			).open();
 		} catch (e) {
 			console.error("[Semlink] share failed:", e);
 			new Notice(t("shareFailed"));

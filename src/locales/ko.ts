@@ -258,6 +258,8 @@ const t: Record<keyof typeof en, string> = {
 	shareThinking: "생각 과정",
 	citeToggle: "답변의 인용 표시 토글",
 	shareBrandSub: "대화 공유",
+	shareRevoke: "공유 중지",
+	shareRevoked: "공유가 중지되어 주소가 더 이상 작동하지 않습니다.",
 	searchCopied: "클립보드에 복사되었습니다",
 	searchCopyFailed: "복사 실패",
 	saveModalTitle: "답변 저장",

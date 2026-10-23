@@ -258,6 +258,8 @@ const t: Record<keyof typeof en, string> = {
 	shareThinking: "Denkprozess",
 	citeToggle: "Zitationsmarken in der Antwort ein-/ausblenden",
 	shareBrandSub: "Geteilte Unterhaltung",
+	shareRevoke: "Freigabe beenden",
+	shareRevoked: "Freigabe beendet — die Adresse funktioniert nicht mehr.",
 	searchCopied: "In die Zwischenablage kopiert",
 	searchCopyFailed: "Kopieren fehlgeschlagen",
 	saveModalTitle: "Antwort speichern",

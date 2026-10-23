@@ -260,6 +260,8 @@ const t: Record<keyof typeof en, string> = {
 	shareThinking: "Processo de raciocínio",
 	citeToggle: "Mostrar ou ocultar os marcadores de citação na resposta",
 	shareBrandSub: "Conversa compartilhada",
+	shareRevoke: "Parar de compartilhar",
+	shareRevoked: "Compartilhamento interrompido — o endereço não funciona mais.",
 	searchCopied: "Copiado para a área de transferência",
 	searchCopyFailed: "Falha ao copiar",
 	saveModalTitle: "Salvar resposta",

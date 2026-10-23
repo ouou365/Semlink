@@ -173,6 +173,18 @@ export class ShareServer {
 		return token;
 	}
 
+	/** Remove a session's share entirely: the URL dies immediately (requests
+	 *  404) and the registry is re-persisted. Returns true if it existed. */
+	revokeSession(sessionId: string): boolean {
+		const token = this.tokens.get(sessionId);
+		if (!token) return false;
+		this.tokens.delete(sessionId);
+		this.sessions.delete(token);
+		this.pages.delete(token);
+		this.persistRegistry();
+		return true;
+	}
+
 	/** Candidate URLs, one per non-internal IPv4 interface (multi-NIC hosts
 	 *  may expose several); falls back to localhost for loopback-only dev. */
 	urls(token: string): string[] {

@@ -257,6 +257,8 @@ const en = {
 	shareThinking: "Thinking process",
 	citeToggle: "Show or hide citation markers in the answer",
 	shareBrandSub: "Shared conversation",
+	shareRevoke: "Stop sharing",
+	shareRevoked: "Sharing stopped — the address no longer works.",
 	searchCopied: "Copied to clipboard",
 	searchCopyFailed: "Copy failed",
 	saveModalTitle: "Save Answer",
