@@ -16,6 +16,7 @@ import { SemlinkTools } from "./src/chat-tools";
 import { Scheduler } from "./src/scheduler";
 import { ProgressTracker } from "./src/progress";
 import { McpServer } from "./src/mcp-server";
+import { ShareServer } from "./src/share-server";
 import { VaultWatcher } from "./src/watcher";
 import { SmartVaultSettingTab } from "./src/settings";
 import { ProgressModal } from "./src/progress-modal";
@@ -39,6 +40,9 @@ export default class SmartVaultPlugin extends Plugin {
 	scheduler!: Scheduler;
 	progress!: ProgressTracker;
 	mcpServer: McpServer | null = null;
+	/** LAN share server for conversation snapshots (lazy-started on first
+	 *  share; snapshots live in memory only). */
+	shareServer = new ShareServer();
 	watcher!: VaultWatcher;
 	pluginDir: string = "";
 
@@ -287,6 +291,8 @@ export default class SmartVaultPlugin extends Plugin {
 		try { this.scheduler?.abort(); } catch { /* best-effort */ }
 		try { this.watcher?.stop(); } catch { /* best-effort */ }
 		try { void this.mcpServer?.stop(); } catch { /* best-effort */ }
+		// Ends all LAN shares (snapshots are memory-only by design).
+		try { void this.shareServer.stop(); } catch { /* best-effort */ }
 		try { this.activityGate?.dispose(); } catch { /* best-effort */ }
 		for (const bot of this.feishuBots.values()) {
 			try { void bot.stop(); } catch { /* best-effort */ }

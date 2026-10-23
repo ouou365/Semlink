@@ -5791,3 +5791,53 @@ body .semlink-msg-user::selection {
     z-index: 30;
     pointer-events: none;
 }
+
+/* ── LAN share modal ── */
+.semlink-share-modal .modal-content {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.semlink-share-hint {
+	font-size: 12.5px;
+	color: var(--text-muted);
+	line-height: 1.55;
+}
+.semlink-share-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 7px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-secondary);
+}
+.semlink-share-url {
+	flex: 1;
+	font-family: var(--font-monospace);
+	font-size: 12.5px;
+	word-break: break-all;
+	user-select: all;
+}
+.semlink-share-copy {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 5px;
+	cursor: pointer;
+	background: none;
+	border: none;
+	border-radius: 6px;
+	color: var(--text-muted);
+}
+.semlink-share-copy:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+/* Off-screen holder for rendering shared conversation markdown. */
+.semlink-share-offscreen {
+	position: absolute;
+	left: -99999px;
+	top: 0;
+}
