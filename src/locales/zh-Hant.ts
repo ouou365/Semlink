@@ -257,6 +257,7 @@ const t: Record<keyof typeof en, string> = {
 	shareFailed: "分享失敗——詳情見開發者控制台。",
 	shareThinking: "思考過程",
 	citeToggle: "顯示或隱藏回答中的引用標記",
+	shareBrandSub: "對話記錄分享",
 	searchCopied: "已複製到剪貼簿",
 	searchCopyFailed: "複製失敗",
 	saveModalTitle: "儲存回答",

@@ -257,6 +257,7 @@ const t: Record<keyof typeof en, string> = {
 	shareFailed: "Échec du partage — détails dans la console développeur.",
 	shareThinking: "Processus de réflexion",
 	citeToggle: "Afficher ou masquer les marqueurs de citation dans la réponse",
+	shareBrandSub: "Conversation partagée",
 	searchCopied: "Copié dans le presse-papiers",
 	searchCopyFailed: "Échec de la copie",
 	saveModalTitle: "Enregistrer la réponse",

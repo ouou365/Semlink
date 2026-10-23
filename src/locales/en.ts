@@ -256,6 +256,7 @@ const en = {
 	shareFailed: "Share failed — see developer console for details.",
 	shareThinking: "Thinking process",
 	citeToggle: "Show or hide citation markers in the answer",
+	shareBrandSub: "Shared conversation",
 	searchCopied: "Copied to clipboard",
 	searchCopyFailed: "Copy failed",
 	saveModalTitle: "Save Answer",

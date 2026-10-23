@@ -257,6 +257,7 @@ const t: Record<keyof typeof en, string> = {
 	shareFailed: "Freigabe fehlgeschlagen — Details in der Entwicklerkonsole.",
 	shareThinking: "Denkprozess",
 	citeToggle: "Zitationsmarken in der Antwort ein-/ausblenden",
+	shareBrandSub: "Geteilte Unterhaltung",
 	searchCopied: "In die Zwischenablage kopiert",
 	searchCopyFailed: "Kopieren fehlgeschlagen",
 	saveModalTitle: "Antwort speichern",
