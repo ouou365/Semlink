@@ -11,7 +11,7 @@
 // (messages loaded from chat history).
 
 import { App, Component, MarkdownRenderer } from "obsidian";
-import { t } from "./i18n";
+import { allLangs, getLang, LANGUAGES, t, type Lang } from "./i18n";
 import type { HistoryMessage } from "./types";
 import logoSvg from "./semlink-logo.svg";
 
@@ -46,7 +46,7 @@ export async function renderSharePage(
 					return text ? `<div class="step">${esc(text.slice(0, 500))}</div>` : "";
 				}).join("");
 				thinkHtml = steps
-					? `<details class="thinking"><summary>${esc(t("shareThinking"))}</summary>${steps}</details>`
+					? `<details class="thinking"><summary data-ui="thinking">${esc(t("shareThinking"))}</summary>${steps}</details>`
 					: "";
 			}
 			const wrap = holder.createDiv({ cls: "answer markdown-rendered" });
@@ -60,6 +60,18 @@ export async function renderSharePage(
 	const safeTitle = esc(title);
 	const day = new Date();
 	const dateLabel = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+	// The visitor can switch the page's OWN labels (slogan / CTA / thinking
+	// summary) between all plugin languages — the conversation itself stays
+	// in the language it was held in.
+	const ui = {
+		slogan: allLangs("shareBrandSub"),
+		cta: allLangs("shareDownloadCta"),
+		thinking: allLangs("shareThinking"),
+	} as Partial<Record<string, Partial<Record<Lang, string>>>>;
+	const uiJson = JSON.stringify(ui).replace(/</g, "\\u003c");
+	const langOptions = LANGUAGES.map(
+		(l) => `<option value="${l.value}"${l.value === getLang() ? " selected" : ""}>${l.label}</option>`,
+	).join("");
 	return `<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -70,17 +82,23 @@ export async function renderSharePage(
 body{margin:0;font:15px/1.7 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#0f172a;background:#fff}
 /* Hero band (site: linear-gradient #eff6ff→#fff) confined to the top so the
    long thread below reads on clean white. */
-.hero{background:linear-gradient(180deg,#eff6ff 0%,rgba(239,246,255,0) 100%);padding:20px 16px 30px}
+.hero{background:linear-gradient(180deg,#eff6ff 0%,rgba(239,246,255,0) 100%);padding:6px 16px 30px}
 .wrap{max-width:780px;margin:0 auto}
 main{max-width:780px;margin:0 auto;padding:6px 16px 48px}
 
-/* ── Brand row (mirrors the site header) ── */
-header.brand{display:flex;align-items:center;gap:10px}
+/* ── Header bar (mirrors the getsemlink.com header): white, hairline
+   bottom border, brand left; language switcher + install CTA right.
+   The logo strokes use currentColor. ── */
+header.brand{background:#fff;border-bottom:1px solid #e2e8f0;padding:13px 16px}
+header.brand .wrap{max-width:780px;margin:0 auto;display:flex;align-items:center;gap:10px}
 header.brand svg{width:30px;height:30px;flex:none;color:#8b6cef}
 header.brand .name{font-weight:700;font-size:20px;letter-spacing:.2px;color:#0f172a}
 header.brand .sub{font-size:12.5px;color:#94a3b8;margin-left:4px;padding-left:11px;border-left:1px solid #d7dfeb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;min-width:0}
-header.brand .cta{margin-left:auto;display:inline-flex;align-items:center;gap:.5rem;border:none;cursor:pointer;text-decoration:none;font-weight:600;font-size:.92rem;padding:.66rem 1.2rem;border-radius:.8rem;background:linear-gradient(135deg,#8b6cef,#6745d9);color:#fff;box-shadow:0 2px 10px rgba(103,69,217,.28);flex:none}
-header.brand .cta:hover{filter:brightness(1.06)}
+header.brand nav{margin-left:auto;display:flex;align-items:center;gap:.9rem;flex:none}
+header.brand .lang-btn{border:1px solid #e2e8f0;background:#fff;color:#64748b;border-radius:999px;padding:.32rem .8rem;font-size:.85rem;cursor:pointer;font-weight:600}
+header.brand .lang-btn:hover{border-color:#8b6cef;color:#8b6cef}
+header.brand .cta{display:inline-flex;align-items:center;gap:.5rem;border:none;cursor:pointer;text-decoration:none;font-weight:600;font-size:.95rem;padding:.6rem 1.15rem;border-radius:.8rem;background:#8b6cef;color:#fff}
+header.brand .cta:hover{background:#6745d9}
 
 /* ── Conversation title block ── */
 .head{margin:34px 0 22px}
@@ -131,13 +149,35 @@ footer{max-width:780px;margin:34px auto 0;padding:16px 16px 0;text-align:center;
 	.msg.assistant .bubble{padding:14px 15px}
 }
 </style></head><body>
+<header class="brand"><div class="wrap">
+${logoSvg}<span class="name">Semlink</span><span class="sub" data-ui="slogan">${esc(t("shareBrandSub"))}</span>
+<nav><select class="lang-btn" id="langSelect" aria-label="Language">${langOptions}</select><a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer" data-ui="cta">${esc(t("shareDownloadCta"))}</a></nav>
+</div></header>
 <div class="hero"><div class="wrap">
-<header class="brand">${logoSvg}<span class="name">Semlink</span><span class="sub">${esc(t("shareBrandSub"))}</span><a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer">${esc(t("shareDownloadCta"))}</a></header>
 <section class="head"><h1>${safeTitle}</h1><div class="meta"><span>${dateLabel}</span><span class="dot"></span><span>Semlink</span></div></section>
 </div></div>
 <main><div class="thread">
 ${parts.join("\n")}
 </div></main>
-<footer>${esc(t("shareBrandSub"))} · Semlink</footer>
+<footer><span data-ui="slogan">${esc(t("shareBrandSub"))}</span> · Semlink</footer>
+<script>
+(function(){
+	var UI = ${uiJson};
+	var sel = document.getElementById("langSelect");
+	var saved = null;
+	try { saved = localStorage.getItem("semlink-share-lang"); } catch (e) {}
+	function apply(lang) {
+		// UI is keyed [uiElement][lang] (slogan/cta/thinking → translations).
+		document.querySelectorAll("[data-ui]").forEach(function (el) {
+			var table = UI[el.getAttribute("data-ui")];
+			var v = table ? table[lang] : null;
+			if (v) el.textContent = v;
+		});
+		try { localStorage.setItem("semlink-share-lang", lang); } catch (e) {}
+	}
+	if (saved && sel.value !== saved) { apply(saved); sel.value = saved; }
+	sel.addEventListener("change", function () { apply(sel.value); });
+})();
+</script>
 </body></html>`;
-}
+	}

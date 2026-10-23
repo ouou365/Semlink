@@ -105,3 +105,9 @@ export function t(key: string): string {
 	if (!entry) return key;
 	return entry[currentLang] || entry.en || key;
 }
+
+/** Every translation of one key, keyed by language — for self-contained
+ *  artifacts (the LAN share page) that embed their own language switcher. */
+export function allLangs(key: string): Partial<Record<Lang, string>> {
+	return { ...(S[key] ?? {}) };
+}
