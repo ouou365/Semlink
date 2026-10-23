@@ -67,11 +67,11 @@ export async function renderSharePage(
 *{box-sizing:border-box}
 body{margin:0;padding:24px 12px 48px;font:15px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#f6f5f2;color:#26221c}
 main{max-width:760px;margin:0 auto}
-header.brand{display:flex;align-items:center;gap:9px;margin-bottom:18px}
-/* Brand purple (#7c3aed, same as the plugin's accent) — the logo strokes
-   use currentColor, so the color is inherited from here. */
-header.brand svg{width:24px;height:24px;flex:none;color:#7c3aed}
-header.brand .name{font-weight:700;font-size:16px;letter-spacing:.2px;color:#7c3aed}
+header.brand{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+/* Mirrors the getsemlink.com header: purple logo mark (#8b6cef, --blue on
+   the site) + dark bold wordmark — the logo strokes use currentColor. */
+header.brand svg{width:30px;height:30px;flex:none;color:#8b6cef}
+header.brand .name{font-weight:700;font-size:20px;letter-spacing:.2px;color:#0f172a}
 header.brand .sub{font-size:12.5px;color:#a39c8e;margin-left:2px;padding-left:10px;border-left:1px solid #ddd8cd}
 h1{font-size:19px;line-height:1.4;margin:0 0 20px;color:#5b3fa8}
 .msg{margin:0 0 14px}
