@@ -65,14 +65,17 @@ export async function renderSharePage(
 <style>
 :root{color-scheme:light}
 *{box-sizing:border-box}
-body{margin:0;padding:24px 12px 48px;font:15px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#f6f5f2;color:#26221c}
+body{margin:0;padding:24px 12px 48px;font:15px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:linear-gradient(180deg,#eff6ff 0%,#fff 100%);color:#26221c}
 main{max-width:760px;margin:0 auto}
 header.brand{display:flex;align-items:center;gap:10px;margin-bottom:18px}
 /* Mirrors the getsemlink.com header: purple logo mark (#8b6cef, --blue on
-   the site) + dark bold wordmark — the logo strokes use currentColor. */
+   the site) + dark bold wordmark, install CTA pinned right — the logo
+   strokes use currentColor. */
 header.brand svg{width:30px;height:30px;flex:none;color:#8b6cef}
 header.brand .name{font-weight:700;font-size:20px;letter-spacing:.2px;color:#0f172a}
 header.brand .sub{font-size:12.5px;color:#a39c8e;margin-left:2px;padding-left:10px;border-left:1px solid #ddd8cd}
+header.brand .cta{margin-left:auto;display:inline-flex;align-items:center;gap:.5rem;border:none;cursor:pointer;text-decoration:none;font-weight:600;font-size:.95rem;padding:.72rem 1.25rem;border-radius:.8rem;background:#8b6cef;color:#fff}
+header.brand .cta:hover{background:#6745d9}
 h1{font-size:19px;line-height:1.4;margin:0 0 20px;color:#5b3fa8}
 .msg{margin:0 0 14px}
 .msg.user{display:flex;justify-content:flex-end}
@@ -90,7 +93,7 @@ details.thinking summary{cursor:pointer;user-select:none}
 details.thinking .step{padding:3px 0;border-top:1px dashed #eee}
 footer{margin-top:28px;text-align:center;font-size:12px;color:#a39c8e}
 </style></head><body><main>
-<header class="brand">${logoSvg}<span class="name">Semlink</span><span class="sub">${esc(t("shareBrandSub"))}</span></header>
+<header class="brand">${logoSvg}<span class="name">Semlink</span><span class="sub">${esc(t("shareBrandSub"))}</span><a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer">${esc(t("shareDownloadCta"))}</a></header>
 <h1>${safeTitle}</h1>
 ${parts.join("\n")}
 <footer>Shared from Semlink</footer>

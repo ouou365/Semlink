@@ -260,6 +260,7 @@ const t: Record<keyof typeof en, string> = {
 	shareBrandSub: "Geteilte Unterhaltung",
 	shareRevoke: "Freigabe beenden",
 	shareRevoked: "Freigabe beendet — die Adresse funktioniert nicht mehr.",
+	shareDownloadCta: "Installieren — kostenlos",
 	searchCopied: "In die Zwischenablage kopiert",
 	searchCopyFailed: "Kopieren fehlgeschlagen",
 	saveModalTitle: "Antwort speichern",

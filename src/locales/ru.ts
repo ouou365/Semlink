@@ -261,6 +261,7 @@ const t: Record<keyof typeof en, string> = {
 	shareBrandSub: "Общий диалог",
 	shareRevoke: "Прекратить доступ",
 	shareRevoked: "Доступ прекращён — адрес больше не работает.",
+	shareDownloadCta: "Установить — это бесплатно",
 	searchCopied: "Скопировано в буфер обмена",
 	searchCopyFailed: "Не удалось скопировать",
 	saveModalTitle: "Сохранить ответ",

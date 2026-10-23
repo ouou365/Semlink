@@ -259,6 +259,7 @@ const en = {
 	shareBrandSub: "Shared conversation",
 	shareRevoke: "Stop sharing",
 	shareRevoked: "Sharing stopped — the address no longer works.",
+	shareDownloadCta: "Install — it's free",
 	searchCopied: "Copied to clipboard",
 	searchCopyFailed: "Copy failed",
 	saveModalTitle: "Save Answer",
