@@ -77,7 +77,6 @@ export async function renderSharePage(
 	// The labels are embedded per-language so a ?lang=.. in the URL always
 	// finds its strings, even after this plugin's own UI language changed.
 	const ui = {
-		slogan: allLangs("shareBrandSub"),
 		cta: allLangs("shareDownloadCta"),
 		thinking: allLangs("shareThinking"),
 		footer: allLangs("shareFooter"),
@@ -115,11 +114,8 @@ body{margin:0;padding:40px 14px 60px;font:15px/1.7 -apple-system,"Segoe UI","Pin
 .postcard{position:relative;max-width:840px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 12px 28px -12px rgba(15,23,42,.10),0 32px 72px -32px rgba(15,23,42,.16)}
 
 /* ── Card head: brand left, theme toggle + install right ── */
-.pc-head{display:flex;align-items:center;gap:10px;padding:20px 28px;border-bottom:1px dashed var(--line)}
-.pc-head svg.logo{width:28px;height:28px;flex:none;color:var(--brand)}
-.pc-head .name{font-weight:700;font-size:19px;letter-spacing:.2px;color:var(--ink)}
-.pc-head .sub{font-size:12.5px;color:var(--faint);margin-left:4px;padding-left:11px;border-left:1px solid var(--line);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;min-width:0}
-.pc-head nav{margin-left:auto;display:flex;align-items:center;gap:.7rem;flex:none}
+.pc-head{display:flex;justify-content:flex-end;padding:16px 28px;border-bottom:1px dashed var(--line)}
+.pc-head nav{display:flex;align-items:center;gap:.7rem}
 .pc-head .theme-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:none;cursor:pointer;border-radius:50%;background:transparent;color:var(--muted)}
 .pc-head .theme-btn:hover{background:rgba(139,108,239,.14);color:var(--brand)}
 html[data-theme="dark"] .pc-head .theme-btn{color:var(--faint)}
@@ -197,7 +193,6 @@ details.thinking .step{padding:5px 0;border-top:1px dashed var(--step-line);line
 <style>${css}</style></head><body data-theme="${theme}">
 <div class="postcard">
 <header class="pc-head">
-${logoSvg.replace("<svg ", '<svg class="logo" ')}<span class="name">Semlink</span><span class="sub" data-ui="slogan">${esc(t("shareBrandSub"))}</span>
 <nav>
 <button class="theme-btn" id="themeToggle" aria-label="Toggle theme"><span id="themeIconMoon" style="display:inline-flex">${moonIcon}</span><span id="themeIconSun" style="display:inline-flex">${sunIcon}</span></button>
 <a class="cta" href="https://getsemlink.com/" target="_blank" rel="noreferrer" aria-label="${esc(t("shareDownloadCta"))}" title="${esc(t("shareDownloadCta"))}">${downloadIcon}</a>
