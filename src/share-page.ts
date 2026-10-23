@@ -136,9 +136,8 @@ html[data-theme="dark"] .pc-head .theme-btn:hover{color:var(--brand);background:
 h1{font-size:23px;line-height:1.35;margin:0 0 8px;font-weight:700;color:var(--brand-ink)}
 .head .meta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
 .head .meta .dot{width:3px;height:3px;border-radius:50%;background:var(--faint)}
-.ai-note{display:inline-flex;align-items:center;gap:5px;padding:2.5px 10px;border-radius:999px;background:rgba(234,179,8,.13);color:#a16207;font-size:12px;font-weight:500}
-html[data-theme="dark"] .ai-note{background:rgba(234,179,8,.14);color:#d6b854}
-.ai-note svg{width:12px;height:12px;flex:none}
+
+
 
 /* ── Thread ── */
 .thread{display:flex;flex-direction:column;gap:16px}
@@ -205,7 +204,7 @@ ${logoSvg.replace("<svg ", '<svg class="logo" ')}<span class="name">Semlink</spa
 </nav>
 </header>
 <div class="pc-body">
-<section class="head"><h1>${safeTitle}</h1><div class="meta"><span>${dateLabel}</span><span class="dot"></span><span>Semlink</span><span class="ai-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span data-ui="ai">${esc(t("shareAIDisclaimer"))}</span></span></div></section>
+<section class="head"><h1>${safeTitle}</h1><div class="meta"><span>${dateLabel}</span><span class="dot"></span><span data-ui="ai">${esc(t("shareAIDisclaimer"))}</span></div></section>
 <div class="thread">
 ${parts.join("\n")}
 </div>
