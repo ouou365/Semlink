@@ -258,7 +258,7 @@ const en = {
 	shareRevoke: "Stop sharing",
 	shareRevoked: "Sharing stopped — the address no longer works.",
 	shareOpenBrowser: "Open in browser",
-	shareFooter: "Shared via Semlink",
+	shareFooter: "Shared on your local network",
 	tabShare: "Share",
 	shareTabHint: "Conversations published to your local network. Paused links return “not found” but keep their address; deleted links are gone for good.",
 	shareEmpty: "No conversations are being shared. Open a chat and press the share button under an answer to publish it.",

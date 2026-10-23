@@ -261,7 +261,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoke: "Parar de compartilhar",
 	shareRevoked: "Compartilhamento interrompido — o endereço não funciona mais.",
 	shareOpenBrowser: "Abrir no navegador",
-	shareFooter: "Compartilhado via Semlink",
+	shareFooter: "Compartilhado na rede local",
 	tabShare: "Compartilhar",
 	shareTabHint: "Gerencie as conversas publicadas na sua rede local. Links pausados retornam «não encontrado» mas mantêm o endereço; links excluídos somem para sempre.",
 	shareEmpty: "Nenhuma conversa sendo compartilhada. Abra um chat e pressione o botão de compartilhar sob uma resposta para publicá-la.",

@@ -260,7 +260,7 @@ const zh: Record<keyof typeof en, string> = {
 	shareRevoke: "关闭共享",
 	shareRevoked: "共享已关闭，地址已失效。",
 	shareOpenBrowser: "在浏览器打开",
-	shareFooter: "通过 Semlink 分享",
+	shareFooter: "通过局域网分享",
 	tabShare: "分享",
 	shareTabHint: "管理局域网内公开访问的对话网页。暂停的链接会显示「未找到」但保留地址；删除的链接永久失效。",
 	shareEmpty: "当前没有共享的对话。打开聊天，点击回答下方的分享按钮即可发布。",

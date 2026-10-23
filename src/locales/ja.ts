@@ -259,7 +259,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoke: "共有を停止",
 	shareRevoked: "共有を停止しました。アドレスは無効になりました。",
 	shareOpenBrowser: "ブラウザで開く",
-	shareFooter: "Semlink で共有",
+	shareFooter: "LAN で共有",
 	tabShare: "共有",
 	shareTabHint: "LAN 内に公開している会話ページを管理します。一時停止したリンクは「見つかりません」になりますが、アドレスは保持されます。削除したリンクは完全に無効になります。",
 	shareEmpty: "共有中の会話はありません。チャットを開き、回答下の共有ボタンから公開できます。",
