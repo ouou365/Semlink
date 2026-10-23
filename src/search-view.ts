@@ -1378,12 +1378,6 @@ export class SemanticSearchView extends ItemView {
 		saveBtn.addEventListener("click", () => {
 			new SaveNoteModal(this.app, questionForSave, content).open();
 		});
-		const shareBtn = actionsEl.createEl("button", {
-			cls: "semlink-msg-action",
-			attr: { "aria-label": t("shareLabel") },
-		});
-		setIcon(shareBtn, "share");
-		shareBtn.addEventListener("click", () => void this.shareSession());
 		const citeBtn = actionsEl.createEl("button", {
 			cls: "semlink-msg-action",
 			attr: { "aria-label": t("citeToggle"), "aria-pressed": String(this.showCitations) },
@@ -1394,6 +1388,12 @@ export class SemanticSearchView extends ItemView {
 		citeBtn.addEventListener("click", () => {
 			this.setCitationsVisible(!this.showCitations, citeBtn);
 		});
+		const shareBtn = actionsEl.createEl("button", {
+			cls: "semlink-msg-action",
+			attr: { "aria-label": t("shareLabel") },
+		});
+		setIcon(shareBtn, "share");
+		shareBtn.addEventListener("click", () => void this.shareSession());
 	}
 
 	/** Toggle citation-marker visibility for the WHOLE view: CSS class on the
