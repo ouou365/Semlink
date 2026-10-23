@@ -132,7 +132,7 @@ html[data-theme="dark"] .pc-head .theme-btn:hover{color:var(--brand);background:
 
 /* ── Card body: title, stamp, thread ── */
 .pc-body{position:relative;padding:32px 36px 10px}
-.head{margin:0 0 22px}
+.head{margin:0 0 22px;padding-bottom:18px;border-bottom:1px dashed var(--line)}
 h1{font-size:23px;line-height:1.35;margin:0 0 8px;font-weight:700;color:var(--brand-ink)}
 .head .meta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
 .head .meta .dot{width:3px;height:3px;border-radius:50%;background:var(--faint)}
