@@ -1428,7 +1428,6 @@ export class SemanticSearchView extends ItemView {
 			const token = this.plugin.shareServer.register(sessionId, html);
 			new ShareModal(this.app, {
 				urls: this.plugin.shareServer.urls(token),
-				previewUrl: this.plugin.shareServer.localhostUrl(token),
 				onRevoke: () => this.plugin.shareServer.revokeSession(sessionId),
 			}).open();
 		} catch (e) {
