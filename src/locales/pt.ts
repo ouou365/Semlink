@@ -263,6 +263,7 @@ const t: Record<keyof typeof en, string> = {
 	shareQrCode: "Código QR",
 	shareHome: "Início",
 	shareFooter: "Compartilhado na rede local",
+	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	tabShare: "Compartilhar",
 	shareTabHint: "Gerencie as conversas publicadas na sua rede local. Links pausados retornam «não encontrado» mas mantêm o endereço; links excluídos somem para sempre.",
 	shareEmpty: "Nenhuma conversa sendo compartilhada. Abra um chat e pressione o botão de compartilhar sob uma resposta para publicá-la.",

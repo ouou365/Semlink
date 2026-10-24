@@ -262,6 +262,7 @@ const t: Record<keyof typeof en, string> = {
 	shareQrCode: "QR-код",
 	shareHome: "Главная",
 	shareFooter: "Опубликовано в локальной сети",
+	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	tabShare: "Доступ",
 	shareTabHint: "Управление диалогами, опубликованными в локальной сети. Приостановленные ссылки отвечают «не найдено», но сохраняют адрес; удалённые ссылки исчезают навсегда.",
 	shareEmpty: "Нет опубликованных диалогов. Откройте чат и нажмите кнопку «Поделиться» под ответом, чтобы опубликовать его.",

@@ -262,6 +262,7 @@ const zh: Record<keyof typeof en, string> = {
 	shareQrCode: "二维码",
 	shareHome: "主页",
 	shareFooter: "通过局域网分享",
+	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	tabShare: "分享",
 	shareTabHint: "管理局域网内公开访问的对话网页。暂停的链接会显示「未找到」但保留地址；删除的链接永久失效。",
 	shareEmpty: "当前没有共享的对话。打开聊天，点击回答下方的分享按钮即可发布。",
