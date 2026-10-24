@@ -655,7 +655,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	private renderShareTab(containerEl: HTMLElement): void {
 		// Same head style as the MCP tab's "MCP Server" row.
 		const head = containerEl.createDiv({ cls: "semlink-mcp-installed-head" });
-		head.createSpan({ cls: "semlink-mcp-installed-title", text: t("tabShare") });
+		head.createSpan({ cls: "semlink-mcp-installed-title", text: t("shareTabTitle") });
 		const server = this.plugin.shareServer;
 		const shares = server.listShares();
 		if (shares.length === 0) {
