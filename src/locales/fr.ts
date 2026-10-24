@@ -263,7 +263,6 @@ const t: Record<keyof typeof en, string> = {
 	shareFooter: "Partagé sur le réseau local",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	tabShare: "Partage",
-	shareTabHint: "Gérez les conversations publiées sur votre réseau local. Les liens en pause renvoient « introuvable » mais conservent leur adresse ; les liens supprimés disparaissent définitivement.",
 	shareEmpty: "Aucune conversation partagée. Ouvrez une discussion et appuyez sur le bouton de partage sous une réponse pour la publier.",
 	shareUntitled: "Conversation sans titre",
 	sharePaused: "Partage en pause — l'adresse ne fonctionne plus",

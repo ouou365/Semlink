@@ -263,7 +263,6 @@ const t: Record<keyof typeof en, string> = {
 	shareFooter: "LAN으로 공유",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	tabShare: "공유",
-	shareTabHint: "로컬 네트워크에 공개된 대화 페이지를 관리합니다. 일시 중지된 링크는 「찾을 수 없음」을 반환하지만 주소는 유지되며, 삭제된 링크는 영구적으로 사라집니다.",
 	shareEmpty: "공유 중인 대화가 없습니다. 채팅을 열고 답변 아래의 공유 버튼으로 게시하세요.",
 	shareUntitled: "제목 없는 대화",
 	sharePaused: "공유 일시 중지 — 주소가 더 이상 작동하지 않습니다",

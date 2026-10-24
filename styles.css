@@ -5894,19 +5894,6 @@ body .semlink-msg-user::selection {
 	shape-rendering: crispEdges;
 }
 
-/* ── Settings: share tab hint ── */
-.semlink-share-tab-hint {
-	margin: 4px 0 14px;
-	font-size: 12.5px;
-	line-height: 1.55;
-	color: var(--text-muted);
-	white-space: pre-wrap;
-}
-.semlink-share-tab-empty {
-	padding: 10px 0;
-	font-size: 13px;
-	color: var(--text-muted);
-}
 
 /* Share rows: action buttons in one horizontal row, pinned right. */
 .semlink-mcp-server-actions {

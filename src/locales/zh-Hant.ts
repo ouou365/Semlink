@@ -263,7 +263,6 @@ const t: Record<keyof typeof en, string> = {
 	shareFooter: "透過區域網路分享",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	tabShare: "分享",
-	shareTabHint: "管理區網內公開存取的對話網頁。暫停的連結會顯示「未找到」但保留位址；刪除的連結永久失效。",
 	shareEmpty: "目前沒有共享的對話。開啟聊天，點擊回答下方的分享按鈕即可發佈。",
 	shareUntitled: "未命名對話",
 	sharePaused: "共享已暫停 — 位址不再可存取",

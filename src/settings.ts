@@ -633,13 +633,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	 *  button. Paused links 404 but survive; deleted links are gone for good. */
 	private renderShareTab(containerEl: HTMLElement): void {
 		new Setting(containerEl).setName(t("tabShare")).setHeading();
-		const intro = containerEl.createDiv({ cls: "semlink-share-tab-hint", text: t("shareTabHint") });
-
 		const server = this.plugin.shareServer;
 		const shares = server.listShares();
 		if (shares.length === 0) {
-			intro.addClass("semlink-share-tab-empty");
-			intro.setText(t("shareEmpty"));
+			containerEl.createDiv({ cls: "semlink-share-tab-empty", text: t("shareEmpty") });
 			return;
 		}
 

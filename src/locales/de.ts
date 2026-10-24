@@ -263,7 +263,6 @@ const t: Record<keyof typeof en, string> = {
 	shareFooter: "Im LAN geteilt",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
 	tabShare: "Teilen",
-	shareTabHint: "Im lokalen Netzwerk veröffentlichte Unterhaltungen verwalten. Pausierte Links liefern „nicht gefunden“, behalten aber ihre Adresse; gelöschte Links sind endgültig weg.",
 	shareEmpty: "Es werden keine Unterhaltungen geteilt. Öffne einen Chat und drücke den Teilen-Button unter einer Antwort, um sie zu veröffentlichen.",
 	shareUntitled: "Unbenannte Unterhaltung",
 	sharePaused: "Freigabe pausiert — die Adresse funktioniert nicht mehr",
