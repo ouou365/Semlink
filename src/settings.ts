@@ -668,12 +668,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 				const actions = item.createDiv({ cls: "semlink-mcp-server-actions" });
 
-				const copyBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareCopy"), title: t("shareCopy") } });
-				setIcon(copyBtn, "copy");
-				copyBtn.addEventListener("click", () => {
-					void navigator.clipboard.writeText(url).then(() => new Notice(t("shareCopied")));
-				});
-
 				const qrBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareQrCode"), title: t("shareQrCode") } });
 				setIcon(qrBtn, "qr-code");
 				qrBtn.addEventListener("click", () => {

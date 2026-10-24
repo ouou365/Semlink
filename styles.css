@@ -5907,3 +5907,12 @@ body .semlink-msg-user::selection {
 	font-size: 13px;
 	color: var(--text-muted);
 }
+
+/* Share rows: action buttons in one horizontal row, pinned right. */
+.semlink-mcp-server-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+	margin-left: auto;
+}
