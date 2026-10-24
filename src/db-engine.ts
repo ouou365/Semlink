@@ -525,13 +525,16 @@ export class DbEngine {
 		return r.length > 0 ? (r[0].values[0][0] as number) : 0;
 	}
 
-	getStats(): { totalChunks: number; activeChunks: number; indexedNotes: number; dbSizeMb: number } {
-		let totalChunks = 0, activeChunks = 0;
+	getStats(): { totalChunks: number; activeChunks: number; embeddedChunks: number; indexedNotes: number; dbSizeMb: number } {
+		let totalChunks = 0, activeChunks = 0, embeddedChunks = 0;
 		const r1 = this.db!.exec("SELECT COUNT(*) FROM chunks");
 		if (r1.length > 0) totalChunks = r1[0].values[0][0] as number;
 
 		const r2 = this.db!.exec("SELECT COUNT(*) FROM chunks WHERE status = 'active'");
 		if (r2.length > 0) activeChunks = r2[0].values[0][0] as number;
+
+		const r2b = this.db!.exec("SELECT COUNT(*) FROM chunks WHERE status = 'active' AND vector IS NOT NULL");
+		if (r2b.length > 0) embeddedChunks = r2b[0].values[0][0] as number;
 
 		const r3 = this.db!.exec("SELECT COUNT(DISTINCT note_path) FROM chunks WHERE status = 'active'");
 		const indexedNotes = r3.length > 0 ? (r3[0].values[0][0] as number) : 0;
@@ -540,7 +543,7 @@ export class DbEngine {
 		let dbSizeMb = 0;
 		try { dbSizeMb = statSync(dbPath).size / (1024 * 1024); } catch { /* file gone */ }
 
-		return { totalChunks, activeChunks, indexedNotes, dbSizeMb: Math.round(dbSizeMb * 10) / 10 };
+		return { totalChunks, activeChunks, embeddedChunks, indexedNotes, dbSizeMb: Math.round(dbSizeMb * 10) / 10 };
 	}
 
 	// ──── Vector Storage (SQLite BLOB) ────

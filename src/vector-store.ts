@@ -324,8 +324,8 @@ export class VectorStore {
 	async purgeGhostQueue(existingPaths: Set<string>): Promise<number> {
 		return await this.call<number>("purgeGhostQueue", [existingPaths]);
 	}
-	async getStats(): Promise<{ totalChunks: number; activeChunks: number; indexedNotes: number; dbSizeMb: number }> {
-		return await this.call<{ totalChunks: number; activeChunks: number; indexedNotes: number; dbSizeMb: number }>("getStats");
+	async getStats(): Promise<{ totalChunks: number; activeChunks: number; embeddedChunks: number; indexedNotes: number; dbSizeMb: number }> {
+		return await this.call<{ totalChunks: number; activeChunks: number; embeddedChunks: number; indexedNotes: number; dbSizeMb: number }>("getStats");
 	}
 
 	async saveEmbeddings(chunkIds: string[], embeddings: number[][]): Promise<void> {

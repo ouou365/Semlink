@@ -5903,3 +5903,29 @@ body .semlink-msg-user::selection {
 	flex: none;
 	margin-left: auto;
 }
+
+/* ── RAG tab: vault metric cards ── */
+.semlink-rag-stats {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 10px;
+	margin: 4px 0 18px;
+}
+.semlink-rag-stat {
+	padding: 12px 14px;
+	text-align: center;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 12px;
+	background: var(--background-secondary);
+}
+.semlink-rag-stat-num {
+	font-size: 20px;
+	font-weight: 700;
+	color: var(--text-accent);
+	line-height: 1.2;
+}
+.semlink-rag-stat-label {
+	margin-top: 3px;
+	font-size: 11.5px;
+	color: var(--text-muted);
+}

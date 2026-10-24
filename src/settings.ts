@@ -161,10 +161,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const tabs: Array<{ id: SettingsTab; label: string }> = [
 			{ id: "general", label: t("tabGeneral") },
 			{ id: "model", label: t("tabModel") },
+			{ id: "index", label: t("tabIndex") },
 			{ id: "embedding", label: t("tabEmbedding") },
 			{ id: "mcp", label: t("tabMcp") },
 			{ id: "share", label: t("tabShare") },
-			{ id: "index", label: t("tabIndex") },
 			// Bot tab deliberately not listed: the Feishu bot is unpublished
 			// (freemium-design v3.6). renderBotTab stays available for re-enable.
 		];
@@ -406,7 +406,28 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	// Tab: Embedding — model, chunking params, rebuild
 	// ══════════════════════════════════════
 	private renderEmbeddingTab(containerEl: HTMLElement): void {
-		// 嵌入供应商：配置了 Key 且带有嵌入模型的供应商
+		// ── 指标卡片:笔记 / 索引块 / 已嵌入 ──
+		const statsHost = containerEl.createDiv({ cls: "semlink-rag-stats" });
+		const statCard = (label: string): HTMLElement => {
+			const card = statsHost.createDiv({ cls: "semlink-rag-stat" });
+			card.createDiv({ cls: "semlink-rag-stat-num", text: "—" });
+			card.createDiv({ cls: "semlink-rag-stat-label", text: label });
+			return card;
+		};
+		const notesStat = statCard(t("ragStatNotes"));
+		const chunksStat = statCard(t("ragStatChunks"));
+		const embeddedStat = statCard(t("ragStatEmbedded"));
+		void this.plugin.store.getStats().then((s) => {
+			const set = (card: HTMLElement, v: number): void => {
+				const el = card.querySelector<HTMLElement>(".semlink-rag-stat-num");
+				if (el) el.textContent = v.toLocaleString();
+			};
+			set(notesStat, s.indexedNotes);
+			set(chunksStat, s.activeChunks);
+			set(embeddedStat, s.embeddedChunks);
+		}).catch(() => { /* worker unavailable — cards keep the placeholder */ });
+
+		// 嵌入供应商:配置了 Key 且带有嵌入模型的供应商
 		const embeddingProviders = this.plugin.settings.providers.filter(
 			(p) => !!p.apiKey.trim() && p.models.some((m) => (m.kind ?? "chat") === "embedding"),
 		);
