@@ -71,12 +71,15 @@ export class ShareServer {
 		try {
 			if (!existsSync(this.registryPath)) return;
 			const raw = JSON.parse(readFileSync(this.registryPath, "utf-8")) as StoredRegistry;
+			// Entries created before sharedAt existed get pinned to load time —
+			// stable from then on, instead of drifting to every re-render.
+			const legacyStamp = Date.now();
 			for (const { token, sessionId, enabled, sharedAt } of raw.shares ?? []) {
 				if (typeof token === "string" && typeof sessionId === "string") {
 					this.tokens.set(sessionId, token);
 					this.sessions.set(token, sessionId);
 					if (enabled === false) this.paused.add(token);
-					if (typeof sharedAt === "number") this.sharedAts.set(token, sharedAt);
+					this.sharedAts.set(token, typeof sharedAt === "number" ? sharedAt : legacyStamp);
 				}
 			}
 		} catch (e) {
