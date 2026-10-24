@@ -72,7 +72,8 @@ export async function renderSharePage(
 	}
 	const safeTitle = esc(title);
 	const day = new Date();
-	const dateLabel = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+	const pad = (n: number): string => String(n).padStart(2, "0");
+	const dateLabel = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())} ${pad(day.getHours())}:${pad(day.getMinutes())}:${pad(day.getSeconds())}`;
 	// The labels are embedded per-language so a ?lang=.. in the URL always
 	// finds its strings, even after this plugin's own UI language changed.
 	const ui = {
