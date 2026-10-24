@@ -5814,9 +5814,13 @@ body .semlink-msg-user::selection {
 }
 .semlink-share-url {
 	flex: 1;
+	min-width: 0;
 	font-family: var(--font-monospace);
 	font-size: 12.5px;
-	word-break: break-all;
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	user-select: all;
 }
 .semlink-share-copy {

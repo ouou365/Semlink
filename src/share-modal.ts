@@ -108,6 +108,12 @@ export class ShareQrModal extends Modal {
 		copyBtn.addEventListener("click", () => {
 			void navigator.clipboard.writeText(this.opts.url).then(() => new Notice(t("shareCopied")));
 		});
+		// Local preview opens via the loopback address when available.
+		const openBtn = row.createEl("button", { cls: "semlink-share-copy", attr: { "aria-label": t("shareOpenBrowser") } });
+		setIcon(openBtn, "external-link");
+		openBtn.addEventListener("click", () => {
+			window.open(this.opts.previewUrl ?? this.opts.url, "_blank");
+		});
 
 		this.contentEl.createDiv({ cls: "semlink-share-hint", text: t("shareHint") });
 
