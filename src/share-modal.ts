@@ -58,10 +58,20 @@ export class ShareModal extends Modal {
 	}
 }
 
-/** QR-code popup for one share URL: big scannable code + the address with
- *  a copy button — lets a phone join without typing the address. */
+/** Options for the share dialog. */
+export interface ShareQrModalOptions {
+	/** LAN address other devices can open (also shown as text/QR). */
+	url: string;
+	/** Loopback address for previewing from THIS machine's browser. */
+	previewUrl?: string;
+	/** Kills the share when invoked (button hidden when absent). */
+	onRevoke?: () => void;
+}
+
+/** QR-code dialog for one share URL: big scannable code, the address with
+ *  copy, open-in-browser, and (when the caller allows) a revoke button. */
 export class ShareQrModal extends Modal {
-	constructor(app: App, private url: string, private onRevoke?: () => void) {
+	constructor(app: App, private opts: ShareQrModalOptions) {
 		super(app);
 	}
 
@@ -73,7 +83,7 @@ export class ShareQrModal extends Modal {
 		const qrWrap = this.contentEl.createDiv({ cls: "semlink-share-qr" });
 		// Build the QR as an inline SVG from the raw module matrix — no
 		// canvas dependency, crisp at any size.
-		const qr = QRCode.create(this.url, { errorCorrectionLevel: "M" });
+		const qr = QRCode.create(this.opts.url, { errorCorrectionLevel: "M" });
 		const size = qr.modules.size;
 		let path = "";
 		for (let y = 0; y < size; y++) {
@@ -92,22 +102,22 @@ export class ShareQrModal extends Modal {
 		qrWrap.createDiv({ cls: "semlink-share-qr-img" }).appendChild(svgEl);
 
 		const row = this.contentEl.createDiv({ cls: "semlink-share-row" });
-		row.createSpan({ cls: "semlink-share-url", text: this.url });
+		row.createSpan({ cls: "semlink-share-url", text: this.opts.url });
 		const copyBtn = row.createEl("button", { cls: "semlink-share-copy", attr: { "aria-label": t("shareCopy") } });
 		setIcon(copyBtn, "copy");
 		copyBtn.addEventListener("click", () => {
-			void navigator.clipboard.writeText(this.url).then(() => new Notice(t("shareCopied")));
+			void navigator.clipboard.writeText(this.opts.url).then(() => new Notice(t("shareCopied")));
 		});
 
 		this.contentEl.createDiv({ cls: "semlink-share-hint", text: t("shareHint") });
 
-		if (this.onRevoke) {
+		if (this.opts.onRevoke) {
 			const revokeBtn = this.contentEl.createEl("button", {
 				cls: "semlink-share-revoke",
 				text: t("shareRevoke"),
 			});
 			revokeBtn.addEventListener("click", () => {
-				this.onRevoke?.();
+				this.opts.onRevoke?.();
 				new Notice(t("shareRevoked"));
 				this.close();
 			});

@@ -252,6 +252,13 @@ export class ShareServer {
 		return [...new Set(ips)].map((ip) => `http://${ip}:${this.port}/s/${token}${suffix}`);
 	}
 
+	/** Loopback URL for local preview ("open in browser" from the share
+	 *  dialog) — immune to firewall rules that may block the LAN address. */
+	localhostUrl(token: string, query?: string): string {
+		const suffix = query ? `?${query}` : "";
+		return `http://127.0.0.1:${this.port}/s/${token}${suffix}`;
+	}
+
 	private async page(token: string): Promise<string | null> {
 		const cached = this.pages.get(token);
 		if (cached !== undefined) return cached;

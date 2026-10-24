@@ -668,7 +668,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				const qrBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareQrCode"), title: t("shareQrCode") } });
 				setIcon(qrBtn, "qr-code");
 				qrBtn.addEventListener("click", () => {
-					new ShareQrModal(this.app, url).open();
+					new ShareQrModal(this.app, { url }).open();
 				});
 
 				const openBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareOpenBrowser"), title: t("shareOpenBrowser") } });

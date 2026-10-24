@@ -21,7 +21,7 @@ import { UsageModal } from "./usage-modal";
 import { guideInProgress, onboardingActive, renderOnboarding } from "./onboarding";
 import type SmartVaultPlugin from "../main";
 import { SaveNoteModal } from "./save-note-modal";
-import { ShareModal } from "./share-modal";
+import { ShareQrModal } from "./share-modal";
 import { renderSharePage } from "./share-page";
 import { ConfirmModal } from "./confirm-modal";
 import { getLang, t, LANGUAGES, type Lang } from "./i18n";
@@ -1429,8 +1429,10 @@ export class SemanticSearchView extends ItemView {
 			const html = await renderSharePage(this.app, this.currentMessages, this.firstQuestion || t("shareTitle"), this, theme, sharedAt);
 			await this.plugin.shareServer.ensureStarted(this.plugin.settings.sharePort);
 			const token = this.plugin.shareServer.register(sessionId, html, sharedAt);
-			new ShareModal(this.app, {
-				urls: this.plugin.shareServer.urls(token, `lang=${lang}&theme=${theme}`),
+			const query = `lang=${lang}&theme=${theme}`;
+			new ShareQrModal(this.app, {
+				url: this.plugin.shareServer.urls(token, query)[0],
+				previewUrl: this.plugin.shareServer.localhostUrl(token, query),
 				onRevoke: () => this.plugin.shareServer.revokeSession(sessionId),
 			}).open();
 		} catch (e) {
