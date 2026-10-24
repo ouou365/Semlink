@@ -691,7 +691,13 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				const qrBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareQrCode"), title: t("shareQrCode") } });
 				setIcon(qrBtn, "qr-code");
 				qrBtn.addEventListener("click", () => {
-					new ShareQrModal(this.app, { url }).open();
+					// Same dialog as the chat share button: QR + copy +
+					// open-in-browser + stop sharing.
+					new ShareQrModal(this.app, {
+						url,
+						previewUrl: server.localhostUrl(token),
+						onRevoke: () => server.revokeToken(token),
+					}).open();
 				});
 
 				const openBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareOpenBrowser"), title: t("shareOpenBrowser") } });
