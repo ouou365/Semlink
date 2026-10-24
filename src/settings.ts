@@ -653,7 +653,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	 *  conversation title, share URL, an on/off pause switch and a delete
 	 *  button. Paused links 404 but survive; deleted links are gone for good. */
 	private renderShareTab(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName(t("tabShare")).setHeading();
+		// Same head style as the MCP tab's "MCP Server" row.
+		const head = containerEl.createDiv({ cls: "semlink-mcp-installed-head" });
+		head.createSpan({ cls: "semlink-mcp-installed-title", text: t("tabShare") });
 		const server = this.plugin.shareServer;
 		const shares = server.listShares();
 		if (shares.length === 0) {

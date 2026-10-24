@@ -266,7 +266,7 @@ const t: Record<keyof typeof en, string> = {
 	ragStatEmbedded: "С эмбеддингом",
 	shareFooter: "Опубликовано в локальной сети",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
-	tabShare: "Доступ",
+	tabShare: "Share on LAN",
 	shareEmpty: "Нет опубликованных диалогов. Откройте чат и нажмите кнопку «Поделиться» под ответом, чтобы опубликовать его.",
 	shareUntitled: "Диалог без названия",
 	shareDelete: "Прекратить доступ и удалить",

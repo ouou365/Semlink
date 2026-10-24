@@ -266,7 +266,7 @@ const zh: Record<keyof typeof en, string> = {
 	ragStatEmbedded: "已嵌入",
 	shareFooter: "通过局域网分享",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
-	tabShare: "分享",
+	tabShare: "Share on LAN",
 	shareEmpty: "当前没有共享的对话。打开聊天，点击回答下方的分享按钮即可发布。",
 	shareUntitled: "未命名对话",
 	shareDelete: "停止共享并删除",

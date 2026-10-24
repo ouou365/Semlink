@@ -264,7 +264,7 @@ const en = {
 	ragStatEmbedded: "Embedded",
 	shareFooter: "Shared on your local network",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
-	tabShare: "Share",
+	tabShare: "Share on LAN",
 	shareEmpty: "No conversations are being shared. Open a chat and press the share button under an answer to publish it.",
 	shareUntitled: "Untitled conversation",
 	shareDelete: "Stop sharing and delete",

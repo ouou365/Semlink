@@ -265,7 +265,7 @@ const t: Record<keyof typeof en, string> = {
 	ragStatEmbedded: "임베딩됨",
 	shareFooter: "LAN으로 공유",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
-	tabShare: "공유",
+	tabShare: "Share on LAN",
 	shareEmpty: "공유 중인 대화가 없습니다. 채팅을 열고 답변 아래의 공유 버튼으로 게시하세요.",
 	shareUntitled: "제목 없는 대화",
 	shareDelete: "공유 중지 후 삭제",
