@@ -264,8 +264,6 @@ const en = {
 	tabShare: "Share",
 	shareEmpty: "No conversations are being shared. Open a chat and press the share button under an answer to publish it.",
 	shareUntitled: "Untitled conversation",
-	sharePaused: "Share paused — the address no longer works",
-	shareResumed: "Share resumed — the address works again",
 	shareDelete: "Stop sharing and delete",
 	shareDeleted: "Share deleted",
 	shareDownloadCta: "Install",

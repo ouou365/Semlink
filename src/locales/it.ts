@@ -267,8 +267,6 @@ const t: Record<keyof typeof en, string> = {
 	tabShare: "Condivisione",
 	shareEmpty: "Nessuna conversazione in condivisione. Apri una chat e premi il pulsante di condivisione sotto una risposta per pubblicarla.",
 	shareUntitled: "Conversazione senza titolo",
-	sharePaused: "Condivisione in pausa — l'indirizzo non funziona più",
-	shareResumed: "Condivisione ripresa — l'indirizzo funziona di nuovo",
 	shareDelete: "Interrompi e elimina",
 	shareDeleted: "Condivisione eliminata",
 	shareDownloadCta: "Installa",

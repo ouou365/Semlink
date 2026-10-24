@@ -265,8 +265,6 @@ const t: Record<keyof typeof en, string> = {
 	tabShare: "分享",
 	shareEmpty: "目前沒有共享的對話。開啟聊天，點擊回答下方的分享按鈕即可發佈。",
 	shareUntitled: "未命名對話",
-	sharePaused: "共享已暫停 — 位址不再可存取",
-	shareResumed: "共享已恢復 — 位址重新可存取",
 	shareDelete: "停止共享並刪除",
 	shareDeleted: "共享已刪除",
 	shareDownloadCta: "安裝",

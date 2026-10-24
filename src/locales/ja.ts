@@ -265,8 +265,6 @@ const t: Record<keyof typeof en, string> = {
 	tabShare: "共有",
 	shareEmpty: "共有中の会話はありません。チャットを開き、回答下の共有ボタンから公開できます。",
 	shareUntitled: "無題の会話",
-	sharePaused: "共有を一時停止しました — アドレスは機能していません",
-	shareResumed: "共有を再開しました — アドレスが再度機能しています",
 	shareDelete: "共有を停止して削除",
 	shareDeleted: "共有を削除しました",
 	shareDownloadCta: "インストール",

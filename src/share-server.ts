@@ -23,7 +23,7 @@ import { join } from "path";
 const MAX_SHARES = 50;
 
 interface StoredRegistry {
-	shares?: Array<{ token: string; sessionId: string; enabled?: boolean; sharedAt?: number }>;
+	shares?: Array<{ token: string; sessionId: string; sharedAt?: number }>;
 }
 
 export class ShareServer {
@@ -35,9 +35,6 @@ export class ShareServer {
 	private tokens = new Map<string, string>();
 	/** token -> sessionId (reverse lookup for request-driven rendering). */
 	private sessions = new Map<string, string>();
-	/** Tokens currently serving 200s; a paused share stays registered but
-	 *  answers 404 until re-enabled. Missing from the set = enabled. */
-	private paused = new Set<string>();
 	/** token -> when the user triggered the share (ms epoch); shown as the
 	 *  page's timestamp and kept stable across re-renders. */
 	private sharedAts = new Map<string, number>();
@@ -74,11 +71,10 @@ export class ShareServer {
 			// Entries created before sharedAt existed get pinned to load time —
 			// stable from then on, instead of drifting to every re-render.
 			const legacyStamp = Date.now();
-			for (const { token, sessionId, enabled, sharedAt } of raw.shares ?? []) {
+			for (const { token, sessionId, sharedAt } of raw.shares ?? []) {
 				if (typeof token === "string" && typeof sessionId === "string") {
 					this.tokens.set(sessionId, token);
 					this.sessions.set(token, sessionId);
-					if (enabled === false) this.paused.add(token);
 					this.sharedAts.set(token, typeof sharedAt === "number" ? sharedAt : legacyStamp);
 				}
 			}
@@ -93,7 +89,6 @@ export class ShareServer {
 			const shares = [...this.tokens.entries()].map(([sessionId, token]) => ({
 				token,
 				sessionId,
-				enabled: !this.paused.has(token),
 				sharedAt: this.sharedAts.get(token) ?? Date.now(),
 			}));
 			writeFileSync(this.registryPath, JSON.stringify({ shares }, null, 2), "utf-8");
@@ -149,7 +144,6 @@ export class ShareServer {
 			// share URLs themselves) survives the restart by design.
 			this.pages.clear();
 			this.pending.clear();
-			this.paused.clear();
 			if (!this.server) {
 				resolve();
 				return;
@@ -175,7 +169,6 @@ export class ShareServer {
 			this.tokens.set(sessionId, token);
 			this.sessions.set(token, sessionId);
 			this.sharedAts.set(token, sharedAt);
-			this.paused.delete(token);
 			while (this.tokens.size > MAX_SHARES) {
 				const oldest = this.tokens.keys().next().value as string | undefined;
 				if (oldest === undefined) break;
@@ -206,32 +199,18 @@ export class ShareServer {
 		if (!sessionId) return false;
 		this.tokens.delete(sessionId);
 		this.sessions.delete(token);
-		this.paused.delete(token);
 		this.pages.delete(token);
 		this.sharedAts.delete(token);
 		this.persistRegistry();
 		return true;
 	}
 
-	/** Pause (404 while paused, registry kept) or resume a share. */
-	setShareEnabled(token: string, enabled: boolean): boolean {
-		if (!this.sessions.has(token)) return false;
-		if (enabled) this.paused.delete(token);
-		else {
-			this.paused.add(token);
-			this.pages.delete(token);
-		}
-		this.persistRegistry();
-		return true;
-	}
-
 	/** All registered shares for the settings page (title resolution is the
 	 *  caller's job — it owns the chat-history store). */
-	listShares(): Array<{ token: string; sessionId: string; enabled: boolean; sharedAt: number }> {
+	listShares(): Array<{ token: string; sessionId: string; sharedAt: number }> {
 		return [...this.tokens.entries()].map(([sessionId, token]) => ({
 			token,
 			sessionId,
-			enabled: !this.paused.has(token),
 			sharedAt: this.sharedAts.get(token) ?? Date.now(),
 		}));
 	}
@@ -263,7 +242,7 @@ export class ShareServer {
 		const cached = this.pages.get(token);
 		if (cached !== undefined) return cached;
 		const sessionId = this.sessions.get(token);
-		if (!sessionId || this.paused.has(token)) return null;
+		if (!sessionId) return null;
 		const inflight = this.pending.get(token);
 		if (inflight) return inflight;
 		const sharedAt = this.sharedAts.get(token) ?? Date.now();

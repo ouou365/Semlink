@@ -267,8 +267,6 @@ const t: Record<keyof typeof en, string> = {
 	tabShare: "Compartir",
 	shareEmpty: "No hay conversaciones compartidas. Abre un chat y pulsa el botón de compartir bajo una respuesta para publicarla.",
 	shareUntitled: "Conversación sin título",
-	sharePaused: "Uso compartido en pausa — la dirección ya no funciona",
-	shareResumed: "Uso compartido reanudado — la dirección vuelve a funcionar",
 	shareDelete: "Dejar de compartir y eliminar",
 	shareDeleted: "Recurso compartido eliminado",
 	shareDownloadCta: "Instalar",

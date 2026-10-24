@@ -266,8 +266,6 @@ const zh: Record<keyof typeof en, string> = {
 	tabShare: "分享",
 	shareEmpty: "当前没有共享的对话。打开聊天，点击回答下方的分享按钮即可发布。",
 	shareUntitled: "未命名对话",
-	sharePaused: "共享已暂停 — 地址不再可访问",
-	shareResumed: "共享已恢复 — 地址重新可访问",
 	shareDelete: "停止共享并删除",
 	shareDeleted: "共享已删除",
 	shareDownloadCta: "安装",

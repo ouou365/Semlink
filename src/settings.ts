@@ -650,12 +650,12 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			// Sorted: live shares first, then paused; newest session first.
 			const rows = shares
 				.map((entry) => ({ ...entry, title: titleOf(entry.sessionId) }))
-				.sort((a, b) => Number(b.enabled) - Number(a.enabled) || b.sessionId.localeCompare(a.sessionId));
+				.sort((a, b) => b.sessionId.localeCompare(a.sessionId));
 			list.empty();
 			for (const row of rows) {
 				// Same card anatomy as the MCP tab: icon, title+FULL-URL main,
 				// then copy / QR / open / delete + toggle on the right edge.
-				const item = list.createDiv({ cls: "semlink-mcp-server" + (row.enabled ? "" : " is-paused") });
+				const item = list.createDiv({ cls: "semlink-mcp-server" });
 				const icon = item.createDiv({ cls: "semlink-mcp-server-icon" });
 				setIcon(icon, "share-2");
 				const main = item.createDiv({ cls: "semlink-mcp-server-main" });
@@ -686,14 +686,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					if (list.children.length === 0) rerenderSettingsTab(this);
 				});
 
-				const toggleWrap = item.createDiv({ cls: "semlink-mcp-server-toggle" });
-				new ToggleComponent(toggleWrap)
-					.setValue(row.enabled)
-					.onChange(async (on) => {
-						server.setShareEnabled(row.token, on);
-						item.toggleClass("is-paused", !on);
-						new Notice(on ? t("shareResumed") : t("sharePaused"));
-					});
 			}
 		})();
 	}
