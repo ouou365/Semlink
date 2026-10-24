@@ -695,8 +695,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					// open-in-browser + stop sharing.
 					new ShareQrModal(this.app, {
 						url,
-						previewUrl: server.localhostUrl(token),
-						onRevoke: () => server.revokeToken(token),
+						previewUrl: server.localhostUrl(row.token),
+						onRevoke: () => server.revokeToken(row.token),
 					}).open();
 				});
 
