@@ -258,6 +258,7 @@ const en = {
 	shareRevoked: "Sharing stopped — the address no longer works.",
 	shareOpenBrowser: "Open in browser",
 	shareQrCode: "Show QR code",
+	shareHome: "Home",
 	shareFooter: "Shared on your local network",
 	tabShare: "Share",
 	shareTabHint: "Conversations published to your local network. Paused links return “not found” but keep their address; deleted links are gone for good.",
