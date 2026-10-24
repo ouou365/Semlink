@@ -5877,3 +5877,19 @@ body .semlink-msg-user::selection {
 .semlink-mcp-server.is-paused {
 	opacity: 0.62;
 }
+
+/* ── Share QR popup ── */
+.semlink-share-qr {
+	display: flex;
+	justify-content: center;
+	padding: 6px 0 14px;
+}
+.semlink-share-qr-img svg {
+	display: block;
+	width: 220px;
+	height: 220px;
+	background: #fff;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	shape-rendering: crispEdges;
+}

@@ -6,6 +6,7 @@
 // revoke button that kills the share.
 
 import { App, Modal, Notice, setIcon } from "obsidian";
+import * as QRCode from "qrcode";
 import { t } from "./i18n";
 
 export interface ShareModalOptions {
@@ -50,6 +51,63 @@ export class ShareModal extends Modal {
 			});
 			revokeBtn.addEventListener("click", () => {
 				this.opts.onRevoke?.();
+				new Notice(t("shareRevoked"));
+				this.close();
+			});
+		}
+	}
+}
+
+/** QR-code popup for one share URL: big scannable code + the address with
+ *  a copy button — lets a phone join without typing the address. */
+export class ShareQrModal extends Modal {
+	constructor(app: App, private url: string, private onRevoke?: () => void) {
+		super(app);
+	}
+
+	async onOpen(): Promise<void> {
+		this.modalEl.addClass("semlink-share-modal");
+		this.contentEl.empty();
+		this.contentEl.createEl("h3", { text: t("shareTitle") });
+
+		const qrWrap = this.contentEl.createDiv({ cls: "semlink-share-qr" });
+		// Build the QR as an inline SVG from the raw module matrix — no
+		// canvas dependency, crisp at any size.
+		const qr = QRCode.create(this.url, { errorCorrectionLevel: "M" });
+		const size = qr.modules.size;
+		let path = "";
+		for (let y = 0; y < size; y++) {
+			for (let x = 0; x < size; x++) {
+				if (qr.modules.data[y * size + x]) path += `M${x} ${y}h1v1h-1z`;
+			}
+		}
+		const NS = "http://www.w3.org/2000/svg";
+		const svgEl = document.createElementNS(NS, "svg");
+		svgEl.setAttribute("viewBox", `0 0 ${size} ${size}`);
+		svgEl.setAttribute("shape-rendering", "crispEdges");
+		const pathEl = document.createElementNS(NS, "path");
+		pathEl.setAttribute("d", path);
+		pathEl.setAttribute("fill", "#111");
+		svgEl.appendChild(pathEl);
+		qrWrap.createDiv({ cls: "semlink-share-qr-img" }).appendChild(svgEl);
+
+		const row = this.contentEl.createDiv({ cls: "semlink-share-row" });
+		row.createSpan({ cls: "semlink-share-url", text: this.url });
+		const copyBtn = row.createEl("button", { cls: "semlink-share-copy", attr: { "aria-label": t("shareCopy") } });
+		setIcon(copyBtn, "copy");
+		copyBtn.addEventListener("click", () => {
+			void navigator.clipboard.writeText(this.url).then(() => new Notice(t("shareCopied")));
+		});
+
+		this.contentEl.createDiv({ cls: "semlink-share-hint", text: t("shareHint") });
+
+		if (this.onRevoke) {
+			const revokeBtn = this.contentEl.createEl("button", {
+				cls: "semlink-share-revoke",
+				text: t("shareRevoke"),
+			});
+			revokeBtn.addEventListener("click", () => {
+				this.onRevoke?.();
 				new Notice(t("shareRevoked"));
 				this.close();
 			});

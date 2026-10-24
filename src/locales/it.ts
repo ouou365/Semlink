@@ -260,6 +260,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoke: "Interrompi condivisione",
 	shareRevoked: "Condivisione interrotta: l'indirizzo non funziona più.",
 	shareOpenBrowser: "Apri nel browser",
+	shareQrCode: "Codice QR",
 	shareFooter: "Condiviso in rete locale",
 	tabShare: "Condivisione",
 	shareTabHint: "Gestisci le conversazioni pubblicate sulla rete locale. I link in pausa restituiscono «non trovato» ma conservano l'indirizzo; i link eliminati spariscono per sempre.",

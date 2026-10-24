@@ -17,6 +17,7 @@ import { licenseErrorMessage } from "./license";
 import { LANGUAGES, t } from "./i18n";
 import { ConfirmModal } from "./confirm-modal";
 import { markDestructive, rerenderSettingsTab, showSliderValue } from "./ui-compat";
+import { ShareQrModal } from "./share-modal";
 
 type SettingsTab = "general" | "model" | "mcp" | "index" | "embedding" | "share" | "bot";
 
@@ -655,16 +656,37 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				.sort((a, b) => Number(b.enabled) - Number(a.enabled) || b.sessionId.localeCompare(a.sessionId));
 			list.empty();
 			for (const row of rows) {
-				// Same card anatomy as the MCP tab: icon, title+sub main, then
-				// delete + toggle pinned to the right edge.
+				// Same card anatomy as the MCP tab: icon, title+FULL-URL main,
+				// then copy / QR / open / delete + toggle on the right edge.
 				const item = list.createDiv({ cls: "semlink-mcp-server" + (row.enabled ? "" : " is-paused") });
 				const icon = item.createDiv({ cls: "semlink-mcp-server-icon" });
 				setIcon(icon, "share-2");
 				const main = item.createDiv({ cls: "semlink-mcp-server-main" });
 				main.createDiv({ cls: "semlink-mcp-server-name", text: row.title });
-				main.createDiv({ cls: "semlink-mcp-server-sub", text: `…/s/${row.token.slice(0, 8)}…` });
+				const url = server.urls(row.token)[0];
+				main.createDiv({ cls: "semlink-mcp-server-sub", text: url });
 
-				const delBtn = item.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareDelete") } });
+				const actions = item.createDiv({ cls: "semlink-mcp-server-actions" });
+
+				const copyBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareCopy"), title: t("shareCopy") } });
+				setIcon(copyBtn, "copy");
+				copyBtn.addEventListener("click", () => {
+					void navigator.clipboard.writeText(url).then(() => new Notice(t("shareCopied")));
+				});
+
+				const qrBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareQrCode"), title: t("shareQrCode") } });
+				setIcon(qrBtn, "qr-code");
+				qrBtn.addEventListener("click", () => {
+					new ShareQrModal(this.app, url).open();
+				});
+
+				const openBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareOpenBrowser"), title: t("shareOpenBrowser") } });
+				setIcon(openBtn, "external-link");
+				openBtn.addEventListener("click", () => {
+					window.open(url, "_blank");
+				});
+
+				const delBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareDelete") } });
 				setIcon(delBtn, "trash-2");
 				delBtn.addEventListener("click", () => {
 					server.revokeToken(row.token);

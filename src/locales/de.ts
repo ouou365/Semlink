@@ -258,6 +258,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoke: "Freigabe beenden",
 	shareRevoked: "Freigabe beendet — die Adresse funktioniert nicht mehr.",
 	shareOpenBrowser: "Im Browser öffnen",
+	shareQrCode: "QR-Code",
 	shareFooter: "Im LAN geteilt",
 	tabShare: "Teilen",
 	shareTabHint: "Im lokalen Netzwerk veröffentlichte Unterhaltungen verwalten. Pausierte Links liefern „nicht gefunden“, behalten aber ihre Adresse; gelöschte Links sind endgültig weg.",

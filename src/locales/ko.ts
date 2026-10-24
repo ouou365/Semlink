@@ -258,6 +258,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoke: "공유 중지",
 	shareRevoked: "공유가 중지되어 주소가 더 이상 작동하지 않습니다.",
 	shareOpenBrowser: "브라우저에서 열기",
+	shareQrCode: "QR 코드",
 	shareFooter: "LAN으로 공유",
 	tabShare: "공유",
 	shareTabHint: "로컬 네트워크에 공개된 대화 페이지를 관리합니다. 일시 중지된 링크는 「찾을 수 없음」을 반환하지만 주소는 유지되며, 삭제된 링크는 영구적으로 사라집니다.",
