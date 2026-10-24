@@ -5864,17 +5864,17 @@ body .semlink-msg-user::selection {
 /* ── Share revoke button ── */
 .semlink-share-revoke {
 	margin-top: 4px;
-	padding: 6px 14px;
+	padding: 7px 14px;
 	cursor: pointer;
 	border-radius: 8px;
-	border: 1px solid var(--background-modifier-error-border, var(--background-modifier-border));
-	background: var(--background-secondary);
-	color: var(--text-error, #c54444);
+	border: none;
+	background: var(--text-error, #c54444);
+	color: #fff;
 	font-size: 13px;
+	font-weight: 600;
 }
 .semlink-share-revoke:hover {
-	background: var(--background-modifier-error, rgba(197, 68, 68, 0.1));
-	border-color: var(--text-error, #c54444);
+	background: var(--background-modifier-error-hover, #a83a3a);
 }
 
 /* Share rows (MCP card anatomy) in the paused state. */
