@@ -82,7 +82,7 @@ export async function renderSharePage(
 	const ui = {
 		cta: allLangs("shareDownloadCta"),
 		meta: allLangs("shareFooter"),
-		footer: allLangs("shareFooter"),
+		slogan: allLangs("shareBrandSub"),
 		home: allLangs("shareHome"),
 	} as Partial<Record<string, Partial<Record<string, string>>>>;
 	const uiJson = JSON.stringify(ui).replace(/</g, "\\u003c");
@@ -179,8 +179,6 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 /* ── Card foot: postcard sign-off above the dashed mid-line ── */
 .pc-foot{display:flex;align-items:center;justify-content:center;gap:9px;margin:26px 36px 0;padding:16px 2px 22px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--faint)}
 .pc-foot .foot-logo{width:20px;height:20px;flex:none;color:var(--brand)}
-.pc-foot .foot-name{font-weight:700;font-size:13.5px;color:var(--ink)}
-.pc-foot .foot-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 @media(max-width:620px){
 	body{padding:16px 8px 40px}
@@ -214,7 +212,7 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 ${parts.join("\n")}
 </div>
 </div>
-<footer class="pc-foot">${logoSvg.replace("<svg ", '<svg class="foot-logo" ')}<span class="foot-name">Semlink</span><span class="foot-text" data-ui="footer">${esc(t("shareFooter"))}</span></footer>
+<footer class="pc-foot">${logoSvg.replace("<svg ", '<svg class="foot-logo" ')}<span data-ui="slogan">${esc(t("shareBrandSub"))}</span></footer>
 </div>
 <script>
 (function(){

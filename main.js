@@ -393,7 +393,7 @@ ${f.map((O,N)=>({l:O,i:N})).filter(({l:O})=>/^#{1,6}\s/.test(O)).map(({l:O,i:N})
         fill="none" stroke="currentColor" stroke-width="58" stroke-linejoin="round" stroke-linecap="round"/>
  </g>
 </svg>
-`;async function wl(n,t,a,r,i="light",s=Date.now()){let o=O=>O.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"),e=createDiv({cls:"semlink-share-offscreen"});document.body.appendChild(e);let f=[];try{for(let O of t){if(O.role==="user"){f.push(`<div class="msg user"><div class="bubble">${o(O.content)}</div></div>`);continue}let N=e.createDiv({cls:"answer markdown-rendered"});await pv.MarkdownRenderer.render(n,O.content,N,"",r);let H=document.createTreeWalker(N,NodeFilter.SHOW_TEXT,{acceptNode:J=>{let V=J.parentElement;if(!V)return NodeFilter.FILTER_REJECT;let te=V.tagName;return te==="CODE"||te==="PRE"||te==="A"?NodeFilter.FILTER_REJECT:/\[\d{1,3}\]/.test(J.nodeValue??"")?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT}}),W=[];for(;H.nextNode();)W.push(H.currentNode);for(let J of W)J.nodeValue=(J.nodeValue??"").replace(/\s?\[\d{1,3}\]/g,"");f.push(`<div class="msg assistant"><div class="bubble md">${N.innerHTML}</div></div>`),N.remove()}}finally{e.remove()}let c=o(a),A=new Date(s),d=O=>String(O).padStart(2,"0"),m=`${A.getFullYear()}-${d(A.getMonth()+1)}-${d(A.getDate())} ${d(A.getHours())}:${d(A.getMinutes())}:${d(A.getSeconds())}`,g={cta:to("shareDownloadCta"),meta:to("shareFooter"),footer:to("shareFooter"),home:to("shareHome")},y=JSON.stringify(g).replace(/</g,"\\u003c"),v="data:image/svg+xml,"+encodeURIComponent(vr.replace("<svg ",'<svg color="#8b6cef" '));return`<!DOCTYPE html>
+`;async function wl(n,t,a,r,i="light",s=Date.now()){let o=O=>O.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"),e=createDiv({cls:"semlink-share-offscreen"});document.body.appendChild(e);let f=[];try{for(let O of t){if(O.role==="user"){f.push(`<div class="msg user"><div class="bubble">${o(O.content)}</div></div>`);continue}let N=e.createDiv({cls:"answer markdown-rendered"});await pv.MarkdownRenderer.render(n,O.content,N,"",r);let H=document.createTreeWalker(N,NodeFilter.SHOW_TEXT,{acceptNode:J=>{let V=J.parentElement;if(!V)return NodeFilter.FILTER_REJECT;let te=V.tagName;return te==="CODE"||te==="PRE"||te==="A"?NodeFilter.FILTER_REJECT:/\[\d{1,3}\]/.test(J.nodeValue??"")?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT}}),W=[];for(;H.nextNode();)W.push(H.currentNode);for(let J of W)J.nodeValue=(J.nodeValue??"").replace(/\s?\[\d{1,3}\]/g,"");f.push(`<div class="msg assistant"><div class="bubble md">${N.innerHTML}</div></div>`),N.remove()}}finally{e.remove()}let c=o(a),A=new Date(s),d=O=>String(O).padStart(2,"0"),m=`${A.getFullYear()}-${d(A.getMonth()+1)}-${d(A.getDate())} ${d(A.getHours())}:${d(A.getMinutes())}:${d(A.getSeconds())}`,g={cta:to("shareDownloadCta"),meta:to("shareFooter"),slogan:to("shareBrandSub"),home:to("shareHome")},y=JSON.stringify(g).replace(/</g,"\\u003c"),v="data:image/svg+xml,"+encodeURIComponent(vr.replace("<svg ",'<svg color="#8b6cef" '));return`<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${c}</title>
@@ -482,8 +482,6 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 /* \u2500\u2500 Card foot: postcard sign-off above the dashed mid-line \u2500\u2500 */
 .pc-foot{display:flex;align-items:center;justify-content:center;gap:9px;margin:26px 36px 0;padding:16px 2px 22px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--faint)}
 .pc-foot .foot-logo{width:20px;height:20px;flex:none;color:var(--brand)}
-.pc-foot .foot-name{font-weight:700;font-size:13.5px;color:var(--ink)}
-.pc-foot .foot-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 @media(max-width:620px){
 	body{padding:16px 8px 40px}
@@ -512,7 +510,7 @@ ${f.join(`
 `)}
 </div>
 </div>
-<footer class="pc-foot">${vr.replace("<svg ",'<svg class="foot-logo" ')}<span class="foot-name">Semlink</span><span class="foot-text" data-ui="footer">${o(x("shareFooter"))}</span></footer>
+<footer class="pc-foot">${vr.replace("<svg ",'<svg class="foot-logo" ')}<span data-ui="slogan">${o(x("shareBrandSub"))}</span></footer>
 </div>
 <script>
 (function(){
