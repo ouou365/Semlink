@@ -5862,7 +5862,10 @@ body .semlink-msg-user::selection {
 }
 
 /* ── Share revoke button ── */
-.semlink-share-revoke {
+/* Modal-scoped + button tag: outspecifies theme globals like button:hover
+   that would otherwise repaint the white label dark on hover. */
+.semlink-modal button.semlink-share-revoke,
+button.semlink-share-revoke {
 	margin-top: 4px;
 	padding: 7px 14px;
 	cursor: pointer;
@@ -5873,8 +5876,10 @@ body .semlink-msg-user::selection {
 	font-size: 13px;
 	font-weight: 600;
 }
-.semlink-share-revoke:hover {
+.semlink-modal button.semlink-share-revoke:hover,
+button.semlink-share-revoke:hover {
 	background: var(--background-modifier-error-hover, #a83a3a);
+	color: #fff;
 }
 
 /* Share rows (MCP card anatomy) in the paused state. */
