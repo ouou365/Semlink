@@ -1425,9 +1425,10 @@ export class SemanticSearchView extends ItemView {
 			// Lock what the sharer sees INTO the link: UI language + light/dark.
 			const lang = getLang();
 			const theme = document.body.classList.contains("theme-dark") ? "dark" : "light";
-			const html = await renderSharePage(this.app, this.currentMessages, this.firstQuestion || t("shareTitle"), this, theme);
+			const sharedAt = Date.now();
+			const html = await renderSharePage(this.app, this.currentMessages, this.firstQuestion || t("shareTitle"), this, theme, sharedAt);
 			await this.plugin.shareServer.ensureStarted(this.plugin.settings.sharePort);
-			const token = this.plugin.shareServer.register(sessionId, html);
+			const token = this.plugin.shareServer.register(sessionId, html, sharedAt);
 			new ShareModal(this.app, {
 				urls: this.plugin.shareServer.urls(token, `lang=${lang}&theme=${theme}`),
 				onRevoke: () => this.plugin.shareServer.revokeSession(sessionId),

@@ -34,6 +34,9 @@ export async function renderSharePage(
 	title: string,
 	component: Component,
 	theme: ShareTheme = "light",
+	/** When the user triggered the share (ms epoch) — the page timestamp is
+	 *  the SHARE moment, not the moment a visitor re-opens it. */
+	sharedAt: number = Date.now(),
 ): Promise<string> {
 	const esc = (s: string): string =>
 		s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -71,7 +74,7 @@ export async function renderSharePage(
 		holder.remove();
 	}
 	const safeTitle = esc(title);
-	const day = new Date();
+	const day = new Date(sharedAt);
 	const pad = (n: number): string => String(n).padStart(2, "0");
 	const dateLabel = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())} ${pad(day.getHours())}:${pad(day.getMinutes())}:${pad(day.getSeconds())}`;
 	// The labels are embedded per-language so a ?lang=.. in the URL always

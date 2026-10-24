@@ -23,7 +23,7 @@ import { join } from "path";
 const MAX_SHARES = 50;
 
 interface StoredRegistry {
-	shares?: Array<{ token: string; sessionId: string; enabled?: boolean }>;
+	shares?: Array<{ token: string; sessionId: string; enabled?: boolean; sharedAt?: number }>;
 }
 
 export class ShareServer {
@@ -38,12 +38,15 @@ export class ShareServer {
 	/** Tokens currently serving 200s; a paused share stays registered but
 	 *  answers 404 until re-enabled. Missing from the set = enabled. */
 	private paused = new Set<string>();
+	/** token -> when the user triggered the share (ms epoch); shown as the
+	 *  page's timestamp and kept stable across re-renders. */
+	private sharedAts = new Map<string, number>();
 	/** token -> rendered page HTML (in-memory cache only). */
 	private pages = new Map<string, string>();
 	/** In-flight render promises, so concurrent hits render once. */
 	private pending = new Map<string, Promise<string | null>>();
 
-	constructor(dataDir: string, private render: (sessionId: string) => Promise<string | null>) {
+	constructor(dataDir: string, private render: (sessionId: string, sharedAt: number) => Promise<string | null>) {
 		this.dataDir = dataDir;
 		this.registryPath = join(dataDir, "share-registry.json");
 		this.loadRegistry();
@@ -68,11 +71,12 @@ export class ShareServer {
 		try {
 			if (!existsSync(this.registryPath)) return;
 			const raw = JSON.parse(readFileSync(this.registryPath, "utf-8")) as StoredRegistry;
-			for (const { token, sessionId, enabled } of raw.shares ?? []) {
+			for (const { token, sessionId, enabled, sharedAt } of raw.shares ?? []) {
 				if (typeof token === "string" && typeof sessionId === "string") {
 					this.tokens.set(sessionId, token);
 					this.sessions.set(token, sessionId);
 					if (enabled === false) this.paused.add(token);
+					if (typeof sharedAt === "number") this.sharedAts.set(token, sharedAt);
 				}
 			}
 		} catch (e) {
@@ -87,6 +91,7 @@ export class ShareServer {
 				token,
 				sessionId,
 				enabled: !this.paused.has(token),
+				sharedAt: this.sharedAts.get(token) ?? Date.now(),
 			}));
 			writeFileSync(this.registryPath, JSON.stringify({ shares }, null, 2), "utf-8");
 		} catch (e) {
@@ -160,12 +165,13 @@ export class ShareServer {
 	/** Register (or refresh) the snapshot for a session; returns its stable
 	 *  token. Re-sharing a session keeps the same share URL; new tokens are
 	 *  persisted so the URL keeps working across restarts. */
-	register(sessionId: string, html: string): string {
+	register(sessionId: string, html: string, sharedAt = Date.now()): string {
 		let token = this.tokens.get(sessionId);
 		if (!token) {
 			token = randomBytes(12).toString("hex");
 			this.tokens.set(sessionId, token);
 			this.sessions.set(token, sessionId);
+			this.sharedAts.set(token, sharedAt);
 			this.paused.delete(token);
 			while (this.tokens.size > MAX_SHARES) {
 				const oldest = this.tokens.keys().next().value as string | undefined;
@@ -199,6 +205,7 @@ export class ShareServer {
 		this.sessions.delete(token);
 		this.paused.delete(token);
 		this.pages.delete(token);
+		this.sharedAts.delete(token);
 		this.persistRegistry();
 		return true;
 	}
@@ -217,11 +224,12 @@ export class ShareServer {
 
 	/** All registered shares for the settings page (title resolution is the
 	 *  caller's job — it owns the chat-history store). */
-	listShares(): Array<{ token: string; sessionId: string; enabled: boolean }> {
+	listShares(): Array<{ token: string; sessionId: string; enabled: boolean; sharedAt: number }> {
 		return [...this.tokens.entries()].map(([sessionId, token]) => ({
 			token,
 			sessionId,
 			enabled: !this.paused.has(token),
+			sharedAt: this.sharedAts.get(token) ?? Date.now(),
 		}));
 	}
 
@@ -248,7 +256,8 @@ export class ShareServer {
 		if (!sessionId || this.paused.has(token)) return null;
 		const inflight = this.pending.get(token);
 		if (inflight) return inflight;
-		const job = this.render(sessionId)
+		const sharedAt = this.sharedAts.get(token) ?? Date.now();
+		const job = this.render(sessionId, sharedAt)
 			.then((html) => {
 				this.pending.delete(token);
 				if (html === null) return null;
