@@ -279,6 +279,24 @@ export class DbEngine {
 		this.save();
 	}
 
+	/** 嵌入模型变更：只清向量与文档向量（保留 chunks），并把存储的 mtime
+	 *  一并清空——扫描会将全部笔记视为新文件重走 add 流程，从而用新模型
+	 *  完成全量重嵌（"保留块 + 标记待嵌入"的落地）。 */
+	clearVectors(): void {
+		if (!this.db) return;
+		this.db.run("UPDATE chunks SET status = 'pending_embed', vector = NULL WHERE vector IS NOT NULL OR status = 'active'");
+		this.db.run("DELETE FROM note_doc_vectors");
+		this.db.run("DELETE FROM meta");
+		this.allVectors = null;
+		this.allVectorIds = [];
+		this.cacheLoaded = false;
+		this.allDocVectors = null;
+		this.allDocNotePaths = [];
+		this.docPathToIndex.clear();
+		this.docCacheLoaded = false;
+		this.save();
+	}
+
 	/** Compact database to reclaim disk space */
 	compact(): void {
 		if (!this.db) return;
@@ -525,6 +543,16 @@ export class DbEngine {
 		return r.length > 0 ? (r[0].values[0][0] as number) : 0;
 	}
 
+	/** 已嵌入（至少一个 chunk 带向量）的笔记数 — 进度面板/引导页的「已嵌入」
+	 *  口径。与文档向量表不同，chunk 向量不会被算法迁移或补算重置清空，
+	 *  且与笔记嵌入同一事务落库——进度只增不减，不出现迁移期归零。 */
+	getEmbeddedNoteCount(): number {
+		const r = this.db!.exec(
+			"SELECT COUNT(DISTINCT note_path) FROM chunks WHERE status = 'active' AND vector IS NOT NULL",
+		);
+		return r.length > 0 ? (r[0].values[0][0] as number) : 0;
+	}
+
 	getStats(): { totalChunks: number; activeChunks: number; embeddedChunks: number; indexedNotes: number; dbSizeMb: number } {
 		let totalChunks = 0, activeChunks = 0, embeddedChunks = 0;
 		const r1 = this.db!.exec("SELECT COUNT(*) FROM chunks");
@@ -580,7 +608,7 @@ export class DbEngine {
 		const blob = Buffer.from(vec.buffer);
 		this.db!.run(
 			"INSERT OR REPLACE INTO note_doc_vectors (note_path, vector, mtime, heading_text) VALUES (?, ?, ?, ?)",
-			[blob, notePath, mtime, headingText]
+			[notePath, blob, mtime, headingText]
 		);
 		this.docCacheLoaded = false;
 	}

@@ -33,6 +33,7 @@ export function createDispatcher(): Dispatcher {
 			case "chunk": return chunkMarkdown(args[0] as string, args[1] as string, args[2] as number, args[3] as number);
 			case "save": return engine.save();
 			case "clearAll": return engine.clearAll();
+			case "clearVectors": return engine.clearVectors();
 			case "compact": return engine.compact();
 			case "close":
 				// Flush to disk before closing (unload path may not await us).
@@ -53,6 +54,7 @@ export function createDispatcher(): Dispatcher {
 			case "getAllIndexedPaths": return engine.getAllIndexedPaths();
 			case "pruneOrphanedPaths": return engine.pruneOrphanedPaths(args[0] as Set<string>);
 			case "getStats": return engine.getStats();
+			case "getEmbeddedNoteCount": return engine.getEmbeddedNoteCount();
 			case "saveEmbeddings": return engine.saveEmbeddings(args[0] as string[], args[1] as number[][]);
 			case "saveDocEmbedding": return engine.saveDocEmbedding(args[0] as string, args[1] as number[], args[2] as number, args[3] as string);
 			case "getDocVectorNotePaths": return engine.getDocVectorNotePaths();

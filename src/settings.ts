@@ -2,36 +2,31 @@
 // Semlink - Settings Tab
 // ========================================
 
-import { App, ButtonComponent, DropdownComponent, Modal, Notice, PluginSettingTab, Setting, ToggleComponent, setIcon } from "obsidian";
+import { App, DropdownComponent, Modal, Notice, PluginSettingTab, Setting, ToggleComponent, setIcon } from "obsidian";
 import * as QRCode from "qrcode";
 import type SmartVaultPlugin from "../main";
-import type { IndexProgress, McpClientServer, ModelProvider, SmartVaultSettings } from "./types";
-import { activeEmbeddingProvider } from "./types";
+import type { IndexProgress, McpClientServer, SmartVaultSettings } from "./types";
 import { AddFeishuBotModal } from "./feishu-bot-modal";
-import { mountCoffeeCanvas } from "./coffee-canvas";
-import { McpServer } from "./mcp-server";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
 import { LicenseModal } from "./license-modal";
 import { licenseErrorMessage } from "./license";
-import { LANGUAGES, t } from "./i18n";
+import { LANGUAGES, getLang, t } from "./i18n";
 import { ConfirmModal } from "./confirm-modal";
 import { markDestructive, rerenderSettingsTab, showSliderValue } from "./ui-compat";
 import { ShareQrModal } from "./share-modal";
+import { debugLog } from "./log";
 
-type SettingsTab = "general" | "model" | "mcp" | "index" | "embedding" | "share" | "bot";
+type SettingsTab = "general" | "model" | "mcp" | "embedding" | "share" | "bot";
 
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
-	private indexBtn: ButtonComponent | null = null;
-	private indexBtnUnsubscribe: (() => void) | null = null;
-	private indexBtnCurrentState: "resume" | "pause" | "none" = "none";
-	private indexBtnLoading = false;
 	private activeTab: SettingsTab = "general";
 	/** Provider-list state (models management, embedded in the General tab):
 	 *  which provider's editor is expanded / which add card is open. */
 	private modelsState: ModelsTabState = { ...EMPTY_MODELS_TAB_STATE };
 	private feishuScanHandle: FeishuScanHandle | null = null;
+	private indexCardUnsub: (() => void) | null = null;
 
 	constructor(app: App, plugin: SmartVaultPlugin) {
 		super(app, plugin);
@@ -77,15 +72,15 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
-		this.indexBtnUnsubscribe?.();
-		this.indexBtnUnsubscribe = null;
-		this.indexBtn = null;
-		this.indexBtnLoading = false;
-		this.indexBtnCurrentState = "none";
+		// 打开设置即触发一次总笔记数检查：reset 后（换嵌入模型/重索引/重嵌入）
+		// 若尚未跑全量扫描，总数会停在 0，RAG 卡片整体显示 0。
+		this.ensureTotalNotesSeeded();
 		// Abort any in-flight Feishu scan before re-rendering (a fresh QR
 		// session is started by the bot tab).
 		this.feishuScanHandle?.abort();
 		this.feishuScanHandle = null;
+		this.indexCardUnsub?.();
+		this.indexCardUnsub = null;
 
 		const { containerEl } = this;
 		containerEl.empty();
@@ -144,9 +139,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			case "share":
 				this.renderShareTab(panelEl);
 				break;
-			case "index":
-				this.renderIndexTab(panelEl);
-				break;
 			case "embedding":
 				this.renderEmbeddingTab(panelEl);
 				break;
@@ -156,12 +148,26 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		}
 	}
 
+	/** 总笔记数补数：换嵌入模型（saveSettings 指纹联动）、重新索引、重新嵌入
+	 *  都会 progress.reset()，而换模型只清向量不触发扫库，reset 后
+	 *  progress.totalNotes 停在 0 —— 设置页 RAG 卡片的 笔记总数/待索引 与
+	 *  两个百分比就全显示 0。与 onload 的种子逻辑同源：只枚举文件清单
+	 *  （不入队、不比对 mtime），代价极低；之后的真实扫描会用权威值覆盖。
+	 *  totalNotes 非零时零开销，display() 的每次重渲染都可安全重复调用。 */
+	private ensureTotalNotesSeeded(): void {
+		if (this.plugin.progress.current.totalNotes !== 0) return;
+		const seeded = this.plugin.scheduler.countIndexableNotes();
+		if (seeded > 0) {
+			this.plugin.progress.setTotalNotes(seeded);
+			debugLog(`[Semlink] Settings opened: reseeded total notes to ${seeded}`);
+		}
+	}
+
 	private renderTabNav(containerEl: HTMLElement): void {
 		const navEl = containerEl.createDiv({ cls: "semlink-settings-tabs" });
 		const tabs: Array<{ id: SettingsTab; label: string }> = [
 			{ id: "general", label: t("tabGeneral") },
 			{ id: "model", label: t("tabModel") },
-			{ id: "index", label: t("tabIndex") },
 			{ id: "embedding", label: t("tabEmbedding") },
 			{ id: "mcp", label: t("tabMcp") },
 			{ id: "share", label: t("tabShare") },
@@ -191,19 +197,93 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		this.renderLicenseSection(containerEl);
 
 		// Open the semantic-search sidebar panel.
-		new Setting(containerEl)
-			.setName(t("openSidebar"))
-			.setDesc(t("openSidebarDesc"))
-			.addButton((btn) =>
-				btn.setButtonText(t("open")).onClick(() => {
-					// Close the settings pane first — the sidebar opens into
-					// the workspace the user returns to.
-					(this.app as unknown as { setting: { close(): void } }).setting.close();
-					void this.plugin.activateSearchView();
-				})
-			);
+		// ── 上手清单：状态自动判定，全部完成后整卡收起为完成态 ──
+		// （原「快速开始」行已被清单的「开始对话」动作覆盖，不再重复展示）
+		this.renderChecklistSection(containerEl);
+	}
 
+	/** 通用页的上手清单：对话模型 / 嵌入模型 / 首次问答 / 解锁，四项状态
+	 *  均由实时设置与历史推导（无需用户手动打勾）；每项带直达动作。 */
+	private renderChecklistSection(containerEl: HTMLElement): void {
+		const providers = this.plugin.settings.providers;
+		const chatReady = providers.some(
+			(p) => !!p.apiKey.trim() && p.models.some((m) => (m.kind ?? "chat") === "chat" && m.enabled === true),
+		);
+		const embeddingProviders = providers.filter(
+			(p) => !!p.apiKey.trim() && p.models.some((m) => (m.kind ?? "chat") === "embedding"),
+		);
+		const embedKey = this.plugin.settings.embeddingModelKey;
+		const embedPid = embedKey.split("::")[0] ?? "";
+		const embedReady = embeddingProviders.some(
+			(p) => p.id === embedPid && p.models.some((m) => (m.kind ?? "chat") === "embedding" && `${p.id}::${m.id}` === embedKey),
+		);
+		let firstChatDone = false;
 
+		const card = containerEl.createDiv({ cls: "semlink-checklist" });
+		const head = card.createDiv({ cls: "semlink-checklist-head" });
+		head.createSpan({ cls: "semlink-checklist-title", text: t("checklistTitle") });
+		const progressEl = head.createSpan({ cls: "semlink-checklist-progress" });
+		const bar = card.createDiv({ cls: "semlink-checklist-bar" });
+		const barFill = bar.createDiv({ cls: "semlink-checklist-bar-fill" });
+		const rowsEl = card.createDiv({ cls: "semlink-checklist-rows" });
+
+		const rows: Array<{
+			label: string;
+			action: string;
+			onAction: () => void;
+			check: () => boolean;
+			rowEl: HTMLElement;
+			actionEl: HTMLElement;
+			iconEl: HTMLElement;
+		}> = [];
+
+		const addRow = (emoji: string, label: string, actionLabel: string, onAction: () => void, check: () => boolean): void => {
+			const rowEl = rowsEl.createDiv({ cls: "semlink-checklist-row" });
+			const iconEl = rowEl.createSpan({ cls: "semlink-checklist-icon" });
+			rowEl.createSpan({ cls: "semlink-checklist-label", text: emoji ? `${emoji} ${label}` : label });
+			const actionEl = rowEl.createEl("button", { cls: "semlink-checklist-action", text: actionLabel });
+			actionEl.addEventListener("click", onAction);
+			rows.push({ label: emoji ? `${emoji} ${label}` : label, action: actionLabel, onAction, check, rowEl, actionEl, iconEl });
+		};
+
+		// 前两行「开始配置」：打开右侧面板并触发对应引导（对话/嵌入目录）
+		addRow("", t("checklistChat"), t("ragSetupBtn"), () => {
+			(this.app as unknown as { setting: { close(): void } }).setting.close();
+			void this.plugin.openSetupGuide("chat");
+		}, () => chatReady);
+		addRow("", t("checklistEmbedding"), t("ragSetupBtn"), () => {
+			(this.app as unknown as { setting: { close(): void } }).setting.close();
+			void this.plugin.openSetupGuide("embed");
+		}, () => embedReady);
+		addRow("", t("checklistFirstChat"), t("checklistStartChat"), () => {
+			(this.app as unknown as { setting: { close(): void } }).setting.close();
+			void this.plugin.activateSearchView();
+		}, () => firstChatDone);
+
+		const refresh = (): void => {
+			let done = 0;
+			for (const r of rows) {
+				const d = r.check();
+				if (d) done++;
+				r.rowEl.toggleClass("is-done", d);
+				setIcon(r.iconEl, d ? "check" : "circle");
+			}
+			progressEl.setText(done === rows.length ? `✓ ${t("checklistDone")}` : `${done}/${rows.length}`);
+			barFill.setAttribute("style", `width: ${Math.round((done / rows.length) * 100)}%`);
+			card.toggleClass("is-complete", done === rows.length);
+		};
+		refresh();
+
+		// 首次问答：历史会话里出现真实消息即视为完成（异步补齐该行）
+		void this.plugin.historyStore
+			.load()
+			.then((sessions) => {
+				if (sessions.some((s) => s.messages.some((m) => m.role === "user" || m.role === "assistant"))) {
+					firstChatDone = true;
+					refresh();
+				}
+			})
+			.catch(() => { /* 历史不可用时保持未完成态 */ });
 	}
 
 	/** License card, conversion-first: badge + headline + one-line free
@@ -326,9 +406,166 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	}
 
 	// ══════════════════════════════════════
-	// Tab: Index — exclude paths, auto-index, full reindex
+	// Tab: Embedding (RAG) — status, model, index controls, rebuild
 	// ══════════════════════════════════════
-	private renderIndexTab(containerEl: HTMLElement): void {
+	/** RAG 页的两个进度面板：索引进度（阶段/待索引/已索引）与嵌入进度
+	 *  （待嵌入/已嵌入/嵌入率）。数据由进度事件与数据库统计双路刷新。 */
+	private renderIndexCard(containerEl: HTMLElement): void {
+		const row = (host: HTMLElement, label: string): HTMLElement => {
+			const r = host.createDiv({ cls: "semlink-index-card-row" });
+			r.createSpan({ cls: "semlink-index-card-label", text: label });
+			return r.createSpan({ cls: "semlink-index-card-value" });
+		};
+		// ── 双面板容器：左右并列（窄幅自动堆叠） ──
+		const panelsWrap = containerEl.createDiv({ cls: "semlink-index-panels" });
+		// ── 面板 1：索引进度（索引率并入标题，如「索引进度：100%」） ──
+		const indexPanel = panelsWrap.createDiv({ cls: "semlink-index-card" });
+		const iHead = indexPanel.createDiv({ cls: "semlink-index-card-head" });
+		const iTitleEl = iHead.createSpan({ cls: "semlink-index-card-title", text: t("indexProgressTitle") });
+		// 标题右侧开关 = 索引总开关（与下方「自动索引」行同一设置）：
+		// 关 = 停止文件监听并暂停当前索引；开 = 恢复监听并继续/重启索引。
+		const indexToggle = new ToggleComponent(iHead);
+		indexToggle.toggleEl.addClass("semlink-index-card-toggle");
+		indexToggle.toggleEl.setAttr("aria-label", t("autoIndex"));
+		indexToggle
+			.setValue(this.plugin.settings.autoIndex)
+			.onChange(async (value) => {
+				this.plugin.settings.autoIndex = value;
+				this.plugin.watcher.setAutoIndex(value);
+				await this.plugin.saveSettings();
+				if (value) this.plugin.scheduler.resume();
+				else this.plugin.scheduler.pause();
+				this.refreshPreservingScroll();
+			});
+		const totalEl = row(indexPanel, t("guideStatTotalNotes"));
+		const awaitingEl = row(indexPanel, t("awaitingChunking"));
+		const chunkedEl = row(indexPanel, t("chunkedNotes"));
+
+		// ── 面板 2：嵌入进度（嵌入率并入标题，如「嵌入进度：100%」） ──
+		const embedPanel = panelsWrap.createDiv({ cls: "semlink-index-card" });
+		const eHead = embedPanel.createDiv({ cls: "semlink-index-card-head" });
+		const eTitleEl = eHead.createSpan({ cls: "semlink-index-card-title", text: t("embedProgressTitle") });
+		// 标题右侧开关 = 自动嵌入总开关。调度器实时读取该设置：关 = 在跑的
+		// 索引继续分块、后续笔记不再调嵌入 API；开 = 后续笔记恢复嵌入。
+		const embedToggle = new ToggleComponent(eHead);
+		embedToggle.toggleEl.addClass("semlink-index-card-toggle");
+		embedToggle.toggleEl.setAttr("aria-label", t("autoEmbed"));
+		embedToggle
+			.setValue(this.plugin.settings.autoEmbed ?? true)
+			.onChange(async (value) => {
+				this.plugin.settings.autoEmbed = value;
+				await this.plugin.saveSettings();
+				this.refreshPreservingScroll();
+			});
+		const modelEl = row(embedPanel, t("ragSemantic"));
+		const providerEl = row(embedPanel, t("guideStep1"));
+		const vectorizedEl = row(embedPanel, t("vectorizedChunks"));
+		// 当前行：正在使用的嵌入模型 + 供应商（未配置显示 —）
+		const embedKey = this.plugin.settings.embeddingModelKey || "";
+		const ePid = embedKey.split("::")[0] ?? "";
+		const eMid = embedKey.split("::").slice(1).join("::");
+		const eProv = this.plugin.settings.providers.find((p) => p.id === ePid);
+		const eModel = eProv?.models.find((m) => (m.kind ?? "chat") === "embedding" && m.id === eMid);
+		modelEl.setText(eProv && eModel ? eModel.id : "—");
+		providerEl.setText(eProv && eModel ? eProv.name : "—");
+
+		// 待索引 = 总笔记数 - 已索引（与已索引同源，数据库口径）；
+		// apply 用最近一次查到的已索引数做即时倒计时，查库后校正。
+		let lastIndexed = 0;
+		const apply = (p: IndexProgress): void => {
+			awaitingEl.setText(Math.max(0, p.totalNotes - lastIndexed).toLocaleString());
+		};
+		// 两面板的数值行取数据库真实状态（笔记数），百分比并入标题：
+		// 索引进度 = 已索引 / 总笔记数；嵌入进度 = 已嵌入 / 总笔记数。
+		// 已嵌入口径 = 至少一个 chunk 带向量的笔记数（getEmbeddedNoteCount），
+		// 不读 note_doc_vectors——该表会被算法迁移/换模型清空重建，迁移期恒
+		// 为 0；chunk 向量与笔记嵌入同事务落库，进度只增不减。
+		// 百分比封顶 100%：重扫进行中 totalNotes 尚未补全时会短暂偏小。
+		// 首查常见于插件刚加载、DB worker 尚在初始化——失败不能静默吞掉
+		// （空闲时没有进度事件来重试），退避重试直到 worker 就绪补上数值。
+		let statsRetryTimer: number | null = null;
+		// CJK 文案用全角冒号，其余语言半角
+		const sep = ["zh", "zh-Hant", "ja"].includes(getLang()) ? "：" : ": ";
+		const rateText = (num: number, denom: number): string =>
+			denom > 0 ? `${Math.min(100, (num / denom) * 100).toFixed(1)}%` : "0%";
+		const refreshStats = async (attempt = 0): Promise<void> => {
+			try {
+				const [s, embeddedNotes] = await Promise.all([
+					this.plugin.store.getStats(),
+					this.plugin.store.getEmbeddedNoteCount(),
+				]);
+				lastIndexed = s.indexedNotes;
+				chunkedEl.setText(s.indexedNotes.toLocaleString());
+				const total = Math.max(0, this.plugin.progress.current.totalNotes);
+				totalEl.setText(total.toLocaleString());
+				const awaiting = Math.max(0, total - s.indexedNotes);
+				awaitingEl.setText(awaiting.toLocaleString());
+				iTitleEl.setText(`${t("indexProgressTitle")}${sep}${rateText(s.indexedNotes, total)}`);
+				vectorizedEl.setText(embeddedNotes.toLocaleString());
+				eTitleEl.setText(`${t("embedProgressTitle")}${sep}${rateText(embeddedNotes, total)}`);
+			} catch (e) {
+				if (attempt >= 8) {
+					console.warn("[Semlink] index stats unavailable:", e);
+					return;
+				}
+				statsRetryTimer = window.setTimeout(() => void refreshStats(attempt + 1), 1000 * (attempt + 1));
+			}
+		};
+		apply(this.plugin.progress.current);
+		void refreshStats();
+
+		// 单一合并订阅：索引进度事件实时刷新待索引 + 数值行节流查库（≤1s 一次）
+		let lastEmbedRefresh = 0;
+		const unIndex = this.plugin.progress.onProgress((e) => {
+			if (e.type !== "progress") return;
+			apply(e.progress);
+			const now = Date.now();
+			if (now - lastEmbedRefresh >= 1000) {
+				lastEmbedRefresh = now;
+				void refreshStats();
+			}
+		});
+		this.indexCardUnsub = () => {
+			unIndex();
+			if (statsRetryTimer != null) window.clearTimeout(statsRetryTimer);
+		};
+	}
+
+	private renderEmbeddingTab(containerEl: HTMLElement): void {
+		// ── 索引进度卡片（实时指标） ──
+		this.renderIndexCard(containerEl);
+
+		// 嵌入供应商:配置了 Key 且带有嵌入模型的供应商
+		const embeddingProviders = this.plugin.settings.providers.filter(
+			(p) => !!p.apiKey.trim() && p.models.some((m) => (m.kind ?? "chat") === "embedding"),
+		);
+
+		// ── Semantic search 行：按钮打开侧栏的配置引导（供应商/模型/嵌入） ──
+		// 已配置时描述显示当前模型；未配置时显示提示语。
+		const currentKey = this.plugin.settings.embeddingModelKey;
+		const keyPid = currentKey.split("::")[0] ?? "";
+		const keyMid = currentKey.split("::").slice(1).join("::");
+		const configuredProvider = embeddingProviders.find((p) => p.id === keyPid);
+		const configuredModel = configuredProvider?.models.find(
+			(m) => (m.kind ?? "chat") === "embedding" && m.id === keyMid,
+		);
+		new Setting(containerEl)
+			.setName(t("ragSemantic"))
+			.setDesc(configuredProvider && configuredModel
+				? `${configuredModel.id} · ${configuredProvider.name}`
+				: t("ragSemanticHint"))
+			.addButton((btn) =>
+				btn.setButtonText(t("ragSetupBtn")).onClick(() => {
+					// 关闭设置页，打开侧边栏的向量检索配置引导
+					// （选嵌入供应商、嵌入模型，然后是咖啡杯嵌入进度）。
+					(this.app as unknown as { setting: { close(): void } }).setting.close();
+					void this.plugin.openSetupGuide("embed");
+				})
+			);
+
+
+		// ── 索引控制（原 Index 页签并入）：排除路径（自动索引开关
+		//    已上移为索引进度面板标题右侧的开关） ──
 		new Setting(containerEl)
 			.setName(t("excludePaths"))
 			.setDesc(t("excludePathsDesc"))
@@ -338,36 +575,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				})
 			);
 
-		new Setting(containerEl)
-			.setName(t("autoIndex"))
-			.setDesc(t("autoIndexDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.autoIndex)
-					.onChange(async (value) => {
-						this.plugin.settings.autoIndex = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName(t("fullReindex"))
-			.setDesc(t("fullReindexDesc"))
-			.addButton((btn) => {
-				this.indexBtn = btn;
-				this.indexBtnCurrentState = "none";
-				this.applyIndexBtnState(this.plugin.progress.current);
-				this.indexBtnUnsubscribe = this.plugin.progress.onProgress((event) => {
-					if (event.type === "progress") {
-						this.applyIndexBtnState(event.progress);
-					}
-				});
-			});
-
-
-		// ── 高级选项：切块参数（改动后需重建索引） ──
+		// ── 高级选项（默认收起）：分块 / 批量 / 延迟 / 并发 ──
 		const advHead = containerEl.createDiv({ cls: "semlink-editor-adv-head" });
-		const chev = advHead.createDiv({ cls: "semlink-editor-adv-chevron" });
+		const chev = advHead.createSpan({ cls: "semlink-editor-adv-chevron" });
 		setIcon(chev, "chevron-right");
 		const advLabel = advHead.createSpan({ cls: "semlink-editor-adv-label", text: t("editorAdvancedShow") });
 		const advBody = containerEl.createDiv({ cls: "semlink-editor-adv-body semlink-hidden" });
@@ -378,6 +588,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
 		});
 
+
+		// 切块参数（改动后需重建索引）
 		new Setting(advBody)
 			.setName(t("chunkSize"))
 			.setDesc(t("chunkSizeDesc"))
@@ -399,113 +611,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 			});
-
-	}
-
-	// ══════════════════════════════════════
-	// Tab: Embedding — model, chunking params, rebuild
-	// ══════════════════════════════════════
-	private renderEmbeddingTab(containerEl: HTMLElement): void {
-		// ── 指标卡片:笔记 / 索引块 / 已嵌入 ──
-		const statsHost = containerEl.createDiv({ cls: "semlink-rag-stats" });
-		const statCard = (label: string): HTMLElement => {
-			const card = statsHost.createDiv({ cls: "semlink-rag-stat" });
-			card.createDiv({ cls: "semlink-rag-stat-num", text: "—" });
-			card.createDiv({ cls: "semlink-rag-stat-label", text: label });
-			return card;
-		};
-		const notesStat = statCard(t("ragStatNotes"));
-		const chunksStat = statCard(t("ragStatChunks"));
-		const embeddedStat = statCard(t("ragStatEmbedded"));
-		void this.plugin.store.getStats().then((s) => {
-			const set = (card: HTMLElement, v: number): void => {
-				const el = card.querySelector<HTMLElement>(".semlink-rag-stat-num");
-				if (el) el.textContent = v.toLocaleString();
-			};
-			set(notesStat, s.indexedNotes);
-			set(chunksStat, s.activeChunks);
-			set(embeddedStat, s.embeddedChunks);
-		}).catch(() => { /* worker unavailable — cards keep the placeholder */ });
-
-		// 嵌入供应商:配置了 Key 且带有嵌入模型的供应商
-		const embeddingProviders = this.plugin.settings.providers.filter(
-			(p) => !!p.apiKey.trim() && p.models.some((m) => (m.kind ?? "chat") === "embedding"),
-		);
-		const active = activeEmbeddingProvider(this.plugin.settings);
-		const currentKey = this.plugin.settings.embeddingModelKey
-			|| `${active.id}::${active.model}`;
-		const activeProvider =
-			embeddingProviders.find((p) => p.id === currentKey.split("::")[0])
-			?? embeddingProviders.find((p) => p.id === active.id)
-			?? embeddingProviders[0];
-
-
-
-		// ── 供应商 + 嵌入模型两级选择 ──
-		new Setting(containerEl)
-			.setName(t("embeddingProvider"))
-			.addDropdown((dropdown) => {
-				for (const p of embeddingProviders) dropdown.addOption(p.id, p.name);
-				if (activeProvider) dropdown.setValue(activeProvider.id);
-				dropdown.onChange(async (value) => {
-					// 切换供应商：嵌入模型落到该供应商的第一个嵌入模型
-					const p = embeddingProviders.find((x) => x.id === value);
-					const model = p?.models.find((m) => (m.kind ?? "chat") === "embedding");
-					if (p && model) {
-						this.plugin.settings.embeddingModelKey = `${p.id}::${model.id}`;
-						await this.plugin.saveSettings();
-						rerenderSettingsTab(this);
-					}
-				});
-			});
-
-		new Setting(containerEl)
-			.setName(t("embeddingModel"))
-			.addDropdown((dropdown) => {
-			const options: Record<string, string> = {};
-			for (const m of activeProvider?.models.filter((m) => (m.kind ?? "chat") === "embedding") ?? []) {
-				options[`${activeProvider.id}::${m.id}`] = m.id;
-			}
-				// 自定义（非目录）模型在选中态保持可选
-				if (activeProvider && !(currentKey in options)) {
-					options[currentKey] = currentKey.split("::").slice(1).join("::");
-				}
-				dropdown
-					.addOptions(options)
-					.setValue(currentKey in options ? currentKey : Object.keys(options)[0] ?? "")
-					.onChange(async (value) => {
-						this.plugin.settings.embeddingModelKey = value;
-						await this.plugin.saveSettings();
-					});
-			});
-
-		// ── 咖啡杯索引可视化：液面 = 嵌入进度，完成时庆祝 ──
-		const coffeeHost = containerEl.createDiv({ cls: "semlink-rag-coffee" });
-		const coffee = mountCoffeeCanvas(coffeeHost, { modelName: active.model });
-		const applyCoffee = (p: IndexProgress): void => {
-			const total = Math.max(p.totalChunks, 0);
-			const pct = total > 0 ? Math.min(100, Math.round((p.embeddedChunks / total) * 100)) : 0;
-			coffee.setLevel(pct, p.phase === "embedding");
-			if (p.phase === "completed" && total > 0) coffee.celebrate();
-		};
-		applyCoffee(this.plugin.progress.current);
-		this.indexBtnUnsubscribe = this.plugin.progress.onProgress((event) => {
-			if (event.type === "progress") applyCoffee(event.progress);
-		});
-
-		// ── 高级选项（默认收起）：分块 / 批量 / 延迟 / 并发 / 重建索引 ──
-		const advHead = containerEl.createDiv({ cls: "semlink-editor-adv-head" });
-		const chev = advHead.createSpan({ cls: "semlink-editor-adv-chevron" });
-		setIcon(chev, "chevron-right");
-		const advLabel = advHead.createSpan({ cls: "semlink-editor-adv-label", text: t("editorAdvancedShow") });
-		const advBody = containerEl.createDiv({ cls: "semlink-editor-adv-body semlink-hidden" });
-		advHead.addEventListener("click", () => {
-			const open = !advBody.hasClass("semlink-hidden");
-			advBody.toggleClass("semlink-hidden", open);
-			setIcon(chev, open ? "chevron-right" : "chevron-down");
-			advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
-		});
-
 
 		new Setting(advBody)
 			.setName(t("batchSize"))
@@ -539,20 +644,21 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 			});
-		// ── Re-embed all：清空向量并按当前嵌入配置全部重嵌（高级选项最后一条） ──
+
+		// ── 高级选项末行：重新索引 ──
+		// 清掉所有索引（含分块），从 0 开始重新分块。破坏性操作压轴，
+		// 与参数滑块隔开，误触概率最低。
 		new Setting(advBody)
-			.setName(t("rebuildIndex"))
-			.setDesc(t("rebuildIndexDesc"))
+			.setName(t("reindexAll"))
+			.setDesc(t("reindexAllDesc"))
 			.addButton((btn) => {
-				btn.setButtonText(t("rebuildIndex"));
+				btn.setButtonText(t("reindexAll"));
 				markDestructive(btn).onClick(() => {
-					new ConfirmModal(this.app, t("rebuildIndex"), t("rebuildConfirm"), () => {
-						// 重建索引并直接在引导页数据索引环节可视化进度
-						void this.plugin.rebuildIndexWithGuide();
+					new ConfirmModal(this.app, t("reindexAll"), t("reindexConfirm"), () => {
+						void this.plugin.reindexAll();
 					}).open();
 				});
 			});
-
 	}
 
 	// ══════════════════════════════════════
@@ -561,7 +667,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	private renderMcpTab(containerEl: HTMLElement): void {
 		const running = !!this.plugin.mcpServer;
 		const mcpUrl = `http://127.0.0.1:${this.plugin.settings.mcpPort}/mcp`;
-		const clientServers = this.plugin.settings.mcpClientServers ?? [];
 
 		// ── Installed 行：数量统计 + New 按钮 ──
 		const installedHead = containerEl.createDiv({ cls: "semlink-mcp-installed-head" });
@@ -569,11 +674,22 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			cls: "semlink-mcp-installed-title",
 			text: t("mcpInstalled"),
 		});
+		// 免费版最多 2 个外部 MCP Server，授权版无限（clientServers 在下方渲染）
+		const FREE_MCP_LIMIT = 2;
+		const clientServers = this.plugin.settings.mcpClientServers ?? [];
+		const atFreeLimit = !this.plugin.licenseManager.isPro() && clientServers.length >= FREE_MCP_LIMIT;
+		// 新增外部 MCP Server 的入口暂时隐藏（功能保留：置回 true 即恢复）
+		const mcpNewEnabled = false;
 		const newBtn = installedHead.createEl("button", {
 			cls: "semlink-mcp-new-btn",
 			text: "＋ " + t("mcpNew"),
 		});
+		newBtn.toggleClass("semlink-hidden", !mcpNewEnabled);
 		newBtn.addEventListener("click", () => {
+			if (atFreeLimit) {
+				new LicenseModal(this.app, this.plugin).open();
+				return;
+			}
 			new McpServerConfigModal(this.app, this.plugin, null, () => rerenderSettingsTab(this)).open();
 		});
 
@@ -644,6 +760,17 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				});
 			}
 		}
+
+		// 免费版达到 MCP Server 上限：显示 Pro 门禁（同 Bot 页签的解锁卡）
+		if (mcpNewEnabled && atFreeLimit) {
+			const gate = containerEl.createDiv({ cls: "semlink-pro-gate" });
+			gate.createSpan({ cls: "semlink-pro-badge", text: "✨ Pro" });
+			gate.createSpan({ cls: "semlink-pro-gate-text", text: t("mcpFreeLimitDesc") });
+			const unlockBtn = gate.createEl("button", { cls: "mod-cta", text: t("unlockPro") });
+			unlockBtn.addEventListener("click", () => {
+				new LicenseModal(this.app, this.plugin).open();
+			});
+		}
 	}
 
 	// ══════════════════════════════════════
@@ -688,15 +815,24 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 				const actions = item.createDiv({ cls: "semlink-mcp-server-actions" });
 
+				// Revoke + drop the row; both the trash button and the QR
+				// dialog's "Stop sharing" go through here. The list re-renders
+				// to the empty hint once the last row is gone.
+				const removeRow = (): void => {
+					server.revokeToken(row.token);
+					item.remove();
+					if (list.children.length === 0) rerenderSettingsTab(this);
+				};
+
 				const qrBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareQrCode"), title: t("shareQrCode") } });
 				setIcon(qrBtn, "qr-code");
 				qrBtn.addEventListener("click", () => {
 					// Same dialog as the chat share button: QR + copy +
-					// open-in-browser + stop sharing.
+					// open-in-browser + stop sharing. Stopping sharing there
+					// removes this row too (the modal shows the notice).
 					new ShareQrModal(this.app, {
 						url,
-						previewUrl: server.localhostUrl(row.token),
-						onRevoke: () => server.revokeToken(row.token),
+						onRevoke: removeRow,
 					}).open();
 				});
 
@@ -709,10 +845,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				const delBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareDelete") } });
 				setIcon(delBtn, "trash-2");
 				delBtn.addEventListener("click", () => {
-					server.revokeToken(row.token);
+					removeRow();
 					new Notice(t("shareDeleted"));
-					item.remove();
-					if (list.children.length === 0) rerenderSettingsTab(this);
 				});
 
 			}
@@ -836,64 +970,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				statusEl.setText(`${t("botScanError")}: ${msg}`);
 			});
 	}
-
-	private applyIndexBtnState(p: IndexProgress) {
-		const btn = this.indexBtn;
-		if (!btn) return;
-
-		let desired: "resume" | "pause" | "none";
-		if (p.isPaused || p.phase === "idle" || p.phase === "completed") {
-			desired = "resume";
-		} else {
-			desired = "pause";
-		}
-
-		if (this.indexBtnLoading) {
-			if (desired === this.indexBtnCurrentState) return;
-			this.indexBtnLoading = false;
-		}
-
-		if (desired === this.indexBtnCurrentState) return;
-		this.indexBtnCurrentState = desired;
-
-		const el = btn.buttonEl;
-		el.setCssStyles({ minWidth: "" });
-		btn.setDisabled(false);
-		el.removeClass("mod-cta");
-
-		if (desired === "resume") {
-			btn.setButtonText(t("startFullIndex")).setClass("mod-cta");
-			btn.onClick(() => {
-				this.indexBtnLoading = true;
-				el.setCssStyles({ minWidth: el.offsetWidth + "px" });
-				btn.setButtonText(t("btnLoading")).setDisabled(true);
-				window.setTimeout(() => {
-					this.plugin.startFullIndex();
-				}, 300);
-			});
-		} else if (desired === "pause") {
-			btn.setButtonText(t("btnPause"));
-			btn.onClick(() => {
-				this.indexBtnLoading = true;
-				el.setCssStyles({ minWidth: el.offsetWidth + "px" });
-				btn.setButtonText(t("btnPausing")).setDisabled(true);
-				window.setTimeout(() => {
-					this.app.workspace.trigger("smart-vault:pause");
-				}, 300);
-			});
-		}
-	}
 }
 
-
-/** The embedding models configured for a provider: its kind-tagged
- *  "embedding" entries that are enabled. */
-function embeddingModelsOf(p: ModelProvider): string[] {
-	return (p.models ?? [])
-		.filter((m) => (m.kind ?? "chat") === "embedding" && m.enabled === true)
-		.map((m) => m.id)
-		.filter((id) => id.length > 0);
-}
 
 /** "Edit MCP server" 配置弹窗（参照 Cherry Studio）：Form/JSON 双视图。
  *  Form 视图可编辑端口与访问 Key；JSON 视图为生成的客户端接入配置。
@@ -981,20 +1059,6 @@ class EditMcpServerModal extends Modal {
 		formBtn.addEventListener("click", () => setView(false));
 		jsonBtn.addEventListener("click", () => setView(true));
 
-		// ── 能力清单：tools / resources / prompts ──
-		const caps = McpServer.listCapabilities();
-		const capsEl = contentEl.createDiv({ cls: "semlink-mcp-edit-caps" });
-		capsEl.createDiv({ cls: "semlink-mcp-edit-caps-title", text: `Tools ${caps.tools.length}` });
-		for (const tool of caps.tools) {
-			const row = capsEl.createDiv({ cls: "semlink-mcp-cap-row" });
-			row.createSpan({ cls: "semlink-mcp-cap-name", text: tool.name });
-			row.createSpan({ cls: "semlink-mcp-cap-desc", text: tool.description });
-		}
-		capsEl.createDiv({
-			cls: "semlink-mcp-cap-empty",
-			text: `Resources · ${caps.resources.length}      Prompts · ${caps.prompts.length}`,
-		});
-
 		// ── Footer：右侧 Save / Cancel ──
 		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
 		const cancelBtn = footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") });
@@ -1040,6 +1104,9 @@ class McpServerConfigModal extends Modal {
 	) {
 		super(app);
 		this.modalEl.addClass("semlink-mcp-edit-modal");
+		this.modalEl.addClass("semlink-mcp-client-modal");
+		// editor-input/select/footer 的样式都挂在 .smart-vault-settings 下
+		this.modalEl.addClass("smart-vault-settings");
 	}
 
 	onOpen(): void {
@@ -1047,47 +1114,154 @@ class McpServerConfigModal extends Modal {
 		this.titleEl.setText(editing ? t("editMcpServer") : t("mcpNew"));
 		const { contentEl } = this;
 
-		contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerName") });
-		const nameInput = contentEl.createEl("input", {
+		// ── Form / JSON 切换（右上角分段控件，同内置服务配置弹窗） ──
+		const segRow = contentEl.createDiv({ cls: "semlink-mcp-edit-segrow" });
+		const seg = segRow.createDiv({ cls: "semlink-mcp-edit-seg" });
+		const formBtn = seg.createEl("button", { cls: "is-active", text: "Form" });
+		const jsonBtn = seg.createEl("button", { text: "JSON" });
+		const formView = contentEl.createDiv({ cls: "semlink-mcp-edit-form" });
+		const jsonView = contentEl.createDiv({ cls: "semlink-mcp-edit-json semlink-hidden" });
+
+		// ── Form：Name / Type / Timeout / Protocol / URL|Command+Args / Headers ──
+		formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerName") });
+		const nameInput = formView.createEl("input", {
 			cls: "semlink-editor-input",
-			attr: { type: "text", spellcheck: "false" },
+			attr: { type: "text", placeholder: "my-mcp-server", spellcheck: "false" },
 		});
 		nameInput.value = this.server?.name ?? "";
 
-		contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerType") });
-		const typeSel = contentEl.createEl("select", { cls: "semlink-editor-select" });
+		formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerType") });
+		const typeSel = formView.createEl("select", { cls: "semlink-editor-select" });
 		for (const [value, label] of [["http", "HTTP"], ["sse", "SSE"], ["stdio", "stdio"]] as const) {
 			typeSel.createEl("option", { value, text: label });
 		}
 		typeSel.value = this.server?.type ?? "http";
 
-		const urlLabel = contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerUrl") });
-		const urlInput = contentEl.createEl("input", {
+		formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpTimeoutMs") });
+		const timeoutInput = formView.createEl("input", {
 			cls: "semlink-editor-input",
-			attr: { type: "text", placeholder: "https://…/mcp", spellcheck: "false" },
+			attr: { type: "text", placeholder: "30000", spellcheck: "false" },
+		});
+		timeoutInput.value = this.server?.timeoutMs ? String(this.server.timeoutMs) : "";
+
+		formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpProtocolVersion") });
+		const protoSel = formView.createEl("select", { cls: "semlink-editor-select" });
+		for (const [value, label] of [
+			["", t("mcpProtocolAuto")],
+			["2025-06-18", "2025-06-18"],
+			["2025-03-26", "2025-03-26"],
+			["2024-11-05", "2024-11-05"],
+		] as const) {
+			protoSel.createEl("option", { value, text: label });
+		}
+		protoSel.value = this.server?.protocolVersion ?? "";
+		const protoHint = document.createElement("div");
+		protoHint.addClass("semlink-mcp-edit-desc");
+		protoHint.setText(t("mcpProtocolHint"));
+		protoSel.insertAdjacentElement("afterend", protoHint);
+
+		const urlLabel = formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerUrl") });
+		const urlInput = formView.createEl("input", {
+			cls: "semlink-editor-input",
+			attr: { type: "text", placeholder: "https://mcp.example.com/mcp", spellcheck: "false" },
 		});
 		urlInput.value = this.server?.url ?? "";
 
-		const cmdLabel = contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerCommand") });
-		const cmdInput = contentEl.createEl("input", {
+		const headersLabel = formView.createDiv({ cls: "semlink-editor-field-label", text: `${t("mcpServerHeaders")} (JSON)` });
+		const headersInput = formView.createEl("textarea", {
+			cls: "semlink-editor-input semlink-monospace",
+		});
+		headersInput.rows = 4;
+		headersInput.placeholder = "{" + "\n" + '  "Authorization": "Bearer your-token"' + "\n" + "}";
+		const serverHeaders = this.server?.headers ?? {};
+		headersInput.value = Object.keys(serverHeaders).length > 0 ? JSON.stringify(serverHeaders, null, 2) : "";
+
+		const cmdLabel = formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerCommand") });
+		const cmdInput = formView.createEl("input", {
 			cls: "semlink-editor-input",
 			attr: { type: "text", placeholder: "npx -y @some/mcp", spellcheck: "false" },
 		});
 		cmdInput.value = this.server?.command ?? "";
 
-		// http/sse 显示 URL，stdio 显示 Command（标签与输入框互斥显隐）
+		const argsLabel = formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerArgs") });
+		const argsInput = formView.createEl("input", {
+			cls: "semlink-editor-input",
+			attr: { type: "text", placeholder: "--port 8080 --verbose", spellcheck: "false" },
+		});
+		argsInput.value = this.server?.args ?? "";
+
+		// http/sse ↔ stdio 互斥显隐
 		const syncType = (): void => {
 			const isStdio = typeSel.value === "stdio";
 			urlLabel.toggleClass("semlink-hidden", isStdio);
 			urlInput.toggleClass("semlink-hidden", isStdio);
+			headersLabel.toggleClass("semlink-hidden", isStdio);
+			headersInput.toggleClass("semlink-hidden", isStdio);
 			cmdLabel.toggleClass("semlink-hidden", !isStdio);
 			cmdInput.toggleClass("semlink-hidden", !isStdio);
+			argsLabel.toggleClass("semlink-hidden", !isStdio);
+			argsInput.toggleClass("semlink-hidden", !isStdio);
 		};
 		typeSel.addEventListener("change", syncType);
 		syncType();
 
+		// ── JSON 视图：完整配置（可粘贴 {"name":{…}} / {"mcpServers":{…}} 回填） ──
+		jsonView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpFullConfig") });
+		const jsonArea = jsonView.createEl("textarea", { cls: "semlink-editor-input semlink-monospace" });
+		jsonArea.rows = 12;
+		jsonView.createDiv({ cls: "semlink-mcp-edit-desc", text: t("mcpJsonPasteHint") });
+
+		const headersOfForm = (): Record<string, string> => {
+			const raw = headersInput.value.trim();
+			if (!raw) return {};
+			const out: Record<string, string> = {};
+			try {
+				const obj = JSON.parse(raw) as Record<string, unknown>;
+				for (const [k, v] of Object.entries(obj)) out[k] = String(v);
+			} catch {
+				return {};
+			}
+			return out;
+		};
+		const buildJson = (): string => {
+			const isStdio = typeSel.value === "stdio";
+			const name = nameInput.value.trim() || "my-mcp-server";
+			const timeout = parseInt(timeoutInput.value, 10);
+			const server: Record<string, unknown> = { type: typeSel.value };
+			if (isStdio) {
+				server.command = cmdInput.value.trim();
+				server.args = argsInput.value.trim() ? argsInput.value.trim().split(/\s+/) : [];
+			} else {
+				server.url = urlInput.value.trim();
+				const headers = headersOfForm();
+				if (Object.keys(headers).length > 0) server.headers = headers;
+			}
+			if (!isNaN(timeout) && timeout > 0) server.timeoutMs = timeout;
+			if (protoSel.value) server.protocolVersion = protoSel.value;
+			return JSON.stringify({ [name]: server }, null, 2);
+		};
+
+		const setView = (json: boolean): void => {
+			formView.toggleClass("semlink-hidden", json);
+			jsonView.toggleClass("semlink-hidden", !json);
+			formBtn.toggleClass("is-active", !json);
+			jsonBtn.toggleClass("is-active", json);
+			if (json) jsonArea.value = buildJson();
+		};
+		formBtn.addEventListener("click", () => setView(false));
+		jsonBtn.addEventListener("click", () => setView(true));
+		// 表单变化时同步 JSON 视图（切到 JSON 视图也会重建一次）
+		for (const el of [nameInput, typeSel, timeoutInput, protoSel, urlInput, cmdInput, argsInput, headersInput]) {
+			const sync = (): void => {
+				if (!jsonView.hasClass("semlink-hidden")) jsonArea.value = buildJson();
+			};
+			el.addEventListener("input", sync);
+			el.addEventListener("change", sync);
+		}
+
 		const error = contentEl.createDiv({ cls: "semlink-guide-error semlink-hidden" });
 
+		// ── Footer：编辑态带 Delete，右侧 Save / Cancel ──
 		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
 		if (editing) {
 			const delBtn = footer.createEl("button", { cls: "semlink-editor-delete-link", text: t("chatDeleteModel") });
@@ -1103,42 +1277,88 @@ class McpServerConfigModal extends Modal {
 		const cancelBtn = footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") });
 		cancelBtn.addEventListener("click", () => this.close());
 		const saveBtn = footer.createEl("button", { cls: "semlink-editor-save-btn", text: t("editorSave") });
+
 		saveBtn.addEventListener("click", () => {
-			const name = nameInput.value.trim();
+			// JSON 视图激活时：解析粘贴的完整配置（{"name":{…}} / {"mcpServers":{…}}）
+			let name = nameInput.value.trim();
+			let typeName = typeSel.value;
+			let url = urlInput.value.trim();
+			let command = cmdInput.value.trim();
+			let args = argsInput.value.trim();
+			let headersRaw = headersInput.value.trim();
+			const timeoutRaw = timeoutInput.value.trim();
+			const protocol = protoSel.value;
+			if (!jsonView.hasClass("semlink-hidden")) {
+				try {
+					const parsed = JSON.parse(jsonArea.value) as Record<string, unknown>;
+					const servers = (parsed.mcpServers ?? parsed) as Record<string, Record<string, unknown>>;
+					const firstKey = Object.keys(servers)[0];
+					if (!firstKey || typeof servers[firstKey] !== "object" || servers[firstKey] === null) {
+						throw new Error("empty");
+					}
+					const s = servers[firstKey];
+					name = firstKey;
+					typeName = typeof s.type === "string" ? s.type : (s.command ? "stdio" : "http");
+					url = typeof s.url === "string" ? s.url : "";
+					command = typeof s.command === "string" ? s.command : "";
+					args = Array.isArray(s.args) ? (s.args as unknown[]).map(String).join(" ")
+						: typeof s.args === "string" ? s.args : "";
+					headersRaw = s.headers && typeof s.headers === "object"
+						? JSON.stringify(s.headers, null, 2)
+						: "";
+				} catch {
+					error.setText(t("mcpJsonInvalid"));
+					error.removeClass("semlink-hidden");
+					return;
+				}
+			}
 			if (!name) {
 				error.setText(t("mcpNameRequired"));
 				error.removeClass("semlink-hidden");
 				return;
 			}
-			const isStdio = typeSel.value === "stdio";
-			const target = isStdio ? cmdInput.value.trim() : urlInput.value.trim();
+			const isStdio = typeName === "stdio";
+			const target = isStdio ? command : url;
 			if (!target) {
 				error.setText(isStdio ? t("mcpServerCommand") : t("mcpServerUrl"));
 				error.removeClass("semlink-hidden");
 				return;
 			}
+			let headers: Record<string, string> | undefined;
+			if (!isStdio && headersRaw) {
+				try {
+					const obj = JSON.parse(headersRaw) as Record<string, unknown>;
+					headers = {};
+					for (const [k, v] of Object.entries(obj)) headers[k] = String(v);
+				} catch {
+					error.setText(t("mcpJsonInvalid"));
+					error.removeClass("semlink-hidden");
+					return;
+				}
+			}
+			const timeout = parseInt(timeoutRaw, 10);
+			const shared = {
+				name,
+				type: typeName as McpClientServer["type"],
+				...(isStdio
+					? { command, args: args || undefined }
+					: { url, ...(headers && Object.keys(headers).length > 0 ? { headers } : {}) }),
+				...(isNaN(timeout) || timeout <= 0 ? {} : { timeoutMs: timeout }),
+				...(protocol ? { protocolVersion: protocol } : {}),
+			};
 			const list = this.plugin.settings.mcpClientServers ??= [];
 			if (editing && this.server) {
-				this.server.name = name;
-				this.server.type = typeSel.value as McpClientServer["type"];
-				if (isStdio) { this.server.command = target; delete this.server.url; }
-				else { this.server.url = target; delete this.server.command; }
+				Object.assign(this.server, shared);
+				if (isStdio) { delete this.server.url; delete this.server.headers; }
+				else { delete this.server.command; delete this.server.args; }
 			} else {
-				list.push({
-					id: `mcp-${Date.now()}`,
-					name,
-					type: typeSel.value as McpClientServer["type"],
-					...(isStdio ? { command: target } : { url: target }),
-					enabled: true,
-				});
+				list.push({ id: `mcp-${Date.now()}`, ...shared, enabled: true });
 			}
 			void this.plugin.saveSettings();
 			this.close();
 			this.onDone();
 		});
-		nameInput.focus();
 	}
-
 	onClose(): void {
 		this.contentEl.empty();
 	}

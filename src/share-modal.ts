@@ -62,8 +62,6 @@ export class ShareModal extends Modal {
 export interface ShareQrModalOptions {
 	/** LAN address other devices can open (also shown as text/QR). */
 	url: string;
-	/** Loopback address for previewing from THIS machine's browser. */
-	previewUrl?: string;
 	/** Kills the share when invoked (button hidden when absent). */
 	onRevoke?: () => void;
 }
@@ -112,7 +110,8 @@ export class ShareQrModal extends Modal {
 		const openBtn = row.createEl("button", { cls: "semlink-share-copy", attr: { "aria-label": t("shareOpenBrowser") } });
 		setIcon(openBtn, "external-link");
 		openBtn.addEventListener("click", () => {
-			window.open(this.opts.previewUrl ?? this.opts.url, "_blank");
+			// 总是打开局域网地址（127.0.0.1 只是本机预览出口）
+			window.open(this.opts.url, "_blank");
 		});
 
 		this.contentEl.createDiv({ cls: "semlink-share-hint", text: t("shareHint") });

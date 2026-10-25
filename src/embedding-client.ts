@@ -35,6 +35,8 @@ export class EmbeddingClient {
 	private providerName: string;
 	private apiKey: string;
 	private apiBase: string;
+	/** Custom embeddings path (Google compat layer etc.); undefined = "/v1/embeddings". */
+	private embedPath?: string;
 	private model: string;
 	private batchSize: number;
 	private requestDelayMs: number;
@@ -61,6 +63,7 @@ export class EmbeddingClient {
 		this.providerName = p.name;
 		this.apiKey = p.apiKey;
 		this.apiBase = p.apiBase;
+		this.embedPath = p.embedPath;
 		this.model = p.model;
 		this.batchSize = settings.batchSize;
 		this.requestDelayMs = settings.requestDelayMs;
@@ -219,7 +222,9 @@ export class EmbeddingClient {
 
 private async callSiliconFlowApi(input: string[]): Promise<EmbeddingResponse> {
 		const params: RequestUrlParam = {
-			url: `${this.apiBase}/v1/embeddings`,
+			url: this.embedPath
+				? `${this.apiBase}${this.embedPath}`
+				: `${this.apiBase}/v1/embeddings`,
 			method: "POST",
 			headers: {
 				"Authorization": `Bearer ${this.apiKey}`,

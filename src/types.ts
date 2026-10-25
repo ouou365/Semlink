@@ -30,6 +30,11 @@ export interface ModelProvider {
 	 *  completions", anthropic → "/v1/messages"), e.g. GLM coding plans
 	 *  ("/chat/completions") or Gemini's OpenAI-compat base. Absent = default. */
 	wirePath?: string;
+	/** Explicit embeddings path appended to apiBase, for providers whose
+	 *  embeddings endpoint deviates from "/v1/embeddings" — e.g. Google's
+	 *  OpenAI-compat layer ("/embeddings" on the .../v1beta/openai base).
+	 *  Absent = the default "/v1/embeddings". */
+	embedPath?: string;
 	/** Kind-tagged model list (embedding / chat / …). */
 	models: ChatModel[];
 	/** Model-tab folder this provider is filed under (user-created folders;
@@ -250,10 +255,15 @@ export interface SmartVaultSettings {
 	mcpEnabled?: boolean;
 	/** 用户在 MCP 标签接入的外部 MCP 服务器（可增删改；内置 semlink 不在此列）。 */
 	mcpClientServers?: McpClientServer[];
+	/** 嵌入模型指纹（providerId::modelId）：变化时清向量并全量重嵌。 */
+	embeddingModelFingerprint?: string;
 	chunkSize: number;
 	chunkOverlap: number;
 	excludePaths: string;
 	autoIndex: boolean;
+	/** 自动嵌入开关（RAG 页嵌入面板标题右侧）：关闭后索引只做分块、不再调
+	 *  嵌入 API；调度器实时读取，转换立即对后续笔记生效。 */
+	autoEmbed?: boolean;
 	maxRetries: number;
 	batchSize: number;
 	requestDelayMs: number;
@@ -277,6 +287,9 @@ export interface SmartVaultSettings {
 		done?: boolean;
 		providerId?: string;
 		embedProviderId?: string;
+		/** Model-first 嵌入流：第一步选中的嵌入模型 id——Key 验证通过后
+		 *  直接落定 embeddingModelKey 并进入索引步骤（自定义供应商无此值）。 */
+		embedModelId?: string;
 		chatReady?: boolean;
 		embedReady?: boolean;
 		chatModelPicked?: boolean;
@@ -317,6 +330,14 @@ export interface McpClientServer {
 	type: "http" | "sse" | "stdio";
 	url?: string;
 	command?: string;
+	/** stdio 专用：命令行参数（按空格切分，运行时接입 시使用）。 */
+	args?: string;
+	/** http/sse 专用：随请求发送的头（如 Authorization）。 */
+	headers?: Record<string, string>;
+	/** 请求/会话超时（毫秒），缺省 30000。 */
+	timeoutMs?: number;
+	/** MCP 协议版本（缺省自动协商）。 */
+	protocolVersion?: string;
 	enabled: boolean;
 }
 
@@ -334,6 +355,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	chunkOverlap: 100,
 	excludePaths: "templates/\n.git/\nnode_modules/",
 	autoIndex: true,
+	autoEmbed: true,
 	maxRetries: 3,
 	batchSize: 64,
 	requestDelayMs: 200,

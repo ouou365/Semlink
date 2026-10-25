@@ -141,6 +141,13 @@ export default class SmartVaultPlugin extends Plugin {
 			this.settings,
 			this.activityGate,
 		);
+		// 启动补数：本会话首次扫描前，进度追踪器的 totalNotes 是 0，设置页
+		// 的 笔记总数/待索引 会显示 0。只枚举文件清单（不比对 mtime、不入队），
+		// 之后的真实扫描会用权威值覆盖。
+		if (this.progress.current.totalNotes === 0) {
+			this.progress.setTotalNotes(this.scheduler.countIndexableNotes());
+			debugLog(`[Semlink] Seeded total notes before first scan: ${this.progress.current.totalNotes}`);
+		}
 
 		// File watcher
 		this.watcher = new VaultWatcher(this.app, this.scheduler, this.settings);
@@ -212,13 +219,13 @@ export default class SmartVaultPlugin extends Plugin {
 		// — with the registry non-empty the server comes up on plugin load
 		// (port from settings, auto-bumped when taken and re-persisted); a
 		// request for an uncached token re-renders the page from history.
-		this.shareServer = new ShareServer(dataDir, async (sessionId) => {
+		this.shareServer = new ShareServer(dataDir, async (sessionId, sharedAt) => {
 			const sessions = await this.historyStore.load();
 			const session = sessions.find((s) => s.id === sessionId);
 			if (!session || session.messages.length === 0) return null;
 			const firstUser = session.messages.find((m) => m.role === "user");
 			const title = (firstUser?.content || session.title || t("shareTitle")).replace(/\s+/g, " ").trim();
-			return renderSharePage(this.app, session.messages, title, this);
+			return renderSharePage(this.app, session.messages, title, this, "light", sharedAt);
 		});
 		if (this.shareServer.hasShares()) {
 			void this.shareServer.start(this.settings.sharePort).then(() => {
@@ -361,6 +368,19 @@ export default class SmartVaultPlugin extends Plugin {
 	}
 
 	async saveSettings() {
+		// 嵌入模型指纹联动：模型变化（含移除/停用）→ 清向量（保留 chunks）
+		// + 清 mtime，下次索引用当前形态重建；移除后向量本就不该再存在。
+		const active = activeEmbeddingProvider(this.settings);
+		const fingerprint = active.apiKey.trim() ? this.settings.embeddingModelKey || "" : "";
+		if ((this.settings.embeddingModelFingerprint ?? "") !== fingerprint) {
+			const hadPrevious = (this.settings.embeddingModelFingerprint ?? "") !== "";
+			this.settings.embeddingModelFingerprint = fingerprint;
+			if (hadPrevious) {
+				await this.store.clearVectors();
+				this.progress.reset();
+				if (fingerprint) new Notice(`Semlink: ${t("embedModelChanged")}`);
+			}
+		}
 		await this.saveData(this.settings);
 		setLang(this.settings.language);
 		// Re-render the search view's language-dependent UI (welcome screen,
@@ -395,8 +415,8 @@ export default class SmartVaultPlugin extends Plugin {
 		);
 
 		try {
+			// 启动成功不打扰——MCP 是常驻后台服务，静默即可；失败仍需提示。
 			await this.mcpServer.start();
-			new Notice(`Semlink MCP: ${t("noticeMcpStarted")} (端口 ${this.mcpServer.port})`);
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
 			new Notice(`Semlink MCP: ${t("noticeMcpFailed")} - ${msg}`);
@@ -518,29 +538,15 @@ export default class SmartVaultPlugin extends Plugin {
 	// ──── Indexing ────
 
 	startFullIndex() {
-		if (this.scheduler.isRunning) {
-			new Notice(`Semlink: ${t("noticeIndexRunning")}`);
-			return;
-		}
-
-
-		new Notice(`Semlink: ${t("noticeStartIndex")}`);
+		// 静默守卫 + 静默启动：索引状态由状态栏/进度面板呈现，不再弹提示。
+		if (this.scheduler.isRunning) return;
 		void this.scheduler.run();
 	}
 
-	/** Force a full rebuild: wipe ALL vectors and re-embed every note. Use after
-	 *  changing chunk filters (e.g. the sparse-chunk skip) or to fix a corrupted
-	 *  index. Unlike startFullIndex, this purges already-stored vectors too. */
-	async rebuildAll() {
-		if (this.scheduler.isRunning) {
-			new Notice(`Semlink: ${t("noticeIndexRunning")}`);
-			return;
-		}
-		const hasApiKey = !!activeEmbeddingProvider(this.settings).apiKey;
-		if (!hasApiKey) {
-			new Notice(`Semlink: ${t("noticeNoApiKey")}`);
-			return;
-		}
+	/** 设置页"重新索引"：清空全部索引（含分块），从 0 开始重新分块。
+	 *  未配置嵌入模型时也允许——调度器会退化为只做分块索引。 */
+	async reindexAll() {
+		if (this.scheduler.isRunning) return;
 		new Notice(`Semlink: ${t("noticeRebuildStarted")}`);
 		await this.store.clearAll();
 		this.progress.reset();
@@ -548,14 +554,6 @@ export default class SmartVaultPlugin extends Plugin {
 	}
 
 	// ──── UI ────
-
-	/** 设置页"重新嵌入"：清空并重建索引，同时关闭设置、打开侧栏，
-	 *  直接在引导页的数据索引环节可视化进度（索引自动处于运行状态）。 */
-	async rebuildIndexWithGuide(): Promise<void> {
-		await this.rebuildAll();
-		(this.app as unknown as { setting: { close(): void } }).setting.close();
-		await this.activateSearchView();
-	}
 
 	async showProgressModal() {
 		// Sync store stats to progress tracker before opening
@@ -595,6 +593,14 @@ export default class SmartVaultPlugin extends Plugin {
 			}
 			workspace.setActiveLeaf(leaf, { focus: true });
 		}
+	}
+
+	/** 打开侧栏并进入对应的配置引导：chat = 对话目录（首次引导同款），
+	 *  embed = 嵌入专用目录（RAG 页「开始配置」），选完模型即触发索引。 */
+	async openSetupGuide(kind: "chat" | "embed" = "chat"): Promise<void> {
+		await this.activateSearchView();
+		const leaf = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
+		(leaf?.view as SemanticSearchView | undefined)?.openSetupGuide(kind);
 	}
 
 	private updateStatusBar(p: import("./src/types").IndexProgress) {

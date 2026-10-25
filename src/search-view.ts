@@ -103,11 +103,11 @@ export class SemanticSearchView extends ItemView {
 	private statusEl!: HTMLElement;   // transient status (no-api-key hint)
 	private headerEl!: HTMLElement;   // top header (brand + icon sides)
 	private menuBtnEl: HTMLElement | null = null; // history drawer toggle
+	private guideHomeBtnEl: HTMLElement | null = null; // 菜单右侧：无对话=对话引导，有对话=回到主页
 	/** Upgrade ✨ entry in the header — visible only on the free tier. */
 	private upgradeBtnEl: HTMLElement | null = null;
 	private headerRightIconsEl!: HTMLElement; // right icon group (ring + settings)
 	private settingsBtnEl!: HTMLElement;      // settings gear (ring sits left of it)
-	private helpBtnEl: HTMLElement | null = null; // setup-guide entry (header right)
 	private firstQuestionEl!: HTMLElement; // second row: first question in small text
 	private firstQuestion = "";       // first user question (header subtitle)
 	private headerCompact = false;    // whether the subtitle row is visible
@@ -142,6 +142,9 @@ export class SemanticSearchView extends ItemView {
 	 *  keeps the guide on screen even when first-run state says otherwise
 	 *  (cleared when the guide hands the screen back). */
 	private guideRequested = false;
+	/** Which catalog the on-demand guide walks: chat (default) or embed
+	 *  (set by openSetupGuide from the RAG settings tab). */
+	private guideMode: "chat" | "embed" = "chat";
 	/** Set when the user skips the guide. With no API key configured the
 	 *  guide is the default landing page on every fresh view open; skipping
 	 *  only dismisses it for the current view session, not forever. */
@@ -211,6 +214,15 @@ export class SemanticSearchView extends ItemView {
 		this.menuBtnEl = menuBtn;
 		setIcon(menuBtn, "menu");
 		menuBtn.addEventListener("click", () => void this.showHistoryDrawer());
+		// 菜单右侧的动态按钮：主页（无对话）= 对话引导入口；有对话 = 回到主页。
+		// 具体形态由 updateHomeIconVisibility() 随会话状态切换。
+		const guideHomeBtn = leftIcons.createEl("button", {
+			cls: "semlink-search-icon-btn clickable-icon",
+		});
+		this.guideHomeBtnEl = guideHomeBtn;
+		setIcon(guideHomeBtn, "help-circle");
+		// 点击行为由 updateHomeIconVisibility() 按状态以 onclick 重绑
+		guideHomeBtn.onclick = () => this.openGuide();
 		// Usage & cost dashboard (Pro view; recording itself runs for all).
 		// Usage & Cost dashboard — entry hidden for now (feature stays wired:
 		// flip this flag to bring the header button back).
@@ -223,26 +235,16 @@ export class SemanticSearchView extends ItemView {
 			setIcon(usageBtn, "gauge");
 			usageBtn.addEventListener("click", () => new UsageModal(this.app, this.plugin).open());
 		}
-		// Help icon: (re-)opens the setup guide on the welcome screen.
-		const helpBtn = leftIcons.createEl("button", {
-			cls: "semlink-search-icon-btn clickable-icon",
-			attr: { "aria-label": t("guideTitle") },
-		});
-		this.helpBtnEl = helpBtn;
-		// Lucide renamed help-circle → circle-help; work with either set.
-		setIcon(helpBtn, "help-circle");
-		if (!helpBtn.firstChild) setIcon(helpBtn, "circle-help");
-		helpBtn.addEventListener("click", () => {
-			this.openGuide();
-		});
+
 		// Centered brand (logo + "Semlink" — always stays).
 		const brand = header.createDiv({ cls: "semlink-search-brand-group" });
 		const logoEl = brand.createDiv({ cls: "semlink-search-logo" });
 		setSvgIcon(logoEl, logoSvg);
 		brand.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
-		// Right icon group: setup guide + settings.
+		// Right icon group: settings.
 		const rightIcons = header.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
 		this.headerRightIconsEl = rightIcons;
+		this.refreshLicenseUI();
 		// Upgrade entry (✨): one of the three standing Pro entry points
 		// (header, settings, locked items). Hidden the moment a license
 		// activates — refreshLicenseUI() runs on every settings save.
@@ -255,7 +257,6 @@ export class SemanticSearchView extends ItemView {
 		upgradeBtn.addEventListener("click", () => {
 			new LicenseModal(this.app, this.plugin).open();
 		});
-		this.refreshLicenseUI();
 		const settingsBtn = rightIcons.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
 			attr: { "aria-label": t("settingsTitle") },
@@ -579,11 +580,7 @@ export class SemanticSearchView extends ItemView {
 			this.scrollToBottom();
 		});
 
-		// The onboarding guide already tells unconfigured users what to do —
-		// only show the bare status hint when the guide is not up.
-		if (!this.hasApiKey() && !onboardingActive(this.plugin)) {
-			this.statusEl.textContent = t("searchNeedChatProvider");
-		}
+		// 未配置提示已由引导/上手清单承载，不再显示纯文字提示。
 	}
 
 	protected async onClose(): Promise<void> {
@@ -1432,7 +1429,6 @@ export class SemanticSearchView extends ItemView {
 			const query = `lang=${lang}&theme=${theme}`;
 			new ShareQrModal(this.app, {
 				url: this.plugin.shareServer.urls(token, query)[0],
-				previewUrl: this.plugin.shareServer.localhostUrl(token, query),
 				onRevoke: () => this.plugin.shareServer.revokeSession(sessionId),
 			}).open();
 		} catch (e) {
@@ -1862,6 +1858,14 @@ export class SemanticSearchView extends ItemView {
 		return protectHyphens(out);
 	}
 
+	/** Entry point for the settings page: open the first-run guide. kind
+	 *  "chat" (help icon / first run) walks the chat catalog; kind "embed"
+	 *  (RAG tab's 开始配置) walks the dedicated embedding catalog. */
+	openSetupGuide(kind: "chat" | "embed" = "chat"): void {
+		this.guideMode = kind;
+		this.openGuide();
+	}
+
 	/** Open the first-run guide (help icon, or asking without any API key).
 	 *  A fresh run always starts from step ① — previous guide progress is
 	 *  reset (configured providers are untouched). */
@@ -1996,6 +2000,7 @@ export class SemanticSearchView extends ItemView {
 				// corners strip lives outside the guide block and would
 				// otherwise survive.
 				this.guideRequested = false;
+				this.guideMode = "chat";
 				this.messagesEl.empty();
 				this.renderWelcome();
 				// 引导完成：清掉遗留的"先去设置配置供应商"提示，并让模型
@@ -2004,7 +2009,7 @@ export class SemanticSearchView extends ItemView {
 				this.updateModelLabel();
 				// 完成引导的彩带庆祝 🎉（跳过引导不触发）
 				this.showWelcomeConfetti();
-			});
+			}, this.guideMode);
 			this.updateHomeIconVisibility();
 			return;
 		}
@@ -2097,6 +2102,17 @@ export class SemanticSearchView extends ItemView {
 	private updateHomeIconVisibility(): void {
 		const onHome = !!this.messagesEl.querySelector(".semlink-search-welcome");
 		this.newChatPillEl?.toggleClass("is-hidden", onHome);
+		// 菜单右侧动态按钮：主页=对话引导；会话中=回到主页
+		if (this.guideHomeBtnEl) {
+			setIcon(this.guideHomeBtnEl, onHome ? "help-circle" : "home");
+			if (onHome && !this.guideHomeBtnEl.firstChild) setIcon(this.guideHomeBtnEl, "circle-help");
+			const label = onHome ? t("guideTitle") : t("searchNewChat");
+			this.guideHomeBtnEl.setAttr("aria-label", label);
+			this.guideHomeBtnEl.setAttr("title", label);
+			this.guideHomeBtnEl.onclick = onHome
+				? () => this.openGuide()
+				: () => this.newChatFromUi();
+		}
 	}
 
 	/** Re-render language-dependent UI after a language switch (settings). */
@@ -2113,13 +2129,14 @@ export class SemanticSearchView extends ItemView {
 			this.settingsBtnEl.setAttr("aria-label", t("settingsTitle"));
 			this.settingsBtnEl.setAttr("title", t("settingsTitle"));
 		}
-		if (this.helpBtnEl) {
-			this.helpBtnEl.setAttr("aria-label", t("guideTitle"));
-			this.helpBtnEl.setAttr("title", t("guideTitle"));
-		}
 		if (this.upgradeBtnEl) {
 			this.upgradeBtnEl.setAttr("aria-label", t("upgradeProBtn"));
 			this.upgradeBtnEl.setAttr("title", t("upgradeProBtn"));
+		}
+		if (this.guideHomeBtnEl) {
+			this.guideHomeBtnEl.onclick = this.messagesEl.querySelector(".semlink-search-welcome")
+				? () => this.openGuide()
+				: () => this.newChatFromUi();
 		}
 		// New-chat pill: label + aria-label were set once at construction, so
 		// they would keep the old language after a switch — refresh them here.
@@ -3718,3 +3735,5 @@ class FolderNameModal extends Modal {
 		this.contentEl.empty();
 	}
 }
+
+

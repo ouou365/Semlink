@@ -2,7 +2,7 @@
 
 **Deutsch** | [English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_zh-Hant.md) | [日本語](README_ja.md) | [한국어](README_ko.md) | [Français](README_fr.md) | [Español](README_es.md) | [Português](README_pt.md) | [Italiano](README_it.md) | [Русский](README_ru.md)
 
-Ein Obsidian-Plugin, das jahrelange Notizen in einen agentischen Wissensworkspace verwandelt: ein transparenter KI-Agent, der dort lebt, wo du schreibst, alles durchsucht, was du je notiert hast, mit echten Tools darüber nachdenkt und mit nummerierten, anklickbaren Quellenangaben antwortet.
+Ein Obsidian-Plugin, das jahrelange Notizen in einen agentischen Wissensarbeitsbereich verwandelt: ein transparenter KI-Agent, der dort lebt, wo du schreibst, alles durchsucht, was du je notiert hast, mit echten Tools darüber nachdenkt und mit nummerierten, anklickbaren Quellenangaben antwortet.
 
 **Agent in deinem Vault • Denken + Tool-Aufrufe sichtbar • Anklickbare Quellenangaben • Lokaler SQLite-Index — kein Server • Beliebiger OpenAI-/Anthropic-kompatibler Anbieter • MCP für Claude & Cursor • 11 Sprachen • Kostenloser Kern, einmaliges Pro**
 

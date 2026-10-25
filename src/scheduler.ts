@@ -28,8 +28,6 @@ export class Scheduler {
 	private gate: ActivityGate | null;
 
 	private running = false;
-	/** 本次运行是否执行嵌入（嵌入模型已配置且自动嵌入开关打开）。 */
-	private embedActive = true;
 	private aborted = false;
 	/** 并发嵌入请求数 — 设置页"嵌入参数"可调（默认 2）。串行(1) 对免费档
 	 *  API 最稳；并发过高会触发 429 限流。 */
@@ -80,6 +78,13 @@ export class Scheduler {
 
 	get isRunning(): boolean {
 		return this.running;
+	}
+
+	/** 本次是否执行嵌入：嵌入模型已配置 且 自动嵌入开关打开。实时读取——
+	 *  设置页翻转嵌入开关后，后续笔记立即按新状态处理，无需重启索引。 */
+	private get embedActive(): boolean {
+		return (this.settings.autoEmbed ?? true)
+			&& activeEmbeddingProvider(this.settings).apiKey.trim() !== "";
 	}
 
 	/** Full vault scan: enqueue all markdown files for indexing */
@@ -160,6 +165,21 @@ export class Scheduler {
 		debugLog(`[Semlink] Scan complete: ${items.length} files to index, ${alreadyIndexed} unchanged`);
 	}
 
+	/** In-scope note count without touching the DB or queue — a startup seed
+	 *  so the RAG panel's 笔记总数/待索引 read correctly before the first scan
+	 *  of the session. scanVault later overwrites with authoritative numbers. */
+	countIndexableNotes(): number {
+		const excludePatterns = this.settings.excludePaths
+			.split("\n")
+			.map((p) => p.trim())
+			.filter((p) => p.length > 0);
+		// The Obsidian config folder is always skipped (same rule as scanVault).
+		excludePatterns.push(this.vault.configDir);
+		return this.vault.getMarkdownFiles()
+			.filter((f) => f.stat.size > 0 && !this.isExcluded(f.path, excludePatterns))
+			.length;
+	}
+
 	/**
 	 * Run the main indexing loop.
 	 * If scan=true, performs a full vault scan first to find new/modified files.
@@ -191,8 +211,8 @@ export class Scheduler {
 		// change, causing the status bar to flicker. Snapshot the real DB
 		// count up front so we can hold processedNotes steady for updates and
 		// only bump it for genuine "add"s.
-		// 嵌入与索引解耦：本次运行是否带嵌入，由嵌入模型配置与自动嵌入开关决定
-		this.embedActive = activeEmbeddingProvider(this.settings).apiKey.trim() !== "";
+		// 嵌入与索引解耦：embedActive 是实时 getter（嵌入模型已配置且自动嵌入
+		// 开关打开），每次取值都反映最新设置——运行中翻转开关也立即生效。
 		this.incrementalBase = 0;
 		if (!scan) {
 			const stats = await this.store.getStats();
@@ -454,11 +474,14 @@ export class Scheduler {
 		if (this.backfilling) return 0;
 		this.backfilling = true;
 		try {
-			// Bump DOC_VECTOR_ALGO_VERSION whenever buildDocVectorText changes.
-			// prepareDocVectorBackfill clears stale vectors on a version change so
-			// they get regenerated with the new logic (otherwise old vectors would
-			// be skipped as "already present" and the new algorithm never applies).
-			const DOC_VECTOR_ALGO_VERSION = 2;
+			// Bump DOC_VECTOR_ALGO_VERSION whenever buildDocVectorText changes —
+			// or when the storage format itself was broken. V3: saveDocEmbedding
+			// used to bind (note_path, vector) in swapped order, so every row had
+			// the embedding BLOB as its primary key and the path string as its
+			// "vector" — counts inflated (rows accumulated per re-backfill) and
+			// doc-vector search silently never matched. prepareDocVectorBackfill
+			// wipes the table once so the fixed writer regenerates everything.
+			const DOC_VECTOR_ALGO_VERSION = 3;
 			await this.store.prepareDocVectorBackfill(DOC_VECTOR_ALGO_VERSION);
 
 			const indexed = await this.store.getAllIndexedPaths();

@@ -222,6 +222,7 @@ export class VectorStore {
 			case "getAllIndexedPaths": return e.getAllIndexedPaths();
 			case "pruneOrphanedPaths": return e.pruneOrphanedPaths(args[0] as Set<string>);
 			case "getStats": return e.getStats();
+			case "getEmbeddedNoteCount": return e.getEmbeddedNoteCount();
 			case "saveEmbeddings": return e.saveEmbeddings(args[0] as string[], args[1] as number[][]);
 			case "saveDocEmbedding": return e.saveDocEmbedding(args[0] as string, args[1] as number[], args[2] as number, args[3] as string);
 			case "getDocVectorNotePaths": return e.getDocVectorNotePaths();
@@ -252,6 +253,8 @@ export class VectorStore {
 
 	async save(): Promise<void> { await this.call("save"); }
 	async clearAll(): Promise<void> { await this.call("clearAll"); }
+	/** 嵌入模型变更：清向量保留块，并重置 mtime 让全量笔记重走嵌入。 */
+	async clearVectors(): Promise<void> { await this.call("clearVectors"); }
 	async compact(): Promise<void> { await this.call("compact"); }
 
 	/**
@@ -326,6 +329,11 @@ export class VectorStore {
 	}
 	async getStats(): Promise<{ totalChunks: number; activeChunks: number; embeddedChunks: number; indexedNotes: number; dbSizeMb: number }> {
 		return await this.call<{ totalChunks: number; activeChunks: number; embeddedChunks: number; indexedNotes: number; dbSizeMb: number }>("getStats");
+	}
+
+	/** 已嵌入（至少一个 chunk 带向量）的笔记数 — 进度面板/引导页「已嵌入」口径。 */
+	async getEmbeddedNoteCount(): Promise<number> {
+		return await this.call<number>("getEmbeddedNoteCount");
 	}
 
 	async saveEmbeddings(chunkIds: string[], embeddings: number[][]): Promise<void> {

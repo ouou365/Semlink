@@ -15,10 +15,12 @@ import type { SemlinkTools } from "./chat-tools";
 import { createCiteRegistry } from "./cite-cards";
 import { t } from "./i18n";
 
-/** Maximum tool-calling rounds before giving up on a final answer. */
-const MAX_TOOL_ITERATIONS = 5;
+/** Maximum tool-calling rounds before giving up on a final answer.
+ *  表格/矩阵扫读需要多次分段读取（一次全量索引的表 ≈ 45K 字符 ≈ 6+ 段），
+ *  5 轮会把覆盖记账规则掐断在半途。 */
+const MAX_TOOL_ITERATIONS = 12;
 /** After this many tool rounds, nudge the model to answer directly. */
-const NUDGE_AFTER_ROUND = 3;
+const NUDGE_AFTER_ROUND = 8;
 /** Explicit per-round output budget. DeepSeek-style OpenAI-compatible APIs
  *  default to ~4K output tokens, which silently truncates long answers
  *  mid-sentence (finish_reason "length"); always ask for more. Providers
@@ -520,6 +522,7 @@ export class ChatClient {
 			t("promptGrepGuide") +
 			t("promptPrimarySource") +
 			t("promptToolGuide") +
+			t("promptTableDiscipline") +
 			vectorLine +
 			depthHint +
 			t("promptNoFabricate") +
@@ -602,7 +605,9 @@ export class ChatClient {
 		this.latestCiteRegistry = citeRegistry;
 		for (const p of contextNotePaths) citeReg.register(p);
 		if (this.tools) {
-			this.tools.maxResultChars = depth === "enhanced" ? 8000 : 4000;
+			// enhanced：长表格分段扫读的单段上限（12K ≈ 80 行表格），
+			// 配合 MAX_TOOL_ITERATIONS=12 可完整覆盖一次全量索引的大表。
+			this.tools.maxResultChars = depth === "enhanced" ? 16000 : 8000;
 			this.tools.citeNumberer = citeReg.register;
 		}
 

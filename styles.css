@@ -3075,6 +3075,7 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     align-content: stretch;
 }
 
+
 /* 系列二次确认弹窗：适度加宽，Endpoint 基本完整显示 */
 .semlink-guide-series-modal {
     width: min(580px, 92vw);
@@ -3532,27 +3533,6 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     margin: 0 auto;
 }
 
-/* RAG 标签的咖啡杯索引可视化：居中，下方留一点呼吸 */
-.semlink-rag-coffee {
-    display: flex;
-    justify-content: center;
-    margin: 10px 0 14px;
-}
-
-/* Barista status line under the cup — reflects the brewing phase. */
-.semlink-guide-index-stamp {
-    margin-top: 4px;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    text-align: center;
-    font-size: 10px;
-    font-style: normal;
-    letter-spacing: 0.4px;
-    color: var(--text-faint);
-}
-
 /* Percentage + count readout beside the cup. */
 .semlink-guide-index-readout {
     display: flex;
@@ -3593,6 +3573,11 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     width: 100%;
     font-size: 11px;
     color: var(--text-muted);
+}
+
+/* Embed guide's final "Done" under the coffee cup. */
+.semlink-guide-index-done {
+    margin-top: 10px;
 }
 
 .semlink-guide-index-timeitem {
@@ -5863,22 +5848,25 @@ body .semlink-msg-user::selection {
 
 /* ── Share revoke button ── */
 /* Modal-scoped + button tag: outspecifies theme globals like button,
-   button:hover that would otherwise repaint the red solid white label. */
+   button:hover that would otherwise repaint the hover state. Default is a
+   quiet white/ink outline button; hover turns it solid error red. */
 .semlink-share-modal button.semlink-share-revoke,
 button.semlink-share-revoke {
 	margin-top: 4px;
 	padding: 7px 14px;
 	cursor: pointer;
 	border-radius: 8px;
-	border: none;
-	background: var(--text-error, #c54444);
-	color: #fff;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary, #fff);
+	color: var(--text-normal, #000);
 	font-size: 13px;
 	font-weight: 600;
+	transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 .semlink-share-modal button.semlink-share-revoke:hover,
 button.semlink-share-revoke:hover {
-	background: var(--background-modifier-error-hover, #a83a3a);
+	background: var(--text-error, #c54444);
+	border-color: var(--text-error, #c54444);
 	color: #fff;
 }
 
@@ -5913,28 +5901,250 @@ button.semlink-share-revoke:hover {
 	margin-left: auto;
 }
 
-/* ── RAG tab: vault metric cards ── */
-.semlink-rag-stats {
-	display: grid;
-	grid-template-columns: repeat(3, 1fr);
-	gap: 10px;
-	margin: 4px 0 18px;
-}
-.semlink-rag-stat {
-	padding: 12px 14px;
-	text-align: center;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 12px;
-	background: var(--background-secondary);
-}
-.semlink-rag-stat-num {
-	font-size: 20px;
-	font-weight: 700;
-	color: var(--text-accent);
-	line-height: 1.2;
-}
-.semlink-rag-stat-label {
-	margin-top: 3px;
-	font-size: 11.5px;
+
+/* 嵌入模型弹窗：模型行的展开箭头与内联供应商子行 */
+.semlink-guide-model-chevron {
+	display: flex;
 	color: var(--text-muted);
+}
+.semlink-guide-model-chevron svg {
+	width: 14px;
+	height: 14px;
+}
+.semlink-guide-provider-grid-vertical .semlink-guide-model-provider {
+	/* 100% 宽 + 缩进会撑破容器出横向滚动条：宽度按缩进回收 */
+	width: calc(100% - 26px);
+	margin-left: 26px;
+	box-sizing: border-box;
+}
+
+/* 嵌入模型弹窗：模型行的上下文 / 供应商行的输入单价（推到行最右） */
+.semlink-guide-model-meta {
+	margin-left: auto;
+	white-space: nowrap;
+}
+
+/* ── 外部 MCP 客户端弹窗：首行（标题/描述/切换）与结尾行（footer）固定，
+ *    中间表单区滚动；Form/JSON 分段控件居左 ── */
+.semlink-mcp-client-modal.modal {
+	display: flex;
+	flex-direction: column;
+	max-height: 85vh;
+}
+.semlink-mcp-client-modal .modal-title {
+	flex-shrink: 0;
+}
+.semlink-mcp-client-modal .modal-content {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+}
+.semlink-mcp-client-modal .semlink-mcp-edit-segrow {
+	justify-content: flex-start;
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	background: var(--background-primary);
+	margin-top: 10px;
+}
+.semlink-mcp-client-modal .semlink-editor-footer {
+	position: sticky;
+	bottom: 0;
+	z-index: 2;
+	margin-top: auto;
+	padding-top: 10px;
+	background: var(--background-primary);
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+/* ── 通用页：上手清单（中性卡片 + 时间轴圆点 + 进度条） ── */
+.semlink-checklist {
+	background: var(--background-secondary);
+	border-radius: 14px;
+	padding: 14px 18px 10px;
+	/* margin-top: 18px; */
+}
+.semlink-checklist-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+}
+.semlink-checklist-title {
+	font-size: 13.5px;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+.semlink-checklist-progress {
+	font-size: 12px;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+.semlink-checklist-bar {
+	height: 6px;
+	border-radius: 3px;
+	background: var(--background-modifier-border);
+	margin: 9px 0 4px;
+	overflow: hidden;
+}
+.semlink-checklist-bar-fill {
+	height: 100%;
+	width: 0%;
+	border-radius: 3px;
+	background: var(--interactive-accent);
+	transition: width 0.25s ease;
+}
+.semlink-checklist-row {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 0;
+}
+/* 时间轴连接线：相邻两行的圆点之间 */
+.semlink-checklist-row + .semlink-checklist-row::before {
+	content: "";
+	position: absolute;
+	left: 10px;
+	top: -8px;
+	height: 16px;
+	width: 1.5px;
+	background: var(--background-modifier-border);
+}
+.semlink-checklist-icon {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 21px;
+	height: 21px;
+	border-radius: 50%;
+	color: var(--text-faint);
+	background: var(--background-primary);
+	box-shadow: 0 0 0 1.5px var(--background-modifier-border);
+}
+.semlink-checklist-icon svg {
+	width: 13px;
+	height: 13px;
+}
+.semlink-checklist-row.is-done .semlink-checklist-icon {
+	background: var(--interactive-accent);
+	box-shadow: none;
+	color: #ffffff;
+}
+.semlink-checklist-label {
+	flex: 1 1 auto;
+	font-size: 13.5px;
+	color: var(--text-normal);
+}
+.semlink-checklist-row.is-done .semlink-checklist-label {
+	color: var(--text-muted);
+}
+.semlink-checklist-action {
+	flex-shrink: 0;
+	font-size: 12.5px;
+	padding: 5px 14px;
+	border-radius: 8px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	cursor: pointer;
+	transition: border-color 0.12s ease, color 0.12s ease;
+}
+.semlink-checklist-action:hover {
+	border-color: var(--interactive-accent);
+	color: var(--interactive-accent);
+}
+.semlink-checklist.is-complete .semlink-checklist-bar-fill {
+	background: var(--interactive-accent);
+}
+.semlink-checklist.is-complete .semlink-checklist-label {
+	text-decoration: none;
+}
+
+
+/* 嵌入引导索引步：当前正在嵌入的文本行 */
+/* 文档名行：名字与分片进度分属两个元素——名字可截断省略，
+   分片进度 flex:0 0 auto 永不挤压，长文件名不会把它顶出视野。 */
+.semlink-guide-index-file {
+	max-width: 100%;
+	display: flex;
+	align-items: baseline;
+	justify-content: center;
+	gap: 4px;
+	font-size: 11px;
+	color: var(--text-muted);
+}
+.semlink-guide-index-file-name {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.semlink-guide-index-file-prog {
+	flex: 0 0 auto;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+/* ── RAG 页：索引进度卡片 ── */
+.semlink-index-card {
+	background: #fafafa;
+	border-radius: 12px;
+	padding: 12px 16px;
+	margin: 4px 0 14px;
+}
+.semlink-index-card-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 6px;
+}
+.semlink-index-card-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+/* 面板标题右侧的功能开关（索引/自动嵌入总开关）：
+   固定尺寸防挤压，center 对齐压过 head 的 baseline。 */
+.semlink-index-card-head .semlink-index-card-toggle {
+	flex: 0 0 auto;
+	align-self: center;
+}
+.semlink-index-card-value {
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.semlink-index-card-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 3px 0;
+	font-size: 12.5px;
+}
+.semlink-index-card-label {
+	color: var(--text-muted);
+	flex-shrink: 0;
+}
+
+/* 标题行的数值与块数值统一右对齐 */
+
+/* ── 索引/嵌入双面板：左右并列，窄幅自动堆叠 ── */
+.semlink-index-panels {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+	gap: 10px;
+	margin: 4px 0 14px;
+}
+.semlink-index-panels .semlink-index-card {
+	margin: 0;
 }

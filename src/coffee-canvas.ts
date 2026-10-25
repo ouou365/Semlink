@@ -64,6 +64,10 @@ export interface CoffeeCanvas {
 	/** A new note starts brewing: pour it into the cup from above. The
 	 *  latte chip wobbles. */
 	pour(fileName: string): void;
+	/** Chunks are actively embedding (the file's chunk ticker is moving):
+	 *  keep the pour stream flowing. Tops the stream timer up per call;
+	 *  when calls stop the stream fades out on its own. */
+	stream(active: boolean): void;
 		/** Finish the brew: big splash + bubble burst + steam before settling. */
 	celebrate(): void;
 	/** Stop the loop immediately and release the canvas. */
@@ -117,7 +121,7 @@ export function mountCoffeeCanvas(
 	canvas.style.height = `${h}px`;
 	const ctx = canvas.getContext("2d");
 	if (!ctx) {
-		return { setLevel() {}, setBrewing() {}, pour() {}, celebrate() {}, destroy() {}, getStats: () => null };
+		return { setLevel() {}, setBrewing() {}, pour() {}, stream() {}, celebrate() {}, destroy() {}, getStats: () => null };
 	}
 	ctx.scale(dpr, dpr);
 
@@ -196,6 +200,10 @@ export function mountCoffeeCanvas(
 	let idleSince = 0;
 	let pourT = 0; // seconds left in the current pour
 	const POUR_DUR = 1.9;
+	// Chunk-streaming floor: while the chunk ticker is moving, keep the pour
+	// stream at least this full so it reads as one continuous column between
+	// progress events (which can gap ~1s when the main thread is busy).
+	const STREAM_FLOOR = 1.2;
 	let latteWobble = 0; // 0-1 — latte chip reaction to a fresh pour
 	const bubbles: Bubble[] = [];
 	const droplets: Droplet[] = [];
@@ -527,7 +535,24 @@ export function mountCoffeeCanvas(
 	};
 
 	// Paint the idle scene immediately — an empty cup waiting to brew.
-	ensureLoop();
+	// ensureLoop() needs canvas.isConnected, but Obsidian may call the
+	// settings tab's display() BEFORE its container is inserted into the
+	// document — in that state the idle scene would silently never paint
+	// (no progress events flow when idle to retry). Wait for the attach.
+	if (canvas.isConnected) {
+		ensureLoop();
+	} else {
+		const attachWatch = new MutationObserver(() => {
+			if (canvas.isConnected) {
+				attachWatch.disconnect();
+				ensureLoop();
+			}
+		});
+		attachWatch.observe(document.documentElement, { childList: true, subtree: true });
+		// Safety valve: stop watching if the canvas is discarded before it
+		// is ever attached (tab re-rendered mid-flight).
+		window.setTimeout(() => attachWatch.disconnect(), 30_000);
+	}
 
 	return {
 		setLevel(pct, splash) {
@@ -548,11 +573,20 @@ export function mountCoffeeCanvas(
 			if (b) ensureLoop();
 		},
 		pour(fileName) {
+			// A new note still wobbles the chip even mid-stream — file changes
+			// are seconds apart, so the wobble reads as per-note feedback.
+			latteWobble = 1;
 			// A pour still in flight keeps playing — restarting it on every
 			// file would hold the surface at max turbulence forever.
 			if (pourT > POUR_DUR * 0.3) return;
 			pourT = POUR_DUR;
-			latteWobble = 1;
+			ensureLoop();
+		},
+		stream(active) {
+			// Keep-alive only: top the stream timer up while chunks tick and
+			// let it decay (with the pour's own fade-out) once they stop.
+			if (!active || done) return;
+			if (pourT < STREAM_FLOOR) pourT = STREAM_FLOOR;
 			ensureLoop();
 		},
 		celebrate() {

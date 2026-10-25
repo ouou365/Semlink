@@ -91,7 +91,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 	{
 		name: "read",
 		description:
-			"Read note content with line numbers (cat -n style) plus total_lines/total_chars metadata. offset supports negative values (-20 = last 20 lines, i.e. tail); heading jumps straight to a section. Compose with grep: grep emits line numbers → feed them into offset/limit here.",
+			"Read note content with line numbers (cat -n style); metadata includes total_lines, offset and end_line - use them to bookkeep coverage. offset supports negative values (-20 = last 20 lines, i.e. tail); heading jumps straight to a section. For long tables/matrices read in segments of <=40 lines (grep's line map → offset/limit here) and enumerate every row per segment before answering.",
 		parameters: {
 			type: "object",
 			properties: {
@@ -107,7 +107,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 	{
 		name: "grep",
 		description:
-			"Exact text or regex search across note contents, emitting 'file:line: content' — line numbers feed directly into read's offset. Best for exact keywords, IDs, dates, code identifiers. Supports limit/offset pagination over matching files.",
+			"Exact text or regex search across note contents, emitting 'file:line: content' — line numbers form a row map that feeds directly into read's offset/limit. Per file reports matchCount and linesOmitted: if linesOmitted > 0 keep paging (offset/limit) or read the file segments until coverage is complete. Best for exact keywords, IDs, dates, code identifiers.",
 		parameters: {
 			type: "object",
 			properties: {
@@ -421,7 +421,10 @@ export class ToolCore {
 		// CJK 长词拆 2-gram（无空格语言的实用检索方案）；ASCII 词整词保留
 		const out: string[] = [];
 		for (const t of raw) {
-			if (/^[ -]+$/.test(t) || t.length <= 3) {
+			// 纯 ASCII（0x00-0x7F）整词保留。不用正则字符类：字面控制字节会把源文件
+			// 变成二进制，转义写法又触发 no-control-regex 门禁，改用码点循环判定。
+			const isAscii = [...t].every((ch) => ch.charCodeAt(0) <= 0x7f);
+			if (isAscii || t.length <= 3) {
 				out.push(t);
 				continue;
 			}
@@ -531,23 +534,35 @@ export class ToolCore {
 		const slice = sectionLines.slice(start - 1, start - 1 + Math.max(0, count));
 		const numbered = slice.map((text, i) => `L${bodyOffsetLines + start + i}: ${text}`);
 		const header = this.citeHeader(path);
-
-		return this.truncate(
+		// 超过单次上限时按行收缩 content，JSON 永远有效，并显式标注
+		// truncated + next_offset——模型据此继续读，不会忽视截断。
+		const remaining = sectionTotal - (start - 1) - slice.length;
+		const build = (keep: number): string =>
 			JSON.stringify(
 				{
 					path,
 					totalLines,
 					totalChars: content.length,
 					offset: start,
-					returned: slice.length,
+					endLine: bodyOffsetLines + start + keep - 1,
+					returned: keep,
+					...(keep < slice.length || remaining > 0
+						? { truncated: true, next_offset: bodyOffsetLines + start + keep }
+						: {}),
 					...(heading ? { heading } : {}),
-					content: numbered.join("\n"),
+					content: numbered.slice(0, keep).join("\n"),
 					...(header ? { cite: header.trim() } : {}),
 				},
 				null,
 				2,
-			),
-		);
+			);
+		let out = build(slice.length);
+		if (out.length > this.maxChars) {
+			let keep = slice.length;
+			while (keep > 1 && build(keep).length > this.maxChars) keep = Math.floor(keep * 0.8);
+			out = build(Math.max(1, keep));
+		}
+		return out;
 	}
 
 	async grep(
@@ -565,7 +580,7 @@ export class ToolCore {
 		const detailLimit = Math.min(Math.max(1, limit), 30);
 		const MAX_PATHS = 200;
 		const ctx = Math.min(Math.max(0, context), 3);
-		const maxLinesPerFile = 12;
+		const maxLinesPerFile = 60;
 
 		const files = this.deps.vault.getFiles().filter((f) => {
 			if (!/\.(md|txt|markdown)$/i.test(f.path)) return false;
@@ -630,7 +645,11 @@ export class ToolCore {
 					completeList: totalFiles <= MAX_PATHS,
 					offset,
 					paths: allPaths,
-					results: detailed.map((r) => ({ n: this.cite?.(r.path), ...r })),
+					results: detailed.map((r) => ({
+						n: this.cite?.(r.path),
+						...r,
+						linesOmitted: Math.max(0, r.matchCount - r.lines.length),
+					})),
 				},
 				null,
 				2,
@@ -641,10 +660,12 @@ export class ToolCore {
 
 	async find(pattern: string, prefix: string | undefined, limit = 20): Promise<string> {
 		if (!pattern) return "Error: missing pattern";
-		// glob：* → 任意（不含 /），? → 单字符；其余按字面匹配（大小写不敏感）
+		// glob：* → 任意字符（含路径分隔符——"*关键词*" 即按包含匹配，
+		// 否则子目录里的文件永远匹配不上），? → 单字符；其余按字面匹配
+		//（大小写不敏感）。
 		const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
 		const re = new RegExp(
-			"^" + escaped.replace(/\*\*/g, "§").replace(/\*/g, "[^/]*").replace(/§/g, ".*").replace(/\?/g, ".") + "$",
+			"^" + escaped.replace(/\*\*/g, "§").replace(/\*/g, "[\\s\\S]*").replace(/§/g, "[\\s\\S]*").replace(/\?/g, ".") + "$",
 			"i",
 		);
 		const base = prefix ? prefix.replace(/\/+$/, "") : "";
