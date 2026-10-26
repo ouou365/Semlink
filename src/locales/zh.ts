@@ -288,7 +288,7 @@ const zh: Record<keyof typeof en, string> = {
 	embedProgressTitle: "嵌入进度",
 	shareFooter: "通过局域网分享",
 	shareBrandSub: "Let your Obsidian Vault think, collaborate and act.",
-	tabShare: "Share",
+	tabShare: "分享",
 	shareEmpty: "当前没有共享的对话。打开聊天，点击回答下方的分享按钮即可发布。",
 	shareUntitled: "未命名对话",
 	shareDelete: "停止共享并删除",
@@ -404,7 +404,8 @@ const zh: Record<keyof typeof en, string> = {
 	modelTagTranslate: "翻译",
 	credentialConfigured: "密钥已配置",
 	credentialMissing: "密钥未配置",
-	edit: "编辑",
+	edit: "编辑",	configure: "配置",
+
 	editProvider: "编辑供应商",
 	editorConfigTitle: "{provider} 配置",
 	editorAdvancedShow: "展开高级选项",

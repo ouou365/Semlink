@@ -402,7 +402,8 @@ const en = {
 	modelTagTranslate: "Translate",
 	credentialConfigured: "Key configured",
 	credentialMissing: "Key missing",
-	edit: "Edit",
+	edit: "Edit",	configure: "Configure",
+
 	editProvider: "Edit provider",
 	editorConfigTitle: "{provider} Configuration",
 	editorAdvancedShow: "Show advanced options",

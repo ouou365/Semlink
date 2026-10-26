@@ -570,10 +570,24 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			.setName(t("excludePaths"))
 			.setDesc(t("excludePathsDesc"))
 			.addButton((btn) =>
-				btn.setButtonText(t("edit")).onClick(() => {
+				btn.setButtonText(t("configure")).onClick(() => {
 					new ExcludePathsModal(this.app, this.plugin).open();
 				})
 			);
+
+		// ── 重新索引（原在高级选项末尾，移到排除路径下方常驻可见）：
+		//    清掉所有索引（含分块），从 0 开始重新分块。破坏性操作带确认。 ──
+		new Setting(containerEl)
+			.setName(t("reindexAll"))
+			.setDesc(t("reindexAllDesc"))
+			.addButton((btn) => {
+				btn.setButtonText(t("reindexAll"));
+				markDestructive(btn).onClick(() => {
+					new ConfirmModal(this.app, t("reindexAll"), t("reindexConfirm"), () => {
+						void this.plugin.reindexAll();
+					}).open();
+				});
+			});
 
 		// ── 高级选项（默认收起）：分块 / 批量 / 延迟 / 并发 ──
 		const advHead = containerEl.createDiv({ cls: "semlink-editor-adv-head" });
@@ -642,21 +656,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				return slider.onChange(async (value) => {
 					this.plugin.settings.embedConcurrency = value;
 					await this.plugin.saveSettings();
-				});
-			});
-
-		// ── 高级选项末行：重新索引 ──
-		// 清掉所有索引（含分块），从 0 开始重新分块。破坏性操作压轴，
-		// 与参数滑块隔开，误触概率最低。
-		new Setting(advBody)
-			.setName(t("reindexAll"))
-			.setDesc(t("reindexAllDesc"))
-			.addButton((btn) => {
-				btn.setButtonText(t("reindexAll"));
-				markDestructive(btn).onClick(() => {
-					new ConfirmModal(this.app, t("reindexAll"), t("reindexConfirm"), () => {
-						void this.plugin.reindexAll();
-					}).open();
 				});
 			});
 	}
