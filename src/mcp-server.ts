@@ -9,7 +9,7 @@ import { VectorStore } from "./vector-store";
 import { EmbeddingClient } from "./embedding-client";
 import { ProgressTracker } from "./progress";
 import { Scheduler } from "./scheduler";
-import { TOOL_SPECS, ToolCore } from "./tools-core";
+import { TOOL_SPECS, ToolCore, parseExcludePaths } from "./tools-core";
 import type { SmartVaultSettings } from "./types";
 
 /** Tool arguments read from tools/call params — only fields this server uses. */
@@ -82,6 +82,8 @@ export class McpServer {
 			client,
 			vault,
 			getActiveNote,
+			// 每次现读：updateSettings 换对象后依然指向最新规则
+			excludedPaths: () => parseExcludePaths(this.settings.excludePaths),
 			progress: () => this.progress.current,
 			reindex: async (path, force) => {
 				await this.toolReindex(path, force);

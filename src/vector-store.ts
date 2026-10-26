@@ -228,9 +228,9 @@ export class VectorStore {
 			case "getDocVectorNotePaths": return e.getDocVectorNotePaths();
 			case "prepareDocVectorBackfill": return e.prepareDocVectorBackfill(args[0] as number);
 			case "loadVectorCache": return e.loadVectorCache();
-			case "search": return e.search(args[0] as number[] | Float32Array, args[1] as number, args[2] as number);
+			case "search": return e.search(args[0] as number[] | Float32Array, args[1] as number, args[2] as number, args[3] as string | undefined, args[4] as string[] | undefined);
 			case "searchRelatedNotes": return e.searchRelatedNotes(args[0] as string, args[1] as number, args[2] as number, args[3] as number);
-			case "textSearch": return e.textSearch(args[0] as string, args[1] as number, args[2] as string | undefined);
+			case "textSearch": return e.textSearch(args[0] as string, args[1] as number, args[2] as string | undefined, args[3] as string[] | undefined);
 			case "enqueue": return e.enqueue(args[0] as string, args[1] as QueueAction, args[2] as number);
 			case "enqueueMany": return e.enqueueMany(args[0] as Array<{ notePath: string; action: QueueAction; priority?: number }>);
 			case "dequeue": return e.dequeue(args[0] as number);
@@ -356,14 +356,14 @@ export class VectorStore {
 	/** 向量搜索总开关（设置页 RAG 标签注入）：关闭时所有语义检索直接返回空。 */
 	searchGate: () => boolean = () => true;
 
-	async search(queryEmbedding: number[], limit = 10, threshold = 0.3): Promise<SearchResult[]> {
+	async search(queryEmbedding: number[], limit = 10, threshold = 0.3, pathFilter?: string, excludePaths?: string[]): Promise<SearchResult[]> {
 		if (!this.searchGate()) return [];
 		if (this.fallback) {
 			// Sync mode: time-slice the scan so the main thread (and the UI's
 			// elapsed counter / dots) keeps breathing between slices.
-			return await this.searchSyncSliced(queryEmbedding, limit, threshold);
+			return await this.searchSyncSliced(queryEmbedding, limit, threshold, pathFilter, excludePaths);
 		}
-		return await this.call<SearchResult[]>("search", [queryEmbedding, limit, threshold]);
+		return await this.call<SearchResult[]>("search", [queryEmbedding, limit, threshold, pathFilter, excludePaths]);
 	}
 
 	/** Note→note "related notes" via max-pooling over the source note's chunks
@@ -379,6 +379,8 @@ export class VectorStore {
 		queryEmbedding: number[],
 		limit: number,
 		threshold: number,
+		pathFilter?: string,
+		excludePaths?: string[],
 	): Promise<SearchResult[]> {
 		const engine = this.engine!;
 		// ~4096 vectors × 300 dims ≈ 1.2M dot products per slice (~50-150ms).
@@ -386,7 +388,7 @@ export class VectorStore {
 		const hits: Array<{ chunkId: string; score: number }> = [];
 		const count = engine.vectorCount();
 		for (let start = 0; start < count; start += SLICE) {
-			hits.push(...engine.searchSlice(queryEmbedding, start, Math.min(start + SLICE, count), threshold));
+			hits.push(...engine.searchSlice(queryEmbedding, start, Math.min(start + SLICE, count), threshold, pathFilter, excludePaths));
 			// Yield to the main thread so timers/render stay responsive.
 			await new Promise((r) => window.setTimeout(r, 0));
 		}
@@ -411,8 +413,8 @@ export class VectorStore {
 	}
 
 	/** Fast substring search over indexed chunk content (for the grep tool). */
-	async textSearch(pattern: string, limit = 200, pathFilter?: string): Promise<Array<{ path: string; matchCount: number; preview: string }>> {
-		return await this.call<Array<{ path: string; matchCount: number; preview: string }>>("textSearch", [pattern, limit, pathFilter]);
+	async textSearch(pattern: string, limit = 200, pathFilter?: string, excludePaths?: string[]): Promise<Array<{ path: string; matchCount: number; preview: string }>> {
+		return await this.call<Array<{ path: string; matchCount: number; preview: string }>>("textSearch", [pattern, limit, pathFilter, excludePaths]);
 	}
 
 	/** Chunk a markdown document. Runs in the worker thread so large-file

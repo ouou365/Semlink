@@ -13,6 +13,7 @@ import { IndexQueue } from "./src/index-queue";
 import { EmbeddingClient } from "./src/embedding-client";
 import { ChatClient, inferAgentDepth, type ThinkingStep } from "./src/chat-client";
 import { SemlinkTools } from "./src/chat-tools";
+import { parseExcludePaths } from "./src/tools-core";
 import { Scheduler } from "./src/scheduler";
 import { ProgressTracker } from "./src/progress";
 import { McpServer } from "./src/mcp-server";
@@ -65,6 +66,9 @@ export default class SmartVaultPlugin extends Plugin {
 	private statusBarEl: HTMLElement | null = null;
 	private lastStatusBarUpdate = 0;
 
+	/** 上次清理索引时用的排除规则（saveSettings 里比对，规则变了才重跑 purge）。 */
+	private lastPurgedExcludePaths = "";
+
 	async onload() {
 		await this.loadSettings();
 		setDebugLogging(this.settings.debugLogging ?? false);
@@ -114,7 +118,7 @@ export default class SmartVaultPlugin extends Plugin {
 
 		this.queue = new IndexQueue(this.store);
 		this.client = new EmbeddingClient(this.settings);
-		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault, () => this.app.workspace.getActiveFile()?.path ?? null);
+		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault, () => this.app.workspace.getActiveFile()?.path ?? null, () => this.settings.excludePaths);
 		this.chatClient = new ChatClient(this.settings, this.chatTools);
 		// Single shared chat-history store: the search view writes to it and
 		// the LAN share server renders from it, so re-opened share URLs see
@@ -390,6 +394,12 @@ export default class SmartVaultPlugin extends Plugin {
 				if (fingerprint) new Notice(`Semlink: ${t("embedModelChanged")}`);
 			}
 		}
+		// 排除规则变化：把新规则命中的已索引内容从索引中移除，让检索
+		//（SQL 快路径/向量）与索引侧立即一致，而不是等下次全量重建。
+		if ((this.lastPurgedExcludePaths ?? "") !== this.settings.excludePaths) {
+			this.lastPurgedExcludePaths = this.settings.excludePaths;
+			await this.purgeExcludedFromIndex();
+		}
 		await this.saveData(this.settings);
 		setLang(this.settings.language);
 		// Re-render the search view's language-dependent UI (welcome screen,
@@ -406,6 +416,31 @@ export default class SmartVaultPlugin extends Plugin {
 		this.mcpServer?.updateSettings(this.settings);
 		this.watcher?.updateSettings(this.settings);
 		await this.syncFeishuBots();
+	}
+
+	/** 排除规则变化后，把命中的已索引路径从索引中移除（chunks + 文档向量）。
+	 *  让 SQL 快路径与向量检索立即和索引侧一致；规则放宽后走全量重建找回。 */
+	async purgeExcludedFromIndex(): Promise<void> {
+		const patterns = parseExcludePaths(this.settings.excludePaths);
+		if (patterns.length === 0 || !this.store) return;
+		try {
+			const indexed = Array.from(await this.store.getAllIndexedPaths());
+			const doomed = indexed.filter((p) =>
+				patterns.some((g) => p.startsWith(g) || p.includes(g)),
+			);
+			for (const p of doomed) {
+				try {
+					await this.store.deleteChunksByNotePath(p);
+				} catch {
+					// best-effort：单条失败不阻断其余清理
+				}
+			}
+			if (doomed.length > 0) {
+				debugLog(`[Semlink] 排除规则更新：已从索引移除 ${doomed.length} 条匹配路径`);
+			}
+		} catch (e) {
+			console.warn("[Semlink] purgeExcludedFromIndex failed:", e);
+		}
 	}
 
 	// ──── MCP Server ────

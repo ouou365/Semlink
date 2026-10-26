@@ -90,7 +90,7 @@ const t: Record<keyof typeof en, string> = {
 	embedConcurrency: "並行請求數",
 	embedConcurrencyDesc: "同時嵌入的筆記數量，過大可能觸發 429 速率限制",
 	excludePaths: "排除路徑",
-	excludePathsDesc: "每行一個路徑前綴，符合的檔案不會被索引",
+	excludePathsDesc: "每行一個路徑前綴：符合的檔案不索引、也不出現在檢索結果裡；儲存時會移除已索引的符合內容",
 	autoIndex: "自動索引",
 	autoEmbed: "自動嵌入",
 	actions: "動作",

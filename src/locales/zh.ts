@@ -91,7 +91,7 @@ const zh: Record<keyof typeof en, string> = {
 	embedConcurrency: "并发请求数",
 	embedConcurrencyDesc: "同时嵌入的笔记数量，过大可能触发 429 限流",
 	excludePaths: "排除路径",
-	excludePathsDesc: "每行一个路径前缀，匹配的文件不会被索引",
+	excludePathsDesc: "每行一个路径前缀：匹配的文件不索引、也不出现在检索结果里；保存时会移除已索引的匹配内容",
 	autoIndex: "自动索引",
 	autoEmbed: "自动嵌入",
 	actions: "操作",

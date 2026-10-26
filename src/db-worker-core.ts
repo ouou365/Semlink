@@ -60,9 +60,9 @@ export function createDispatcher(): Dispatcher {
 			case "getDocVectorNotePaths": return engine.getDocVectorNotePaths();
 			case "prepareDocVectorBackfill": return engine.prepareDocVectorBackfill(args[0] as number);
 			case "loadVectorCache": return engine.loadVectorCache();
-			case "search": return engine.search(args[0] as number[] | Float32Array, args[1] as number, args[2] as number);
+			case "search": return engine.search(args[0] as number[] | Float32Array, args[1] as number, args[2] as number, args[3] as string | undefined, args[4] as string[] | undefined);
 			case "searchRelatedNotes": return engine.searchRelatedNotes(args[0] as string, args[1] as number, args[2] as number, args[3] as number);
-			case "textSearch": return engine.textSearch(args[0] as string, args[1] as number, args[2] as string | undefined);
+			case "textSearch": return engine.textSearch(args[0] as string, args[1] as number, args[2] as string | undefined, args[3] as string[] | undefined);
 			// queue ops
 			case "enqueue": return engine.enqueue(args[0] as string, args[1] as QueueAction, args[2] as number);
 			case "enqueueMany": return engine.enqueueMany(args[0] as Array<{ notePath: string; action: QueueAction; priority?: number }>);

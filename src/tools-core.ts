@@ -31,55 +31,59 @@ export const TOOL_SPECS: ToolSpec[] = [
 		name: "search",
 		description:
 			"Universal search entry point (use this first): runs BM25 keyword search and vector semantic search in parallel, fuses both ranked lists with Reciprocal Rank Fusion, and returns a single deduplicated ranking. When the vector path is unavailable (no embedding model configured / vector search disabled / nothing indexed yet) it automatically degrades to BM25-only results; meta.sources reports what was actually used. For exact terms prefer keyword.",
-		parameters: {
-			type: "object",
-			properties: {
-				query: { type: "string", description: "Natural-language query or keyword combination" },
-				limit: { type: "number", description: "Max results (default 10)" },
-				path: { type: "string", description: "Path prefix filter (optional)" },
-				alpha: { type: "number", description: "Fusion weight 0-1: 0 = BM25 only, 1 = vector only (default 0.5)" },
+			parameters: {
+				type: "object",
+				properties: {
+					query: { type: "string", description: "Natural-language query or keyword combination" },
+					limit: { type: "number", description: "Max results (default 10)" },
+					path: { type: "string", description: "Path prefix filter (optional)" },
+					exclude: { type: "array", items: { type: "string" }, description: "Path prefixes to drop from results (optional, e.g. ['templates/','attachments/'])" },
+					alpha: { type: "number", description: "Fusion weight 0-1: 0 = BM25 only, 1 = vector only (default 0.5)" },
+				},
+				required: ["query"],
 			},
-			required: ["query"],
 		},
-	},
-	{
-		name: "keyword",
-		description:
-			"Keyword-only search scored with BM25. No embedding dependency — always available. Best for exact terms, IDs, dates, code identifiers that semantic retrieval can miss.",
-		parameters: {
-			type: "object",
-			properties: {
-				query: { type: "string", description: "Keyword combination, space-separated terms (union scored)" },
-				limit: { type: "number", description: "Max results (default 10)" },
-				path: { type: "string", description: "Path prefix filter (optional)" },
-				case_sensitive: { type: "boolean", description: "Case-sensitive matching (default false)" },
+		{
+			name: "keyword",
+			description:
+				"Keyword-only search scored with BM25. No embedding dependency — always available. Best for exact terms, IDs, dates, code identifiers that semantic retrieval can miss.",
+			parameters: {
+				type: "object",
+				properties: {
+					query: { type: "string", description: "Keyword combination, space-separated terms (union scored)" },
+					limit: { type: "number", description: "Max results (default 10)" },
+					path: { type: "string", description: "Path prefix filter (optional)" },
+					exclude: { type: "array", items: { type: "string" }, description: "Path prefixes to drop from results (optional)" },
+					case_sensitive: { type: "boolean", description: "Case-sensitive matching (default false)" },
+				},
+				required: ["query"],
 			},
-			required: ["query"],
 		},
-	},
-	{
-		name: "semantic",
-		description:
-			"Pure semantic vector search: natural-language query returns the most relevant note passages (path, heading, preview, score). Controlled by the vector-search toggle; returns an explicit 'unavailable' message instead of empty results when no embedding model is configured.",
-		parameters: {
-			type: "object",
-			properties: {
-				query: { type: "string", description: "Natural-language search query" },
-				limit: { type: "number", description: "Max results (default 10)" },
-				threshold: { type: "number", description: "Similarity threshold 0-1 (default 0.3)" },
+		{
+			name: "semantic",
+			description:
+				"Pure semantic vector search: natural-language query returns the most relevant note passages (path, heading, preview, score). Controlled by the vector-search toggle; returns an explicit 'unavailable' message instead of empty results when no embedding model is configured.",
+			parameters: {
+				type: "object",
+				properties: {
+					query: { type: "string", description: "Natural-language search query" },
+					limit: { type: "number", description: "Max results (default 10)" },
+					threshold: { type: "number", description: "Similarity threshold 0-1 (default 0.3)" },
+					exclude: { type: "array", items: { type: "string" }, description: "Path prefixes to drop from results (optional)" },
+				},
+				required: ["query"],
 			},
-			required: ["query"],
 		},
-	},
 	{
 		name: "ls",
 		description:
 			"List indexed notes with created/modified ISO timestamps. Supports sorting, date-range filters, path prefix and limit/offset pagination — like ls -la. Best for 'what did I note recently' / 'what's in this folder'.",
-		parameters: {
-			type: "object",
-			properties: {
-				path: { type: "string", description: "Path prefix filter (optional)" },
-				sort: { type: "string", description: "modified (default, newest first) | created | name" },
+			parameters: {
+				type: "object",
+				properties: {
+					path: { type: "string", description: "Path prefix filter (optional)" },
+					exclude: { type: "array", items: { type: "string" }, description: "Path prefixes to drop from results (optional)" },
+					sort: { type: "string", description: "modified (default, newest first) | created | name" },
 				limit: { type: "number", description: "Max entries (default 50)" },
 				offset: { type: "number", description: "Skip first N entries (default 0, for pagination)" },
 				recursive: { type: "boolean", description: "Include subfolders (default true); false lists only direct children of path" },
@@ -114,6 +118,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 				pattern: { type: "string", description: "Text or regular expression" },
 				regex: { type: "boolean", description: "Treat pattern as regex (default false: literal text)" },
 				path: { type: "string", description: "Path prefix filter (optional)" },
+				exclude: { type: "array", items: { type: "string" }, description: "Path prefixes to skip entirely (optional)" },
 				case_sensitive: { type: "boolean", description: "Case-sensitive matching (default false)" },
 				context: { type: "number", description: "Context lines around each match (default 1, max 3)" },
 				limit: { type: "number", description: "Max files with detailed lines (default 10, max 30)" },
@@ -131,6 +136,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 			properties: {
 				pattern: { type: "string", description: "Filename glob or substring, e.g. '*weekly*'" },
 				path: { type: "string", description: "Path prefix filter (optional)" },
+				exclude: { type: "array", items: { type: "string" }, description: "Path prefixes to drop from results (optional)" },
 				limit: { type: "number", description: "Max entries (default 20)" },
 			},
 			required: ["pattern"],
@@ -193,6 +199,17 @@ export interface ToolCoreDeps {
 	progress: () => IndexProgress;
 	/** 重建索引（reindex 用）：由宿主注入（MCP 走 scheduler，聊天侧走插件）。 */
 	reindex: (path?: string, force?: boolean) => Promise<unknown>;
+	/** 全局排除前缀（设置 excludePaths 的运行时兜底——已索引的旧内容也挡在结果外）。
+	 *  语义与索引侧（scheduler/watcher）一致：startsWith || includes。 */
+	excludedPaths?: () => string[];
+}
+
+/** 解析设置里的 excludePaths（每行一个前缀）。与索引侧同源同语义。 */
+export function parseExcludePaths(raw: string): string[] {
+	return raw
+		.split("\n")
+		.map((p) => p.trim())
+		.filter((p) => p.length > 0);
 }
 
 interface SearchResultLike {
@@ -238,23 +255,25 @@ export class ToolCore {
 			get_active_note: "active",
 		};
 		if (legacy[name]) name = legacy[name]!;
-		const a = args as Record<string, string | number | boolean | undefined>;
+		const a = args as Record<string, string | number | boolean | string[] | undefined>;
+		// 工具参数 exclude（string[]）——与全局设置排除合并，见 excludedMatch()
+		const exclude = (a.exclude as string[] | undefined) ?? undefined;
 		try {
 			switch (name) {
 				case "search":
-					return await this.search(String(a.query ?? ""), Number(a.limit) || 10, a.path as string | undefined, Number(a.alpha) || 0.5);
+					return await this.search(String(a.query ?? ""), Number(a.limit) || 10, a.path as string | undefined, Number(a.alpha) || 0.5, exclude);
 				case "keyword":
-					return await this.searchBm25(String(a.query ?? ""), Number(a.limit) || 10, a.path as string | undefined, Boolean(a.case_sensitive));
+					return await this.searchBm25(String(a.query ?? ""), Number(a.limit) || 10, a.path as string | undefined, Boolean(a.case_sensitive), exclude);
 				case "semantic":
-					return await this.searchVector(String(a.query ?? ""), Number(a.limit) || 10, Number(a.threshold) || 0.3);
+					return await this.searchVector(String(a.query ?? ""), Number(a.limit) || 10, Number(a.threshold) || 0.3, exclude);
 				case "ls":
-					return await this.ls(a.path as string | undefined, (a.sort as string) ?? "modified", Number(a.limit) || 50, Number(a.offset) || 0, a.recursive !== false, a.since as string | undefined, a.until as string | undefined);
+					return await this.ls(a.path as string | undefined, (a.sort as string) ?? "modified", Number(a.limit) || 50, Number(a.offset) || 0, a.recursive !== false, a.since as string | undefined, a.until as string | undefined, exclude);
 				case "read":
 					return await this.read(String(a.path ?? ""), Number(a.offset) || 0, a.limit === undefined ? undefined : Number(a.limit), a.heading as string | undefined, a.max_depth === undefined ? undefined : Number(a.max_depth));
 				case "grep":
-					return await this.grep(String(a.pattern ?? ""), Boolean(a.regex), a.path as string | undefined, Boolean(a.case_sensitive), Number(a.context) === 0 ? 0 : Number(a.context) || 1, Number(a.limit) || 10, Number(a.offset) || 0);
+					return await this.grep(String(a.pattern ?? ""), Boolean(a.regex), a.path as string | undefined, Boolean(a.case_sensitive), Number(a.context) === 0 ? 0 : Number(a.context) || 1, Number(a.limit) || 10, Number(a.offset) || 0, exclude);
 				case "find":
-					return await this.find(String(a.pattern ?? ""), a.path as string | undefined, Number(a.limit) || 20);
+					return await this.find(String(a.pattern ?? ""), a.path as string | undefined, Number(a.limit) || 20, exclude);
 				case "headings":
 					return await this.headings(String(a.path ?? ""));
 				case "links":
@@ -275,14 +294,28 @@ export class ToolCore {
 
 	// ──── 检索 ────
 
+	/** 运行时排除判定：全局设置排除 ∪ 本次调用参数 exclude。
+	 *  语义与索引侧（scheduler/watcher 的 isExcluded）一致：前缀或包含即排除。
+	 *  过滤一律发生在 IO/打分之前——被排除的文件不进入读取队列。 */
+	private excludedMatch(path: string, extra?: string[]): boolean {
+		for (const g of this.deps.excludedPaths?.() ?? []) {
+			if (g.length > 0 && (path.startsWith(g) || path.includes(g))) return true;
+		}
+		for (const e of extra ?? []) {
+			const p = e.trim();
+			if (p.length > 0 && (path.startsWith(p) || path.includes(p))) return true;
+		}
+		return false;
+	}
+
 	/** 通用检索：BM25 + 向量并行，RRF 融合；向量路不可用时纯 BM25 兜底。 */
-	async search(query: string, limit = 10, path?: string, alpha = 0.5): Promise<string> {
+	async search(query: string, limit = 10, path?: string, alpha = 0.5, exclude?: string[]): Promise<string> {
 		if (!query.trim()) return "Error: missing query";
 		const useVector = this.deps.store.searchGate();
 		const [bm25, vector] = (await Promise.all([
-			this.bm25Raw(query, limit * 2, path).catch(() => []),
+			this.bm25Raw(query, limit * 2, path, false, exclude).catch(() => []),
 			useVector
-				? this.vectorRaw(query, limit * 2, 0.2, path).catch(() => [])
+				? this.vectorRaw(query, limit * 2, 0.2, path, exclude).catch(() => [])
 				: Promise.resolve([] as SearchResultLike[]),
 		])) as [SearchResultLike[], SearchResultLike[]];
 		const sources: string[] = [];
@@ -313,9 +346,9 @@ export class ToolCore {
 	}
 
 	/** 纯 BM25-lite：分词 → LIKE 候选 → idf/tf 打分。 */
-	async searchBm25(query: string, limit = 10, path?: string, caseSensitive = false): Promise<string> {
+	async searchBm25(query: string, limit = 10, path?: string, caseSensitive = false, exclude?: string[]): Promise<string> {
 		if (!query.trim()) return "Error: missing query";
-		const results = await this.bm25Raw(query, limit, path, caseSensitive);
+		const results = await this.bm25Raw(query, limit, path, caseSensitive, exclude);
 		return this.truncate(
 			JSON.stringify(
 				{
@@ -331,14 +364,14 @@ export class ToolCore {
 	}
 
 	/** 纯向量检索；不可用时返回明确的提示而不是空结果。 */
-	async searchVector(query: string, limit = 10, threshold = 0.3): Promise<string> {
+	async searchVector(query: string, limit = 10, threshold = 0.3, exclude?: string[]): Promise<string> {
 		if (!query.trim()) return "Error: missing query";
 		if (!this.deps.store.searchGate()) {
 			return JSON.stringify({
 				error: "Vector search is unavailable: no embedding model is configured. Set one up in the RAG settings, or use keyword / grep instead.",
 			});
 		}
-		const results = await this.vectorRaw(query, limit, threshold);
+		const results = await this.vectorRaw(query, limit, threshold, undefined, exclude);
 		return this.truncate(
 			JSON.stringify(
 				{
@@ -355,27 +388,30 @@ export class ToolCore {
 
 	/** BM25 检索：先查索引 chunk（毫秒级），未命中则兜底扫描 Vault 文件——
 	 *  BM25 兜底必须兜得住：内容还没索引时也能按文件词频返回结果。 */
-	private async bm25Raw(query: string, limit: number, path?: string, caseSensitive = false): Promise<SearchResultLike[]> {
-		const indexed = await this.bm25Indexed(query, limit, path, caseSensitive);
+	private async bm25Raw(query: string, limit: number, path?: string, caseSensitive = false, exclude?: string[]): Promise<SearchResultLike[]> {
+		const indexed = await this.bm25Indexed(query, limit, path, caseSensitive, exclude);
 		if (indexed.length > 0) return indexed.slice(0, limit);
-		return await this.bm25FileScan(query, limit, path, caseSensitive);
+		return await this.bm25FileScan(query, limit, path, caseSensitive, exclude);
 	}
 
 	/** 索引快路径：分词 → 每个词 LIKE 取候选 → idf·饱和tf 累计打分。 */
-	private async bm25Indexed(query: string, limit: number, path?: string, caseSensitive = false): Promise<SearchResultLike[]> {
+	private async bm25Indexed(query: string, limit: number, path?: string, caseSensitive = false, exclude?: string[]): Promise<SearchResultLike[]> {
 		const tokens = this.tokenize(query);
 		if (tokens.length === 0) return [];
+		// 排除在 SQL（NOT LIKE）与结果层各挡一道：索引里可能仍有规则变更前的旧内容
+		const globalExcludes = [...(this.deps.excludedPaths?.() ?? []), ...(exclude ?? [])];
 		const scores = new Map<string, { score: number; preview: string | null }>();
 		for (const token of tokens) {
 			let hits: Array<{ path: string; matchCount: number; preview: string }> = [];
 			try {
-				hits = await this.deps.store.textSearch(token, Math.min(limit * 3, 200), path);
+				hits = await this.deps.store.textSearch(token, Math.min(limit * 3, 200), path, globalExcludes.length > 0 ? globalExcludes : undefined);
 			} catch {
 				return []; // 索引不可用 → 交给文件扫描兜底
 			}
 			const df = Math.max(hits.length, 1);
 			const idf = Math.log(1 + 200 / df);
 			for (const h of hits) {
+				if (this.excludedMatch(h.path, exclude)) continue;
 				const tf = h.matchCount > 0 ? h.matchCount / (h.matchCount + 1.2) : 0;
 				const prev = scores.get(h.path);
 				scores.set(h.path, { score: (prev?.score ?? 0) + idf * tf, preview: prev?.preview ?? h.preview });
@@ -388,14 +424,15 @@ export class ToolCore {
 	}
 
 	/** 文件扫描兜底：并发读取笔记内容，按命中词数与词覆盖打分。 */
-	private async bm25FileScan(query: string, limit: number, path?: string, caseSensitive = false): Promise<SearchResultLike[]> {
+	private async bm25FileScan(query: string, limit: number, path?: string, caseSensitive = false, exclude?: string[]): Promise<SearchResultLike[]> {
 		const tokens = this.tokenize(query);
 		if (tokens.length === 0) return [];
 		const res = new RegExp(tokens.map((t) => this.escapeRegExp(t)).join("|"), caseSensitive ? "g" : "gi");
 		const base = path ? path.replace(/\/+$/, "") : "";
 		const files = this.deps.vault.getFiles().filter((f) => {
 			if (!/\.(md|txt|markdown)$/i.test(f.path)) return false;
-			return !base || f.path.startsWith(base);
+			if (base && !f.path.startsWith(base)) return false;
+			return !this.excludedMatch(f.path, exclude);
 		});
 		const scored: SearchResultLike[] = [];
 		const CONCURRENCY = 32;
@@ -445,13 +482,23 @@ export class ToolCore {
 	}
 
 
-	/** 向量原始结果：embed → store.search。 */
-	private async vectorRaw(query: string, limit: number, threshold: number, path?: string): Promise<SearchResultLike[]> {
+	/** 向量原始结果：embed → store.search。路径前缀与排除谓词下推到
+	 *  向量扫描内部（打分循环按 note_path 跳过）——一次扫描返回过滤后的
+	 *  精确 topN：无 over-fetch、无多余元数据查询，候选被排除占据时也
+	 *  不会凑不满 limit。 */
+	private async vectorRaw(query: string, limit: number, threshold: number, path?: string, exclude?: string[]): Promise<SearchResultLike[]> {
 		const embedResult = await this.deps.client.embed([query]);
-		const hits = await this.deps.store.search(embedResult.embeddings[0], limit, threshold);
-		return hits
-			.filter((r) => !path || r.notePath.startsWith(path))
-			.map((r) => ({ path: r.notePath, heading: r.heading, preview: r.contentPreview, score: r.score }));
+		const excludes = [...(this.deps.excludedPaths?.() ?? []), ...(exclude ?? [])]
+			.map((p) => p.trim())
+			.filter((p) => p.length > 0);
+		const hits = await this.deps.store.search(
+			embedResult.embeddings[0],
+			limit,
+			threshold,
+			path,
+			excludes.length > 0 ? excludes : undefined,
+		);
+		return hits.map((r) => ({ path: r.notePath, heading: r.heading, preview: r.contentPreview, score: r.score }));
 	}
 
 	// ──── 导航与读取 ────
@@ -464,12 +511,14 @@ export class ToolCore {
 		recursive: boolean,
 		since?: string,
 		until?: string,
+		exclude?: string[],
 	): Promise<string> {
 		const paths = await this.deps.store.getAllIndexedPaths();
 		const base = prefix ? prefix.replace(/\/+$/, "") : "";
 		const notes: Array<{ path: string; created: string | null; modified: string | null }> = [];
 		for (const p of paths) {
 			if (base && !p.startsWith(base)) continue;
+			if (this.excludedMatch(p, exclude)) continue;
 			if (!recursive) {
 				const rel = base ? p.slice(base.length).replace(/^\/+/, "") : p;
 				if (rel.includes("/")) continue;
@@ -589,6 +638,7 @@ export class ToolCore {
 		context: number,
 		limit: number,
 		offset: number,
+		exclude?: string[],
 	): Promise<string> {
 		if (!pattern) return "Error: missing pattern";
 
@@ -601,7 +651,7 @@ export class ToolCore {
 		const files = this.deps.vault.getFiles().filter((f) => {
 			if (!/\.(md|txt|markdown)$/i.test(f.path)) return false;
 			if (path && !f.path.toLowerCase().startsWith(path.toLowerCase())) return false;
-			return true;
+			return !this.excludedMatch(f.path, exclude);
 		});
 
 		const CONCURRENCY = 32;
@@ -686,7 +736,7 @@ export class ToolCore {
 		);
 	}
 
-	async find(pattern: string, prefix: string | undefined, limit = 20): Promise<string> {
+	async find(pattern: string, prefix: string | undefined, limit = 20, exclude?: string[]): Promise<string> {
 		if (!pattern) return "Error: missing pattern";
 		// glob：* → 任意字符（含路径分隔符——"*关键词*" 即按包含匹配，
 		// 否则子目录里的文件永远匹配不上），? → 单字符；其余按字面匹配
@@ -701,6 +751,7 @@ export class ToolCore {
 		for (const file of this.deps.vault.getFiles()) {
 			if (!/\.(md|txt|markdown)$/i.test(file.path)) continue;
 			if (base && !file.path.startsWith(base)) continue;
+			if (this.excludedMatch(file.path, exclude)) continue;
 			const name = file.path.slice(base ? base.length + 1 : 0);
 			if (!re.test(name) && !re.test(file.path)) continue;
 			results.push({ path: file.path, modified: new Date(file.stat.mtime).toISOString() });

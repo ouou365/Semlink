@@ -90,7 +90,7 @@ const t: Record<keyof typeof en, string> = {
 	embedConcurrency: "Parallele Anfragen",
 	embedConcurrencyDesc: "Parallel eingebettete Notizen – zu hohe Werte können 429-Rate-Limits auslösen",
 	excludePaths: "Ausgeschlossene Pfade",
-	excludePathsDesc: "Pfadpräfixe, die von der Indexierung ausgeschlossen werden (einer pro Zeile)",
+	excludePathsDesc: "Pfadpräfixe (einer pro Zeile). Übereinstimmende Dateien werden nicht indiziert und erscheinen nie in Suchergebnissen; beim Speichern werden bereits indizierte Treffer aus dem Index entfernt",
 	autoIndex: "Auto-Index",
 	autoEmbed: "Auto-Embedding",
 	actions: "Aktionen",

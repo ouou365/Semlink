@@ -90,7 +90,7 @@ const t: Record<keyof typeof en, string> = {
 	embedConcurrency: "Requêtes simultanées",
 	embedConcurrencyDesc: "Notes embeddées en parallèle — une valeur trop élevée peut déclencher des limites de débit 429",
 	excludePaths: "Chemins exclus",
-	excludePathsDesc: "Préfixes de chemins à exclure de l'indexation (un par ligne)",
+	excludePathsDesc: "Préfixes de chemins (un par ligne). Les fichiers correspondants ne sont pas indexés et n'apparaissent jamais dans les résultats ; à l'enregistrement, les correspondances déjà indexées sont retirées de l'index",
 	autoIndex: "Indexation auto",
 	autoEmbed: "Embedding auto",
 	actions: "Actions",

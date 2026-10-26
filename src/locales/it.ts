@@ -92,7 +92,7 @@ const t: Record<keyof typeof en, string> = {
 	embedConcurrency: "Richieste simultanee",
 	embedConcurrencyDesc: "Note elaborate in parallelo — un valore troppo alto può attivare i limiti 429",
 	excludePaths: "Percorsi esclusi",
-	excludePathsDesc: "Prefissi di percorso da escludere dall'indicizzazione (uno per riga)",
+	excludePathsDesc: "Prefissi di percorso (uno per riga). I file corrispondenti non vengono indicizzati e non compaiono mai nei risultati; al salvataggio, le corrispondenze già indicizzate vengono rimosse dall'indice",
 	autoIndex: "Indicizzazione automatica",
 	autoEmbed: "Embedding automatico",
 	actions: "Azioni",

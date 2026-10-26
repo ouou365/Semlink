@@ -89,7 +89,7 @@ const en = {
 	embedConcurrency: "Concurrent requests",
 	embedConcurrencyDesc: "Notes embedded in parallel — too high may trigger 429 rate limits",
 	excludePaths: "Exclude Paths",
-	excludePathsDesc: "Path prefixes to exclude from indexing (one per line)",
+	excludePathsDesc: "Path prefixes (one per line). Matching files are not indexed and never appear in search results; on save, already-indexed matches are removed from the index",
 	autoIndex: "Auto Index",
 	autoEmbed: "Auto-embed",
 	actions: "Actions",
