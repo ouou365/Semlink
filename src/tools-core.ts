@@ -36,7 +36,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 				properties: {
 					query: { type: "string", description: "Natural-language query or keyword combination" },
 					limit: { type: "number", description: "Max results (default 10)" },
-					path: { type: "string", description: "Path prefix filter (optional)" },
+					path: { type: "string", description: "Vault-relative path prefix filter, e.g. 'projects/' (optional; disk paths are auto-normalized)" },
 					exclude: { type: "array", items: { type: "string" }, description: "Path prefixes to drop from results (optional, e.g. ['templates/','attachments/'])" },
 					alpha: { type: "number", description: "Fusion weight 0-1: 0 = BM25 only, 1 = vector only (default 0.5)" },
 				},
@@ -52,7 +52,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 				properties: {
 					query: { type: "string", description: "Keyword combination, space-separated terms (union scored)" },
 					limit: { type: "number", description: "Max results (default 10)" },
-					path: { type: "string", description: "Path prefix filter (optional)" },
+					path: { type: "string", description: "Vault-relative path prefix filter, e.g. 'projects/' (optional; disk paths are auto-normalized)" },
 					exclude: { type: "array", items: { type: "string" }, description: "Path prefixes to drop from results (optional)" },
 					case_sensitive: { type: "boolean", description: "Case-sensitive matching (default false)" },
 				},
@@ -81,7 +81,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 			parameters: {
 				type: "object",
 				properties: {
-					path: { type: "string", description: "Path prefix filter (optional)" },
+					path: { type: "string", description: "Vault-relative path prefix filter, e.g. 'projects/' (optional; disk paths are auto-normalized)" },
 					exclude: { type: "array", items: { type: "string" }, description: "Path prefixes to drop from results (optional)" },
 					sort: { type: "string", description: "modified (default, newest first) | created | name" },
 				limit: { type: "number", description: "Max entries (default 50)" },
@@ -117,7 +117,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 			properties: {
 				pattern: { type: "string", description: "Text or regular expression" },
 				regex: { type: "boolean", description: "Treat pattern as regex (default false: literal text)" },
-				path: { type: "string", description: "Path prefix filter (optional)" },
+				path: { type: "string", description: "Vault-relative path prefix filter, e.g. 'projects/' (optional; disk paths are auto-normalized)" },
 				exclude: { type: "array", items: { type: "string" }, description: "Path prefixes to skip entirely (optional)" },
 				case_sensitive: { type: "boolean", description: "Case-sensitive matching (default false)" },
 				context: { type: "number", description: "Context lines around each match (default 1, max 3)" },
@@ -135,7 +135,7 @@ export const TOOL_SPECS: ToolSpec[] = [
 			type: "object",
 			properties: {
 				pattern: { type: "string", description: "Filename glob or substring, e.g. '*weekly*'" },
-				path: { type: "string", description: "Path prefix filter (optional)" },
+				path: { type: "string", description: "Vault-relative path prefix filter, e.g. 'projects/' (optional; disk paths are auto-normalized)" },
 				exclude: { type: "array", items: { type: "string" }, description: "Path prefixes to drop from results (optional)" },
 				limit: { type: "number", description: "Max entries (default 20)" },
 			},
@@ -308,14 +308,40 @@ export class ToolCore {
 		return false;
 	}
 
+	/** 把调用方传入的 path 前缀规范化为 vault 相对路径。MCP/聊天侧的
+	 *  调用方常给磁盘绝对路径（D:\…\vault\ECS/）或反斜杠分隔——不处理
+	 *  的话 startsWith 永远不成立，前缀过滤会吃掉全部结果。
+	 *  规范化：反斜杠→/；剥离 vault 根的磁盘前缀（desktop 的
+	 *  FileSystemAdapter.getBasePath）；去首尾 /。仍是盘符形态（拿不到
+	 *  basePath 的环境）时丢弃前缀并标记 dropped，宁可多回结果也不空手。 */
+	private resolvePrefix(raw?: string): { prefix: string; dropped: boolean } {
+		if (!raw || !raw.trim()) return { prefix: "", dropped: false };
+		let p = raw.trim().replace(/\\/g, "/");
+		try {
+			const base = (this.deps.vault.adapter as { getBasePath?: () => string }).getBasePath?.();
+			if (base) {
+				const normBase = base.replace(/\\/g, "/").replace(/\/+$/, "");
+				if (p.toLowerCase().startsWith(normBase.toLowerCase())) {
+					p = p.slice(normBase.length);
+				}
+			}
+		} catch {
+			// adapter 不支持 → 走通用规范化
+		}
+		p = p.replace(/^\/+/, "").replace(/\/+$/, "");
+		if (/^[a-zA-Z]:/.test(p)) return { prefix: "", dropped: true };
+		return { prefix: p, dropped: false };
+	}
+
 	/** 通用检索：BM25 + 向量并行，RRF 融合；向量路不可用时纯 BM25 兜底。 */
 	async search(query: string, limit = 10, path?: string, alpha = 0.5, exclude?: string[]): Promise<string> {
 		if (!query.trim()) return "Error: missing query";
+		const { prefix } = this.resolvePrefix(path);
 		const useVector = this.deps.store.searchGate();
 		const [bm25, vector] = (await Promise.all([
-			this.bm25Raw(query, limit * 2, path, false, exclude).catch(() => []),
+			this.bm25Raw(query, limit * 2, prefix || undefined, false, exclude).catch(() => []),
 			useVector
-				? this.vectorRaw(query, limit * 2, 0.2, path, exclude).catch(() => [])
+				? this.vectorRaw(query, limit * 2, 0.2, prefix || undefined, exclude).catch(() => [])
 				: Promise.resolve([] as SearchResultLike[]),
 		])) as [SearchResultLike[], SearchResultLike[]];
 		const sources: string[] = [];
@@ -348,7 +374,8 @@ export class ToolCore {
 	/** 纯 BM25-lite：分词 → LIKE 候选 → idf/tf 打分。 */
 	async searchBm25(query: string, limit = 10, path?: string, caseSensitive = false, exclude?: string[]): Promise<string> {
 		if (!query.trim()) return "Error: missing query";
-		const results = await this.bm25Raw(query, limit, path, caseSensitive, exclude);
+		const { prefix } = this.resolvePrefix(path);
+		const results = await this.bm25Raw(query, limit, prefix || undefined, caseSensitive, exclude);
 		return this.truncate(
 			JSON.stringify(
 				{
@@ -514,7 +541,7 @@ export class ToolCore {
 		exclude?: string[],
 	): Promise<string> {
 		const paths = await this.deps.store.getAllIndexedPaths();
-		const base = prefix ? prefix.replace(/\/+$/, "") : "";
+		const { prefix: base } = this.resolvePrefix(prefix);
 		const notes: Array<{ path: string; created: string | null; modified: string | null }> = [];
 		for (const p of paths) {
 			if (base && !p.startsWith(base)) continue;
@@ -647,10 +674,11 @@ export class ToolCore {
 		const MAX_PATHS = 200;
 		const ctx = Math.min(Math.max(0, context), 3);
 		const maxLinesPerFile = 60;
+		const { prefix: pathBase } = this.resolvePrefix(path);
 
 		const files = this.deps.vault.getFiles().filter((f) => {
 			if (!/\.(md|txt|markdown)$/i.test(f.path)) return false;
-			if (path && !f.path.toLowerCase().startsWith(path.toLowerCase())) return false;
+			if (pathBase && !f.path.toLowerCase().startsWith(pathBase.toLowerCase())) return false;
 			return !this.excludedMatch(f.path, exclude);
 		});
 
@@ -704,9 +732,10 @@ export class ToolCore {
 		return this.truncate(
 			JSON.stringify(
 				{
-					pattern,
-					regex,
-					caseSensitive,
+				pattern,
+				regex,
+				caseSensitive,
+				path: pathBase,
 					totalFiles,
 					completeList: totalFiles <= MAX_PATHS,
 					offset,
@@ -746,7 +775,7 @@ export class ToolCore {
 			"^" + escaped.replace(/\*\*/g, "§").replace(/\*/g, "[\\s\\S]*").replace(/§/g, "[\\s\\S]*").replace(/\?/g, ".") + "$",
 			"i",
 		);
-		const base = prefix ? prefix.replace(/\/+$/, "") : "";
+		const { prefix: base, dropped } = this.resolvePrefix(prefix);
 		const results: Array<{ path: string; modified: string | null }> = [];
 		for (const file of this.deps.vault.getFiles()) {
 			if (!/\.(md|txt|markdown)$/i.test(file.path)) continue;
@@ -759,7 +788,27 @@ export class ToolCore {
 		results.sort((a, b) => (b.modified ?? "").localeCompare(a.modified ?? ""));
 		const total = results.length;
 		return this.truncate(
-			JSON.stringify({ pattern, total, truncated: total > limit, results: results.slice(0, limit) }, null, 2),
+			JSON.stringify(
+				{
+					pattern,
+					path: base,
+					total,
+					truncated: total > limit,
+					// 调用方常把 path 传成磁盘绝对路径（vault 相对前缀才有效）；
+					// 规范化拿不掉时宁可丢弃前缀多回结果，也要把原因说清楚。
+					...(dropped ? { hint: `path "${prefix}" looks like a disk path and was IGNORED — path must be vault-relative (e.g. 'projects/'). Results below are unfiltered.` } : {}),
+					...(total === 0 && !dropped
+						? {
+							hint:
+								"0 matches. The path filter is a VAULT-RELATIVE prefix (e.g. 'projects/'), not a disk path. " +
+								"Retry without path, or use ls to see real folder prefixes first.",
+						}
+						: {}),
+					results: results.slice(0, limit),
+				},
+				null,
+				2,
+			),
 		);
 	}
 
