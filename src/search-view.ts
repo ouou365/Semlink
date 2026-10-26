@@ -1076,7 +1076,7 @@ export class SemanticSearchView extends ItemView {
 					const citeRegistry = result.citeRegistry || [];
 					const citeEntries = hasAttachments
 						? []
-						: buildCitedCards(answer, citeRegistry, readNotes);
+						: buildCitedCards(answer, citeRegistry, readNotes, this.chatClient.latestCiteLines);
 					// Fallback (no registry — e.g. surfaces that don't seed it):
 					// the legacy declared-sources pipeline.
 					const declared = this.matchDeclaredSources(result.declaredSources || [], knownPaths);
@@ -1112,8 +1112,8 @@ export class SemanticSearchView extends ItemView {
 					// headings, lists, code, links, etc.).
 					const answerEl = loadingEl.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
 					await MarkdownRenderer.render(this.app, protectHyphens(answer), answerEl, "", this);
-					// 正文里的 [n] 引用变成可点击链接（打开对应笔记）
-					this.makeCitationsClickable(answerEl, citeNumbers ?? [], usedSources);
+					// 正文里的 [n]/[n:L行号] 引用变成可点击链接（打开对应笔记并跳行）
+					this.makeCitationsClickable(answerEl, citeNumbers ?? [], usedSources, answer, thinking);
 					this.makeVaultPathsClickable(answerEl);
 
 					// Persist this turn into chat history (incl. context usage so
@@ -1232,21 +1232,28 @@ export class SemanticSearchView extends ItemView {
 	/** One-line source rows (title + path), numbered like paper references.
 	 *  With `numbers`, row [n] is the model's own citation number — gaps are
 	 *  honest (uncited notes have no card). */
-	/** 让答案正文中的 [n] 引用变成可点击：点击打开对应笔记。只处理文本
-	 *  节点（跳过代码/链接），没有对应来源的 [n] 保持原样不误伤。 */
-	private makeCitationsClickable(root: HTMLElement, numbers: number[], sources: SearchResult[]): void {
+	/** 让答案正文中的 [n] / [n:L行号] 引用变成可点击：点击打开对应笔记并跳行。
+	 *  只处理文本节点（跳过代码/链接），没有对应来源的 [n] 保持原样不误伤。
+	 *  行号解析优先级：标记自带的 :L行号（模型显式标注，最准）→ 句子对齐
+	 *  （拿标记周边文本与该笔记工具结果里的行做相似度匹配）→ 注册表锚点
+	 *  （每笔记一个，read>grep）。 */
+	private makeCitationsClickable(root: HTMLElement, numbers: number[], sources: SearchResult[], answer?: string, evidence?: ThinkingStep[]): void {
 		const pathByNumber = new Map<number, string>();
 		sources.forEach((r, i) => {
 			const n = numbers?.[i];
 			if (n) pathByNumber.set(n, r.notePath);
 		});
 		// 全局注册表兜底：被精确过滤丢弃的纯搜索命中（如 [79]）也能通过
-		// citeRegistry[n-1] 解析到路径，正文引用全部可点击
+		// citeRegistry[n-1] 解析到路径，正文引用全部可点击。行号锚点与注册
+		// 表平行：read 注册过的笔记带 1-based 行号，点击直接跳行。
+		const lineByNumber = new Map<number, number | undefined>();
 		const globalRegistry = this.chatClient.latestCiteRegistry;
+		const globalLines = this.chatClient.latestCiteLines ?? [];
 		if (globalRegistry.length > 0) {
 			globalRegistry.forEach((p: string, idx: number) => {
 				const n = idx + 1;
 				if (!pathByNumber.has(n)) pathByNumber.set(n, p);
+				lineByNumber.set(n, globalLines[idx]);
 			});
 		}
 		// No early return on an empty map: markers must STILL be wrapped so
@@ -1264,14 +1271,14 @@ export class SemanticSearchView extends ItemView {
 		while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
 		for (const node of textNodes) {
 			const text = node.textContent ?? "";
-			if (!/\[\d{1,3}\]/.test(text)) continue;
-			const re = /\[(\d{1,3})\]/g;
-			const parts: Array<{ text?: string; n?: number }> = [];
+			if (!/\[\d{1,3}(?::L\d{1,5}(?:[-\u2011]L\d{1,5})?)?\]/.test(text)) continue;
+			const re = /\[(\d{1,3})(?::L(\d{1,5})(?:[-\u2011]L\d{1,5})?)?\]/g;
+			const parts: Array<{ text?: string; n?: number; line?: number; idx?: number; len?: number }> = [];
 			let last = 0;
 			let m: RegExpExecArray | null;
 			while ((m = re.exec(text))) {
 				if (m.index > last) parts.push({ text: text.slice(last, m.index) });
-				parts.push({ n: parseInt(m[1], 10) });
+				parts.push({ n: parseInt(m[1], 10), line: m[2] ? parseInt(m[2], 10) : undefined, idx: m.index, len: m[0].length });
 				last = m.index + m[0].length;
 			}
 			if (last < text.length) parts.push({ text: text.slice(last) });
@@ -1289,14 +1296,79 @@ export class SemanticSearchView extends ItemView {
 				ref.className = target ? "semlink-cite-ref semlink-cite-link" : "semlink-cite-ref";
 				ref.setText(`[${part.n}]`);
 				if (target) {
+					// 行号：显式标注 > 句子对齐 > 注册表锚点。
+					let line = part.line;
+					if (line === undefined && answer && evidence && evidence.length > 0 && part.idx !== undefined && part.len !== undefined) {
+						const probe = this.markerProbe(text, part.idx, part.len, answer);
+						if (probe) line = this.alignEvidenceLine(probe, target, evidence);
+					}
+					if (line === undefined && part.n !== undefined) line = lineByNumber.get(part.n);
 					ref.addEventListener("click", () => {
-						void this.openNote(target, "");
+						void this.openNote(target, "", line);
 					});
 				}
 				frag.appendChild(ref);
 			}
 			node.replaceWith(frag);
 		}
+	}
+
+	/** 提取标记周边的文本探针（前 80 字符为主，不足则取后 40），并把连字符
+	 *  变体统一，供在原文答案串中定位更宽的上下文窗口。 */
+	private markerProbe(nodeText: string, idx: number, len: number, answer: string): string | null {
+		const norm = (x: string): string => x.replace(/\u2011/g, "-");
+		const before = nodeText.slice(Math.max(0, idx - 80), idx);
+		const probeRaw = before.trim().length >= 12 ? before : nodeText.slice(idx + len, idx + len + 80);
+		const probe = norm(probeRaw);
+		if (probe.trim().length < 12) return null;
+		const hay = norm(answer);
+		const at = hay.indexOf(probe.trim());
+		if (at < 0) return probe.trim().length >= 12 ? probe.trim() : null;
+		// 在答案原文里取以标记为中心的宽窗口（前后各 ~120 字符）。
+		return hay.slice(Math.max(0, at - 120), at + probe.trim().length + 120);
+	}
+
+	/** 句子对齐：把探针文本与该笔记所有 read/grep 结果的行做 bigram Dice
+	 *  相似度匹配，返回最相似行的行号（阈值 0.32——低于它宁可回退注册表
+	 *  锚点，也不跳到似是而非的行）。 */
+	private alignEvidenceLine(probe: string, path: string, evidence: ThinkingStep[]): number | undefined {
+		const norm = (x: string): string => x.toLowerCase().replace(/\u2011/g, "-").replace(/\[\d{1,3}(?::L\d{1,5}(?:-L\d{1,5})?)?\]/g, "").replace(/\s+/g, "");
+		const target = norm(probe);
+		if (target.length < 12) return undefined;
+		const gramsOf = (t: string): Map<string, number> => {
+			const g = new Map<string, number>();
+			for (let i = 0; i < t.length - 1; i++) {
+				const gr = t.slice(i, i + 2);
+				g.set(gr, (g.get(gr) ?? 0) + 1);
+			}
+			return g;
+		};
+		const targetGrams = gramsOf(target);
+		let targetTotal = 0;
+		targetGrams.forEach((v) => (targetTotal += v));
+		let best: { line: number; score: number } | undefined;
+		for (const step of evidence) {
+			if (step.type !== "tool") continue;
+			const stepPath = (step.args as { path?: unknown } | null)?.path;
+			if (typeof stepPath === "string" && stepPath !== path) continue;
+			const re = /^L(\d{1,5}): (.*)$/gm;
+			let m: RegExpExecArray | null;
+			while ((m = re.exec(step.result))) {
+				const lineText = norm(m[2]);
+				if (lineText.length < 4) continue;
+				const g = gramsOf(lineText);
+				let inter = 0;
+				let total = targetTotal;
+				g.forEach((v, k) => {
+					total += v;
+					const t = targetGrams.get(k);
+					if (t) inter += Math.min(t, v);
+				});
+				const score = total === 0 ? 0 : (2 * inter) / total;
+				if (!best || score > best.score) best = { line: Number(m[1]), score };
+			}
+		}
+		return best && best.score >= 0.32 ? best.line : undefined;
 	}
 
 	/** 正文里明确写出的 Vault 路径（…/*.md）转成可点击链接，点击打开笔记。
@@ -1347,6 +1419,58 @@ export class SemanticSearchView extends ItemView {
 			}
 			node.replaceWith(frag);
 		}
+	}
+
+	/** 阅读模式跳行：等预览把目标行的文本渲染出来，然后 scrollIntoView。
+	 *  轮询最多 ~3s（长文档渲染慢）；行文本用行号从 vault 反查，避免依赖
+	 *  预览内部的行映射。 */
+	private async scrollPreviewToLine(view: MarkdownView, line0: number): Promise<void> {
+		try {
+			const file = view.file;
+			if (!file) return;
+			const lines = (await this.app.vault.cachedRead(file)).split("\n");
+			let anchor = "";
+			for (let i = line0; i >= 0 && i >= line0 - 5; i--) {
+				const t = (lines[i] ?? "").trim();
+				if (t) { anchor = t.replace(/^#+\s*/, "").slice(0, 60); break; }
+			}
+			if (!anchor) return;
+			const scroller = (view.contentEl.querySelector(".markdown-preview-view") ?? view.contentEl) as HTMLElement;
+			for (let attempt = 0; attempt < 30; attempt++) {
+				const hit = this.findTextInPreview(scroller, anchor);
+				if (hit) {
+					hit.scrollIntoView({ block: "start" });
+					return;
+				}
+				await new Promise((r) => window.setTimeout(r, 100));
+			}
+		} catch {
+			// 跳行失败不致命——视图已经打开，只是停在原位。
+		}
+	}
+
+	/** 在预览 DOM 中找到包含锚文本的元素（跳过代码块），返回它以供滚动。 */
+	private findTextInPreview(root: HTMLElement, anchor: string): HTMLElement | null {
+		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+			acceptNode: (node) => {
+				const tag = node.parentElement?.tagName;
+				return tag === "CODE" || tag === "PRE" ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+			},
+		});
+		let node: Node | null;
+		while ((node = walker.nextNode())) {
+			if ((node.textContent ?? "").includes(anchor)) {
+				return node.parentElement;
+			}
+		}
+		return null;
+	}
+
+	/** 引用行号锚点：笔记在最近一回合注册表中的 1-based 行号（未 read 过则
+	 *  undefined）。来源卡片点击时用它跳行，回退到预览匹配。 */
+	private lineForPath(path: string): number | undefined {
+		const idx = this.chatClient.latestCiteRegistry.indexOf(path);
+		return idx >= 0 ? this.chatClient.latestCiteLines[idx] : undefined;
 	}
 
 	/** 解析路径到 Vault 文件：兼容连字符变体（‑ 与 - 互换）后再尝试。 */
@@ -2328,7 +2452,7 @@ export class SemanticSearchView extends ItemView {
 					await MarkdownRenderer.render(this.app, protectHyphens(msg.content), answerEl, "", this);
 					if (msg.sources && msg.sources.length > 0) {
 						const usedSources = msg.sources.map((p) => ({ notePath: p, heading: "", contentPreview: "" }));
-						this.makeCitationsClickable(answerEl, msg.sourceNumbers ?? [], usedSources as SearchResult[]);
+						this.makeCitationsClickable(answerEl, msg.sourceNumbers ?? [], usedSources as SearchResult[], msg.content, thinking);
 						this.makeVaultPathsClickable(answerEl);
 					}
 					// Copy / save actions for history answers too.
@@ -3169,7 +3293,7 @@ export class SemanticSearchView extends ItemView {
 			}
 
 			card.addEventListener("click", () => {
-				void this.openNote(r.notePath, r.contentPreview);
+				void this.openNote(r.notePath, r.contentPreview, this.lineForPath(r.notePath));
 			});
 		}
 	}
@@ -3619,17 +3743,53 @@ export class SemanticSearchView extends ItemView {
 		}
 	}
 
-	private async openNote(notePath: string, preview: string): Promise<void> {
+	private async openNote(notePath: string, preview: string, lineHint?: number): Promise<void> {
 		const file = this.vault.getAbstractFileByPath(notePath);
 		if (!(file instanceof TFile)) return;
 
-		// Open the file, then try to scroll to the line that best matches the
-		// chunk's preview text.
-		await this.app.workspace.getLeaf(false).openFile(file);
-		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-		const editor = view?.editor;
-		if (!editor) return;
+		const leaf = this.app.workspace.getLeaf(false);
+		// Read-anchored citations carry a 1-based registry line — pass it as
+		// eState INTO openFile: Obsidian applies it AFTER its own scroll
+		// restoration, which would otherwise reset a post-open setCursor back
+		// to the file's last position (the "jumps to page 1" bug). Same
+		// mechanism the obsidian://…&line= URL scheme uses.
+		if (lineHint !== undefined && lineHint > 0) {
+			const line = lineHint - 1;
+			await leaf.openFile(file, {
+				eState: {
+					line,
+					cursor: { from: { line, ch: 0 }, to: { line, ch: 0 } },
+				},
+			});
+			const view = leaf.view;
+			if (view instanceof MarkdownView) {
+				if (view.getMode() === "source") {
+					// Source-mode backup for hosts where eState didn't take.
+					const editor = view.editor;
+					if (editor.getCursor().line !== line) {
+						editor.setCursor({ line, ch: 0 });
+						editor.scrollIntoView({
+							from: { line, ch: 0 },
+							to: { line: Math.min(line + 3, editor.lastLine()), ch: 0 },
+						}, true);
+					}
+				} else {
+					// Reading view: eState.line only lands on already-rendered
+					// views — a FIRST open renders asynchronously and resets
+					// scroll to 0. Anchor on the line's own text instead and
+					// scroll the preview once that text shows up.
+					await this.scrollPreviewToLine(view, line);
+				}
+			}
+			return;
+		}
 
+		// No anchor — open, then scroll to the line that best matches the
+		// chunk's preview text.
+		await leaf.openFile(file);
+		const view = leaf.view;
+		if (!(view instanceof MarkdownView)) return;
+		const editor = view.editor;
 		const line = this.findMatchingLine(editor.getValue(), preview);
 		if (line >= 0) {
 			editor.setCursor({ line, ch: 0 });

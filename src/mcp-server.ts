@@ -168,6 +168,8 @@ export class McpServer {
 			try {
 				const body = await this.readBody(req);
 				const request = JSON.parse(body) as JsonRpcRequest;
+				// 通知（无 id，如 notifications/initialized）：规范要求不回正文，202 即可
+				if (request.id == null) { res.writeHead(202); res.end(); return; }
 				const response = await this.route(request);
 				this.sendJsonRpc(res, response);
 			} catch (e) {
@@ -265,7 +267,16 @@ export class McpServer {
 	}
 
 	private static handleToolsList() {
-		return { tools: TOOL_SPECS };
+		// MCP 规范的工具字段是 inputSchema；ToolCore 内部是 OpenAI 风格的
+		// parameters——直接透传缺 inputSchema，严格客户端（官方 SDK）解析
+		// 工具列表直接失败（"failed to retrieve its tool list"）。
+		return {
+			tools: TOOL_SPECS.map((t) => ({
+				name: t.name,
+				description: t.description ?? "",
+				inputSchema: t.parameters,
+			})),
+		};
 	}
 	/** 设置页展示用：本服务声明的 tools / resources / prompts（纯静态定义）。 */
 	static listCapabilities(): { tools: Array<{ name: string; description: string }>; resources: unknown[]; prompts: unknown[] } {

@@ -253,6 +253,10 @@ export interface SmartVaultSettings {
 	mcpApiKey: string;
 	/** MCP 服务总开关：默认开启；用户手动关闭后重启保持关闭。 */
 	mcpEnabled?: boolean;
+	/** 调试问答服务（semlink-debug，ask 单工具）：供 ZCode 等 agent 端到端
+	 *  测试问答管线；仅监听 127.0.0.1，能触发真实 LLM API 调用。 */
+	debugMcpEnabled?: boolean;
+	debugMcpPort?: number;
 	/** 用户在 MCP 标签接入的外部 MCP 服务器（可增删改；内置 semlink 不在此列）。 */
 	mcpClientServers?: McpClientServer[];
 	/** 嵌入模型指纹（providerId::modelId）：变化时清向量并全量重嵌。 */
@@ -350,6 +354,8 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	sharePort: 43900,
 	mcpApiKey: "",
 	mcpEnabled: true,
+	debugMcpEnabled: true,
+	debugMcpPort: 3002,
 	mcpClientServers: [],
 	chunkSize: 800,
 	chunkOverlap: 100,

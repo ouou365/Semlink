@@ -15,12 +15,20 @@ import type { SemlinkTools } from "./chat-tools";
 import { createCiteRegistry } from "./cite-cards";
 import { t } from "./i18n";
 
-/** Maximum tool-calling rounds before giving up on a final answer.
- *  表格/矩阵扫读需要多次分段读取（一次全量索引的表 ≈ 45K 字符 ≈ 6+ 段），
- *  5 轮会把覆盖记账规则掐断在半途。 */
-const MAX_TOOL_ITERATIONS = 12;
-/** After this many tool rounds, nudge the model to answer directly. */
-const NUDGE_AFTER_ROUND = 8;
+/** Base tool-calling budget. 表格/矩阵扫读需要多次分段读取（一次全量索引
+ *  的表 ≈ 45K 字符 ≈ 6+ 段），再叠加 grep 定位、大纲与跨表核对。预算是
+ *  进度感知的：一无所获的回合最多用到这里，而持续读到新内容的回合可以
+ *  续到 EXTENDED_TOOL_ITERATIONS。 */
+const MAX_TOOL_ITERATIONS = 20;
+/** Hard ceiling for rounds that keep making read progress（持续读到新内容
+ *  的枚举型任务）。到顶即强制收尾，与进度无关——这是成本与延迟的绝对
+ *  上界，不是为了「答完」而是为了「烧得起」。 */
+const EXTENDED_TOOL_ITERATIONS = 40;
+/** Consecutive no-information rounds (zero-hit searches, all calls skipped,
+ *  errors) after which the turn is force-closed. 3 gives the model room to
+ *  act on the zero-hit grep hint (retry with a broader pattern) before the
+ *  door closes. */
+const IDLE_FORCE_AFTER = 3;
 /** Explicit per-round output budget. DeepSeek-style OpenAI-compatible APIs
  *  default to ~4K output tokens, which silently truncates long answers
  *  mid-sentence (finish_reason "length"); always ask for more. Providers
@@ -70,10 +78,13 @@ export type AgentMode = "classic" | "proactive";
 
 /** Analysis/overview-heavy prompts get the "enhanced" depth: full-note reads
  *  allowed and a larger per-result cap, so the model can read related
- *  protocol/design docs before answering. Shared by the sidebar search and
- *  the Feishu bot (identical behavior on both surfaces). */
+ *  protocol/design docs before answering. Enumeration questions (哪些/条款/
+ *  满足/清单…) also get enhanced — their answers are "the whole table/list",
+ *  and standard's read-economy hint would let the model stop at fragments.
+ *  Shared by the sidebar search and the Feishu bot (identical behavior on
+ *  both surfaces). */
 export function inferAgentDepth(query: string): "standard" | "enhanced" {
-	return /介绍|概述|分析|总结|梳理|归纳|对比|设计需求|如何设计|怎么设计|评估|方案|深入|是什么/.test(query)
+	return /介绍|概述|分析|总结|梳理|归纳|对比|设计需求|如何设计|怎么设计|评估|方案|深入|是什么|哪些|列举|列出|逐条|条款|清单|全部|所有|满足|符合/.test(query)
 		? "enhanced"
 		: "standard";
 }
@@ -363,6 +374,9 @@ export class ChatClient {
 	 *  model saw as [n]. The chat view reads it to make every inline [n]
 	 *  clickable, including hits the source cards filtered out. */
 	latestCiteRegistry: string[] = [];
+	/** Line anchors parallel to latestCiteRegistry (1-based; undefined when the
+	 *  note was never read) — the view jumps to the line on [n] clicks. */
+	latestCiteLines: Array<number | undefined> = [];
 	/** Current per-round output-token budget; steps down when a provider
 	 *  rejects CHAT_MAX_OUTPUT_TOKENS (older models cap at 8192/4096), and 0
 	 *  means "omit max_tokens entirely" (provider default). Remembered across
@@ -603,10 +617,11 @@ export class ChatClient {
 		// Exposed for the chat view: lets the renderer resolve ANY [n] in the
 		// answer to its path (source cards only carry the filtered subset).
 		this.latestCiteRegistry = citeRegistry;
+		this.latestCiteLines = citeReg.lines;
 		for (const p of contextNotePaths) citeReg.register(p);
 		if (this.tools) {
-			// enhanced：长表格分段扫读的单段上限（12K ≈ 80 行表格），
-			// 配合 MAX_TOOL_ITERATIONS=12 可完整覆盖一次全量索引的大表。
+			// enhanced：长表格分段扫读的单段上限（16K ≈ 100+ 行表格），
+			// 配合 MAX_TOOL_ITERATIONS=20 可完整覆盖一次全量索引的大表。
 			this.tools.maxResultChars = depth === "enhanced" ? 16000 : 8000;
 			this.tools.citeNumberer = citeReg.register;
 		}
@@ -755,6 +770,21 @@ export class ChatClient {
 		return n + 4; // role + per-message overhead
 	}
 
+	/** Estimated tokens of the whole prompt (system + tool schemas overhead +
+	 *  conversation) — the same convention truncateConversation uses. */
+	private estimateConversationTokens(systemPrompt: string, messages: ConversationMessage[]): number {
+		return this.estimateTextTokens(systemPrompt) + 512 + messages.reduce((a, m) => a + this.estimateMessageTokens(m), 0);
+	}
+
+	/** Round budget's context watermark: when the prompt estimate crosses it,
+	 *  the turn is force-closed regardless of progress — continuing past it
+	 *  risks an overflowing request that fails the WHOLE turn. 90% of the
+	 *  effective window (window minus output reserve). */
+	private contextWatermark(contextWindow: number): number {
+		const outputReserve = Math.min(32000, Math.max(8000, Math.round(contextWindow * 0.15)));
+		return Math.round((contextWindow - outputReserve) * 0.9);
+	}
+
 	// ──── OpenAI format (streaming) ────
 
 	/** Primary free-text argument of a query-bearing tool (for dedup). */
@@ -765,17 +795,26 @@ export class ChatClient {
 	}
 
 	/**
-	 * Near-duplicate detection: the model rephrases the same query (e.g.
-	 * "智能船载终端研发" → "船载终端研发") instead of finalizing. One query
-	 * being a substring of a previous query (same tool) means it's repeating
-	 * itself — force an answer instead of re-running the tool.
+	 * Near-duplicate detection with round tracking. Returns the ROUND the
+	 * original query was issued in when the new call duplicates it, or null
+	 * when it is new work. Only a NARROWER query (new ⊂ previous — a modifier
+	 * was dropped, e.g. "智能船载终端研发" → "船载终端研发") counts as a
+	 * duplicate; the reverse direction MUST execute: a query that ADDS
+	 * constraints ("62288" → "附录12 62288") is refinement/progress — flagging
+	 * it skipped the model's second grep and force-ended the turn before any
+	 * read happened (the "读取请求被跳过" failure mode). The round matters:
+	 * parallel variants of one query inside a SINGLE round are the model
+	 * hedging, not spinning — only a repeat of an EARLIER round's query is.
 	 */
-	private isNearDuplicateQuery(name: string, args: Record<string, unknown>, seenQueries: Map<string, string[]>): boolean {
+	private findDuplicateQueryRound(name: string, args: Record<string, unknown>, seenQueries: Map<string, Array<{ q: string; round: number }>>): number | null {
 		const q = this.primaryQueryArg(name, args).toLowerCase().replace(/\s+/g, " ").trim();
-		if (q.length < 4) return false;
+		if (q.length < 4) return null;
 		const prev = seenQueries.get(name);
-		if (!prev) return false;
-		return prev.some((p) => q.includes(p) || p.includes(q));
+		if (!prev) return null;
+		for (const p of prev) {
+			if (p.q.includes(q)) return p.round;
+		}
+		return null;
 	}
 
 	/**
@@ -930,6 +969,54 @@ export class ChatClient {
 	}
 
 	/**
+	 * Detect a draft answer that ADMITS an unresolved evidence gap — a
+	 * located region it never actually read ("未能逐行枚举该表", "could not
+	 * read the table", "cannot be given without that table being read").
+	 * Such drafts are rejected once per turn (promptGapBounce): the model
+	 * must read the region it named instead of shipping reading
+	 * instructions. Deliberately narrow: honest absence claims ("来源笔记中
+	 * 没有提到", "the notes don't mention it") never match — only
+	 * self-declared reading/enumeration failures do.
+	 */
+	private admitsUnreadGap(text: string): boolean {
+		if (!text || text.length < 20) return false;
+		const zh = [
+			/未能(读取|读到|打开|枚举|逐行|逐条|核对|覆盖)/,
+			/无法(逐行|逐条|枚举|读取|打开)/,
+			/我?(无法|不能)(给你|给您)?(提供|给出|列出|枚举)(完整|逐行|逐条)/,
+			/没有(读取|读到|打开)[^。]{0,8}(表格|表\d|原文|附录|条款)/,
+			/只(读取|读到|核对)了?(骨架|部分|片段)/,
+			/需要(逐行|逐条|分段)?(读取|阅读|核对|枚举)[^。]{0,16}(才能|方可|之后再)/,
+			/(要|若)得到完整(清单|列表|内容)/,
+			/才能给出完整/,
+			/没有可枚举的(行|条目|内容)/,
+			/(无法|不能)从[^。]{0,16}(片段|摘录|提取|预览)[^。]{0,24}(给出|列出|枚举)/,
+			/(本轮|这一轮|该段)[^。]{0,10}(未|没有|不包含|未覆盖)/,
+			/(不再|不会?)(枚举|列出|读取|摘录|展开)/,
+			/未被?(枚举|列出|收录|照录|读取)/,
+			/只(存在于|能在|来自|出现在)[^。]{0,20}(表|条款|附录|原文|文件|笔记)/,
+			/读取(请求|调用)被跳过/,
+			/工具调用受限/,
+		];
+		const en = [
+			/could (not|n't) (read|open|enumerate|verify)/,
+			/cannot (be given|be listed|be enumerated|enumerate|list)\b[^.]{0,60}(without|unless|requires?)/,
+			/cannot (give|provide|produce) (you |us )?(the |a )?(row-by-row|complete|full|exact|cell-by-cell|itemized)/,
+			/(will|would) not (enumerate|list|read|quote|copy|reproduce)/,
+			/(is|are) not (enumerated|listed|reproduced|captured|included|quoted)/,
+			/not (contained|captured|included|covered) in [^.]{0,40}(segment|portion|part|round|read)/i,
+			/(would|will|must) (need to|require|have to)\s+(be\s+)?(read|reading|open|opening)/,
+			/(would|will) have to (come|be taken|be extracted|be read)/,
+			/requires? reading [^.]{0,40}(row by row|segment|first)/,
+			/without (that |the )?(table|document|note|file|section) being read/,
+			/not (contain|include|reproduce)[^.]{0,24}(row-by-row|row by row|per-row|markings|entries)/,
+			/(detail|content|list|numbers?|values?|markings?|information)[^.]{0,30}exists only in [^.]{0,40}(table|clause|appendix|document|file|note|source|original)/i,
+			/only (a|the) (skeleton|structure|location)[^.]{0,40}(available|found|read)/i,
+		];
+		return [...zh, ...en].some((re) => re.test(text));
+	}
+
+	/**
 	 * Parse text-style tool calls some models emit as plain markup instead of
 	 * using the structured function-calling protocol — e.g.
 	 * `<invoke name="get_section"><parameter name="heading">X</parameter>
@@ -1006,16 +1093,33 @@ export class ChatClient {
 		// Latest assistant text (used as a graceful fallback if the model keeps
 		// calling tools without ever producing a final answer).
 		let lastText = "";
-		// Guard against the model repeating the exact same tool call in a loop.
-		const seenCalls = new Set<string>();
-		// Normalized queries per tool, to catch near-duplicate rephrasing.
-		const seenQueries = new Map<string, string[]>();
+		// Exact tool calls already issued, mapped to their round — exact
+		// repeats across rounds are the spin signal.
+		const seenCallRounds = new Map<string, number>();
+		// Normalized queries per tool with their rounds, to catch near-duplicate
+		// rephrasing (findDuplicateQueryRound).
+		const seenQueries = new Map<string, Array<{ q: string; round: number }>>();
+		// Consecutive duplicate-call strikes. ONE strike (e.g. parallel
+		// variants of the same query in a single round) only skips that call —
+		// stripping all tools immediately turned a harmless duplicate into a
+		// forced premature answer. Two strikes mean the model is spinning.
+		let repeatStrikes = 0;
+		// Consecutive rounds that yielded NO new information (all calls
+		// skipped, zero-hit searches, errors). IDLE_FORCE_AFTER in a row
+		// force-closes the turn — the progress-aware budget's idle brake.
+		let idleStreak = 0;
 		// Set when the model repeats itself — tools are removed from the next
 		// round so it must produce a real answer (not loop or echo a thought).
 		let forceAnswer = false;
+		// Set for the round immediately after a gap-bounce — keeps that round
+		// REGULAR (tools available) even at/after the nudge threshold.
+		let justBounced = false;
 		// Set when a provider rejects the forced submit_answer tool_choice —
 		// remaining rounds degrade to the legacy plain-text answer path.
 		let submitDisabled = false;
+		// Set when a gap-admitting draft answer has been bounced back once —
+		// the rejection fires at most one time per turn.
+		let gapBounceUsed = false;
 		// Notes actually OPENED via get_note/get_section this turn — a
 		// stronger "used" signal than search hits, for the source cards.
 		const readNotes: string[] = [];
@@ -1115,14 +1219,23 @@ export class ChatClient {
 			});
 		}
 
-		for (let round = 0; round < MAX_TOOL_ITERATIONS; round++) {
+		for (let round = 0; round < EXTENDED_TOOL_ITERATIONS; round++) {
 			// The model is generating this round (tool decision or final
 			// answer) — let the UI show a generic "generating" state.
 			onRoundStart?.();
-			// If we're deep into tool rounds — or the model started repeating
-			// itself — nudge it to wrap up AND remove the tools so it cannot
+			// Progress-aware budget: the base budget applies to turns that
+			// are NOT visibly moving (or have gone idle); a turn that keeps
+			// reading fresh content gets the extended ceiling. The context
+			// watermark overrides everything — a request that overflows the
+			// window fails the whole turn, so close before that.
+			const overBudgetRound = round >= (idleStreak === 0 ? EXTENDED_TOOL_ITERATIONS : MAX_TOOL_ITERATIONS);
+			const overWatermark = contextWindow > 0
+				&& this.estimateConversationTokens(systemPrompt, messages) > this.contextWatermark(contextWindow);
+			if (overBudgetRound || overWatermark) forceAnswer = true;
+			// Model is past its budget, repeating itself (strike escalation), or
+			// went idle — nudge it to wrap up AND remove the tools so it cannot
 			// call more; it must answer with what it has.
-			if (round === NUDGE_AFTER_ROUND || forceAnswer) {
+			if (forceAnswer) {
 				messages.push({ role: "user", content: t("searchAnswerNowHint") });
 			}
 
@@ -1138,7 +1251,10 @@ export class ChatClient {
 			// the `answer` argument (streamed live out of the partial JSON).
 			// If a provider rejects the forced tool_choice, the round degrades
 			// to the legacy plain-text path for the rest of the turn.
-			const submitRound = !submitDisabled && tools.length > 0 && (forceAnswer || round >= NUDGE_AFTER_ROUND);
+			// justBounced keeps the round after a gap-bounce REGULAR — the
+			// model needs its tools back to fill the rejected gap.
+			const submitRound = !submitDisabled && tools.length > 0 && forceAnswer && !justBounced;
+			justBounced = false;
 			if (submitRound) {
 				body.tools = [{
 					type: "function",
@@ -1188,8 +1304,6 @@ export class ChatClient {
 
 			// Forced submit call: the answer arrives as the tool call's
 			// `answer` argument. Deltas were streamed live out of the partial
-			// JSON; this final parse is authoritative. A "length" finish means
-			// the answer was cut mid-generation — continue it to completion.
 			const submitCall = stream.toolCalls.find((tc) => tc?.function?.name === SUBMIT_TOOL_NAME);
 			if (submitCall) {
 				const submitted = this.parseSubmittedAnswer(submitCall.function.arguments || "", stream.content);
@@ -1200,13 +1314,44 @@ export class ChatClient {
 					usageOut += cont.roundOut;
 					answer = cont.text;
 				}
+				// Gap-admission guard: a submitted answer that declares an
+				// unread region is rejected ONCE per turn — the submit call
+				// gets a rejection tool result, tools come back (forceAnswer
+				// cleared), and the loop continues so the model must actually
+				// read what it named.
+				if (round < EXTENDED_TOOL_ITERATIONS - 1 && !gapBounceUsed && tools.length > 0 && this.admitsUnreadGap(answer)) {
+					gapBounceUsed = true;
+					forceAnswer = false;
+					justBounced = true;
+					const note: ThinkingStep = { type: "thought", text: t("gapBounceNote") };
+					thinking.push(note);
+					onThinking?.(note);
+					messages.push({ role: "assistant", content: stream.content || "", tool_calls: stream.toolCalls });
+					messages.push({ role: "tool", tool_call_id: submitCall.id || `call_${round}_submit`, content: t("promptGapBounce") });
+					continue;
+				}
 				onStream?.(answer);
 				return finalize(answer, submitted.sources);
 			}
 
 			if (stream.toolCalls.length === 0) {
-				// Final round — answer was already streamed live above.
-				return finalize(stream.content.trim() || lastText.trim());
+				// Final round — answer was already streamed live above. A draft
+				// that admits an unread gap gets the same one-time bounce: the
+				// draft goes back as an assistant message with the rejection
+				// appended, and the loop continues with tools available.
+				const draft = stream.content.trim() || lastText.trim();
+				if (round < EXTENDED_TOOL_ITERATIONS - 1 && !gapBounceUsed && tools.length > 0 && this.admitsUnreadGap(stream.content.trim())) {
+					gapBounceUsed = true;
+					forceAnswer = false;
+					justBounced = true;
+					const note: ThinkingStep = { type: "thought", text: t("gapBounceNote") };
+					thinking.push(note);
+					onThinking?.(note);
+					messages.push({ role: "assistant", content: stream.content.trim() });
+					messages.push({ role: "user", content: t("promptGapBounce") });
+					continue;
+				}
+				return finalize(draft);
 			}
 
 			// Interim text the model produced while deciding to call tools.
@@ -1219,6 +1364,9 @@ export class ChatClient {
 			// Echo the assistant message (with its tool_calls) back verbatim.
 			messages.push({ role: "assistant", content: stream.content || "", tool_calls: stream.toolCalls });
 
+			// Progress bookkeeping for the budget: a round counts as productive
+			// when it READ something or any executed call returned information.
+			let roundProgressed = false;
 			for (const tc of stream.toolCalls) {
 				const name = tc?.function?.name;
 				const rawArgs = tc?.function?.arguments || "{}";
@@ -1234,6 +1382,18 @@ export class ChatClient {
 						usageOut += cont.roundOut;
 						answer = cont.text;
 					}
+					// Same one-time gap guard as the submitCall branch above.
+					if (round < EXTENDED_TOOL_ITERATIONS - 1 && !gapBounceUsed && this.admitsUnreadGap(answer)) {
+						gapBounceUsed = true;
+						forceAnswer = false;
+						justBounced = true;
+						const note: ThinkingStep = { type: "thought", text: t("gapBounceNote") };
+						thinking.push(note);
+						onThinking?.(note);
+						messages.push({ role: "assistant", content: stream.content || "", tool_calls: stream.toolCalls });
+						messages.push({ role: "tool", tool_call_id: tc.id || `call_${round}_submit`, content: t("promptGapBounce") });
+						continue;
+					}
 					onStream?.(answer);
 					return finalize(answer, submitted.sources);
 				}
@@ -1245,12 +1405,21 @@ export class ChatClient {
 					args = { _error: `invalid JSON arguments: ${rawArgs}` };
 				}
 
-				// Repeated call (exact or rephrased query): don't re-execute and
-				// don't echo a thought as the answer — flag a forced answer so
-				// the next round has no tools and the model answers for real.
+				// Repeated call (exact or rephrased query): skip the redundant
+				// execution. A variant issued in the SAME round is hedging, not
+				// spinning — skip it without a strike; repeating an EARLIER
+				// round's query is a spin strike (two → forced answer).
 				const callKey = `${name}|${JSON.stringify(args)}`;
-				if (seenCalls.has(callKey) || this.isNearDuplicateQuery(name, args, seenQueries)) {
-					forceAnswer = true;
+				const exactRound = seenCallRounds.get(callKey);
+				const dupRound = exactRound !== undefined ? exactRound : this.findDuplicateQueryRound(name, args, seenQueries);
+				if (dupRound !== undefined && dupRound !== null) {
+					if (dupRound < round) {
+						repeatStrikes++;
+						// Stripping tools from a model that has not READ anything
+						// only yields a skeleton essay — keep the tools and let it
+						// work (the nudge round closes the turn eventually).
+						if (repeatStrikes >= 2 && readNotes.length > 0) forceAnswer = true;
+					}
 					messages.push({
 						role: "tool",
 						tool_call_id: tc.id || `call_${round}_${stream.toolCalls.indexOf(tc)}`,
@@ -1258,10 +1427,12 @@ export class ChatClient {
 					});
 					continue;
 				}
-				seenCalls.add(callKey);
+				seenCallRounds.set(callKey, round);
+				// A real (non-duplicate) call breaks the spin — decay strikes.
+				repeatStrikes = 0;
 				const normQ = this.primaryQueryArg(name, args).toLowerCase().replace(/\s+/g, " ").trim();
 				if (normQ.length >= 4) {
-					seenQueries.set(name, [...(seenQueries.get(name) || []), normQ]);
+					seenQueries.set(name, [...(seenQueries.get(name) || []), { q: normQ, round }]);
 				}
 
 				// User hit stop — bail out before running (possibly slow) tools.
@@ -1275,12 +1446,25 @@ export class ChatClient {
 				thinking.push(step);
 				onThinking?.(step);
 				this.collectUsedNotes(usedNotes, name, args, result);
-				if ((name === "get_note" || name === "get_section") && typeof (args as { path?: unknown }).path === "string") {
+				if ((name === "read" || name === "get_note" || name === "get_section") && typeof (args as { path?: unknown }).path === "string") {
 					const rp = (args as { path: string }).path;
 					if (!readNotes.includes(rp)) readNotes.push(rp);
 				}
+				// A read always counts as progress; anything else only when it
+				// returned information (not an error / zero-hit search).
+				const isRead = name === "read" || name === "get_note" || name === "get_section";
+				const emptyResult = /^Error:/i.test(result) || /"totalFiles":\s*0,/.test(result) || /"results":\s*\[\]/.test(result);
+				if (isRead || !emptyResult) roundProgressed = true;
 				messages.push({ role: "tool", tool_call_id: tc.id || `call_${round}_${stream.toolCalls.indexOf(tc)}`, content: result });
 			}
+			// 多轮推进：工具结果附上后，显式要求模型重新评估证据完备性——
+			// 有缺口就继续调用工具，确已完备才作答。没有这条，弱模型常把
+			// 一轮工具后的「看起来够用」当「真的够用」直接收工（单轮即答）。
+			messages.push({ role: "user", content: t("promptContinueRound") });
+			// Budget idle brake: consecutive no-information rounds close the
+			// turn (see IDLE_FORCE_AFTER); productive rounds reset the streak.
+			if (roundProgressed) idleStreak = 0;
+			else idleStreak++;
 		}
 
 		// Loop exhausted — return whatever the model has said so far, or a
@@ -1611,15 +1795,27 @@ export class ChatClient {
 		// Latest assistant text (graceful fallback if the model never produces
 		// a final answer), plus a guard against repeated identical tool calls.
 		let lastText = "";
-		const seenCalls = new Set<string>();
-		// Normalized queries per tool, to catch near-duplicate rephrasing.
-		const seenQueries = new Map<string, string[]>();
+		// Exact tool calls already issued, mapped to their round.
+		const seenCallRounds = new Map<string, number>();
+		// Normalized queries per tool with their rounds (findDuplicateQueryRound).
+		const seenQueries = new Map<string, Array<{ q: string; round: number }>>();
+		// Consecutive duplicate-call strikes (see the OpenAI path: same-round
+		// variants skip without a strike; cross-round repeats strike).
+		let repeatStrikes = 0;
+		// Consecutive no-information rounds (budget idle brake, see OpenAI).
+		let idleStreak = 0;
 		// Set when the model repeats itself — tools are removed from the next
 		// round so it must produce a real answer (not loop or echo a thought).
 		let forceAnswer = false;
+		// Set for the round immediately after a gap-bounce — keeps that round
+		// REGULAR (tools available) even at/after the nudge threshold.
+		let justBounced = false;
 		// Set when a provider rejects the forced submit_answer tool_choice —
 		// remaining rounds degrade to the legacy plain-text answer path.
 		let submitDisabled = false;
+		// Set when a gap-admitting draft answer has been bounced back once —
+		// the rejection fires at most one time per turn.
+		let gapBounceUsed = false;
 		// Notes actually OPENED via get_note/get_section this turn — a
 		// stronger "used" signal than search hits, for the source cards.
 		const readNotes: string[] = [];
@@ -1721,13 +1917,20 @@ export class ChatClient {
 			});
 		}
 
-		for (let round = 0; round < MAX_TOOL_ITERATIONS; round++) {
+		for (let round = 0; round < EXTENDED_TOOL_ITERATIONS; round++) {
 			// The model is generating this round (tool decision or final
 			// answer) — let the UI show a generic "generating" state.
 			onRoundStart?.();
-			// Deep into tool rounds — or the model started repeating itself —
+			// Progress-aware budget (see the OpenAI path): base budget for
+			// turns that are not visibly moving, extended ceiling for turns
+			// that keep reading fresh content, watermark overrides all.
+			const overBudgetRound = round >= (idleStreak === 0 ? EXTENDED_TOOL_ITERATIONS : MAX_TOOL_ITERATIONS);
+			const overWatermark = contextWindow > 0
+				&& this.estimateConversationTokens(systemPrompt, messages) > this.contextWatermark(contextWindow);
+			if (overBudgetRound || overWatermark) forceAnswer = true;
+			// Model is past its budget, repeating itself, or went idle —
 			// nudge it to wrap up AND remove the tools so it must answer.
-			if (round === NUDGE_AFTER_ROUND || forceAnswer) {
+			if (forceAnswer) {
 				messages.push({ role: "user", content: t("searchAnswerNowHint") });
 			}
 			const body: AnthropicChatBody = {
@@ -1741,7 +1944,9 @@ export class ChatClient {
 			// thinking/answer separation (see the OpenAI path for the full
 			// rationale). Providers rejecting the forced tool_choice degrade
 			// to the legacy plain-text path for the rest of the turn.
-			const submitRound = !submitDisabled && tools.length > 0 && (forceAnswer || round >= NUDGE_AFTER_ROUND);
+			// justBounced keeps the round after a gap-bounce REGULAR.
+			const submitRound = !submitDisabled && tools.length > 0 && forceAnswer && !justBounced;
+			justBounced = false;
 			if (submitRound) {
 				body.tools = [{
 					name: SUBMIT_TOOL_NAME,
@@ -1816,6 +2021,20 @@ export class ChatClient {
 					usageOut += cont.roundOut;
 					submitted = cont.text;
 				}
+				// Gap-admission guard (same as the OpenAI path): reject a draft
+				// that declares an unread region once per turn — the tool_use
+				// gets a rejection tool_result and tools come back.
+				if (round < EXTENDED_TOOL_ITERATIONS - 1 && !gapBounceUsed && tools.length > 0 && this.admitsUnreadGap(submitted)) {
+					gapBounceUsed = true;
+					forceAnswer = false;
+					justBounced = true;
+					const note: ThinkingStep = { type: "thought", text: t("gapBounceNote") };
+					thinking.push(note);
+					onThinking?.(note);
+					messages.push({ role: "assistant", content: stream.contentBlocks });
+					messages.push({ role: "user", content: [{ type: "tool_result", tool_use_id: submitUse.id, content: t("promptGapBounce") }] });
+					continue;
+				}
 				await this.replay(submitted, onStream);
 				return finalize(submitted, sources);
 			}
@@ -1827,6 +2046,18 @@ export class ChatClient {
 					.join("\n")
 					.trim();
 				if (answer) lastText = answer;
+				// Gap-admission guard for the plain-text path (one-time bounce).
+				if (answer && round < EXTENDED_TOOL_ITERATIONS - 1 && !gapBounceUsed && tools.length > 0 && this.admitsUnreadGap(answer)) {
+					gapBounceUsed = true;
+					forceAnswer = false;
+					justBounced = true;
+					const note: ThinkingStep = { type: "thought", text: t("gapBounceNote") };
+					thinking.push(note);
+					onThinking?.(note);
+					messages.push({ role: "assistant", content: [{ type: "text", text: answer }] });
+					messages.push({ role: "user", content: t("promptGapBounce") });
+					continue;
+				}
 				// Final round: deltas were streamed live above; replay is the
 				// idempotent normalization pass (stripped markup, joined blocks).
 				await this.replay(answer || lastText, onStream);
@@ -1852,6 +2083,8 @@ export class ChatClient {
 			messages.push({ role: "assistant", content: stream.contentBlocks });
 
 			const toolResults: ContentBlock[] = [];
+			// Progress bookkeeping for the budget (see the OpenAI path).
+			let roundProgressed = false;
 			for (const tu of stream.toolUses) {
 				const name = tu.name;
 				const args = tu.input || {};
@@ -1868,12 +2101,20 @@ export class ChatClient {
 					return finalize(submitted, sources);
 				}
 
-				// Repeated call (exact or rephrased query): don't re-execute and
-				// don't echo a thought as the answer — flag a forced answer so
-				// the next round has no tools and the model answers for real.
+				// Repeated call (exact or rephrased query): skip the redundant
+				// execution. Same-round variants skip without a strike;
+				// cross-round repeats strike (two → forced answer).
 				const callKey = `${name}|${JSON.stringify(args)}`;
-				if (seenCalls.has(callKey) || this.isNearDuplicateQuery(name, args, seenQueries)) {
-					forceAnswer = true;
+				const exactRound = seenCallRounds.get(callKey);
+				const dupRound = exactRound !== undefined ? exactRound : this.findDuplicateQueryRound(name, args, seenQueries);
+				if (dupRound !== undefined && dupRound !== null) {
+					if (dupRound < round) {
+						repeatStrikes++;
+						// Stripping tools from a model that has not READ anything
+						// only yields a skeleton essay — keep the tools and let it
+						// work (the nudge round closes the turn eventually).
+						if (repeatStrikes >= 2 && readNotes.length > 0) forceAnswer = true;
+					}
 					toolResults.push({
 						type: "tool_result",
 						tool_use_id: tu.id,
@@ -1881,10 +2122,12 @@ export class ChatClient {
 					});
 					continue;
 				}
-				seenCalls.add(callKey);
+				seenCallRounds.set(callKey, round);
+				// A real (non-duplicate) call breaks the spin — decay strikes.
+				repeatStrikes = 0;
 				const normQ = this.primaryQueryArg(name, args).toLowerCase().replace(/\s+/g, " ").trim();
 				if (normQ.length >= 4) {
-					seenQueries.set(name, [...(seenQueries.get(name) || []), normQ]);
+					seenQueries.set(name, [...(seenQueries.get(name) || []), { q: normQ, round }]);
 				}
 
 				// User hit stop — bail out before running (possibly slow) tools.
@@ -1898,16 +2141,27 @@ export class ChatClient {
 				thinking.push(step);
 				onThinking?.(step);
 				this.collectUsedNotes(usedNotes, name, args, result);
-				if ((name === "get_note" || name === "get_section") && typeof (args as { path?: unknown }).path === "string") {
+				if ((name === "read" || name === "get_note" || name === "get_section") && typeof (args as { path?: unknown }).path === "string") {
 					const rp = (args as { path: string }).path;
 					if (!readNotes.includes(rp)) readNotes.push(rp);
 				}
+				// A read always counts as progress; anything else only when it
+				// returned information (not an error / zero-hit search).
+				const isRead = name === "read" || name === "get_note" || name === "get_section";
+				const emptyResult = /^Error:/i.test(result) || /"totalFiles":\s*0,/.test(result) || /"results":\s*\[\]/.test(result);
+				if (isRead || !emptyResult) roundProgressed = true;
 				toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: result });
 			}
 			if (toolResults.length === 0) {
 				throw new Error("Chat model requested a tool but none was called");
 			}
+			// 多轮推进（同 OpenAI 路径）：重评估提示作为 text 块附进同一个
+			// user 消息（Anthropic 要求 tool_result 与后续文本同属一块）。
+			toolResults.push({ type: "text", text: t("promptContinueRound") });
 			messages.push({ role: "user", content: toolResults });
+			// Budget idle brake (see the OpenAI path).
+			if (roundProgressed) idleStreak = 0;
+			else idleStreak++;
 		}
 
 		// Loop exhausted — return whatever the model has said so far, or a

@@ -203,12 +203,23 @@ interface SearchResultLike {
 	score: number;
 }
 
+/** First "L<line>:" number in a grep result's line list — the citation's
+ *  jump-to anchor. Context lines may precede the match, so this lands at
+ *  most `context` lines above the hit; close enough for a jump target. */
+function firstHitLine(lines: string[]): number | undefined {
+	for (const l of lines) {
+		const m = /^L(\d+):/.exec(l);
+		if (m) return Number(m[1]);
+	}
+	return undefined;
+}
+
 /** 12 个工具的唯一实现。MCP server 与聊天 Agent 都委托到这里。 */
 export class ToolCore {
 	/** 单次输出的字符上限（聊天侧 4000，MCP 侧 12000）。 */
 	maxChars = 8000;
 	/** 引用编号钩子：聊天侧注入，让出现的路径带全局 [n]。 */
-	cite: ((path: string) => number | null) | null = null;
+	cite: ((path: string, line?: number, kind?: "read" | "hit") => number | null) | null = null;
 
 	constructor(private deps: ToolCoreDeps) {}
 
@@ -533,7 +544,12 @@ export class ToolCore {
 		}
 		const slice = sectionLines.slice(start - 1, start - 1 + Math.max(0, count));
 		const numbered = slice.map((text, i) => `L${bodyOffsetLines + start + i}: ${text}`);
-		const header = this.citeHeader(path);
+		// Register the read with its first content line so clicking [n] jumps there.
+		// A no-offset full read of a LONG file anchors at L1 (the TOC) — useless
+		// as a jump target, so skip it and let a grep hit or a later segmented
+		// read anchor the note instead. Short files: L1 is fine.
+		const anchorLine = bodyOffsetLines + start;
+		const header = this.citeHeader(path, anchorLine > 1 || totalLines <= 400 ? anchorLine : undefined, "read");
 		// 超过单次上限时按行收缩 content，JSON 永远有效，并显式标注
 		// truncated + next_offset——模型据此继续读，不会忽视截断。
 		const remaining = sectionTotal - (start - 1) - slice.length;
@@ -644,9 +660,21 @@ export class ToolCore {
 					totalFiles,
 					completeList: totalFiles <= MAX_PATHS,
 					offset,
+					// Zero matches is a FORMATTING problem far more often than a
+					// content problem — say so, or the model concludes "absent
+					// from the vault" off one spacing variant and answers wrong.
+					...(totalFiles === 0
+						? {
+							hint:
+								"0 matches does NOT prove the content is absent. OCR/plain-text documents often insert spaces or line breaks inside a phrase " +
+								"(e.g. a source may store '附录12' as '附录 12', or split it across lines). " +
+								"Retry with: a SHORTER keyword (drop the number or suffix); a regex tolerating spaces (regex=true, pattern like '附录\\s*12'); " +
+								"no path filter (search the whole vault); or inspect the file directly — read(path, offset, limit) or headings(path).",
+						}
+						: {}),
 					paths: allPaths,
 					results: detailed.map((r) => ({
-						n: this.cite?.(r.path),
+						n: this.cite?.(r.path, firstHitLine(r.lines)),
 						...r,
 						linesOmitted: Math.max(0, r.matchCount - r.lines.length),
 					})),
@@ -802,8 +830,8 @@ export class ToolCore {
 
 	// ──── 内部 ────
 
-	private citeHeader(path: string): string {
-		const n = this.cite?.(path);
+	private citeHeader(path: string, line?: number, kind?: "read" | "hit"): string {
+		const n = this.cite?.(path, line, kind);
 		return n ? `[${n}] ${path}\n\n` : "";
 	}
 

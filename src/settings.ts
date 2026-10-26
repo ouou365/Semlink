@@ -736,6 +736,34 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			new EditMcpServerModal(this.app, this.plugin, () => rerenderSettingsTab(this)).open();
 		});
 
+		// ── 内置 semlink-debug 服务器卡片：ask 单工具，问答端到端测试 ──
+		const debugRunning = !!this.plugin.debugMcpServer;
+		const debugCard = list.createDiv({ cls: "semlink-mcp-server" });
+		const dIconWrap = debugCard.createDiv({
+			cls: "semlink-mcp-server-icon",
+			attr: { title: debugRunning ? t("mcpRunning") : t("mcpStopped") },
+		});
+		setIcon(dIconWrap, "bug");
+		if (debugRunning) {
+			dIconWrap.createSpan({ cls: "semlink-mcp-server-dot" });
+		}
+		const dMain = debugCard.createDiv({ cls: "semlink-mcp-server-main" });
+		dMain.createDiv({ cls: "semlink-mcp-server-name", text: "semlink-debug" });
+		dMain.createDiv({
+			cls: "semlink-mcp-server-sub",
+			text: `http · http://127.0.0.1:${this.plugin.settings.debugMcpPort ?? 3002}/mcp · ask · reload`,
+		});
+		const dToggleWrap = debugCard.createDiv({ cls: "semlink-mcp-server-toggle" });
+		new ToggleComponent(dToggleWrap)
+			.setValue(this.plugin.settings.debugMcpEnabled !== false)
+			.onChange(async (v) => {
+				this.plugin.settings.debugMcpEnabled = v;
+				await this.plugin.saveSettings();
+				if (v) await this.plugin.startDebugMcpServer();
+				else await this.plugin.stopDebugMcpServer();
+				rerenderSettingsTab(this);
+			});
+
 		// ── 外部 MCP 服务器：可增删改（管理层；运行时接入后续扩展） ──
 		if (clientServers.length > 0) {
 			const clientList = containerEl.createDiv({ cls: "semlink-mcp-list" });

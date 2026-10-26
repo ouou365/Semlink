@@ -2,7 +2,7 @@
 // Semlink - Plugin Entry Point
 // ========================================
 
-import { Notice, Plugin, FileSystemAdapter, WorkspaceSidedock, addIcon } from "obsidian";
+import { Notice, Plugin, FileSystemAdapter, WorkspaceSidedock, addIcon, MarkdownView, TFile } from "obsidian";
 import { debugLog, setDebugLogging } from "./src/log";
 import { join } from "path";
 import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
@@ -11,11 +11,12 @@ import { migrateLegacyCatalogBases, sanitizeProviderOrder, syncCatalogModels } f
 import { VectorStore } from "./src/vector-store";
 import { IndexQueue } from "./src/index-queue";
 import { EmbeddingClient } from "./src/embedding-client";
-import { ChatClient, inferAgentDepth } from "./src/chat-client";
+import { ChatClient, inferAgentDepth, type ThinkingStep } from "./src/chat-client";
 import { SemlinkTools } from "./src/chat-tools";
 import { Scheduler } from "./src/scheduler";
 import { ProgressTracker } from "./src/progress";
 import { McpServer } from "./src/mcp-server";
+import { DebugMcpServer } from "./src/debug-mcp-server";
 import { ShareServer } from "./src/share-server";
 import { ChatHistoryStore } from "./src/chat-history";
 import { renderSharePage } from "./src/share-page";
@@ -42,6 +43,7 @@ export default class SmartVaultPlugin extends Plugin {
 	scheduler!: Scheduler;
 	progress!: ProgressTracker;
 	mcpServer: McpServer | null = null;
+	debugMcpServer: DebugMcpServer | null = null;
 	/** LAN share server for conversation snapshots. Token↔session pairs
 	 *  persist in data/share-registry.json and the port in settings, so a
 	 *  share URL keeps working across restarts (unchanged IP); page HTML is
@@ -196,6 +198,12 @@ export default class SmartVaultPlugin extends Plugin {
 			await this.startMcpServer();
 		}
 
+		// 调试问答服务（semlink-debug）：ask 单工具，端到端跑真实问答管线，
+		// 供 ZCode 等 agent 回归测试。仅监听 127.0.0.1（会触发真实 LLM 调用）。
+		if (this.settings.debugMcpEnabled !== false) {
+			await this.startDebugMcpServer();
+		}
+
 		// Register settings tab
 		this.addSettingTab(new SmartVaultSettingTab(this.app, this));
 
@@ -328,6 +336,7 @@ export default class SmartVaultPlugin extends Plugin {
 		try { this.scheduler?.abort(); } catch { /* best-effort */ }
 		try { this.watcher?.stop(); } catch { /* best-effort */ }
 		try { void this.mcpServer?.stop(); } catch { /* best-effort */ }
+		try { void this.debugMcpServer?.stop(); } catch { /* best-effort */ }
 		// Ends all LAN shares (snapshots are memory-only by design).
 		try { void this.shareServer.stop(); } catch { /* best-effort */ }
 		try { this.activityGate?.dispose(); } catch { /* best-effort */ }
@@ -435,6 +444,102 @@ export default class SmartVaultPlugin extends Plugin {
 	async restartMcpServer() {
 		await this.stopMcpServer();
 		await this.startMcpServer();
+	}
+
+	// ──── Debug MCP（semlink-debug）：ask 单工具，端到端测试问答 ────
+
+	async startDebugMcpServer() {
+		if (this.debugMcpServer) return;
+		const server = new DebugMcpServer(
+			this.settings.debugMcpPort ?? 3002,
+			(q) => this.runDebugAsk(q),
+			() => this.runDebugReload(),
+			(path, line) => this.runDebugJump(path, line),
+		);
+		try {
+			await server.start();
+			this.debugMcpServer = server;
+			debugLog(`[Semlink] debug MCP listening on http://127.0.0.1:${server.port}/mcp`);
+		} catch (e) {
+			console.warn("[Semlink] debug MCP failed to start:", e);
+		}
+	}
+
+	async stopDebugMcpServer() {
+		await this.debugMcpServer?.stop();
+		this.debugMcpServer = null;
+	}
+
+	/** ask 执行器：与侧栏同一条管线（agentic 模式、按问题推断读取深度、
+	 *  空历史——每次 ask 都是独立会话），收集完整思考过程与最终回答。 */
+	private debugAskRunning = false;
+	private async runDebugAsk(question: string): Promise<unknown> {
+		if (this.debugAskRunning) throw new Error("Another ask is still running");
+		this.debugAskRunning = true;
+		const startedAt = Date.now();
+		try {
+			const thinking: ThinkingStep[] = [];
+			const result = await this.chatClient.chat(
+				"",
+				question,
+				[],
+				() => { /* onToolCall：UI 动画用，调试服务无消费方 */ },
+				inferAgentDepth(question),
+				undefined, // onStream
+				undefined, // onRoundStart
+				(step) => thinking.push(step),
+			);
+			return {
+				question,
+				answer: result.answer,
+				thinking,
+				usedNotes: result.usedNotes,
+				readNotes: result.readNotes,
+				// Citation anchors: paths[n-1] is cited as [n]; lines[n-1] is the
+				// jump-to line (undefined = never read/grep-anchored). Debug-only
+				// visibility so the MCP surface can verify line-anchored citations.
+				citeRegistry: this.chatClient.latestCiteRegistry,
+				citeLines: this.chatClient.latestCiteLines,
+				elapsedMs: Date.now() - startedAt,
+			};
+		} finally {
+			this.debugAskRunning = false;
+		}
+	}
+
+	/** reload 工具执行器：同命令面板的「Reload app without saving」。
+	 *  整个应用窗口重载、放弃未保存修改——插件新构建加载的唯一可靠途径。 */
+	/** jump 调试工具执行器：走侧栏 openNote 的真实跳行路径，然后回报实际
+	 *  视图模式 / 光标行 / 滚动位置——引用跳行链路的端到端自动验证。 */
+	private async runDebugJump(path: string, line: number): Promise<unknown> {
+		const sidebarLeaf = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
+		if (!sidebarLeaf) throw new Error("search view not open — open the Semlink sidebar once first");
+		const view = sidebarLeaf.view as unknown as {
+			openNote(notePath: string, preview: string, lineHint?: number): Promise<void>;
+		};
+		const resolved = this.app.vault.getAbstractFileByPath(path) instanceof TFile;
+		await view.openNote(path, "", line);
+		// Give the view a beat to settle its scroll restoration, then report.
+		await new Promise((r) => window.setTimeout(r, 300));
+		const leaf = this.app.workspace.getLeaf(false);
+		const v = leaf?.view as MarkdownView | null;
+		if (!v) return { mode: "none", expectedLine: line, resolved };
+		const totalLines = (await this.app.vault.cachedRead(v.file!)).split("\n").length;
+		const viewFileCodes = v.file ? Array.from(v.file.path.slice(0, 24)).map((c) => c.codePointAt(0)!.toString(16)).join(",") : null;
+		const mode = v.getMode();
+		if (mode === "source") {
+			const cur = v.editor.getCursor();
+			const si = v.editor.getScrollInfo();
+			return { mode, resolved, cursorLine: cur.line + 1, expectedLine: line, totalLines, scrollTop: Math.round(si.top), file: v.file?.path };
+		}
+		const scroller = (v.contentEl.querySelector(".markdown-preview-view") ?? v.contentEl) as HTMLElement | null;
+		return { mode, resolved, scrollTop: Math.round(scroller?.scrollTop ?? -1), scrollHeight: scroller?.scrollHeight ?? -1, expectedLine: line, totalLines, file: v.file?.path };
+	}
+
+	private runDebugReload(): void {
+		// commands 在当前 obsidian 类型里未公开，与 setting 等内部 API 同款断言
+		(this.app as unknown as { commands: { executeCommandById(id: string): void } })
+			.commands.executeCommandById("app:reload");
 	}
 
 	async toggleMcpServer() {

@@ -35,7 +35,7 @@ export class SemlinkTools {
 	 *  start. When set, search hits carry their global `n`, and opened notes
 	 *  announce theirs in a header line — one numbering space across the
 	 *  initial context, tool results, thinking, and the final answer. */
-	citeNumberer: ((path: string) => number) | null = null;
+	citeNumberer: ((path: string, line?: number, kind?: "read" | "hit") => number) | null = null;
 
 	/** Shared implementation core. */
 	private core: ToolCore;
@@ -70,7 +70,7 @@ export class SemlinkTools {
 	/** Execute a tool by name; always returns a text result (errors included). */
 	async execute(name: string, args: Record<string, unknown>): Promise<string> {
 		this.core.maxChars = this.maxResultChars;
-		this.core.cite = (path) => this.citeNumberer?.(path) ?? null;
+		this.core.cite = (path, line, kind) => this.citeNumberer?.(path, line, kind) ?? null;
 		return await this.core.execute(name, args);
 	}
 }
