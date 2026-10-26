@@ -92,7 +92,7 @@ const t: Record<keyof typeof en, string> = {
 	embedConcurrency: "Requisições concorrentes",
 	embedConcurrencyDesc: "Notas processadas em paralelo — um valor muito alto pode disparar limites de taxa 429",
 	excludePaths: "Caminhos excluídos",
-	excludePathsDesc: "Prefixos de caminho a excluir da indexação (um por linha)",
+	excludePathsDesc: "Prefixos de caminho (um por linha). Os arquivos correspondentes não são indexados e nunca aparecem nos resultados; ao salvar, as correspondências já indexadas são removidas do índice",
 	autoIndex: "Indexação automática",
 	autoEmbed: "Embedding automático",
 	actions: "Ações",

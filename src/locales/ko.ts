@@ -90,7 +90,7 @@ const t: Record<keyof typeof en, string> = {
 	embedConcurrency: "동시 요청 수",
 	embedConcurrencyDesc: "병렬로 임베딩하는 노트 수 — 너무 높으면 429 속도 제한이 발생할 수 있습니다",
 	excludePaths: "제외 경로",
-	excludePathsDesc: "인덱싱에서 제외할 경로 접두사 (한 줄에 하나)",
+	excludePathsDesc: "한 줄에 하나의 경로 접두사. 일치하는 파일은 인덱싱되지 않고 검색 결과에도 나타나지 않습니다. 저장 시 이미 인덱싱된 일치 항목은 인덱스에서 제거됩니다",
 	autoIndex: "자동 인덱싱",
 	autoEmbed: "자동 임베딩",
 	actions: "작업",

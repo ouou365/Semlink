@@ -34,6 +34,10 @@ export class DbEngine {
 	// In-memory vector cache for fast search
 	private allVectors: Float32Array | null = null;
 	private allVectorIds: string[] = [];
+	/** 与 allVectorIds 平行的 note_path 数组（loadVectorCache 同步构建）。
+	 *  语义检索的路径过滤在打分循环里下推到这个数组——一次扫描返回过滤
+	 *  后的精确 topN，无需 over-fetch，元数据查询也只对最终命中做。 */
+	private allVectorPaths: string[] = [];
 	// Reverse lookup chunk-id → index into allVectors, so searchRelatedNotes
 	// can fetch a stored vector by id without re-reading the DB.
 	private vectorIdToIndex: Map<string, number> = new Map();
@@ -264,6 +268,7 @@ export class DbEngine {
 		this.db.run("DELETE FROM note_doc_vectors");
 		this.allVectors = null;
 		this.allVectorIds = [];
+		this.allVectorPaths = [];
 		this.cacheLoaded = false;
 		this.allDocVectors = null;
 		this.allDocNotePaths = [];
@@ -289,6 +294,7 @@ export class DbEngine {
 		this.db.run("DELETE FROM meta");
 		this.allVectors = null;
 		this.allVectorIds = [];
+		this.allVectorPaths = [];
 		this.cacheLoaded = false;
 		this.allDocVectors = null;
 		this.allDocNotePaths = [];
@@ -310,6 +316,7 @@ export class DbEngine {
 		this.db = null;
 		this.allVectors = null;
 		this.allVectorIds = [];
+		this.allVectorPaths = [];
 		this.cacheLoaded = false;
 		this.allDocVectors = null;
 		this.allDocNotePaths = [];
@@ -620,12 +627,13 @@ export class DbEngine {
 		if (this.cacheLoaded) return;
 
 		const results = this.db!.exec(
-			"SELECT id, vector FROM chunks WHERE status = 'active' AND vector IS NOT NULL"
+			"SELECT id, note_path, vector FROM chunks WHERE status = 'active' AND vector IS NOT NULL"
 		);
 
 		if (results.length === 0 || results[0].values.length === 0) {
 			this.allVectors = new Float32Array(0);
 			this.allVectorIds = [];
+			this.allVectorPaths = [];
 			// Do NOT set cacheLoaded here. This path runs when no vectors exist
 			// yet — often at startup, before indexing/embedding finishes. If we
 			// cached the empty state, every later search would run against an
@@ -638,13 +646,15 @@ export class DbEngine {
 		const rows = results[0].values;
 		const numVectors = rows.length;
 		const ids: string[] = [];
+		const paths: string[] = [];
 		const allVec = new Float32Array(numVectors * EMBEDDING_DIM);
 		this.vectorIdToIndex.clear();
 
 		for (let i = 0; i < numVectors; i++) {
 			const id = rows[i][0] as string;
-			const blob = rows[i][1] as Uint8Array;
+			const blob = rows[i][2] as Uint8Array;
 			ids.push(id);
+			paths.push((rows[i][1] as string) ?? "");
 			this.vectorIdToIndex.set(id, i);
 
 			// Copy blob bytes into the contiguous array
@@ -654,6 +664,7 @@ export class DbEngine {
 
 		this.allVectors = allVec;
 		this.allVectorIds = ids;
+		this.allVectorPaths = paths;
 		this.cacheLoaded = true;
 
 		debugLog(`[Semlink] Loaded ${numVectors} vectors into cache (${(numVectors * EMBEDDING_DIM * BYTES_PER_FLOAT / 1024 / 1024).toFixed(1)}MB)`);
@@ -774,8 +785,12 @@ export class DbEngine {
 	 * Uses brute-force cosine similarity. This is the other main-thread hot
 	 * path — tens of thousands of 1024-dim dot products per query. Running it
 	 * in the worker keeps it off the UI thread.
+	 *
+	 * pathFilter/excludePaths are evaluated INSIDE the scoring loop against
+	 * the parallel allVectorPaths array — one scan yields the exact filtered
+	 * top-K, with no over-fetch and metadata lookups only for final hits.
 	 */
-	search(queryEmbedding: number[] | Float32Array, limit = 10, threshold = 0.3): SearchResult[] {
+	search(queryEmbedding: number[] | Float32Array, limit = 10, threshold = 0.3, pathFilter?: string, excludePaths?: string[]): SearchResult[] {
 		this.loadVectorCache();
 
 		if (!this.allVectors || this.allVectorIds.length === 0) {
@@ -787,6 +802,14 @@ export class DbEngine {
 
 		// Normalize query vector
 		const query = this.normalizeQuery(queryEmbedding);
+
+		// Path predicates precomputed once (startsWith || includes semantics,
+		// matching the index-side isExcluded); lower-cased for matching.
+		const lowerPrefix = pathFilter?.toLowerCase();
+		const excl = excludePaths
+			?.map((e) => e.trim().toLowerCase())
+			.filter((e) => e.length > 0) ?? [];
+		const hasFilter = !!lowerPrefix || excl.length > 0;
 
 		// Compute cosine similarities in batches to avoid blocking too long
 		const BATCH = 10000;
@@ -808,6 +831,13 @@ export class DbEngine {
 
 				const score = normB > 0 ? dot / Math.sqrt(normB) : 0;
 				if (score >= threshold) {
+					// Path predicates run only for threshold-passing chunks
+					// (a small subset), so the per-hit toLowerCase cost is fine.
+					if (hasFilter) {
+						const p = this.allVectorPaths[i]?.toLowerCase() ?? "";
+						if (lowerPrefix && !p.startsWith(lowerPrefix)) continue;
+						if (excl.length > 0 && excl.some((e) => p.includes(e))) continue;
+					}
 					scores.push({ index: i, score });
 				}
 			}
@@ -862,12 +892,15 @@ export class DbEngine {
 	 * Cosine scan over ONE index range. Used by the sync-fallback path to
 	 * time-slice a full scan so the main thread can breathe between slices
 	 * (the worker path uses the monolithic search() instead).
+	 * Path predicates are evaluated in-loop, same as search().
 	 */
 	searchSlice(
 		queryEmbedding: number[] | Float32Array,
 		startIdx: number,
 		endIdx: number,
 		threshold = 0.3,
+		pathFilter?: string,
+		excludePaths?: string[],
 	): Array<{ chunkId: string; score: number }> {
 		this.loadVectorCache();
 		if (!this.allVectors || !this.allVectorIds) return [];
@@ -875,6 +908,11 @@ export class DbEngine {
 		const dim = EMBEDDING_DIM;
 		const query = this.normalizeQuery(queryEmbedding);
 		const out: Array<{ chunkId: string; score: number }> = [];
+		const lowerPrefix = pathFilter?.toLowerCase();
+		const excl = excludePaths
+			?.map((e) => e.trim().toLowerCase())
+			.filter((e) => e.length > 0) ?? [];
+		const hasFilter = !!lowerPrefix || excl.length > 0;
 
 		for (let i = startIdx; i < Math.min(endIdx, this.allVectorIds.length); i++) {
 			const offset = i * dim;
@@ -887,6 +925,11 @@ export class DbEngine {
 			}
 			const score = normB > 0 ? dot / Math.sqrt(normB) : 0;
 			if (score >= threshold) {
+				if (hasFilter) {
+					const p = this.allVectorPaths[i]?.toLowerCase() ?? "";
+					if (lowerPrefix && !p.startsWith(lowerPrefix)) continue;
+					if (excl.length > 0 && excl.some((e) => p.includes(e))) continue;
+				}
 				out.push({ chunkId: this.allVectorIds[i], score });
 			}
 		}
@@ -1002,13 +1045,21 @@ export class DbEngine {
 	 * scanning every vault file (used by the grep tool). Returns matching note
 	 * paths with a count of matching chunks per note.
 	 */
-	textSearch(pattern: string, limit = 200, pathFilter?: string): Array<{ path: string; matchCount: number; preview: string }> {
+	textSearch(pattern: string, limit = 200, pathFilter?: string, excludePaths?: string[]): Array<{ path: string; matchCount: number; preview: string }> {
 		const like = `%${pattern}%`;
 		let sql = "SELECT note_path, COUNT(*) as cnt, MAX(content_preview) as prev FROM chunks WHERE content LIKE ?";
 		const params: unknown[] = [like];
 		if (pathFilter) {
 			sql += " AND note_path LIKE ?";
 			params.push(`%${pathFilter}%`);
+		}
+		// 排除前缀（NOT LIKE %p%）：startsWith 是 includes 的子集，一个条件
+		// 即覆盖索引侧 isExcluded 的两种匹配；索引里可能仍有规则变更前的旧内容。
+		for (const ex of excludePaths ?? []) {
+			const t = ex.trim();
+			if (!t) continue;
+			sql += " AND note_path NOT LIKE ?";
+			params.push(`%${t}%`);
 		}
 		sql += " GROUP BY note_path ORDER BY cnt DESC LIMIT ?";
 		params.push(Math.max(1, limit));

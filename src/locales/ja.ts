@@ -90,7 +90,7 @@ const t: Record<keyof typeof en, string> = {
 	embedConcurrency: "同時リクエスト数",
 	embedConcurrencyDesc: "並列で埋め込み処理するノート数です。大きすぎると 429 レート制限が発生することがあります",
 	excludePaths: "除外パス",
-	excludePathsDesc: "インデックス対象から除外するパスのプレフィックス（1 行に 1 つ）",
+	excludePathsDesc: "1 行に 1 つのパス接頭辞。一致するファイルはインデックスされず、検索結果にも出ません。保存時に既にインデックス済みの一致内容はインデックスから削除されます",
 	autoIndex: "自動インデックス",
 	autoEmbed: "自動埋め込み",
 	actions: "アクション",
