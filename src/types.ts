@@ -354,7 +354,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	sharePort: 43900,
 	mcpApiKey: "",
 	mcpEnabled: true,
-	debugMcpEnabled: true,
+	debugMcpEnabled: false,
 	debugMcpPort: 3002,
 	mcpClientServers: [],
 	chunkSize: 800,

@@ -204,7 +204,7 @@ export default class SmartVaultPlugin extends Plugin {
 
 		// 调试问答服务（semlink-debug）：ask 单工具，端到端跑真实问答管线，
 		// 供 ZCode 等 agent 回归测试。仅监听 127.0.0.1（会触发真实 LLM 调用）。
-		if (this.settings.debugMcpEnabled !== false) {
+		if (this.settings.debugMcpEnabled === true) {
 			await this.startDebugMcpServer();
 		}
 
@@ -782,6 +782,14 @@ export default class SmartVaultPlugin extends Plugin {
 			if (count) {
 				const stats = await this.store.getStats();
 				count.textContent = `${stats.indexedNotes} ${t("statusFilesCount")}`;
+				// 用 DB 权威值播种进度追踪器：否则启动后任何一次进度事件
+				// （扫描枚举阶段 processedNotes=0）都会把状态栏覆盖成
+				// 「0 个文件」，直到打开面板/设置触发重播种才恢复。
+				this.progress.initFromStats(
+					stats.indexedNotes,
+					stats.activeChunks,
+					Math.max(this.progress.current.totalNotes, stats.indexedNotes),
+				);
 			}
 		}
 	}

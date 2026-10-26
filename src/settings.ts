@@ -693,7 +693,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		});
 
 		// ── 内置 semlink 服务器卡片：不可增删改，右侧开关启停服务 ──
-		const list = containerEl.createDiv({ cls: "semlink-mcp-list" });
+		let list = containerEl.createDiv({ cls: "semlink-mcp-list" });
 		const card = list.createDiv({ cls: "semlink-mcp-server" });
 		const iconWrap = card.createDiv({
 			cls: "semlink-mcp-server-icon",
@@ -735,7 +735,21 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			new EditMcpServerModal(this.app, this.plugin, () => rerenderSettingsTab(this)).open();
 		});
 
-		// ── 内置 semlink-debug 服务器卡片：ask 单工具，问答端到端测试 ──
+		// ── 内置 semlink-debug 服务器卡片：ask 单工具，问答端到端测试。
+		//    默认关闭（严格 opt-in），并收进「高级选项」折叠区——调试工具
+		//    只面向开发者，不该占据普通用户的视线。 ──
+		const debugAdvHead = containerEl.createDiv({ cls: "semlink-editor-adv-head" });
+		const debugChev = debugAdvHead.createSpan({ cls: "semlink-editor-adv-chevron" });
+		setIcon(debugChev, "chevron-right");
+		const debugAdvLabel = debugAdvHead.createSpan({ cls: "semlink-editor-adv-label", text: t("editorAdvancedShow") });
+		const debugAdvBody = containerEl.createDiv({ cls: "semlink-editor-adv-body semlink-hidden" });
+		debugAdvHead.addEventListener("click", () => {
+			const open = !debugAdvBody.hasClass("semlink-hidden");
+			debugAdvBody.toggleClass("semlink-hidden", open);
+			setIcon(debugChev, open ? "chevron-right" : "chevron-down");
+			debugAdvLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
+		});
+		list = debugAdvBody;
 		const debugRunning = !!this.plugin.debugMcpServer;
 		const debugCard = list.createDiv({ cls: "semlink-mcp-server" });
 		const dIconWrap = debugCard.createDiv({
@@ -754,7 +768,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		});
 		const dToggleWrap = debugCard.createDiv({ cls: "semlink-mcp-server-toggle" });
 		new ToggleComponent(dToggleWrap)
-			.setValue(this.plugin.settings.debugMcpEnabled !== false)
+			.setValue(this.plugin.settings.debugMcpEnabled === true)
 			.onChange(async (v) => {
 				this.plugin.settings.debugMcpEnabled = v;
 				await this.plugin.saveSettings();
