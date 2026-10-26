@@ -1435,7 +1435,7 @@ export class SemanticSearchView extends ItemView {
 				if (t) { anchor = t.replace(/^#+\s*/, "").slice(0, 60); break; }
 			}
 			if (!anchor) return;
-			const scroller = (view.contentEl.querySelector(".markdown-preview-view") ?? view.contentEl) as HTMLElement;
+			const scroller = view.contentEl.querySelector(".markdown-preview-view") ?? view.contentEl;
 			for (let attempt = 0; attempt < 30; attempt++) {
 				const hit = this.findTextInPreview(scroller, anchor);
 				if (hit) {

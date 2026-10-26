@@ -180,7 +180,11 @@ export class DebugMcpServer {
 				case "tools/list":
 					result = { tools: [ASK_TOOL, JUMP_TOOL, RELOAD_TOOL] };
 					break;
-				case "tools/call":
+				case "tools/call": {
+					if (!params) {
+						result = { jsonrpc: "2.0", id: id ?? null, error: { code: -32602, message: "Missing params" } };
+						break;
+					}
 					if (params.name === "reload") {
 						result = this.handleReload();
 					} else if (params.name === "jump") {
@@ -189,9 +193,10 @@ export class DebugMcpServer {
 						if (!jp || !(jl > 0)) throw new Error("jump needs path and a positive line");
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runJump?.(jp, jl)) ?? { error: "no jump runner" }, null, 2) }] };
 					} else {
-						result = await this.handleAsk(params || {});
+						result = await this.handleAsk(params);
 					}
 					break;
+				}
 				default:
 					if (id == null) return { jsonrpc: "2.0", id: null, result: {} };
 					return { jsonrpc: "2.0", id, error: { code: -32601, message: `Method not found: ${method}` } };
