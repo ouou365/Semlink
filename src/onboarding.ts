@@ -1516,3 +1516,80 @@ class GuideFetchModelsModal extends Modal {
 		this.contentEl.empty();
 	}
 }
+
+// ──── Guide hub (generic entry, Obsidian-welcome style) ────
+
+/** The generic "Get started" hub: brand header + a card list (site, Discord,
+ *  and the two setup guides as sub-entries). Mirrors Obsidian's own welcome
+ *  modal anatomy: leading icon, title + two-line description, trailing
+ *  action button. `onPick` launches a sub-guide ("chat" | "embed"). */
+export function renderGuideHub(
+	container: HTMLElement,
+	plugin: SmartVaultPlugin,
+	onPick: (kind: "chat" | "embed") => void,
+): void {
+	const hub = container.createDiv({ cls: "semlink-guide-hub" });
+
+	// 品牌 logo + 名称已在顶部角落条出现——这里是问候区：大 emoji +
+	// 欢迎语 + 标语，避免两个 logo 同屏重复。
+	const brand = hub.createDiv({ cls: "semlink-guide-hub-brand" });
+	brand.createDiv({ cls: "semlink-guide-hub-emoji", text: "👋" });
+	brand.createDiv({ cls: "semlink-guide-hub-name", text: t("hubWelcome") });
+	brand.createDiv({ cls: "semlink-guide-hub-tagline", text: t("settingsTagline") });
+
+	const card = hub.createDiv({ cls: "semlink-guide-hub-card" });
+
+	const row = (
+		icon: string,
+		title: string,
+		desc: string,
+		btnText: string,
+		primary: boolean,
+		onClick: () => void,
+	): void => {
+		const r = card.createDiv({ cls: "semlink-guide-hub-row" });
+		const ic = r.createDiv({ cls: "semlink-guide-hub-row-icon" });
+		setIcon(ic, icon);
+		const texts = r.createDiv({ cls: "semlink-guide-hub-row-texts" });
+		texts.createDiv({ cls: "semlink-guide-hub-row-title", text: title });
+		texts.createDiv({ cls: "semlink-guide-hub-row-desc", text: desc });
+		const btn = r.createEl("button", {
+			cls: primary ? "semlink-guide-hub-btn is-primary" : "semlink-guide-hub-btn",
+			text: btnText,
+		});
+		btn.addEventListener("click", onClick);
+	};
+
+	row(
+		"globe",
+		t("hubSiteTitle"),
+		t("hubSiteDesc"),
+		t("hubVisit"),
+		true,
+		() => window.open("https://getsemlink.com/", "_blank"),
+	);
+	row(
+		"message-circle",
+		t("hubDiscordTitle"),
+		t("hubDiscordDesc"),
+		t("hubJoin"),
+		false,
+		() => window.open("https://discord.gg/4HQRqJj92", "_blank"),
+	);
+	row(
+		"bot",
+		t("hubChatTitle"),
+		t("hubChatDesc"),
+		t("hubOpen"),
+		false,
+		() => onPick("chat"),
+	);
+	row(
+		"database",
+		t("hubEmbedTitle"),
+		t("hubEmbedDesc"),
+		t("hubOpen"),
+		false,
+		() => onPick("embed"),
+	);
+}

@@ -835,6 +835,12 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		void (async () => {
 			const sessions = await this.plugin.historyStore.load();
 			const titleOf = (sessionId: string): string => {
+				// Note shares (`note:<path>` keys) title by the note's file name.
+				if (sessionId.startsWith("note:")) {
+					const p = sessionId.slice("note:".length);
+					const f = this.plugin.app.vault.getAbstractFileByPath(p);
+					return f ? f.name : p.split("/").pop() || p;
+				}
 				const st = sessions.find((x) => x.id === sessionId);
 				return st?.title || st?.messages.find((m) => m.role === "user")?.content || t("shareUntitled");
 			};
@@ -848,7 +854,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				// then copy / QR / open / delete + toggle on the right edge.
 				const item = list.createDiv({ cls: "semlink-mcp-server" });
 				const icon = item.createDiv({ cls: "semlink-mcp-server-icon" });
-				setIcon(icon, "share-2");
+				// Note shares get the file-text mark, chats keep share-2.
+				setIcon(icon, row.sessionId.startsWith("note:") ? "file-text" : "share-2");
 				const main = item.createDiv({ cls: "semlink-mcp-server-main" });
 				main.createDiv({ cls: "semlink-mcp-server-name", text: row.title });
 				const url = server.urls(row.token)[0];

@@ -28,6 +28,59 @@ import logoSvg from "./semlink-logo.svg";
 
 export type ShareTheme = "light" | "dark";
 
+/**
+ * Render a (possibly very long) markdown document in chunks, yielding to the
+ * UI between chunks — a single MarkdownRenderer.render call on a multi-
+ * thousand-line note blocks the main thread for seconds and freezes the
+ * editor. Chunks split at blank lines outside code fences (a blank line is
+ * always a block boundary, so lists/tables/code stay intact) and land in the
+ * SAME bubble container, so the page shows one continuous document.
+ */
+export async function renderMarkdownChunked(
+	app: App,
+	markdown: string,
+	component: Component,
+	onProgress?: (done: number, total: number) => void,
+): Promise<string> {
+	const chunks = splitMarkdownChunks(markdown, 80);
+	const holder = createDiv({ cls: "semlink-share-offscreen" });
+	document.body.appendChild(holder);
+	const htmls: string[] = [];
+	try {
+		for (let i = 0; i < chunks.length; i++) {
+			const wrap = holder.createDiv({ cls: "answer markdown-rendered" });
+			await MarkdownRenderer.render(app, chunks[i], wrap, "", component);
+			htmls.push(wrap.innerHTML);
+			wrap.remove();
+			onProgress?.(i + 1, chunks.length);
+			// Let the editor breathe between chunks (time-slice, same pattern
+			// as the sync-fallback vector scan).
+			if (i < chunks.length - 1) await new Promise((r) => setTimeout(r, 0));
+		}
+	} finally {
+		holder.remove();
+	}
+	return htmls.join("");
+}
+
+/** Split into ≤`targetLines` chunks at blank lines outside code fences. */
+function splitMarkdownChunks(text: string, targetLines: number): string[] {
+	const lines = text.split("\n");
+	const out: string[] = [];
+	let buf: string[] = [];
+	let inFence = false;
+	for (const line of lines) {
+		if (/^\s*```/.test(line)) inFence = !inFence;
+		buf.push(line);
+		if (!inFence && line.trim() === "" && buf.length >= targetLines) {
+			out.push(buf.join("\n"));
+			buf = [];
+		}
+	}
+	if (buf.length > 0) out.push(buf.join("\n"));
+	return out.length > 0 ? out : [text];
+}
+
 export async function renderSharePage(
 	app: App,
 	messages: HistoryMessage[],
@@ -37,6 +90,10 @@ export async function renderSharePage(
 	/** When the user triggered the share (ms epoch) — the page timestamp is
 	 *  the SHARE moment, not the moment a visitor re-opens it. */
 	sharedAt: number = Date.now(),
+	/** Pre-rendered markdown bubble for a SINGLE-assistant-message share
+	 *  (note sharing): skips the render loop below — long notes come in
+	 *  through renderMarkdownChunked so the editor never freezes. */
+	preRenderedHtml?: string,
 ): Promise<string> {
 	const esc = (s: string): string =>
 		s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -44,31 +101,37 @@ export async function renderSharePage(
 	document.body.appendChild(holder);
 	const parts: string[] = [];
 	try {
-		for (const m of messages) {
-			if (m.role === "user") {
-				parts.push(`<div class="msg user"><div class="bubble">${esc(m.content)}</div></div>`);
-				continue;
+		if (preRenderedHtml !== undefined) {
+			// Citation stripping does NOT apply to notes: [1] in a note is
+			// footnote/link syntax the author wrote, not model output.
+			parts.push(`<div class="msg assistant"><div class="bubble md">${preRenderedHtml}</div></div>`);
+		} else {
+			for (const m of messages) {
+				if (m.role === "user") {
+					parts.push(`<div class="msg user"><div class="bubble">${esc(m.content)}</div></div>`);
+					continue;
+				}
+				const wrap = holder.createDiv({ cls: "answer markdown-rendered" });
+				await MarkdownRenderer.render(app, m.content, wrap, "", component);
+				// Shared pages stay clean: no thinking transcript, no inline [n]
+				// citation markers (the sources live in the vault, not here).
+				const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT, {
+					acceptNode: (node) => {
+						const parent = node.parentElement;
+						if (!parent) return NodeFilter.FILTER_REJECT;
+						const tag = parent.tagName;
+						if (tag === "CODE" || tag === "PRE" || tag === "A") return NodeFilter.FILTER_REJECT;
+						return /\[\d{1,3}\]/.test(node.nodeValue ?? "") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+					},
+				});
+				const marked: Text[] = [];
+				while (walker.nextNode()) marked.push(walker.currentNode as Text);
+				for (const node of marked) {
+					node.nodeValue = (node.nodeValue ?? "").replace(/\s?\[\d{1,3}\]/g, "");
+				}
+				parts.push(`<div class="msg assistant"><div class="bubble md">${wrap.innerHTML}</div></div>`);
+				wrap.remove();
 			}
-			const wrap = holder.createDiv({ cls: "answer markdown-rendered" });
-			await MarkdownRenderer.render(app, m.content, wrap, "", component);
-			// Shared pages stay clean: no thinking transcript, no inline [n]
-			// citation markers (the sources live in the vault, not here).
-			const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT, {
-				acceptNode: (node) => {
-					const parent = node.parentElement;
-					if (!parent) return NodeFilter.FILTER_REJECT;
-					const tag = parent.tagName;
-					if (tag === "CODE" || tag === "PRE" || tag === "A") return NodeFilter.FILTER_REJECT;
-					return /\[\d{1,3}\]/.test(node.nodeValue ?? "") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
-				},
-			});
-			const marked: Text[] = [];
-			while (walker.nextNode()) marked.push(walker.currentNode as Text);
-			for (const node of marked) {
-				node.nodeValue = (node.nodeValue ?? "").replace(/\s?\[\d{1,3}\]/g, "");
-			}
-			parts.push(`<div class="msg assistant"><div class="bubble md">${wrap.innerHTML}</div></div>`);
-			wrap.remove();
 		}
 	} finally {
 		holder.remove();
@@ -84,6 +147,7 @@ export async function renderSharePage(
 		meta: allLangs("shareFooter"),
 		slogan: allLangs("shareBrandSub"),
 		home: allLangs("shareHome"),
+		top: allLangs("shareBackTop"),
 	} as Partial<Record<string, Partial<Record<string, string>>>>;
 	const uiJson = JSON.stringify(ui).replace(/</g, "\\u003c");
 	// Inline SVG favicon (brand purple) — no external request, works on the
@@ -175,6 +239,9 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 .msg.assistant .bubble.md th{background:var(--table-head)}
 .msg.assistant .bubble.md td,.msg.assistant .bubble.md th{border:1px solid var(--table-line);padding:6px 10px;text-align:left}
 .msg.assistant .bubble.md hr{border:none;border-top:1px solid var(--line);margin:1.2em 0}
+/* 图片不撑破卡片：限宽 + 自适应高度 + 圆角 */
+.msg .bubble img{max-width:100%;height:auto;border-radius:8px}
+.msg .bubble video,.msg .bubble iframe{max-width:100%}
 
 /* ── Card foot: postcard sign-off above the dashed mid-line ── */
 .pc-foot{display:flex;align-items:center;justify-content:center;gap:9px;margin:26px 36px 0;padding:16px 2px 22px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--faint)}
@@ -191,6 +258,22 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 	.msg.user .bubble{max-width:92%}
 	.msg.assistant .bubble{padding:14px 15px}
 }
+
+/* ── Outline (TOC): fixed rail right of the postcard on wide screens ── */
+.toc{display:none}
+@media(min-width:1360px){
+	.toc.has-toc{display:block;position:fixed;left:calc(50% + 440px);top:72px;width:240px;max-height:calc(100vh - 140px);overflow:auto;font-size:12.5px;line-height:1.5;padding:2px 0 2px 2px}
+}
+.toc-top{display:flex;align-items:center;gap:6px;padding:6px 10px 8px;margin-bottom:6px;border-bottom:1px dashed var(--line);color:var(--muted);text-decoration:none;cursor:pointer;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toc-top svg{width:13px;height:13px;flex:none}
+.toc-top:hover{color:var(--brand-ink)}
+.toc-item{display:block;padding:4px 10px;color:var(--muted);text-decoration:none;border-left:2px solid var(--line);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:0 6px 6px 0}
+.toc-item:hover{color:var(--ink);background:var(--bubble)}
+.toc-item.is-active{color:var(--brand-ink);border-left-color:var(--brand);font-weight:600;background:linear-gradient(90deg,rgba(139,108,239,.09),transparent)}
+.toc-h1{font-weight:600;color:var(--ink)}
+.toc-h2{padding-left:16px}
+.toc-h3{padding-left:28px}
+.toc-h4{padding-left:40px;font-size:12px}
 `;
 	return `<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8">
@@ -214,6 +297,7 @@ ${parts.join("\n")}
 </div>
 <footer class="pc-foot">${logoSvg.replace("<svg ", '<svg class="foot-logo" ')}<span data-ui="slogan">${esc(t("shareBrandSub"))}</span></footer>
 </div>
+<nav class="toc" id="toc" aria-label="Outline"></nav>
 <script>
 (function(){
 	var UI = ${uiJson};
@@ -241,6 +325,54 @@ ${parts.join("\n")}
 	document.getElementById("themeToggle").addEventListener("click", function () {
 		setTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
 	});
+
+	/* ── outline (TOC): build from the document's headings, click to jump ── */
+	var thread = document.querySelector(".thread");
+	var toc = document.getElementById("toc");
+	if (thread && toc) {
+		var hs = thread.querySelectorAll("h1,h2,h3,h4");
+		if (hs.length >= 3) {
+			var list = document.createElement("div");
+			/* back-to-top pinned above the outline */
+			var topLink = document.createElement("a");
+			topLink.className = "toc-top";
+			topLink.href = "#";
+			topLink.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg><span data-ui="top"></span>';
+			topLink.addEventListener("click", function (e) {
+				e.preventDefault();
+				window.scrollTo({ top: 0, behavior: "smooth" });
+			});
+			toc.appendChild(topLink);
+			hs.forEach(function (h, i) {
+				if (!h.id) h.id = "sec-" + i;
+				var a = document.createElement("a");
+				a.className = "toc-item toc-" + h.tagName.toLowerCase();
+				a.textContent = h.textContent;
+				a.href = "#" + h.id;
+				a.addEventListener("click", function (e) {
+					e.preventDefault();
+					h.scrollIntoView({ behavior: "smooth", block: "start" });
+				});
+				list.appendChild(a);
+			});
+			toc.appendChild(list);
+			toc.classList.add("has-toc");
+			/* highlight the section currently in view (last heading above the line) */
+			var items = list.querySelectorAll(".toc-item");
+			var updateActive = function () {
+				var cur = -1;
+				for (var i = 0; i < hs.length; i++) {
+					if (hs[i].getBoundingClientRect().top <= 120) cur = i;
+					else break;
+				}
+				for (var j = 0; j < items.length; j++) {
+					items[j].classList.toggle("is-active", j === cur);
+				}
+			};
+			document.addEventListener("scroll", updateActive, { passive: true });
+			updateActive();
+		}
+	}
 })();
 </script>
 </body></html>`;

@@ -874,6 +874,10 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    /* 滚动兜底：正常情况由 .vertical-tab-content 滚动（面板被内容撑高，
+       这里不会出现第二条滚动条）；宿主布局给面板施加高度约束时
+       （弹窗形态等），内容超高就地在面板内滚动，Share 页签不再滚不动。 */
+    overflow-y: auto;
 }
 
 .smart-vault-settings .semlink-mt {
@@ -6149,4 +6153,151 @@ button.semlink-share-revoke:hover {
 }
 .semlink-index-panels .semlink-index-card {
 	margin: 0;
+}
+
+/* ── 笔记分享：editor header 两态图标 ──
+   未分享 = share 图标（主题默认灰）；已分享 = share-2 图标 + 强调色，
+   一眼区分发布状态。 */
+.view-action.semlink-share-btn-active {
+	color: var(--interactive-accent);
+	opacity: 1;
+}
+
+/* ── 分享弹窗的进度态：spinner + 分块计数，渲染完成后原地填充 QR ── */
+.semlink-share-progress {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	padding: 26px 0 18px;
+	color: var(--text-muted);
+}
+.semlink-share-progress.is-error {
+	color: var(--text-error);
+	font-size: 13px;
+}
+.semlink-share-progress-icon {
+	display: flex;
+	color: var(--interactive-accent);
+}
+.semlink-share-progress-icon .svg-icon,
+.semlink-share-progress-icon svg {
+	width: 28px;
+	height: 28px;
+	animation: semlink-spin 1s linear infinite;
+}
+.semlink-share-progress-text {
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+}
+@keyframes semlink-spin {
+	to { transform: rotate(360deg); }
+}
+
+/* ── 通用引导 hub（参考 Obsidian 官方欢迎弹窗）：
+   品牌 logo + 标语居中，下方一张卡片列表：
+   左大图标 | 标题 + 两行描述 | 右侧动作按钮 ── */
+.semlink-guide-hub {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 18px;
+	padding: 26px 8px 10px;
+	width: 100%;
+	max-width: 520px;
+	margin: 0 auto;
+}
+.semlink-guide-hub-brand {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 6px;
+}
+.semlink-guide-hub-emoji {
+	font-size: 44px;
+	line-height: 1.2;
+}
+.semlink-guide-hub-name {
+	font-size: 22px;
+	font-weight: 700;
+	color: var(--text-normal);
+	letter-spacing: .2px;
+}
+.semlink-guide-hub-tagline {
+	font-size: 12.5px;
+	color: var(--text-muted);
+}
+.semlink-guide-hub-card {
+	width: 100%;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 14px;
+	padding: 2px 18px;
+}
+.semlink-guide-hub-row {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 15px 2px;
+}
+.semlink-guide-hub-row + .semlink-guide-hub-row {
+	border-top: 1px solid var(--background-modifier-border);
+}
+.semlink-guide-hub-row-icon {
+	display: flex;
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+.semlink-guide-hub-row-icon .svg-icon,
+.semlink-guide-hub-row-icon svg {
+	width: 26px;
+	height: 26px;
+}
+.semlink-guide-hub-row-texts {
+	flex: 1 1 auto;
+	min-width: 0;
+	/* 欢迎屏容器 text-align:center 会继承进来——参考 Obsidian 官方
+	   欢迎弹窗，行内标题与描述必须左对齐，按钮贴右。 */
+	text-align: left;
+}
+.semlink-guide-hub-row-title {
+	font-size: 13.5px;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+.semlink-guide-hub-row-desc {
+	font-size: 12px;
+	line-height: 1.55;
+	color: var(--text-muted);
+	margin-top: 3px;
+	/* 描述自然断行（word 级），中间列拿满剩余宽度，不再折成三行 */
+	overflow-wrap: break-word;
+	white-space: normal;
+}
+.semlink-guide-hub-btn {
+	flex-shrink: 0;
+	align-self: center;
+	min-width: 64px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--interactive-normal);
+	color: var(--text-normal);
+	border-radius: 8px;
+	padding: 5px 14px;
+	font-size: 13px;
+	cursor: pointer;
+	text-align: center;
+}
+.semlink-guide-hub-btn:hover {
+	border-color: var(--interactive-accent);
+	color: var(--interactive-accent);
+}
+.semlink-guide-hub-btn.is-primary {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+.semlink-guide-hub-btn.is-primary:hover {
+	filter: brightness(1.08);
+	color: var(--text-on-accent);
 }

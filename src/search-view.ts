@@ -18,7 +18,7 @@ import { ChatHistoryStore } from "./chat-history";
 import { brandLogoOf, formatContextWindow } from "./settings-models";
 import { LicenseModal } from "./license-modal";
 import { UsageModal } from "./usage-modal";
-import { guideInProgress, onboardingActive, renderOnboarding } from "./onboarding";
+import { guideInProgress, onboardingActive, renderGuideHub, renderOnboarding } from "./onboarding";
 import type SmartVaultPlugin from "../main";
 import { SaveNoteModal } from "./save-note-modal";
 import { ShareQrModal } from "./share-modal";
@@ -142,9 +142,10 @@ export class SemanticSearchView extends ItemView {
 	 *  keeps the guide on screen even when first-run state says otherwise
 	 *  (cleared when the guide hands the screen back). */
 	private guideRequested = false;
-	/** Which catalog the on-demand guide walks: chat (default) or embed
-	 *  (set by openSetupGuide from the RAG settings tab). */
-	private guideMode: "chat" | "embed" = "chat";
+	/** Which screen the guide area shows: "hub" (generic entry — site,
+	 *  Discord, and the two setup guides as sub-entries), or the catalog
+	 *  a sub-entry walks ("chat" default / "embed" from the RAG tab). */
+	private guideMode: "hub" | "chat" | "embed" = "hub";
 	/** Set when the user skips the guide. With no API key configured the
 	 *  guide is the default landing page on every fresh view open; skipping
 	 *  only dismisses it for the current view session, not forever. */
@@ -1982,18 +1983,20 @@ export class SemanticSearchView extends ItemView {
 		return protectHyphens(out);
 	}
 
-	/** Entry point for the settings page: open the first-run guide. kind
-	 *  "chat" (help icon / first run) walks the chat catalog; kind "embed"
-	 *  (RAG tab's 开始配置) walks the dedicated embedding catalog. */
+	/** Entry point for the settings page: an explicit setup intent ("对话配
+	 *  置" / "开始配置") walks the matching catalog directly — no hub. The
+	 *  hub is only for the generic entries (help icon / Get Started). */
 	openSetupGuide(kind: "chat" | "embed" = "chat"): void {
-		this.guideMode = kind;
-		this.openGuide();
+		this.openGuide(kind);
 	}
 
-	/** Open the first-run guide (help icon, or asking without any API key).
-	 *  A fresh run always starts from step ① — previous guide progress is
-	 *  reset (configured providers are untouched). */
-	private openGuide(): void {
+	/** Open the guide area (help icon, Get Started, or asking without any
+	 *  API key). Always lands on the GENERIC HUB first — a previous run's
+	 *  "chat"/"embed" selection never sticks. Only openSetupGuide passes an
+	 *  explicit mode to skip the hub. A fresh run resets step ① (configured
+	 *  providers are untouched). */
+	private openGuide(mode: "hub" | "chat" | "embed" = "hub"): void {
+		this.guideMode = mode;
 		this.guideRequested = true;
 		this.guideDismissed = false;
 		this.plugin.settings.onboarding = { done: false };
@@ -2118,13 +2121,25 @@ export class SemanticSearchView extends ItemView {
 			// Modifier class: the guide fills the block top-down so the
 			// stepper can pin to the top while step content scrolls.
 			const guide = this.messagesEl.createDiv({ cls: "semlink-search-welcome semlink-search-welcome-guide" });
+			const mode = this.guideMode;
+			if (mode === "hub") {
+				// Generic entry: site / Discord / the two setup guides.
+				renderGuideHub(guide, this.plugin, (kind) => {
+					this.guideMode = kind;
+					this.messagesEl.empty();
+					this.renderWelcome();
+				});
+				this.updateHomeIconVisibility();
+				return;
+			}
 			renderOnboarding(guide, this.plugin, () => {
 				// Guide skipped/dismissed: end any help-triggered run and
 				// swap it for the plain welcome. Empty the whole slot — the
 				// corners strip lives outside the guide block and would
-				// otherwise survive.
+				// otherwise survive. Back to the hub: the user may want the
+				// other setup guide next.
 				this.guideRequested = false;
-				this.guideMode = "chat";
+				this.guideMode = "hub";
 				this.messagesEl.empty();
 				this.renderWelcome();
 				// 引导完成：清掉遗留的"先去设置配置供应商"提示，并让模型
@@ -2133,7 +2148,7 @@ export class SemanticSearchView extends ItemView {
 				this.updateModelLabel();
 				// 完成引导的彩带庆祝 🎉（跳过引导不触发）
 				this.showWelcomeConfetti();
-			}, this.guideMode);
+			}, mode);
 			this.updateHomeIconVisibility();
 			return;
 		}

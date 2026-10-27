@@ -19,6 +19,7 @@ import { ProgressTracker } from "./src/progress";
 import { McpServer } from "./src/mcp-server";
 import { DebugMcpServer } from "./src/debug-mcp-server";
 import { ShareServer } from "./src/share-server";
+import { NoteShare, attachNoteShareAction } from "./src/note-share";
 import { ChatHistoryStore } from "./src/chat-history";
 import { renderSharePage } from "./src/share-page";
 import { VaultWatcher } from "./src/watcher";
@@ -50,6 +51,9 @@ export default class SmartVaultPlugin extends Plugin {
 	 *  share URL keeps working across restarts (unchanged IP); page HTML is
 	 *  re-rendered from chat history on request. */
 	shareServer: ShareServer;
+	/** Note-level LAN sharing: reuses the ShareServer registry with
+	 *  `note:<path>` keys and drives the editor-header two-state icon. */
+	noteShare!: NoteShare;
 	historyStore!: ChatHistoryStore;
 	watcher!: VaultWatcher;
 	pluginDir: string = "";
@@ -232,6 +236,14 @@ export default class SmartVaultPlugin extends Plugin {
 		// (port from settings, auto-bumped when taken and re-persisted); a
 		// request for an uncached token re-renders the page from history.
 		this.shareServer = new ShareServer(dataDir, async (sessionId, sharedAt) => {
+			// Note shares (`note:<path>` keys) render the note's CURRENT
+			// content; bare session ids render the chat from history.
+			if (sessionId.startsWith("note:")) {
+				const path = sessionId.slice("note:".length);
+				const file = this.app.vault.getAbstractFileByPath(path);
+				if (!(file instanceof TFile)) return null;
+				return await this.noteShare.renderPage(path, await this.app.vault.read(file), sharedAt);
+			}
 			const sessions = await this.historyStore.load();
 			const session = sessions.find((s) => s.id === sessionId);
 			if (!session || session.messages.length === 0) return null;
@@ -239,6 +251,18 @@ export default class SmartVaultPlugin extends Plugin {
 			const title = (firstUser?.content || session.title || t("shareTitle")).replace(/\s+/g, " ").trim();
 			return renderSharePage(this.app, session.messages, title, this, "light", sharedAt);
 		});
+		this.noteShare = new NoteShare(
+			this.app,
+			this.shareServer,
+			this,
+			async (path) => {
+				const file = this.app.vault.getAbstractFileByPath(path);
+				return file instanceof TFile ? this.app.vault.read(file) : null;
+			},
+			() => this.saveSettings(),
+			() => this.settings.sharePort,
+			() => this.updateNoteShareAction(),
+		);
 		if (this.shareServer.hasShares()) {
 			void this.shareServer.start(this.settings.sharePort).then(() => {
 				if (this.shareServer.port !== this.settings.sharePort) {
@@ -247,6 +271,13 @@ export default class SmartVaultPlugin extends Plugin {
 				}
 			}).catch((e) => console.warn("[Semlink] share server failed to start:", e));
 		}
+
+		// Editor-header share icon: attach to the active markdown view and
+		// refresh its state on every file switch (file-open also fires when
+		// the same leaf opens a different note).
+		this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.updateNoteShareAction()));
+		this.registerEvent(this.app.workspace.on("file-open", () => this.updateNoteShareAction()));
+		this.app.workspace.onLayoutReady(() => this.updateNoteShareAction());
 
 		// Register the custom Semlink logo as a named Obsidian icon so that both
 		// the left ribbon button and the right sidebar tab use the same brand
@@ -332,6 +363,23 @@ export default class SmartVaultPlugin extends Plugin {
 		await this.updateInitialStatusBar();
 
 		debugLog("[Semlink] Plugin loaded");
+	}
+
+	/** Attach/refresh the two-state share icon on the active note's header. */
+	private updateNoteShareAction(): void {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!view) return;
+		attachNoteShareAction(
+			view,
+			(path) => {
+				// Already shared → dialog with refresh + stop sharing; first
+				// tap publishes the note and opens the same dialog.
+				if (this.noteShare.isShared(path)) void this.noteShare.showShareDialog(path);
+				else void this.noteShare.share(path);
+			},
+			(path) => this.noteShare.isShared(path),
+			t("shareNoteAction"),
+		);
 	}
 
 	onunload() {
