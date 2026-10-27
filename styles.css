@@ -6092,7 +6092,9 @@ button.semlink-share-revoke:hover {
 
 /* ── RAG 页：索引进度卡片 ── */
 .semlink-index-card {
-	background: #fafafa;
+	/* 主题变量而非硬编码浅色：深色模式下 #fafafa 会变成近白卡片，
+	   叠加浅色主题文字后浅底浅字、对比度崩溃（与思考卡片同一类病）。 */
+	background: var(--background-secondary);
 	border-radius: 12px;
 	padding: 12px 16px;
 	margin: 4px 0 14px;

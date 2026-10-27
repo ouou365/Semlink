@@ -2964,15 +2964,9 @@ export function renderModelsTab(
 	for (const r of rows.filter((x) => !x.folder)) {
 		items.push({ rank: r.rank, name: r.name, row: r });
 	}
-	// 已配置 Key 的供应商自动置顶（文件夹看成员：任一成员配了 Key 即视为
-	// 已配置）；置顶组与非置顶组内部仍按原有排名（拖拽顺序/市场排名）
-	const itemConfigured = (item: { node?: FolderNode; row?: Row }): number =>
-		item.node
-			? (item.node.members.some((m) => !!m.live?.apiKey?.trim()) ? 1 : 0)
-			: (item.row?.live?.apiKey?.trim() ? 1 : 0);
-	items.sort((a, b) =>
-		itemConfigured(b) - itemConfigured(a) || a.rank - b.rank || a.name.localeCompare(b.name),
-	);
+	// 列表顺序只由用户拖拽/目录排名决定，不做"已配置置顶"：
+	// 选中或配置某个 Provider 后列表顺序稳定，不会跳到最上面。
+	items.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
 
 	// 当前展示顺序：顶层供应商记名称，文件夹记其键 + 展开的成员名序列
 	//（收起时也按成员计入）——拖动重排以此为基准生成新的持久化顺序
@@ -3107,13 +3101,11 @@ export function renderModelsTab(
 		const renderRows = (): void => {
 			const q = (st.search ?? "").toLowerCase();
 			// 携带模型在全量清单里的原始下标：搜索过滤后拖拽重排仍按全量
-			// 顺序计算插入位置。启用的模型自动置顶（供应商状态点为绿即有
-			// 启用模型）；稳定排序，组内保持原有（拖拽/目录）顺序，行仍携带
-			// 全量下标供拖拽落点计算
+			// 顺序计算插入位置。列表顺序只按原有（拖拽/目录）顺序，不做
+			// "启用置顶"：开关某个模型后行位置稳定，不会跳到最上面。
 			const shown = sel.models
 				.map((m, i) => ({ m, i }))
-				.filter(({ m }) => !q || m.id.toLowerCase().includes(q))
-				.sort((a, b) => Number(b.m.enabled === true) - Number(a.m.enabled === true));
+				.filter(({ m }) => !q || m.id.toLowerCase().includes(q));
 			renderShowing(shown.length);
 			// 保留滚动位置：empty() 的瞬间内容高度清零，浏览器会把 scrollTop
 			// 钳制到 0，重建后就会“自动滚回顶部”。
