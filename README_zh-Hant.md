@@ -6,6 +6,9 @@
 
 Semlink 把你的 Obsidian 知識庫變成一個智慧代理知識工作區——一位住在你側邊欄的 AI 助手：搜尋你寫過的每一個字，用真正的工具推理，每條結論都引用回你的筆記，還能一鍵分享它的所得。完整的智慧代理就內建在外掛裡：不需要 Claude Desktop、不需要 Cursor、不需要終端機、不需要安裝任何第三方用戶端。帶上你自己的 API Key，你的知識庫就開始思考。
 
+
+![Semlink — agentic knowledge workspace living in the Obsidian sidebar](assets/screenshot-overview.png)
+
 ## 🤔 為什麼是 Semlink？
 
 你寫了很多年。然後想問一個關於自己知識的問題——流程卻變成：回憶在哪個資料夾、Ctrl+F、複製貼上進聊天視窗、遺失上下文。

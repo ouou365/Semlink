@@ -6,6 +6,9 @@
 
 Semlink는 Obsidian Vault를 에이전틱 지식 워크스페이스로 바꿉니다 — 사이드바에 살면서 지금까지 적어 온 모든 것을 검색하고, 진짜 도구로 추론하고, 모든 주장을 당신의 노트로 인용하고, 배운 것을 공유하는 AI 어시스턴트입니다. 에이전트 전체가 플러그인 안에 담겨 있습니다: Claude Desktop도, Cursor도, 터미널도, 설치할 서드파티 클라이언트도 필요 없습니다. 자신의 API key를 가져오면, Vault가 생각하기 시작합니다.
 
+
+![Semlink — agentic knowledge workspace living in the Obsidian sidebar](assets/screenshot-overview.png)
+
 ## 🤔 왜 Semlink인가?
 
 당신은 수년간 글을 써 왔습니다. 그런데 자신의 지식에 대해 질문하려면 흐름은 이렇습니다: 어느 폴더였는지 기억해 내고, Ctrl+F 하고, 채팅 창에 복사-붙여넣기하고, 맥락은 놓쳐 버립니다.
