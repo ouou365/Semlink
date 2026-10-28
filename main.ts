@@ -5,7 +5,8 @@
 import { Notice, Plugin, FileSystemAdapter, WorkspaceSidedock, addIcon, MarkdownView, TFile } from "obsidian";
 import { debugLog, setDebugLogging } from "./src/log";
 import { join } from "path";
-import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
+import { DEFAULT_SETTINGS, DEFAULT_GIT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
+import { GitService } from "./src/git-service";
 import { UsageStore } from "./src/usage-store";
 import { migrateLegacyCatalogBases, sanitizeProviderOrder, syncCatalogModels } from "./src/settings-models";
 import { VectorStore } from "./src/vector-store";
@@ -54,6 +55,8 @@ export default class SmartVaultPlugin extends Plugin {
 	/** Note-level LAN sharing: reuses the ShareServer registry with
 	 *  `note:<path>` keys and drives the editor-header two-state icon. */
 	noteShare!: NoteShare;
+	/** Git 集成：本地自动快照免费，远程推送（GitHub/Gitee）Pro 门控。 */
+	gitService!: GitService;
 	historyStore!: ChatHistoryStore;
 	watcher!: VaultWatcher;
 	pluginDir: string = "";
@@ -122,7 +125,18 @@ export default class SmartVaultPlugin extends Plugin {
 
 		this.queue = new IndexQueue(this.store);
 		this.client = new EmbeddingClient(this.settings);
-		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault, () => this.app.workspace.getActiveFile()?.path ?? null, () => this.settings.excludePaths);
+		// Git 集成（桌面端）：vault 根为仓库目录；任何文件事件都重置自动
+		// 快照的防抖计时（默认 1 分钟内无变化才提交——全自动，不询问）。
+		this.gitService = new GitService(
+			(this.app.vault.adapter as FileSystemAdapter).getBasePath(),
+			() => this.settings.git ?? DEFAULT_GIT_SETTINGS,
+			() => this.licenseManager.isPro(),
+		);
+		this.registerEvent(this.app.vault.on("modify", () => this.gitService.schedule()));
+		this.registerEvent(this.app.vault.on("create", () => this.gitService.schedule()));
+		this.registerEvent(this.app.vault.on("delete", () => this.gitService.schedule()));
+		this.registerEvent(this.app.vault.on("rename", () => this.gitService.schedule()));
+		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault, () => this.app.workspace.getActiveFile()?.path ?? null, () => this.settings.excludePaths, this.gitService);
 		this.chatClient = new ChatClient(this.settings, this.chatTools);
 		// Single shared chat-history store: the search view writes to it and
 		// the LAN share server renders from it, so re-opened share URLs see
@@ -411,6 +425,8 @@ export default class SmartVaultPlugin extends Plugin {
 	async loadSettings() {
 		const data = (await this.loadData()) as Partial<SmartVaultSettings> | null;
 		this.settings = { ...DEFAULT_SETTINGS, ...data };
+		// Git 设置嵌套对象：旧配置补默认值（浅合并外层覆盖不到）。
+		this.settings.git = { ...DEFAULT_GIT_SETTINGS, ...(this.settings.git ?? {}) };
 		// Data written before the unified provider list existed carries the
 		// old embeddingProviders/chatProviders split (and earlier still, flat
 		// provider/apiBase/*ApiKey fields) — fold them into `providers` once.
@@ -504,6 +520,7 @@ export default class SmartVaultPlugin extends Plugin {
 			this.settings,
 			this.app.vault,
 			() => this.app.workspace.getActiveFile()?.path ?? null,
+			this.gitService,
 		);
 
 		try {

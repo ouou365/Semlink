@@ -861,7 +861,11 @@
 .semlink-settings-root {
     display: flex;
     flex-direction: column;
-    min-height: 100%;
+    /* height 钉死为容器高度（而不是被内容撑开）：面板 flex:1 + min-height:0
+       才有真实的高度约束，内容超高时由面板内部滚动（见下方 panel 的
+       overflow-y:auto）。min-height:100% 时面板高度=内容高度，overflow
+       永远不触发——Share 页签滚不动就是这个原因。 */
+    height: 100%;
 }
 
 .semlink-settings-root .setting-item-heading,
@@ -874,10 +878,12 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    /* 滚动兜底：正常情况由 .vertical-tab-content 滚动（面板被内容撑高，
-       这里不会出现第二条滚动条）；宿主布局给面板施加高度约束时
-       （弹窗形态等），内容超高就地在面板内滚动，Share 页签不再滚不动。 */
+    /* 滚动兜底：不依赖父级高度链（弹窗宿主没有确定的 height，
+       height:100% 解析为 auto 时面板高度=内容高度，overflow 永不触发）。
+       max-height 直接钉在视口上：内容超高就地在面板内滚动，
+       内容不超时无滚动条，两种宿主布局都正确。 */
     overflow-y: auto;
+    max-height: calc(100vh - 230px);
 }
 
 .smart-vault-settings .semlink-mt {
@@ -5730,11 +5736,18 @@ body .semlink-msg-user::selection {
 .semlink-history-folder-edit .semlink-folder-input{height:24px;padding:.1rem .45rem}
 .semlink-history-folder-edit .semlink-history-folder-act{opacity:1}
 .semlink-history-unfiled-gap{height:.8rem}
-.semlink-history-folder-body > .semlink-history-item {
+/* 树形缩进：每层 body 相对父层缩进 1.5rem 并画一条竖线，子行/子项
+    只保留固定基数 padding——竖线始终对齐本层 chevron，嵌套自动对齐。 */
+.semlink-history-folder-body {
+    margin-left: 1.05rem;
+    padding-left: 0.5rem;
     border-left: 1px solid var(--background-modifier-border);
-    margin-left: .8rem;
-    padding-left: 1.4rem;
-    border-radius: 0 6px 6px 0;
+}
+.semlink-history-folder-body > .semlink-history-item {
+    border-radius: 6px;
+}
+.semlink-history-folder-body .semlink-history-folder {
+    padding-left: 0.35rem;
 }
 .semlink-history-folder.is-drop{background:var(--background-modifier-hover);outline:2px dashed var(--interactive-accent);outline-offset:-2px}
 .semlink-history-folder-body .semlink-history-item-pin{display:none}
@@ -6300,4 +6313,169 @@ button.semlink-share-revoke:hover {
 .semlink-guide-hub-btn.is-primary:hover {
 	filter: brightness(1.08);
 	color: var(--text-on-accent);
+}
+
+/* ── 历史抽屉融合：Folders 组头（chevron+文件夹图标+名称+计数+新建，
+   整行可点折叠；免费用户显示锁标，点击升级） ── */
+.semlink-history-folders-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+	border-radius: 6px;
+	/* 覆盖 .semlink-history-group 的小字灰字——组头是正常行：
+	    与文件夹行同字号同色，计数徽章与新建按钮在右侧。 */
+	font-size: .88rem;
+	font-weight: 500;
+	color: var(--text-normal);
+	padding: .3rem .45rem;
+	min-height: 34px;
+}
+.semlink-history-folders-head:hover {
+	background: var(--background-modifier-hover);
+}
+.semlink-history-folders-head .semlink-history-folder-chev {
+	display: flex;
+	flex-shrink: 0;
+}
+.semlink-history-folders-head .semlink-history-folder-chev .svg-icon,
+.semlink-history-folders-head .semlink-history-folder-chev svg {
+	width: 14px;
+	height: 14px;
+}
+.semlink-history-folders-head .semlink-history-folder-name {
+	font-size: inherit;
+	font-weight: inherit;
+	color: inherit;
+}
+.semlink-history-folders-head .semlink-history-folder-add {
+	display: flex;
+	flex-shrink: 0;
+	color: var(--text-muted);
+	border-radius: 5px;
+	padding: 2px;
+}
+.semlink-history-folders-head .semlink-history-folder-add:hover {
+	color: var(--interactive-accent);
+	background: var(--background-modifier-hover);
+}
+.semlink-history-folders-head.is-locked {
+	color: var(--text-faint);
+}
+.semlink-history-folders-head.is-locked .semlink-history-folder-lock {
+	display: flex;
+	flex-shrink: 0;
+}
+
+/* ── Git 仓库浏览弹窗：搜索 + 文件树（文件夹折叠/计数，文件点击打开） ── */
+.semlink-git-repo-modal .modal-content {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	overflow: hidden;
+}
+.semlink-git-repo-search {
+	width: 100%;
+	padding: 6px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-primary);
+	font-size: 13px;
+}
+.semlink-git-repo-count {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+.semlink-git-repo-body {
+	overflow: auto;
+	min-height: 200px;
+	max-height: 55vh;
+	padding-right: 4px;
+}
+.semlink-git-repo-body-inner {
+	/* 子树容器：折叠重绘以行为单位，不需要额外装饰 */
+}
+.semlink-git-repo-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 6px;
+	border-radius: 6px;
+	font-size: 13px;
+	cursor: pointer;
+	color: var(--text-normal);
+	min-width: 0;
+}
+.semlink-git-repo-row:hover {
+	background: var(--background-modifier-hover);
+}
+.semlink-git-repo-row.is-file .semlink-git-repo-name {
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.semlink-git-repo-chev {
+	display: flex;
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+.semlink-git-repo-chev .svg-icon,
+.semlink-git-repo-chev svg {
+	width: 14px;
+	height: 14px;
+}
+.semlink-git-repo-name {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.semlink-git-repo-count {
+	flex-shrink: 0;
+	font-size: 11px;
+	color: var(--text-muted);
+	background: var(--background-modifier-border);
+	border-radius: 999px;
+	padding: 0 .42rem;
+	line-height: 1.4;
+}
+
+/* ── Git 仓库浏览：面包屑导航（根 / A / B，点击回跳） ── */
+.semlink-git-repo-crumbs {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 2px;
+	font-size: 12.5px;
+	min-height: 22px;
+}
+.semlink-git-repo-crumb {
+	color: var(--interactive-accent);
+	cursor: pointer;
+	border-radius: 4px;
+	padding: 1px 4px;
+}
+.semlink-git-repo-crumb:hover {
+	background: var(--background-modifier-hover);
+}
+.semlink-git-repo-crumb.is-current {
+	color: var(--text-normal);
+	font-weight: 600;
+	cursor: default;
+}
+.semlink-git-repo-crumb.is-current:hover {
+	background: none;
+}
+.semlink-git-repo-crumb-sep {
+	color: var(--text-faint);
+}
+
+/* ── Git 未初始化态：整页只有一个居中的主行动按钮 ── */
+.semlink-git-init-btn {
+	display: block;
+	width: 100%;
+	padding: 12px;
+	font-size: 14px;
+	border-radius: 10px;
+	margin-top: 12px;
 }

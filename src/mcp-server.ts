@@ -11,6 +11,8 @@ import { ProgressTracker } from "./progress";
 import { Scheduler } from "./scheduler";
 import { TOOL_SPECS, ToolCore, parseExcludePaths } from "./tools-core";
 import type { SmartVaultSettings } from "./types";
+import type { GitService } from "./git-service";
+import { GIT_TOOL_NAMES } from "./tools-core";
 
 /** Tool arguments read from tools/call params — only fields this server uses. */
 interface ToolCallArgs {
@@ -59,6 +61,8 @@ export class McpServer {
 	private vault: Vault; // Obsidian Vault
 	/** Vault path of the note currently open in Obsidian (or null). */
 	private getActiveNote: () => string | null;
+	/** Git 集成（null = 未启用，git_* 工具不进 tools/list）。 */
+	private git: GitService | null;
 	private core: ToolCore;
 
 	constructor(
@@ -69,6 +73,7 @@ export class McpServer {
 		settings: SmartVaultSettings,
 		vault: Vault,
 		getActiveNote: () => string | null = () => null,
+		git: GitService | null = null,
 	) {
 		this.store = store;
 		this.client = client;
@@ -77,6 +82,7 @@ export class McpServer {
 		this.settings = settings;
 		this.vault = vault;
 		this.getActiveNote = getActiveNote;
+		this.git = git;
 		this.core = new ToolCore({
 			store,
 			client,
@@ -84,6 +90,7 @@ export class McpServer {
 			getActiveNote,
 			// 每次现读：updateSettings 换对象后依然指向最新规则
 			excludedPaths: () => parseExcludePaths(this.settings.excludePaths),
+			git,
 			progress: () => this.progress.current,
 			reindex: async (path, force) => {
 				await this.toolReindex(path, force);
@@ -219,7 +226,7 @@ export class McpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = McpServer.handleToolsList();
+					result = McpServer.handleToolsList(this.git);
 					break;
 				case "tools/call":
 					result = await this.handleToolsCall(params || {});
@@ -268,22 +275,17 @@ export class McpServer {
 		};
 	}
 
-	private static handleToolsList() {
+	private static handleToolsList(git: GitService | null) {
 		// MCP 规范的工具字段是 inputSchema；ToolCore 内部是 OpenAI 风格的
 		// parameters——直接透传缺 inputSchema，严格客户端（官方 SDK）解析
 		// 工具列表直接失败（"failed to retrieve its tool list"）。
 		return {
-			tools: TOOL_SPECS.map((t) => ({
+			tools: TOOL_SPECS.filter((t) => git || !GIT_TOOL_NAMES.has(t.name)).map((t) => ({
 				name: t.name,
 				description: t.description ?? "",
 				inputSchema: t.parameters,
 			})),
 		};
-	}
-	/** 设置页展示用：本服务声明的 tools / resources / prompts（纯静态定义）。 */
-	static listCapabilities(): { tools: Array<{ name: string; description: string }>; resources: unknown[]; prompts: unknown[] } {
-		const list = McpServer.handleToolsList();
-		return { tools: list.tools.map((t) => ({ name: t.name, description: t.description ?? "" })), resources: [], prompts: [] };
 	}
 
 	private async handleToolsCall(params: ToolCallParams): Promise<unknown> {

@@ -1554,6 +1554,7 @@ export class SemanticSearchView extends ItemView {
 			const query = `lang=${lang}&theme=${theme}`;
 			new ShareQrModal(this.app, {
 				url: this.plugin.shareServer.urls(token, query)[0],
+				name: (this.firstQuestion || t("shareTitle")).replace(/\s+/g, " ").trim(),
 				onRevoke: () => this.plugin.shareServer.revokeSession(sessionId),
 			}).open();
 		} catch (e) {
@@ -2518,21 +2519,6 @@ export class SemanticSearchView extends ItemView {
 		const pro = this.plugin.licenseManager.isPro();
 		const freeLimit = this.plugin.licenseManager.freeHistoryLimit();
 		let view: "main" | "archive" = "main";
-		let tab: "time" | "folder" = "time";
-
-		// Tabs (Pro): 时间 | 文件夹. Free users get the plain time list.
-		const tabsEl = drawer.createDiv({ cls: "semlink-history-tabs" });
-		const tabBtn = (key: "time" | "folder", label: string) => {
-			const b = tabsEl.createSpan({
-				cls: "semlink-history-tab" + (tab === key && view === "main" ? " is-active" : ""),
-				text: label,
-			});
-			b.addEventListener("click", () => {
-				view = "main";
-				tab = key;
-				render();
-			});
-		};
 
 		// The search input is created ONCE and only shown/hidden by render() —
 		// re-creating it on each keystroke breaks CJK IME composition (the
@@ -2587,37 +2573,14 @@ export class SemanticSearchView extends ItemView {
 			const all = allSessions.filter((x) => !x.archived); // active, newest first
 			const manuallyArchived = allSessions.filter((x) => x.archived);
 			list.empty();
-			tabsEl.empty();
 			// NOTE: tools (the search input) is never emptied — it is created
 			// once and only shown/hidden, or CJK IME composition breaks.
 			// Header chrome per view.
 			if (view === "archive") {
 				titleEl.setText(t("historyArchiveTitle"));
-				tabsEl.hide();
 				tools.hide();
 			} else {
 				titleEl.setText(t("historyTitle"));
-				// Tabs are visible to everyone; for free users the Folders tab
-				// itself is the friction point (click → activation modal).
-				tabsEl.show();
-				tabBtn("time", t("historyTabTime"));
-				if (pro) {
-					tabBtn("folder", t("historyTabFolder"));
-				} else {
-					// Free users CAN enter the Folders tab — the content is a
-					// masked preview whose "Unlock with Pro" overlay is the
-					// activation trigger (not the tab itself).
-					const locked = tabsEl.createSpan({
-						cls: "semlink-history-tab" + (tab === "folder" ? " is-active" : "") + " semlink-history-tab-locked",
-						text: t("historyTabFolder"),
-					});
-					locked.addEventListener("click", () => {
-						tab = "folder";
-						render();
-					});
-				}
-				// The persistent search input (never re-created — see above);
-				// visible for free users too (readonly, click → activate).
 				tools.show();
 			}
 
@@ -2663,7 +2626,28 @@ export class SemanticSearchView extends ItemView {
 
 			const rest = pool;
 
-			if (pro && tab === "folder" && !query) {
+			// ── Unified single list (Time ⊕ Folder fusion): the Folders group
+			// sits on top (Pro, collapsible, count + new-folder action), the
+			// pinned group and the flat time buckets follow. Sessions filed
+			// into a folder appear ONLY inside it (not duplicated in the time
+			// flow); searching hides the folder group and flattens everything.
+			const showFolders = pro && !query;
+
+			if (!pro && !query) {
+				// Free tier: the Folders group header is visible but locked —
+				// tapping it opens the activation modal (the friction point
+				// the old Folders tab provided).
+				const head = list.createDiv({ cls: "semlink-history-group semlink-history-folders-head is-locked" });
+				head.createSpan({ cls: "semlink-history-folder-name", text: t("historyTabFolder") });
+				const lock = head.createSpan({ cls: "semlink-history-folder-lock" });
+				setIcon(lock, "lock");
+				head.addEventListener("click", () => {
+					this.closeHistoryDrawer(backdrop, drawer);
+					new LicenseModal(this.app, this.plugin, () => void this.showHistoryDrawer()).open();
+				});
+			}
+
+			if (showFolders) {
 				// Folder tree (nested via "/" in folder names). Empty folders
 				// come from the store's registry so they survive without any
 				// session inside.
@@ -2689,23 +2673,17 @@ export class SemanticSearchView extends ItemView {
 				}
 				const countOf = (n: FNode): number =>
 					n.sessions.length + [...n.children.values()].reduce((a, c) => a + countOf(c), 0);
+				const folderRoots = [...root.children.values()].sort((a, b) => a.name.localeCompare(b.name));
+
 				const renderNode = (n: FNode, depth: number, container: HTMLElement): void => {
 					const isCollapsed = collapsed.has(n.path);
-					// Direct children of the "Folders" root render with a folder
-					// icon instead of a chevron, at the root's indent level.
-					const childOfRoot = depth === 1;
-					const visualDepth = childOfRoot ? 0 : depth;
 					if (editingPath === n.path) {
 						// Inline rename: [icon][input][✓][✕] — name, count and
 						// the action buttons are all hidden while editing.
 						const editRow = container.createDiv({ cls: "semlink-history-folder semlink-history-folder-edit" });
-						editRow.style.paddingLeft = `${0.35 + visualDepth * 0.85}rem`;
-						if (n.path !== "__folders_root__") {
-							const icon = editRow.createSpan({ cls: "semlink-history-folder-chev" });
-							setIcon(icon, isCollapsed ? "chevron-right" : "chevron-down");
-							const folderIco = editRow.createSpan({ cls: "semlink-history-folder-chev" });
-							setIcon(folderIco, "folder");
-						}
+						editRow.style.paddingLeft = "0.35rem";
+						const icon = editRow.createSpan({ cls: "semlink-history-folder-chev" });
+						setIcon(icon, isCollapsed ? "chevron-right" : "chevron-down");
 						const input = editRow.createEl("input", {
 							cls: "semlink-folder-input",
 							attr: { type: "text", value: n.name },
@@ -2749,100 +2727,72 @@ export class SemanticSearchView extends ItemView {
 						return;
 					}
 					const row = container.createDiv({
-						cls: "semlink-history-folder" + (isCollapsed ? " is-collapsed" : "") + (n.path === "__folders_root__" ? " semlink-history-folder-root" : ""),
+						cls: "semlink-history-folder" + (isCollapsed ? " is-collapsed" : ""),
 					});
-					row.style.paddingLeft = `${0.35 + visualDepth * 0.85}rem`;
-					if (n.path !== "__folders_root__") {
-						// Root has no icon (bold name only); real folders carry a
-						// state chevron + folder identity icon.
-						const chev = row.createSpan({ cls: "semlink-history-folder-chev" });
-						setIcon(chev, isCollapsed ? "chevron-right" : "chevron-down");
-						const folderIco = row.createSpan({ cls: "semlink-history-folder-chev" });
-						setIcon(folderIco, "folder");
-					}
+					row.style.paddingLeft = "0.35rem";
+					const chev = row.createSpan({ cls: "semlink-history-folder-chev" });
+					setIcon(chev, isCollapsed ? "chevron-right" : "chevron-down");
 					row.createSpan({ cls: "semlink-history-folder-name", text: n.name });
-					if (n.path !== "__folders_root__") {
-						row.createSpan({ cls: "semlink-history-folder-count", text: String(countOf(n)) });
-					}
-					if (n.path === "__folders_root__") {
-						// The Folders root carries the "new sub-folder" action.
-						const add = row.createSpan({
-							cls: "semlink-history-folder-add",
-							attr: { "aria-label": t("historyNewFolder") },
-						});
-						setIcon(add, "folder-plus");
-						add.addEventListener("click", (e) => {
-							e.stopPropagation();
-							new FolderNameModal(this.app, "", (name) => {
-								this.history.createFolder(name);
-								void this.history.save();
-								render();
-							}).open();
-						});
-					}
-					if (n.path !== "__folders_root__") {
-						// Hover actions on real folders: rename + delete.
-						const acts = row.createSpan({ cls: "semlink-history-folder-acts" });
-						const ren = acts.createSpan({
-							cls: "semlink-history-folder-act",
-							attr: { "aria-label": t("historyRenameFolder") },
-						});
-						setIcon(ren, "pencil");
-						ren.addEventListener("click", (e) => {
-							e.stopPropagation();
-							editingPath = n.path;
+					row.createSpan({ cls: "semlink-history-folder-count", text: String(countOf(n)) });
+					// Hover actions: rename + delete.
+					const acts = row.createSpan({ cls: "semlink-history-folder-acts" });
+					const ren = acts.createSpan({
+						cls: "semlink-history-folder-act",
+						attr: { "aria-label": t("historyRenameFolder") },
+					});
+					setIcon(ren, "pencil");
+					ren.addEventListener("click", (e) => {
+						e.stopPropagation();
+						editingPath = n.path;
+						render();
+					});
+					const del = acts.createSpan({
+						cls: "semlink-history-folder-act",
+						attr: { "aria-label": t("historyDeleteFolder") },
+					});
+					setIcon(del, "trash-2");
+					del.addEventListener("click", (e) => {
+						e.stopPropagation();
+						const doDelete = () => {
+							this.history.deleteFolder(n.path);
+							void this.history.save();
 							render();
-						});
-						const del = acts.createSpan({
-							cls: "semlink-history-folder-act",
-							attr: { "aria-label": t("historyDeleteFolder") },
-						});
-						setIcon(del, "trash-2");
-						del.addEventListener("click", (e) => {
-							e.stopPropagation();
-							const doDelete = () => {
-								this.history.deleteFolder(n.path);
-								void this.history.save();
-								render();
-							};
-							const n2 = countOf(n);
-							if (n2 > 0) {
-								new ConfirmModal(this.app, t("historyDeleteFolder"),
-									t("historyDeleteFolderConfirm").replace("{n}", String(n2)), doDelete).open();
-								return;
-							}
-							doDelete();
-						});
-					}
+						};
+						const n2 = countOf(n);
+						if (n2 > 0) {
+							new ConfirmModal(this.app, t("historyDeleteFolder"),
+								t("historyDeleteFolderConfirm").replace("{n}", String(n2)), doDelete).open();
+							return;
+						}
+						doDelete();
+					});
 					row.addEventListener("click", () => {
 						if (collapsed.has(n.path)) collapsed.delete(n.path);
 						else collapsed.add(n.path);
 						render();
 					});
-					if (n.path !== "__folders_root__") {
-						row.addEventListener("dragover", (e) => {
-							const dt = e.dataTransfer;
-							if (dt?.types.includes("text/semlink-session")) {
-								e.preventDefault();
-								e.stopPropagation();
-								// Must match the dragstart effectAllowed("move"),
-								// or Chromium silently cancels the drop.
-								dt.dropEffect = "move";
-								row.addClass("is-drop");
-							}
-						});
-						row.addEventListener("dragleave", () => row.removeClass("is-drop"));
-						row.addEventListener("drop", (e) => {
+					row.addEventListener("dragover", (e) => {
+						const dt = e.dataTransfer;
+						if (dt?.types.includes("text/semlink-session")) {
 							e.preventDefault();
 							e.stopPropagation();
-							row.removeClass("is-drop");
-							const id = e.dataTransfer?.getData("text/semlink-session");
-							if (!id) return;
-							this.history.updateSession(id, { folder: n.path });
-							void this.history.save();
-							render();
-						});
-					}
+							// Must match the dragstart effectAllowed("move"),
+							// or Chromium silently cancels the drop.
+							dt.dropEffect = "move";
+							row.addClass("is-drop");
+						}
+					});
+					row.addEventListener("dragleave", () => row.removeClass("is-drop"));
+					row.addEventListener("drop", (e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						row.removeClass("is-drop");
+						const id = e.dataTransfer?.getData("text/semlink-session");
+						if (!id) return;
+						this.history.updateSession(id, { folder: n.path });
+						void this.history.save();
+						render();
+					});
 					if (!isCollapsed) {
 						const body = container.createDiv({ cls: "semlink-history-folder-body" });
 						for (const child of [...n.children.values()].sort((a, b) => a.name.localeCompare(b.name))) {
@@ -2851,67 +2801,60 @@ export class SemanticSearchView extends ItemView {
 						for (const session of n.sessions) renderItem(body, session);
 					}
 				};
-				const folderRoots = [...root.children.values()].sort((a, b) => a.name.localeCompare(b.name));
+
 				if (folderRoots.length > 0) {
-					// A single "Folders" root holds every created folder as its
-					// child (one consistent root instead of loose top-levels).
-					const foldersRoot: FNode = {
-						name: t("historyTabFolder"),
-						path: "__folders_root__",
-						children: new Map(folderRoots.map((f) => [f.name, f])),
-						sessions: [],
-					};
-					renderNode(foldersRoot, 0, list);
-				}
-				// Folder tab groups by folder name only — no time buckets even
-				// for un-filed sessions (they form one flat "unfiled" group).
-				const unfiled = rest.filter((s) => !s.folder);
-				if (unfiled.length > 0 && folderRoots.length > 0) {
-					list.createDiv({ cls: 'semlink-history-unfiled-gap' });
-				}
-				if (unfiled.length > 0) {
-					// No wrapper here: un-filed chats render flush (no left
-					// border / indent) alongside the folder tree; no pin slot
-					// either (pinning lives on the Time tab).
-					for (const session of unfiled.slice(0, visibleCount)) renderItem(list, session, false, false);
-				}
-				if (visibleCount < unfiled.length) {
-					const more = list.createDiv({ cls: "semlink-history-more", text: t("historyShowMore") });
-					more.addEventListener("click", () => { showMorePages++; render(); });
-				}
-			} else if (!pro && tab === "folder") {
-				// Free tier on the Folders tab: ghost tree under a veil;
-				// clicking the veil's call-to-action opens the activation.
-				const wrap = list.createDiv({ cls: "semlink-history-folder-veil" });
-				const ghost = wrap.createDiv({ cls: "semlink-history-folder-ghost" });
-				for (let i = 0; i < 7; i++) {
-					ghost.createDiv({
-						cls: "semlink-history-folder-ghost-line" + (i % 3 === 2 ? " is-child" : ""),
-						attr: { style: `width:${46 + ((i * 37) % 42)}%` },
+					// The "Folders" group header: chevron + name + folder count +
+					// new-folder action; the whole row toggles the collapse.
+					const isCollapsed = collapsed.has("__folders_root__");
+					const head = list.createDiv({
+						cls: "semlink-history-group semlink-history-folders-head" + (isCollapsed ? " is-collapsed" : ""),
 					});
-				}
-				const mask = wrap.createDiv({ cls: "semlink-history-folder-mask" });
-				mask.createDiv({ cls: "semlink-history-folder-mask-title", text: `✨ ${t("historyTabFolder")}` });
-				const cta = mask.createDiv({ cls: "semlink-history-folder-mask-cta", text: t("unlockPro") });
-				cta.addEventListener("click", () => {
-					this.closeHistoryDrawer(backdrop, drawer);
-					new LicenseModal(this.app, this.plugin, () => void this.showHistoryDrawer()).open();
-				});
-			} else {
-				// Time tab (and Pro search): pinned group first, then flat
-				// time buckets. (While searching, everything flattens.)
-				if (pro && tab === "time") {
-					const pinned = pool.filter((x) => x.pinned);
-					if (pinned.length > 0) {
-						list.createDiv({ cls: "semlink-history-group", text: t("historyPinnedGroup") });
-						const pinnedItems = list.createDiv({ cls: "semlink-history-group-items" });
-						// compact: title-only rows in the pinned group
-						for (const session of pinned) renderItem(pinnedItems, session, true);
+					const chev = head.createSpan({ cls: "semlink-history-folder-chev" });
+					setIcon(chev, isCollapsed ? "chevron-right" : "chevron-down");
+					head.createSpan({ cls: "semlink-history-folder-name", text: t("historyTabFolder") });
+					head.createSpan({ cls: "semlink-history-folder-count", text: String(folderRoots.length) });
+					const add = head.createSpan({
+						cls: "semlink-history-folder-add",
+						attr: { "aria-label": t("historyNewFolder") },
+					});
+					setIcon(add, "folder-plus");
+					add.addEventListener("click", (e) => {
+						e.stopPropagation();
+						new FolderNameModal(this.app, "", (name) => {
+							this.history.createFolder(name);
+							void this.history.save();
+							render();
+						}).open();
+					});
+					head.addEventListener("click", () => {
+						if (collapsed.has("__folders_root__")) collapsed.delete("__folders_root__");
+						else collapsed.add("__folders_root__");
+						render();
+					});
+					if (!isCollapsed) {
+						const body = list.createDiv({ cls: "semlink-history-folder-body" });
+						for (const child of folderRoots) renderNode(child, 1, body);
 					}
 				}
+			}
+
+			// Pinned group first (Pro), then the flat time buckets. Filed
+			// sessions are excluded from the flow when the folder group is
+			// shown — they live inside their folder only.
+			const flow = showFolders ? rest.filter((s) => !s.folder) : rest;
+			if (pro) {
+				const pinned = pool.filter((x) => x.pinned);
+				if (pinned.length > 0) {
+					list.createDiv({ cls: "semlink-history-group", text: t("historyPinnedGroup") });
+					const pinnedItems = list.createDiv({ cls: "semlink-history-group-items" });
+					// compact: title-only rows in the pinned group
+					for (const session of pinned) renderItem(pinnedItems, session, true);
+				}
+			}
+			{
 				let lastKey = "";
 				let groupEl: HTMLElement | null = null;
-				const timePool = (pro && tab === "time") ? rest.filter((x) => !x.pinned) : rest;
+				const timePool = pro ? flow.filter((x) => !x.pinned) : flow;
 				for (const session of timePool.slice(0, visibleCount)) {
 					const key = historyBucket(session.updatedAt, now);
 					if (key !== lastKey) {
@@ -2921,34 +2864,34 @@ export class SemanticSearchView extends ItemView {
 					}
 					renderItem(groupEl!, session);
 				}
-				if (freeLimit === null && visibleCount < rest.length) {
+				if (freeLimit === null && visibleCount < flow.length) {
 					const more = list.createDiv({ cls: "semlink-history-more", text: t("historyShowMore") });
 					more.addEventListener("click", () => { showMorePages++; render(); });
 				}
-				if (freeLimit !== null) {
-					// Free tier: locked earlier chats live HERE (bottom of the
-					// Time tab, where the user wanted to read them) — NOT in
-					// the archive view; manual archiving is a different thing.
-					const locked = all.slice(Math.min(freeLimit, all.length));
-					const lockedVisible = Math.min(locked.length, LOCKED_PAGE + lockedPages * LOCKED_PAGE);
-					if (locked.length > 0) {
-						const head = list.createDiv({ cls: "semlink-history-archive-head" });
-						head.createSpan({
-							cls: "semlink-history-archive-title",
-							text: t("historyArchivedHead").replace("{n}", String(locked.length)),
-						});
-						const unlock = head.createSpan({ cls: "semlink-history-archive-upgrade", text: t("unlockPro") });
-						unlock.addEventListener("click", (e) => {
-							e.stopPropagation();
-							this.closeHistoryDrawer(backdrop, drawer);
-							new LicenseModal(this.app, this.plugin, () => void this.showHistoryDrawer()).open();
-						});
-						const lockedItems = list.createDiv({ cls: "semlink-history-group-items semlink-history-archive-items" });
-						for (const session of locked.slice(0, lockedVisible)) renderArchivedItem(lockedItems, session, false);
-						if (lockedVisible < locked.length) {
-							const more = lockedItems.createDiv({ cls: "semlink-history-more", text: t("historyShowMore") });
-							more.addEventListener("click", () => { lockedPages++; render(); });
-						}
+			}
+			if (freeLimit !== null) {
+				// Free tier: locked earlier chats live HERE (bottom of the
+				// list, where the user wanted to read them) — NOT in
+				// the archive view; manual archiving is a different thing.
+				const locked = all.slice(Math.min(freeLimit, all.length));
+				const lockedVisible = Math.min(locked.length, LOCKED_PAGE + lockedPages * LOCKED_PAGE);
+				if (locked.length > 0) {
+					const head = list.createDiv({ cls: "semlink-history-archive-head" });
+					head.createSpan({
+						cls: "semlink-history-archive-title",
+						text: t("historyArchivedHead").replace("{n}", String(locked.length)),
+					});
+					const unlock = head.createSpan({ cls: "semlink-history-archive-upgrade", text: t("unlockPro") });
+					unlock.addEventListener("click", (e) => {
+						e.stopPropagation();
+						this.closeHistoryDrawer(backdrop, drawer);
+						new LicenseModal(this.app, this.plugin, () => void this.showHistoryDrawer()).open();
+					});
+					const lockedItems = list.createDiv({ cls: "semlink-history-group-items semlink-history-archive-items" });
+					for (const session of locked.slice(0, lockedVisible)) renderArchivedItem(lockedItems, session, false);
+					if (lockedVisible < locked.length) {
+						const more = lockedItems.createDiv({ cls: "semlink-history-more", text: t("historyShowMore") });
+						more.addEventListener("click", () => { lockedPages++; render(); });
 					}
 				}
 			}
@@ -3883,7 +3826,9 @@ class FolderNameModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: t("historyNewFolder") });
+		// Clean title (no ellipsis — that's the trigger-button wording), a
+		// single primary action + cancel. Enter still submits.
+		contentEl.createEl("h2", { text: t("folderModalTitle") });
 		const input = contentEl.createEl("input", {
 			cls: "semlink-folder-input",
 			attr: { type: "text", placeholder: t("historyFolderPlaceholder"), value: this.initial },
@@ -3900,10 +3845,10 @@ class FolderNameModal extends Modal {
 			if (e.key === "Enter") submit();
 		});
 		const row = contentEl.createDiv({ cls: "semlink-folder-input-row" });
+		const cancel = row.createEl("button", { text: t("cancel") });
+		cancel.addEventListener("click", () => this.close());
 		const ok = row.createEl("button", { cls: "mod-cta", text: t("historyFolderOk") });
 		ok.addEventListener("click", submit);
-		const cancel = row.createEl("button", { text: t("chatDone") });
-		cancel.addEventListener("click", () => this.close());
 	}
 
 	onClose() {

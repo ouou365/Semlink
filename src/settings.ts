@@ -6,6 +6,7 @@ import { App, DropdownComponent, Modal, Notice, PluginSettingTab, Setting, Toggl
 import * as QRCode from "qrcode";
 import type SmartVaultPlugin from "../main";
 import type { IndexProgress, McpClientServer, SmartVaultSettings } from "./types";
+import { DEFAULT_GIT_SETTINGS } from "./types";
 import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
@@ -17,7 +18,7 @@ import { markDestructive, rerenderSettingsTab, showSliderValue } from "./ui-comp
 import { ShareQrModal } from "./share-modal";
 import { debugLog } from "./log";
 
-type SettingsTab = "general" | "model" | "mcp" | "embedding" | "share" | "bot";
+type SettingsTab = "general" | "model" | "mcp" | "embedding" | "share" | "git" | "bot";
 
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
@@ -139,6 +140,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			case "share":
 				this.renderShareTab(panelEl);
 				break;
+			case "git":
+				this.renderGitTab(panelEl);
+				break;
 			case "embedding":
 				this.renderEmbeddingTab(panelEl);
 				break;
@@ -169,6 +173,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			{ id: "general", label: t("tabGeneral") },
 			{ id: "model", label: t("tabModel") },
 			{ id: "embedding", label: t("tabEmbedding") },
+			{ id: "git", label: t("tabGit") },
 			{ id: "mcp", label: t("tabMcp") },
 			{ id: "share", label: t("tabShare") },
 			// Bot tab deliberately not listed: the Feishu bot is unpublished
@@ -880,6 +885,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					// removes this row too (the modal shows the notice).
 					new ShareQrModal(this.app, {
 						url,
+						name: row.title,
 						onRevoke: removeRow,
 					}).open();
 				});
@@ -899,6 +905,201 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 			}
 		})();
+	}
+
+	// ══════════════════════════════════════
+	// Tab: Git — 本地自动快照（免费） + 远程推送（Pro）
+	// ══════════════════════════════════════
+	private renderGitTab(containerEl: HTMLElement): void {
+		const pro = this.plugin.licenseManager.isPro();
+		new Setting(containerEl).setName(t("gitSection")).setHeading();
+		const git = () => this.plugin.settings.git ?? DEFAULT_GIT_SETTINGS;
+
+		// ── 未初始化：整个页签只呈现一个动作——初始化并快照 ──
+		// （说明文字 + 大按钮，其余配置项在初始化完成后才出现。）
+		if (!this.plugin.gitService.isRepo()) {
+			const intro = containerEl.createDiv({ cls: "semlink-pro-gate" });
+			intro.createSpan({ cls: "semlink-pro-gate-text", text: t("gitEnableDesc") });
+			const btn = containerEl.createEl("button", {
+				cls: "mod-cta semlink-git-init-btn",
+				text: t("gitInitRepo"),
+			});
+			btn.addEventListener("click", async () => {
+				// 首次快照要给全部附件做 hash（大 vault + 杀毒软件可达分钟级）
+				// ——按钮进入明确的运行态并显示真实分批进度。
+				btn.disabled = true;
+				btn.textContent = t("gitSnapRunning");
+				try {
+					await this.plugin.gitService.ensureRepo();
+					await this.plugin.gitService.commit(`${git().messagePrefix}: initial snapshot`, true, (done, total) => {
+						btn.textContent = `${t("gitSnapRunning")} ${done}/${total}`;
+					});
+					new Notice(t("gitInitDone"));
+				} catch (e) {
+					new Notice(String(e instanceof Error ? e.message : e) || t("gitMissingHint"));
+					btn.disabled = false;
+					btn.textContent = t("gitInitRepo");
+					return;
+				}
+				this.refreshPreservingScroll();
+			});
+			return;
+		}
+
+		// Pro 说明前置：一句话讲清免费/增值边界（本地免费、远程 Pro）。
+		const proHint = containerEl.createDiv({ cls: "semlink-pro-gate" });
+		proHint.createSpan({ cls: "semlink-pro-badge", text: "✨ Pro" });
+		proHint.createSpan({ cls: "semlink-pro-gate-text", text: t("gitProHint") });
+
+		// 总开关（免费）：关 = 完全不动 git。
+		new Setting(containerEl)
+			.setName(t("gitEnable"))
+			.setDesc(t("gitEnableDesc"))
+			.addToggle((tg) =>
+				tg.setValue(git().enabled).onChange(async (v) => {
+					this.plugin.settings.git = { ...git(), enabled: v };
+					await this.plugin.saveSettings();
+					this.refreshPreservingScroll();
+				}),
+			);
+
+		// 仓库状态（免费）：是否已初始化 + 最近提交。
+		const statusSetting = new Setting(containerEl).setName(t("gitRepoStatus"));
+		const statusDesc = statusSetting.descEl;
+		void (async () => {
+			try {
+				const svc = this.plugin.gitService;
+				if (!svc.isRepo()) {
+					statusDesc.setText(t("gitNoRepo"));
+				} else {
+					statusDesc.setText(await svc.status());
+				}
+			} catch (e) {
+				statusDesc.setText(t("gitMissingHint"));
+			}
+		})();
+		// 已初始化 → 查看仓库（未初始化已在方法开头提前返回，只显示初始化按钮）。
+		statusSetting.addButton((btn) =>
+			btn.setButtonText(t("gitViewRepo")).onClick(() => {
+				new GitRepoModal(this.plugin).open();
+			}),
+		);
+
+		// 自动快照间隔（分钟，免费）。
+		new Setting(containerEl)
+			.setName(t("gitSnapMinutes"))
+			.setDesc(t("gitSnapMinutesDesc"))
+			.addText((tx) => {
+				tx.inputEl.type = "number";
+				tx.setValue(String(git().autoCommitMinutes));
+				tx.onChange(async (v) => {
+					const n = Math.max(1, Math.round(Number(v) || 1));
+					this.plugin.settings.git = { ...git(), autoCommitMinutes: n };
+					await this.plugin.saveSettings();
+				});
+			});
+
+		// 提交信息前缀（免费）。
+		new Setting(containerEl)
+			.setName(t("gitPrefix"))
+			.setDesc(t("gitPrefixDesc"))
+			.addText((tx) =>
+				tx.setValue(git().messagePrefix).onChange(async (v) => {
+					this.plugin.settings.git = { ...git(), messagePrefix: v };
+					await this.plugin.saveSettings();
+				}),
+			);
+
+		// ── 危险区：删除本地仓库（只删 .git 版本历史，文件不动） ──
+		new Setting(containerEl)
+			.setName(t("gitRemoveRepo"))
+			.setDesc(t("gitRemoveDesc"))
+			.addButton((btn) =>
+				btn
+					.setButtonText(t("gitRemoveBtn"))
+					.onClick(() => {
+						btn.buttonEl.addClass("mod-warning");
+						new ConfirmModal(this.app, t("gitRemoveRepo"), t("gitRemoveConfirm"), async () => {
+							// 删 .git（大量只读 objects）也可能数秒——运行态反馈。
+							btn.setDisabled(true);
+							btn.setButtonText(t("gitSnapRunning"));
+							try {
+								await this.plugin.gitService.removeRepo();
+								new Notice(t("gitRemoveDone"));
+							} catch (e) {
+								new Notice(String(e instanceof Error ? e.message : e));
+								btn.setDisabled(false);
+								btn.setButtonText(t("gitRemoveBtn"));
+								return;
+							}
+							this.refreshPreservingScroll();
+						}).open();
+					}),
+			);
+
+		// ── 远程推送（Pro 增值） ──
+		new Setting(containerEl).setName(t("gitRemoteTitle")).setHeading();
+		if (!pro) {
+			const gate = containerEl.createDiv({ cls: "semlink-pro-gate" });
+			gate.createSpan({ cls: "semlink-pro-badge", text: "✨ Pro" });
+			gate.createSpan({ cls: "semlink-pro-gate-text", text: t("gitProHint") });
+			const btn = gate.createEl("button", { cls: "mod-cta", text: t("unlockPro") });
+			btn.addEventListener("click", () => new LicenseModal(this.app, this.plugin).open());
+			return;
+		}
+
+		new Setting(containerEl)
+			.setName(t("gitAutoPush"))
+			.setDesc(t("gitAutoPushDesc"))
+			.addToggle((tg) =>
+				tg.setValue(git().autoPush).onChange(async (v) => {
+					this.plugin.settings.git = { ...git(), autoPush: v };
+					await this.plugin.saveSettings();
+				}),
+			);
+		new Setting(containerEl)
+			.setName(t("gitRemoteUrl"))
+			.setDesc(t("gitRemoteUrlDesc"))
+			.addText((tx) => {
+				tx.inputEl.style.width = "100%";
+				tx.setValue(git().remoteUrl);
+				tx.onChange(async (v) => {
+					this.plugin.settings.git = { ...git(), remoteUrl: v.trim() };
+					await this.plugin.saveSettings();
+				});
+			});
+		new Setting(containerEl)
+			.setName(t("gitBranch"))
+			.addText((tx) =>
+				tx.setValue(git().remoteBranch).onChange(async (v) => {
+					this.plugin.settings.git = { ...git(), remoteBranch: v.trim() || "master" };
+					await this.plugin.saveSettings();
+				}),
+			);
+		new Setting(containerEl)
+			.setName(t("gitToken"))
+			.setDesc(t("gitTokenDesc"))
+			.addText((tx) => {
+				tx.inputEl.type = "password";
+				tx.setValue(git().token);
+				tx.onChange(async (v) => {
+					this.plugin.settings.git = { ...git(), token: v.trim() };
+					await this.plugin.saveSettings();
+				});
+			});
+		new Setting(containerEl).addButton((btn) =>
+			btn.setButtonText(t("gitPushNow")).onClick(async () => {
+				btn.setDisabled(true);
+				try {
+					const msg = await this.plugin.gitService.push();
+					new Notice(msg.startsWith("Error") ? msg : t("gitPushOk"));
+				} catch (e) {
+					new Notice(String(e instanceof Error ? e.message : e));
+				} finally {
+					btn.setDisabled(false);
+				}
+			}),
+		);
 	}
 
 	private renderBotTab(containerEl: HTMLElement): void {
@@ -1497,5 +1698,157 @@ class ExcludePathsModal extends Modal {
 
 	onClose(): void {
 		this.contentEl.empty();
+	}
+}
+/** 仓库文件浏览弹窗：git ls-files 构建成树，文件夹可折叠、文件点击
+ *  在 Obsidian 中打开（仅 vault 内真实存在的路径）。支持标题过滤。 */
+class GitRepoModal extends Modal {
+	private files: string[] = [];
+	private query = "";
+	/** 当前所在目录（"" = 仓库根）。面包屑导航的落点。 */
+	private cwd = "";
+	private page = 0;
+	private static PAGE = 100;
+	private loaded = false;
+	private loadError: string | null = null;
+
+	constructor(private plugin: SmartVaultPlugin) {
+		super(plugin.app);
+		this.modalEl.addClass("semlink-git-repo-modal");
+	}
+
+	async onOpen(): Promise<void> {
+		this.titleEl.setText(t("gitViewRepo"));
+		const search = this.contentEl.createEl("input", {
+			cls: "semlink-git-repo-search",
+			attr: { type: "text", placeholder: t("historySearch") },
+		});
+		const crumbEl = this.contentEl.createDiv({ cls: "semlink-git-repo-crumbs" });
+		const countEl = this.contentEl.createDiv({ cls: "semlink-git-repo-count" });
+		const body = this.contentEl.createDiv({ cls: "semlink-git-repo-body" });
+		try {
+			this.files = await this.plugin.gitService.listFiles();
+			this.loadError = null;
+		} catch (e) {
+			this.loadError = String(e instanceof Error ? e.message : e);
+			this.files = [];
+		}
+		this.loaded = true;
+		search.addEventListener("input", () => {
+			this.query = search.value.trim().toLowerCase();
+			this.page = 0;
+			this.render(crumbEl, countEl, body);
+		});
+		this.render(crumbEl, countEl, body);
+		search.focus();
+	}
+
+	/** 每次只渲染当前目录的直接子项（面包屑 + 分页），不再递归整树——
+	 *  1269 个文件的仓库每层也就几十个条目，DOM 量恒定不卡顿。 */
+	private render(crumbEl: HTMLElement, countEl: HTMLElement, body: HTMLElement): void {
+		// ── 面包屑：根 / A / B（点击回跳；搜索态隐藏） ──
+		crumbEl.empty();
+		if (!this.query) {
+			const mkCrumb = (label: string, path: string, current: boolean): void => {
+				const a = crumbEl.createSpan({
+					cls: "semlink-git-repo-crumb" + (current ? " is-current" : ""),
+					text: label,
+				});
+				if (!current) {
+					a.addEventListener("click", () => {
+						this.cwd = path;
+						this.page = 0;
+						this.render(crumbEl, countEl, body);
+					});
+				}
+			};
+			mkCrumb(t("gitViewRepo"), "", this.cwd === "");
+			let acc = "";
+			for (const part of this.cwd.split("/").filter(Boolean)) {
+				acc = acc ? `${acc}/${part}` : part;
+				crumbEl.createSpan({ cls: "semlink-git-repo-crumb-sep", text: " / " });
+				mkCrumb(part, acc, acc === this.cwd);
+			}
+		} else {
+			crumbEl.createSpan({ cls: "semlink-git-repo-crumb is-current", text: t("historySearch") });
+		}
+
+		body.empty();
+		if (!this.loaded) {
+			body.createDiv({ cls: "semlink-history-empty", text: "…" });
+			return;
+		}
+		if (this.loadError) {
+			body.createDiv({ cls: "semlink-msg-error", text: this.loadError });
+			return;
+		}
+		if (this.files.length === 0) {
+			body.createDiv({ cls: "semlink-history-empty", text: t("gitNoRepo") });
+			return;
+		}
+
+		// ── 当前层条目：搜索态=全库平铺（显示完整路径）；普通态=直接子文件夹 + 直接文件 ──
+		interface Entry { name: string; folderPath?: string; filePath?: string; count?: number; hint?: string }
+		let entries: Entry[] = [];
+		if (this.query) {
+			const hits = this.files.filter((f) => f.toLowerCase().includes(this.query));
+			entries = hits.map((f) => ({ name: f, filePath: f }));
+		} else {
+			const prefix = this.cwd ? `${this.cwd}/` : "";
+			const folders = new Map<string, number>();
+			const direct: string[] = [];
+			for (const f of this.files) {
+				if (!f.startsWith(prefix)) continue;
+				const rel = f.slice(prefix.length);
+				const slash = rel.indexOf("/");
+				if (slash === -1) direct.push(rel);
+				else folders.set(rel.slice(0, slash), (folders.get(rel.slice(0, slash)) ?? 0) + 1);
+			}
+			entries = [
+				...[...folders.entries()]
+					.sort((a, b) => a[0].localeCompare(b[0]))
+					.map(([name, count]) => ({ name, folderPath: prefix + name, count })),
+				...direct.sort((a, b) => a.localeCompare(b)).map((name) => ({ name, filePath: prefix + name })),
+			];
+		}
+		countEl.setText(t("gitRepoFiles").replace("{n}", entries.length.toLocaleString()));
+
+		// ── 分页渲染 ──
+		const slice = entries.slice(0, (this.page + 1) * GitRepoModal.PAGE);
+		for (const e of slice) {
+			const row = body.createDiv({ cls: "semlink-git-repo-row" + (e.folderPath ? " is-folder" : " is-file") });
+			if (!this.query) row.style.paddingLeft = "0.5rem";
+			const ico = row.createSpan({ cls: "semlink-git-repo-chev" });
+			setIcon(ico, e.folderPath ? "folder" : "file-text");
+			row.createSpan({ cls: "semlink-git-repo-name", text: e.name });
+			if (e.count !== undefined) {
+				row.createSpan({ cls: "semlink-git-repo-count", text: String(e.count) });
+			}
+			row.addEventListener("click", () => {
+				if (e.folderPath) {
+					this.cwd = e.folderPath;
+					this.page = 0;
+					this.render(crumbEl, countEl, body);
+					return;
+				}
+				const file = e.filePath !== undefined ? this.plugin.app.vault.getAbstractFileByPath(e.filePath) : null;
+				if (file) {
+					void this.plugin.app.workspace.openLinkText(e.filePath!, "", false);
+					this.close();
+				} else {
+					new Notice(t("gitFileGone"));
+				}
+			});
+		}
+		if (slice.length < entries.length) {
+			const more = body.createDiv({ cls: "semlink-history-more", text: t("historyShowMore") });
+			more.addEventListener("click", () => {
+				this.page++;
+				this.render(crumbEl, countEl, body);
+			});
+		}
+		if (entries.length === 0) {
+			body.createDiv({ cls: "semlink-history-empty", text: t("historyNoMatch") });
+		}
 	}
 }

@@ -86,6 +86,7 @@ export class NoteShare {
 			await this.persist();
 		}
 		const modal = new ShareQrModal(this.app, {
+			name: path.split("/").pop()?.replace(/\.[^.]+$/, "") || path,
 			onRevoke: () => {
 				this.revoke(path);
 			},
@@ -118,6 +119,7 @@ export class NoteShare {
 		}
 		new ShareQrModal(this.app, {
 			url: this.server.urls(token)[0],
+			name: path.split("/").pop()?.replace(/\.[^.]+$/, "") || path,
 			onRevoke: () => {
 				this.revoke(path);
 			},

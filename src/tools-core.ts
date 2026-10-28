@@ -188,6 +188,59 @@ export const TOOL_SPECS: ToolSpec[] = [
 			},
 		},
 	},
+	{
+		name: "git_status",
+		description: "Git: branch, changed-file count and the last commit. Always take a snapshot (git_commit) before editing note content yourself — Semlink's version safety net.",
+		parameters: { type: "object", properties: {} },
+	},
+	{
+		name: "git_log",
+		description: "Git: recent commit history (hash | date | message), newest first.",
+		parameters: {
+			type: "object",
+			properties: {
+				count: { type: "number", description: "Max commits (default 10, max 100)" },
+			},
+		},
+	},
+	{
+		name: "git_diff",
+		description: "Git: current uncommitted diff of one note vs HEAD. Use before editing to see what would change.",
+		parameters: {
+			type: "object",
+			properties: {
+				path: { type: "string", description: "Vault-relative note path" },
+			},
+			required: ["path"],
+		},
+	},
+	{
+		name: "git_commit",
+		description: "Git: snapshot the whole vault NOW (stages everything, no prompts). Run before/after your own edits so every change stays reversible.",
+		parameters: {
+			type: "object",
+			properties: {
+				message: { type: "string", description: "Commit message (optional; a timestamped default is used otherwise)" },
+			},
+		},
+	},
+	{
+		name: "git_restore",
+		description: "Git: roll a note back to a previous commit. A 'before restore' snapshot is committed automatically first, so a wrong rollback is itself reversible.",
+		parameters: {
+			type: "object",
+			properties: {
+				path: { type: "string", description: "Vault-relative note path" },
+				ref: { type: "string", description: "Commit hash / ref to restore from (default HEAD)" },
+			},
+			required: ["path"],
+		},
+	},
+	{
+		name: "git_push",
+		description: "Git: push commits to the configured GitHub/Gitee remote. Pro feature — local snapshots are free, remotes require a Pro license.",
+		parameters: { type: "object", properties: {} },
+	},
 ];
 
 export interface ToolCoreDeps {
@@ -202,7 +255,19 @@ export interface ToolCoreDeps {
 	/** 全局排除前缀（设置 excludePaths 的运行时兜底——已索引的旧内容也挡在结果外）。
 	 *  语义与索引侧（scheduler/watcher）一致：startsWith || includes。 */
 	excludedPaths?: () => string[];
+	/** Git 集成（本地快照免费、远程推送 Pro）。缺省/null 时 git_* 工具不注册。 */
+	git?: {
+		status(): Promise<string>;
+		log(count: number): Promise<string>;
+		diff(path: string): Promise<string>;
+		commit(message?: string): Promise<string>;
+		restore(path: string, ref: string): Promise<string>;
+		push(): Promise<string>;
+	} | null;
 }
+
+/** git_* 工具名集合（可用性过滤用：服务缺位时不注册）。 */
+export const GIT_TOOL_NAMES = new Set(["git_status", "git_log", "git_diff", "git_commit", "git_restore", "git_push"]);
 
 /** 解析设置里的 excludePaths（每行一个前缀）。与索引侧同源同语义。 */
 export function parseExcludePaths(raw: string): string[] {
@@ -284,6 +349,18 @@ export class ToolCore {
 					return await this.status();
 				case "reindex":
 					return await this.reindex(a.path as string | undefined, Boolean(a.force));
+				case "git_status":
+					return this.deps.git ? await this.deps.git.status() : "Error: Git integration is disabled (Settings → Git)";
+				case "git_log":
+					return this.deps.git ? await this.deps.git.log(Number(a.count) || 10) : "Error: Git integration is disabled (Settings → Git)";
+				case "git_diff":
+					return this.deps.git ? await this.deps.git.diff(String(a.path ?? "")) : "Error: Git integration is disabled (Settings → Git)";
+				case "git_commit":
+					return this.deps.git ? await this.deps.git.commit(a.message as string | undefined) : "Error: Git integration is disabled (Settings → Git)";
+				case "git_restore":
+					return this.deps.git ? await this.deps.git.restore(String(a.path ?? ""), String(a.ref ?? "HEAD")) : "Error: Git integration is disabled (Settings → Git)";
+				case "git_push":
+					return this.deps.git ? await this.deps.git.push() : "Error: Git integration is disabled (Settings → Git)";
 				default:
 					return `Error: unknown tool "${name}"`;
 			}

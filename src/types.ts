@@ -305,6 +305,8 @@ export interface SmartVaultSettings {
 	 *  Ed25519-signed activation receipt from the license backend; cleared
 	 *  entirely on deactivation/revocation. */
 	license?: LicenseState;
+	/** Git 集成（本地快照免费，远程推送 Pro）。 */
+	git?: GitSettings;
 }
 
 /** Client-side license state persisted in data.json. */
@@ -344,6 +346,34 @@ export interface McpClientServer {
 	protocolVersion?: string;
 	enabled: boolean;
 }
+
+/** Git 集成设置：本地自动快照免费，远程推送（GitHub/Gitee）为 Pro 增值。 */
+export interface GitSettings {
+	/** 总开关：关闭时完全不动 git。 */
+	enabled: boolean;
+	/** 自动快照防抖间隔（分钟，最小 1）。 */
+	autoCommitMinutes: number;
+	/** 提交信息前缀。 */
+	messagePrefix: string;
+	/** 自动推送开关（仅 Pro 生效）。 */
+	autoPush: boolean;
+	/** 远程仓库 HTTPS URL（GitHub/Gitee）。 */
+	remoteUrl: string;
+	/** 推送分支（缺省 master）。 */
+	remoteBranch: string;
+	/** 远程访问令牌（PAT，仅存本地 data.json，不写入 git config）。 */
+	token: string;
+}
+
+export const DEFAULT_GIT_SETTINGS: GitSettings = {
+	enabled: false,
+	autoCommitMinutes: 1,
+	messagePrefix: "Semlink snapshot",
+	autoPush: false,
+	remoteUrl: "",
+	remoteBranch: "master",
+	token: "",
+};
 
 export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	language: "auto",

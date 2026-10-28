@@ -16,8 +16,17 @@ import { t } from "./i18n";
 export interface ShareModalOptions {
 	/** LAN addresses other devices can open. */
 	urls: string[];
+	/** What the share is (conversation title / note name) — copied along
+	 *  with the URL so a pasted link still says what it points at. */
+	name?: string;
 	/** Kills the share when invoked (button hidden when absent). */
 	onRevoke?: () => void;
+}
+
+/** Copy `name` + URL (name first line, link second) when a name is known. */
+function copyShareText(clipboard: Clipboard, name: string | undefined, url: string): Promise<void> {
+	const text = name ? `${name}\n${url}` : url;
+	return clipboard.writeText(text);
 }
 
 export class ShareModal extends Modal {
@@ -37,7 +46,7 @@ export class ShareModal extends Modal {
 			const copyBtn = row.createEl("button", { cls: "semlink-share-copy", attr: { "aria-label": t("shareCopy") } });
 			setIcon(copyBtn, "copy");
 			copyBtn.addEventListener("click", () => {
-				void navigator.clipboard.writeText(url).then(() => new Notice(t("shareCopied")));
+				void copyShareText(navigator.clipboard, this.opts.name, url).then(() => new Notice(t("shareCopied")));
 			});
 			// Open THIS row's address in the system browser (Obsidian's
 			// window.open routes to the OS default browser).
@@ -68,6 +77,9 @@ export class ShareModal extends Modal {
 export interface ShareQrModalOptions {
 	/** LAN address other devices can open (also shown as text/QR). */
 	url?: string;
+	/** What the share is (conversation title / note name) — copied along
+	 *  with the URL so a pasted link still says what it points at. */
+	name?: string;
 	/** Kills the share when invoked (button hidden when absent). */
 	onRevoke?: () => void;
 }
@@ -163,7 +175,7 @@ export class ShareQrModal extends Modal {
 		const copyBtn = row.createEl("button", { cls: "semlink-share-copy", attr: { "aria-label": t("shareCopy") } });
 		setIcon(copyBtn, "copy");
 		copyBtn.addEventListener("click", () => {
-			void navigator.clipboard.writeText(url).then(() => new Notice(t("shareCopied")));
+			void copyShareText(navigator.clipboard, this.opts.name, url).then(() => new Notice(t("shareCopied")));
 		});
 		// Local preview opens via the loopback address when available.
 		const openBtn = row.createEl("button", { cls: "semlink-share-copy", attr: { "aria-label": t("shareOpenBrowser") } });

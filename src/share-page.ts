@@ -28,6 +28,35 @@ import logoSvg from "./semlink-logo.svg";
 
 export type ShareTheme = "light" | "dark";
 
+/** Strip Semlink's inline citation markers from rendered markdown text
+ *  nodes (skipping code/links). Two forms exist: `[n]` and `[n:Lline]`.
+ *  `stripPlain` controls whether bare `[n]` goes too — note shares keep
+ *  those (a user's footnote may look exactly like that), while `[n:Lline]`
+ *  is unambiguous plugin output and always goes. */
+function stripCitationMarkers(wrap: HTMLElement, stripPlain: boolean): void {
+	// `[n]` and `[n:Lline]` / `[n:Lline-Lline]` (ranges; the model sometimes
+	// cites a span, with or without the second "L"). `(?:-L?\d+)*` absorbs
+	// every span shape seen so far.
+	const re = stripPlain ? /\[\d{1,3}(?::L\d+(?:-L?\d+)*)?\]/ : /\[\d{1,3}:L\d+(?:-L?\d+)*\]/;
+	const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT, {
+		acceptNode: (node) => {
+			const parent = node.parentElement;
+			if (!parent) return NodeFilter.FILTER_REJECT;
+			const tag = parent.tagName;
+			if (tag === "CODE" || tag === "PRE" || tag === "A") return NodeFilter.FILTER_REJECT;
+			return re.test(node.nodeValue ?? "") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+		},
+	});
+	const marked: Text[] = [];
+	while (walker.nextNode()) marked.push(walker.currentNode as Text);
+	// The replace eats one leading whitespace with the marker, so stripping
+	// doesn't leave double spaces behind.
+	const replaceRe = new RegExp("\\s?" + re.source, "g");
+	for (const node of marked) {
+		node.nodeValue = (node.nodeValue ?? "").replace(replaceRe, "");
+	}
+}
+
 /**
  * Render a (possibly very long) markdown document in chunks, yielding to the
  * UI between chunks — a single MarkdownRenderer.render call on a multi-
@@ -50,6 +79,9 @@ export async function renderMarkdownChunked(
 		for (let i = 0; i < chunks.length; i++) {
 			const wrap = holder.createDiv({ cls: "answer markdown-rendered" });
 			await MarkdownRenderer.render(app, chunks[i], wrap, "", component);
+			// Note text may embed saved chat answers — always drop the
+			// unambiguous [n:Lline] markers (bare [n] stays: footnotes).
+			stripCitationMarkers(wrap, false);
 			htmls.push(wrap.innerHTML);
 			wrap.remove();
 			onProgress?.(i + 1, chunks.length);
@@ -113,22 +145,10 @@ export async function renderSharePage(
 				}
 				const wrap = holder.createDiv({ cls: "answer markdown-rendered" });
 				await MarkdownRenderer.render(app, m.content, wrap, "", component);
-				// Shared pages stay clean: no thinking transcript, no inline [n]
-				// citation markers (the sources live in the vault, not here).
-				const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT, {
-					acceptNode: (node) => {
-						const parent = node.parentElement;
-						if (!parent) return NodeFilter.FILTER_REJECT;
-						const tag = parent.tagName;
-						if (tag === "CODE" || tag === "PRE" || tag === "A") return NodeFilter.FILTER_REJECT;
-						return /\[\d{1,3}\]/.test(node.nodeValue ?? "") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
-					},
-				});
-				const marked: Text[] = [];
-				while (walker.nextNode()) marked.push(walker.currentNode as Text);
-				for (const node of marked) {
-					node.nodeValue = (node.nodeValue ?? "").replace(/\s?\[\d{1,3}\]/g, "");
-				}
+				// Shared pages stay clean: no thinking transcript, no inline
+				// citation markers ([n] / [n:Lline] — the sources live in the
+				// vault, not here).
+				stripCitationMarkers(wrap, true);
 				parts.push(`<div class="msg assistant"><div class="bubble md">${wrap.innerHTML}</div></div>`);
 				wrap.remove();
 			}
