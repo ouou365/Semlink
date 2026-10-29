@@ -111,8 +111,18 @@ export class VaultWatcher {
 			// Moved to excluded location — delete old index entries
 			void this.scheduler.enqueueFile(oldPath, "delete").then(() => this.ensureSchedulerRunning());
 		} else {
-			// Just update the path in-place, no re-embedding needed
-			void this.scheduler.renamePath(oldPath, file.path);
+			// Old path was indexed → real rename, update the path in-place, no
+			// re-embedding needed. Otherwise the file is arriving into scope
+			// from a never-indexed location (e.g. moved out of an excluded
+			// folder) — there are no rows to rename, index it fresh.
+			void (async () => {
+				if (await this.scheduler.hasIndexEntries(oldPath)) {
+					await this.scheduler.renamePath(oldPath, file.path);
+				} else {
+					await this.scheduler.enqueueFile(file.path, "add");
+					this.ensureSchedulerRunning();
+				}
+			})();
 		}
 	}
 

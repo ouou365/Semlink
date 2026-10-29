@@ -176,6 +176,7 @@ export default class SmartVaultPlugin extends Plugin {
 		// File watcher
 		this.watcher = new VaultWatcher(this.app, this.scheduler, this.settings);
 		this.watcher.start(this.settings.autoIndex);
+		this.setupSilentReconcile();
 
 		// Background: ensure document-level vectors exist (one-time backfill if
 		// the table is empty or an algorithm bump cleared it). Runs async —
@@ -741,6 +742,31 @@ export default class SmartVaultPlugin extends Plugin {
 	}
 
 	// ──── Indexing ────
+
+	/** 获焦对账上次触发时间（节流用）。 */
+	private lastFocusReconcile = 0;
+
+	/** 静默对账：mtime 增量全扫（scanVault），未变更文件零成本跳过，只有
+	 *  新增/变更文件真正分块嵌入。兜住 watcher 收不到的事件——Obsidian
+	 *  关闭或插件重载窗口期间的外部写入、后台窗口期间 Obsidian 尚未察觉
+	 *  的外部新建（这类文件不进 vault.getMarkdownFiles，手动“开始索引”
+	 *  同样看不见）。与 watcher 共用 autoIndex 开关；调度器运行中自动让路。 */
+	private setupSilentReconcile() {
+		this.lastFocusReconcile = Date.now();
+		// 获焦对账：Obsidian 在窗口获焦时才把外部变更纳入文件清单，此时对账
+		// 恰好能看到刚被察觉的文件。节流 ≥5 分钟一次。
+		this.registerDomEvent(window, "focus", () => {
+			if (!this.settings.autoIndex) return;
+			const now = Date.now();
+			if (now - this.lastFocusReconcile < 5 * 60 * 1000) return;
+			this.lastFocusReconcile = now;
+			this.startFullIndex();
+		});
+		// 启动对账：等 watcher 5s 宽限期与启动风暴过去后再跑一次。
+		this.registerInterval(window.setTimeout(() => {
+			if (this.settings.autoIndex) this.startFullIndex();
+		}, 8000));
+	}
 
 	startFullIndex() {
 		// 静默守卫 + 静默启动：索引状态由状态栏/进度面板呈现，不再弹提示。
