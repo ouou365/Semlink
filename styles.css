@@ -6243,7 +6243,7 @@ button.semlink-share-revoke:hover {
 }
 .semlink-guide-hub-card {
 	width: 100%;
-	background: var(--background-secondary);
+	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 14px;
 	padding: 2px 18px;

@@ -1533,9 +1533,9 @@ export function renderGuideHub(
 	// 品牌 logo + 名称已在顶部角落条出现——这里是问候区：大 emoji +
 	// 欢迎语 + 标语，避免两个 logo 同屏重复。
 	const brand = hub.createDiv({ cls: "semlink-guide-hub-brand" });
-	brand.createDiv({ cls: "semlink-guide-hub-emoji", text: "👋" });
+	brand.createDiv({ cls: "semlink-guide-hub-emoji", text: "🥳" });
 	brand.createDiv({ cls: "semlink-guide-hub-name", text: t("hubWelcome") });
-	brand.createDiv({ cls: "semlink-guide-hub-tagline", text: t("settingsTagline") });
+	brand.createDiv({ cls: "semlink-guide-hub-tagline", text: t("guideIntroSub") });
 
 	const card = hub.createDiv({ cls: "semlink-guide-hub-card" });
 
@@ -1560,22 +1560,8 @@ export function renderGuideHub(
 		btn.addEventListener("click", onClick);
 	};
 
-	row(
-		"globe",
-		t("hubSiteTitle"),
-		t("hubSiteDesc"),
-		t("hubVisit"),
-		true,
-		() => window.open("https://getsemlink.com/", "_blank"),
-	);
-	row(
-		"message-circle",
-		t("hubDiscordTitle"),
-		t("hubDiscordDesc"),
-		t("hubJoin"),
-		false,
-		() => window.open("https://discord.gg/4HQRqJj92", "_blank"),
-	);
+	// 引导卡片顺序：Chat / Embedding 设置在上（新用户的主路径），
+	// Official site / Discord 放在下面。
 	row(
 		"bot",
 		t("hubChatTitle"),
@@ -1591,5 +1577,21 @@ export function renderGuideHub(
 		t("hubOpen"),
 		false,
 		() => onPick("embed"),
+	);
+	row(
+		"globe",
+		t("hubSiteTitle"),
+		t("hubSiteDesc"),
+		t("hubVisit"),
+		true,
+		() => window.open("https://getsemlink.com/", "_blank"),
+	);
+	row(
+		"message-circle",
+		t("hubDiscordTitle"),
+		t("hubDiscordDesc"),
+		t("hubJoin"),
+		false,
+		() => window.open("https://discord.gg/4HQRqJj92", "_blank"),
 	);
 }
