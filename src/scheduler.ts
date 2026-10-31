@@ -647,6 +647,14 @@ export class Scheduler {
 		await this.store.renameNotePath(oldPath, newPath);
 	}
 
+	/** Whether a note path has index entries (chunks). The watcher uses this
+	 *  to tell a real rename (old path was indexed → update path in place)
+	 *  from a file arriving into scope from a never-indexed location, e.g.
+	 *  moved out of an excluded folder (→ index it fresh as an add). */
+	async hasIndexEntries(notePath: string): Promise<boolean> {
+		return (await this.store.getNoteMtime(notePath)) !== null;
+	}
+
 	/**
 	 * Run incremental indexing: only process items already in the queue.
 	 * Does NOT scan the vault. Used by the watcher for file change events.

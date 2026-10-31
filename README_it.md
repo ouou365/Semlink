@@ -6,6 +6,9 @@
 
 Semlink trasforma il tuo vault di Obsidian in uno spazio di lavoro conoscitivo agentico — un assistente AI che vive nella tua barra laterale, cerca tutto ciò che hai mai annotato, ragiona sui tuoi appunti con veri strumenti, riporta ogni affermazione alle tue note con citazioni e condivide ciò che impara. L'intero agente è incluso nel plugin: niente Claude Desktop, niente Cursor, niente terminale, nessun client di terze parti da installare. Porta la tua API key, e il tuo vault comincia a pensare.
 
+
+![Semlink — agentic knowledge workspace living in the Obsidian sidebar](assets/screenshot-overview.png)
+
 ## 🤔 Perché Semlink?
 
 Scrivi da anni. Poi fai una domanda sulle tue stesse conoscenze — e il flusso è: ricordare in quale cartella, Ctrl+F, copia-incolla in una finestra di chat, perdere il filo.

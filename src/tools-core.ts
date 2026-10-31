@@ -62,13 +62,14 @@ export const TOOL_SPECS: ToolSpec[] = [
 		{
 			name: "semantic",
 			description:
-				"Pure semantic vector search: natural-language query returns the most relevant note passages (path, heading, preview, score). Controlled by the vector-search toggle; returns an explicit 'unavailable' message instead of empty results when no embedding model is configured.",
+				"Pure semantic vector search: natural-language query returns the most relevant note passages (path, heading, preview, score). The path filter is pushed down into the vector scan (pre-filter), so scoping to a folder or a single note still returns the exact top-N within that scope. Controlled by the vector-search toggle; returns an explicit 'unavailable' message instead of empty results when no embedding model is configured.",
 			parameters: {
 				type: "object",
 				properties: {
 					query: { type: "string", description: "Natural-language search query" },
 					limit: { type: "number", description: "Max results (default 10)" },
 					threshold: { type: "number", description: "Similarity threshold 0-1 (default 0.3)" },
+					path: { type: "string", description: "Vault-relative path prefix filter, e.g. 'projects/' or a full note path to search within one document (optional; disk paths are auto-normalized)" },
 					exclude: { type: "array", items: { type: "string" }, description: "Path prefixes to drop from results (optional)" },
 				},
 				required: ["query"],
@@ -330,7 +331,7 @@ export class ToolCore {
 				case "keyword":
 					return await this.searchBm25(String(a.query ?? ""), Number(a.limit) || 10, a.path as string | undefined, Boolean(a.case_sensitive), exclude);
 				case "semantic":
-					return await this.searchVector(String(a.query ?? ""), Number(a.limit) || 10, Number(a.threshold) || 0.3, exclude);
+					return await this.searchVector(String(a.query ?? ""), Number(a.limit) || 10, Number(a.threshold) || 0.3, a.path as string | undefined, exclude);
 				case "ls":
 					return await this.ls(a.path as string | undefined, (a.sort as string) ?? "modified", Number(a.limit) || 50, Number(a.offset) || 0, a.recursive !== false, a.since as string | undefined, a.until as string | undefined, exclude);
 				case "read":
@@ -467,15 +468,17 @@ export class ToolCore {
 		);
 	}
 
-	/** 纯向量检索；不可用时返回明确的提示而不是空结果。 */
-	async searchVector(query: string, limit = 10, threshold = 0.3, exclude?: string[]): Promise<string> {
+	/** 纯向量检索；不可用时返回明确的提示而不是空结果。path 解析为
+	 *  vault 相对前缀后下推 store——打分循环内预过滤，限定单文件也凑得满 limit。 */
+	async searchVector(query: string, limit = 10, threshold = 0.3, path?: string, exclude?: string[]): Promise<string> {
 		if (!query.trim()) return "Error: missing query";
 		if (!this.deps.store.searchGate()) {
 			return JSON.stringify({
 				error: "Vector search is unavailable: no embedding model is configured. Set one up in the RAG settings, or use keyword / grep instead.",
 			});
 		}
-		const results = await this.vectorRaw(query, limit, threshold, undefined, exclude);
+		const { prefix } = this.resolvePrefix(path);
+		const results = await this.vectorRaw(query, limit, threshold, prefix || undefined, exclude);
 		return this.truncate(
 			JSON.stringify(
 				{

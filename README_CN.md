@@ -6,6 +6,9 @@
 
 Semlink 把你的 Obsidian 知识库变成一个智能体知识工作区——一个住在侧边栏的 AI 助手：检索你写过的每一个字，用真正的工具推理，每一条结论都引用回你的笔记，并能一键分享它的所得。完整的智能体就内置在插件里：不需要 Claude Desktop、不需要 Cursor、不需要终端、不需要安装任何第三方客户端。带上你自己的 API Key，你的知识库就开始思考。
 
+
+![Semlink — agentic knowledge workspace living in the Obsidian sidebar](assets/screenshot-overview.png)
+
 ## 🤔 为什么是 Semlink？
 
 你写了很多年。然后想问一个关于自己知识的问题——流程却变成：回忆在哪个文件夹、Ctrl+F、复制粘贴进聊天窗口、丢失上下文。

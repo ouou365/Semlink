@@ -6,6 +6,9 @@
 
 Semlink convierte tu bóveda de Obsidian en un espacio de trabajo de conocimiento agéntico — un asistente de IA que vive en tu barra lateral, busca todo lo que has anotado jamás, razona sobre ello con herramientas reales, respalda cada afirmación con citas a tus propias notas y comparte lo que aprende. Todo el agente viene dentro del plugin: nada de Claude Desktop, ni Cursor, ni terminal, ni cliente de terceros que instalar. Trae tu propia API key, y tu bóveda empieza a pensar.
 
+
+![Semlink — agentic knowledge workspace living in the Obsidian sidebar](assets/screenshot-overview.png)
+
 ## 🤔 ¿Por qué Semlink?
 
 Llevas años escribiendo. Luego haces una pregunta sobre tu propio conocimiento — y el flujo de trabajo es: recordar qué carpeta, Ctrl+F, copiar y pegar en una ventana de chat, perder el hilo.
