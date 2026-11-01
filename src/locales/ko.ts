@@ -93,8 +93,6 @@ const t: Record<keyof typeof en, string> = {
 	excludePathsDesc: "한 줄에 하나의 경로 접두사. 일치하는 파일은 인덱싱되지 않고 검색 결과에도 나타나지 않습니다. 저장 시 이미 인덱싱된 일치 항목은 인덱스에서 제거됩니다",
 	autoIndex: "자동 인덱싱",
 	autoEmbed: "자동 임베딩",
-	newTabHome: "새 탭에서 Semlink 표시",
-	newTabHomeDesc: "새 탭은 빈 상태 대신 Semlink 홈을 엽니다 — + 버튼, Ctrl+T, 마지막 탭을 닫은 후 남는 빈 화면도 포함됩니다",
 	popOutWindow: "팝업 창으로 열기",
 	popOutFailed: "이 환경에서는 팝업 창을 지원하지 않습니다",
 	actions: "작업",
@@ -193,7 +191,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── Semantic Search View ────
 	searchViewTitle: "의미 검색",
-	searchPlaceholder: "무엇이든 물어보세요 — 문서를 던져 놓으면 제가 처리합니다",
+	searchPlaceholder: "무엇이든 물어보세요",
+	searchQueueHint: "입력을 계속하면 후속 지시로 순차 실행됩니다",
+	queueSteer: "우선 실행",
 	searchButton: "검색",
 	searchSend: "보내기",
 	searchStop: "중지",

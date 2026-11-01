@@ -17,6 +17,9 @@ export type DebugAskRunner = (question: string) => Promise<unknown>;
  *  然后回报实际光标/滚动位置，用于自动验证引用跳行链路。 */
 export type DebugJumpRunner = (path: string, line: number) => Promise<unknown>;
 
+/** measure 工具执行器：由 main.ts 注入——回报输入区相关元素的实际布局。 */
+export type DebugMeasureRunner = () => Promise<unknown>;
+
 interface JsonRpcRequest {
 	jsonrpc: "2.0";
 	id?: string | number | null;
@@ -66,6 +69,15 @@ const JUMP_TOOL = {
 	},
 };
 
+const MEASURE_TOOL = {
+	name: "measure",
+	description:
+		"Measure the chat input footer layout in the main window: bounding rects " +
+		"and computed paddings/margins of .semlink-search-view, -footer, " +
+		"-input-wrapper, -input-row, -input. For diagnosing spacing issues.",
+	inputSchema: { type: "object", properties: {}, required: [] },
+};
+
 const RELOAD_TOOL = {
 	name: "reload",
 	description:
@@ -85,7 +97,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -178,7 +190,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, RELOAD_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, RELOAD_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -192,6 +204,8 @@ export class DebugMcpServer {
 						const jl = Number(params.arguments?.line ?? 0);
 						if (!jp || !(jl > 0)) throw new Error("jump needs path and a positive line");
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runJump?.(jp, jl)) ?? { error: "no jump runner" }, null, 2) }] };
+					} else if (params.name === "measure") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.()) ?? { error: "no measure runner" }, null, 2) }] };
 					} else {
 						result = await this.handleAsk(params);
 					}

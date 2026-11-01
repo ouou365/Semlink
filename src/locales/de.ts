@@ -93,8 +93,6 @@ const t: Record<keyof typeof en, string> = {
 	excludePathsDesc: "Pfadpräfixe (einer pro Zeile). Übereinstimmende Dateien werden nicht indiziert und erscheinen nie in Suchergebnissen; beim Speichern werden bereits indizierte Treffer aus dem Index entfernt",
 	autoIndex: "Auto-Index",
 	autoEmbed: "Auto-Embedding",
-	newTabHome: "Semlink in neuen Tabs anzeigen",
-	newTabHomeDesc: "Neue Tabs öffnen die Semlink-Startseite statt des leeren Zustands — gilt für die +-Schaltfläche, Strg+T und die leere Ansicht nach dem Schließen des letzten Tabs",
 	popOutWindow: "In eigenem Fenster öffnen",
 	popOutFailed: "Hier werden Popup-Fenster nicht unterstützt",
 	actions: "Aktionen",
@@ -193,7 +191,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── Semantic Search View ────
 	searchViewTitle: "Semantische Suche",
-	searchPlaceholder: "Frag mich alles – oder zieh Dokumente hierher, die ich für dich bearbeiten soll",
+	searchPlaceholder: "Frag mich alles",
+	searchQueueHint: "Weiter tippen, um Folgeaufträge einzureihen",
+	queueSteer: "Vorrangig",
 	searchButton: "Suchen",
 	searchSend: "Senden",
 	searchStop: "Stopp",

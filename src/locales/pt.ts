@@ -95,8 +95,6 @@ const t: Record<keyof typeof en, string> = {
 	excludePathsDesc: "Prefixos de caminho (um por linha). Os arquivos correspondentes não são indexados e nunca aparecem nos resultados; ao salvar, as correspondências já indexadas são removidas do índice",
 	autoIndex: "Indexação automática",
 	autoEmbed: "Embedding automático",
-	newTabHome: "Mostrar o Semlink em novas abas",
-	newTabHomeDesc: "Novas abas abrem a página inicial do Semlink em vez do estado vazio — inclui o botão +, Ctrl+T e a visão em branco deixada após fechar a última aba",
 	popOutWindow: "Abrir em janela separada",
 	popOutFailed: "Janelas separadas não estão disponíveis aqui",
 	actions: "Ações",
@@ -195,7 +193,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── Semantic Search View ────
 	searchViewTitle: "Busca Semântica",
-	searchPlaceholder: "Pergunte qualquer coisa — ou solte documentos para eu cuidar deles",
+	searchPlaceholder: "Pergunte qualquer coisa",
+	searchQueueHint: "Continue digitando para enfileirar seguimentos",
+	queueSteer: "Priorizar",
 	searchButton: "Buscar",
 	searchSend: "Enviar",
 	searchStop: "Parar",

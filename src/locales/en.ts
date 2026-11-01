@@ -92,8 +92,6 @@ const en = {
 	excludePathsDesc: "Path prefixes (one per line). Matching files are not indexed and never appear in search results; on save, already-indexed matches are removed from the index",
 	autoIndex: "Auto Index",
 	autoEmbed: "Auto-embed",
-	newTabHome: "Show Semlink in new tabs",
-	newTabHomeDesc: "New tabs open the Semlink home page instead of the empty state — covers the + button, Ctrl+T, and the blank view left after closing the last tab",
 	popOutWindow: "Open in popup window",
 	popOutFailed: "Popup windows are not available here",
 	actions: "Actions",
@@ -192,7 +190,9 @@ const en = {
 
 // ──── Semantic Search View ────
 	searchViewTitle: "Semantic Search",
-	searchPlaceholder: "Ask me anything — or drop in documents for me to handle",
+	searchPlaceholder: "Ask me anything",
+	searchQueueHint: "Keep typing to queue follow-ups",
+	queueSteer: "Steer",
 	searchButton: "Search",
 	searchSend: "Send",
 	searchStop: "Stop",

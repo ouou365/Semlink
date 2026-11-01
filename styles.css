@@ -817,6 +817,7 @@
 
 .smart-vault-settings .semlink-settings-tabs {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
     margin-bottom: 18px;
 }
@@ -859,6 +860,11 @@
    只作用于设置 Tab 根节点（.semlink-settings-root）：弹窗借用
    smart-vault-settings 复用样式，不能被这套 flex 撑满规则波及。 */
 .semlink-settings-root {
+    /* 响应式作用域：设置页出现在宽窗口的窄侧栏里，media query 量视口会
+       误判——容器查询量根节点实际宽度。不支持容器查询的宿主优雅退化为
+       原有固定布局。 */
+    container-type: inline-size;
+    container-name: settings;
     display: flex;
     flex-direction: column;
     /* height 钉死为容器高度（而不是被内容撑开）：面板 flex:1 + min-height:0
@@ -2415,8 +2421,13 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 
 /* ──── Semantic Search View (Right Sidebar) ──── */
 /* Layout follows the claudian pattern: flex column with a fixed header at top,
-   a scrollable results area in the middle, and a fixed input footer at bottom. */
+   a scrollable results area in the middle, and a fixed input footer at bottom.
 
+   padding 必须用双类选择器清零：Obsidian 核心 app.css 给
+   `.workspace-leaf-content .view-content` 注入 12/12/max(safe-area,32px) 的
+   padding（双类特异性压过单类的 padding:0）——顶部 12px 把头部推低、与
+   历史抽屉标题错位，底部 32px 在输入卡下留死空隙。本文件加载晚于核心
+   样式，同特异性即胜出。 */
 .semlink-search-view {
     display: flex;
     flex-direction: column;
@@ -2435,7 +2446,9 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 .semlink-search-view .semlink-search-messages,
 .semlink-search-view .semlink-search-footer {
     width: 100%;
-    max-width: 760px;
+    /* 输入列调窄：模型选择器/输入卡/发送按钮共用同一 560 列居中，
+       消除选择器悬在卡片左外侧的错位 */
+    max-width: 560px;
     margin-left: auto;
     margin-right: auto;
 }
@@ -2458,6 +2471,9 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     z-index: 50;
     transition: transform 0.25s ease;
     transform: translateX(-100%);
+    /* 常显形态随视图 padding-top 下移 8px：抽屉标题行与视图头部
+       按钮行对齐（浮层抽屉不偏移，从顶部 0 全覆盖）。 */
+    top: 8px;
 }
 .semlink-menu-persistent .semlink-history-drawer.is-persistent {
     transform: translateX(0);
@@ -2560,6 +2576,28 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 
 .semlink-search-header--compact .semlink-search-first-question {
     display: block;
+}
+
+/* 紧凑头部：首问直接顶替品牌组（logo+Semlink）且并入同一行——
+   头部从两行收成一行，滚动读长回答时省出一整行高度给内容。 */
+.semlink-search-header--compact .semlink-search-brand-group {
+    display: none;
+}
+.semlink-search-header--compact .semlink-search-first-question {
+    /* flex 垂直居中：inline 布局会让文字贴着 logo 基线排、视觉偏下 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+    order: 1;
+    line-height: 1;
+    /* 与被顶替的品牌文字同一字号/字重/字色（14px/600/text-normal） */
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+.semlink-search-header--compact .semlink-search-header-right {
+    order: 2;
 }
 
 /* Shared icon-button style (menu, settings, close). */
@@ -2752,6 +2790,12 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     flex-shrink: 0;
 }
 
+/* 状态行为空（无提示文案）时整行收起——空 padding 在头部与内容之间
+   留出一条死空白。guide/settings 模式本就显式隐藏，不受影响。 */
+.semlink-search-status:empty {
+    display: none;
+}
+
 /* Conversation area (middle, scrollable). Doubled class specificity
    replaces !important: beats Obsidian's global selection-disable rules. */
 .semlink-search-messages.semlink-search-messages {
@@ -2762,8 +2806,10 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     flex-direction: column;
     gap: 12px;
     /* Slim side padding — the conversation area spans nearly the full
-       panel width. */
+       panel width. scrollbar-gutter 两侧对称预留：引导 hub 超高出现滚动条
+       时内容列宽度不变（否则头部/品牌整体左移 ~22px，与主页错位）。 */
     padding: 0 6px 8px;
+    scrollbar-gutter: stable both-edges;
     /* Obsidian's global CSS disables text selection in places; force it back
        on for the conversation so messages can be selected & copied. */
     user-select: text;
@@ -2776,10 +2822,13 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    /* 顶对齐（不再垂直居中）：与引导 hub 同一起点，主页↔引导切换零抖动。
+       padding-top 26 使主页 emoji 字形与引导 emoji 字形同水平线
+       （实测：home 64px 盒内 40px 字形 +12 偏移 vs guide 53px 盒内 44px）。 */
+    justify-content: flex-start;
     text-align: center;
-    gap: 16px;
-    padding: 40px 20px;
+    gap: 6px;
+    padding: 38px 20px;
     color: var(--text-muted);
     animation: semlink-welcome-fade 0.3s ease;
 }
@@ -2791,26 +2840,28 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 
 /* The greeting emoji above the text (no background, no animation). */
 .semlink-search-welcome-emoji {
-    width: 64px;
-    height: 64px;
+    /* 与引导 hub 的 emoji 同规格（44px 字形、自适应盒） */
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 40px;
-    line-height: 1;
+    font-size: 44px;
+    line-height: 1.2;
 }
 
 .semlink-search-welcome-greeting {
-    font-size: 24px;
-    font-weight: 600;
+    /* 与引导 hub 的 name 同规格（22px/700/.2px 字距） */
+    font-size: 22px;
+    font-weight: 700;
     color: var(--text-normal);
+    letter-spacing: 0.2px;
     max-width: 300px;
-    line-height: 1.5;
+    line-height: 1.2;
     word-break: break-word;
 }
 
 .semlink-search-welcome-sub {
-    font-size: 17px;
+    /* 与引导 hub 的 tagline 同规格（12.5px/text-muted） */
+    font-size: 12.5px;
     font-weight: 400;
     color: var(--text-muted);
     max-width: 360px;
@@ -2821,6 +2872,8 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 .semlink-search-welcome-sugs {
     display: flex;
     flex-direction: column;
+    /* 副标题 → 建议卡：与引导 hub 的 tagline→卡片 18px 节奏一致 */
+    margin-top: 12px;
     gap: 8px;
     width: 100%;
     max-width: 300px;
@@ -2903,6 +2956,14 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     flex-shrink: 0;
     z-index: auto;
     margin: 0 -6px;
+    /* 显式拉伸：messages 列容器里某处改变了交叉轴行为 */
+    align-self: stretch;
+    width: calc(100% + 12px);
+}
+/* 弹窗实例：内容列两侧多出滚动条 gutter，引导头部条需右移校准才与
+   主页头部对齐（实测 dx -22 → 0）。侧栏实例不偏移，勿加。 */
+.semlink-search-view.semlink-main-tab .semlink-guide-corners {
+    margin: 0 -6px 0 16px;
 }
 
 /* Guide mode: the welcome block hosts only the guide — flow top-down
@@ -4479,7 +4540,8 @@ body .semlink-msg-user::selection {
 /* Input footer (bottom, fixed) — like claudian's composer */
 .semlink-search-footer {
     flex-shrink: 0;
-    /* 10px breathing room at the top (above the input wrapper). */
+    /* 10px breathing room at the top (above the input wrapper); bottom kept
+       tight but not cramped — the earlier 32px host padding was the real bug. */
     padding: 10px 12px 12px;
 }
 
@@ -4570,6 +4632,7 @@ body .semlink-msg-user::selection {
     border-radius: 8px;
     background: var(--background-primary);
     padding: 6px;
+    width: 100%;
 }
 
 .semlink-search-input-wrapper:focus-within {
@@ -4623,7 +4686,11 @@ body .semlink-msg-user::selection {
 
 .semlink-search-input {
 	flex: 1 1 0;
-	min-height: 60px;
+	/* 主页 welcome 容器 text-align:center 会继承进来——输入文字/占位符必须居左 */
+	text-align: left;
+	/* 空态时贴合一行文字：min-height 撑出的内部空白在视觉上成了
+	   「文字与按钮之间的洞」。多行输入时仍随内容长高（max-height 封顶）。 */
+	min-height: 0;
 	max-height: 160px;
 	overflow-x: hidden;
 	overflow-y: auto;
@@ -6532,4 +6599,175 @@ button.semlink-share-revoke:hover {
 	font-size: 14px;
 	border-radius: 10px;
 	margin-top: 12px;
+}
+
+/* ══════════ 设置页响应式（容器查询，作用域 .semlink-settings-root） ══════════ */
+
+/* 窄容器（侧栏 / 窄弹窗）≤720px：模型页双栏堆叠、MCP 行折行、
+   许可证卡折行、内嵌屏面板高度随容器（100vh 在侧栏里是整窗高度，失真）。 */
+@container settings (max-width: 720px) {
+    /* 模型页：左栏 provider 列表从侧栏变顶栏 */
+    .smart-vault-settings .semlink-mt {
+        flex-direction: column;
+        min-height: 0;
+    }
+    .smart-vault-settings .semlink-mt-providers {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--background-modifier-border);
+        padding-right: 0;
+        padding-bottom: 10px;
+        max-height: 220px;
+        overflow-y: auto;
+    }
+    .smart-vault-settings .semlink-mt-models {
+        min-height: 320px;
+    }
+
+    /* MCP / Share 服务器行：窄幅允许换行，toggle 靠右独立成行 */
+    .semlink-mcp-server {
+        flex-wrap: wrap;
+    }
+    .semlink-mcp-server .semlink-mcp-server-main {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+    .semlink-mcp-server .semlink-mcp-server-toggle {
+        margin-left: auto;
+    }
+
+    /* 许可证卡内部行折行 */
+    .smart-vault-settings .semlink-license-card *,
+    .smart-vault-settings .semlink-license-card {
+        flex-wrap: wrap;
+    }
+
+    /* 内嵌设置屏：面板高度随容器 flex 撑满，不按 100vh 钉死 */
+    .semlink-settings-screen .semlink-settings-root .semlink-settings-panel {
+        max-height: none;
+        flex: 1 1 auto;
+    }
+}
+
+/* 极窄容器 ≤480px：标题/问候纵排、卡片内边距收紧、语言下拉放开限宽 */
+@container settings (max-width: 480px) {
+    .smart-vault-settings .semlink-settings-heading-left {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    .smart-vault-settings .semlink-settings-lang select.dropdown {
+        max-width: none;
+    }
+    .semlink-mcp-server {
+        padding: 8px 10px;
+    }
+    .smart-vault-settings .setting-item {
+        padding-top: 12px;
+        padding-bottom: 12px;
+    }
+}
+
+
+
+/* ── 工具栏行合并进输入卡：模型选择器在卡片底行左端，按钮靠右 ── */
+.semlink-search-model .semlink-search-model-trigger {
+    margin-right: auto;
+    padding: 2px 4px;
+    border-radius: 6px;
+}
+.semlink-search-model .semlink-search-model-trigger:hover {
+    background: var(--background-modifier-hover);
+}
+/* 菜单标题行里的「新对话」入口：紧凑形态（无外框、hover 浅底） */
+.semlink-history-header .semlink-search-newchat {
+    padding: 4px 8px;
+    margin-right: 2px;
+}
+
+/* ── 排队跟进指令卡片（生成中发送的消息，贴在输入行上方）── */
+.semlink-queue {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    margin-bottom: 6px;
+}
+.semlink-queue.semlink-hidden {
+    display: none;
+}
+.semlink-queue-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+.semlink-queue-texts {
+    flex: 1 1 0;
+    min-width: 0;
+}
+.semlink-queue-text {
+    font-size: 13px;
+    color: var(--text-normal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.semlink-queue-attach {
+    font-size: 11px;
+    color: var(--text-faint);
+}
+.semlink-queue-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+/* ── 主区域/弹窗实例加宽内容列：760 是侧栏时代的可读宽度，宽弹窗里
+   浪费太多——放宽到 1080（约 110 字符/行），侧栏窄幅碰不到上限不受影响 ── */
+.semlink-search-view.semlink-main-tab .semlink-search-header,
+.semlink-search-view.semlink-main-tab .semlink-search-status,
+.semlink-search-view.semlink-main-tab .semlink-search-messages,
+.semlink-search-view.semlink-main-tab .semlink-search-footer {
+    max-width: min(1080px, calc(100% - 32px));
+}
+
+
+/* 视图根 padding 清零：同特异性覆盖核心 app.css 的
+   .workspace-leaf-content .view-content（12/12/max(safe-area,32px)）。
+   插件样式表加载更晚，同分自胜；所有实例（侧栏/主区域/弹窗）一致。 */
+.workspace-leaf-content .semlink-search-view {
+    /* 顶部 8px 呼吸（弹窗里头部贴标题栏太挤）；与历史抽屉的 top 偏移
+       同值——抽屉打开时两者标题行始终对齐。
+       底部 28px：Obsidian 状态栏悬浮在侧栏底部之上，必须让出——
+       这就是核心样式给 view-content 32px 底距的用途（主区域/弹窗无此
+       问题，由下方 main-tab 规则收回）。 */
+    padding: 8px 12px 28px;
+}
+.semlink-search-view.semlink-main-tab {
+    padding-bottom: 0;
+}
+
+/* 排队卡片的 Steer（插队优先）按钮 */
+.semlink-queue-steer {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 12px;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+.semlink-queue-steer:hover {
+    filter: brightness(1.1);
+}
+.semlink-queue-steer .svg-icon {
+    width: 12px;
+    height: 12px;
 }

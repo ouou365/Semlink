@@ -95,8 +95,6 @@ const t: Record<keyof typeof en, string> = {
 	excludePathsDesc: "Prefijos de ruta (uno por línea). Los archivos coincidentes no se indexan ni aparecen en los resultados de búsqueda; al guardar, las coincidencias ya indexadas se eliminan del índice",
 	autoIndex: "Indexado automático",
 	autoEmbed: "Embeddings automáticos",
-	newTabHome: "Mostrar Semlink en las pestañas nuevas",
-	newTabHomeDesc: "Las pestañas nuevas abren la página de inicio de Semlink en lugar del estado vacío — incluye el botón +, Ctrl+T y la vista en blanco que queda tras cerrar la última pestaña",
 	popOutWindow: "Abrir en ventana flotante",
 	popOutFailed: "Las ventanas flotantes no están disponibles aquí",
 	actions: "Acciones",
@@ -195,7 +193,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── Semantic Search View ────
 	searchViewTitle: "Búsqueda semántica",
-	searchPlaceholder: "Pregúntame lo que quieras — o suelta documentos y yo me encargo",
+	searchPlaceholder: "Pregúntame lo que quieras",
+	searchQueueHint: "Sigue escribiendo para encolar seguimientos",
+	queueSteer: "Priorizar",
 	searchButton: "Buscar",
 	searchSend: "Enviar",
 	searchStop: "Detener",

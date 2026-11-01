@@ -226,18 +226,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// （原「快速开始」行已被清单的「开始对话」动作覆盖，不再重复展示）
 		this.renderChecklistSection(containerEl);
 
-		// ── 新建标签页显示 Semlink 主页 ──
-		new Setting(containerEl)
-			.setName(t("newTabHome"))
-			.setDesc(t("newTabHomeDesc"))
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.newTabSemlink ?? true)
-					.onChange(async (value) => {
-						this.plugin.settings.newTabSemlink = value;
-						await this.plugin.saveSettings();
-					}),
-			);
 	}
 
 	/** 通用页的上手清单：对话模型 / 嵌入模型 / 首次问答 / 解锁，四项状态

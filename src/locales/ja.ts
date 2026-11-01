@@ -93,8 +93,6 @@ const t: Record<keyof typeof en, string> = {
 	excludePathsDesc: "1 行に 1 つのパス接頭辞。一致するファイルはインデックスされず、検索結果にも出ません。保存時に既にインデックス済みの一致内容はインデックスから削除されます",
 	autoIndex: "自動インデックス",
 	autoEmbed: "自動埋め込み",
-	newTabHome: "新しいタブでSemlinkを表示",
-	newTabHomeDesc: "新しいタブは空の状態の代わりにSemlinkホームを開きます——+ボタン、Ctrl+T、最後のタブを閉じた後の空白ページも対象です",
 	popOutWindow: "ポップアップウィンドウで開く",
 	popOutFailed: "この環境ではポップアップウィンドウは利用できません",
 	actions: "アクション",
@@ -193,7 +191,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── Semantic Search View ────
 	searchViewTitle: "セマンティック検索",
-	searchPlaceholder: "何でも聞いてください — ドキュメントをドロップして処理を依頼することもできます",
+	searchPlaceholder: "何でも聞いてください",
+	searchQueueHint: "入力を続けるとフォローアップとして順次実行されます",
+	queueSteer: "優先実行",
 	searchButton: "検索",
 	searchSend: "送信",
 	searchStop: "停止",

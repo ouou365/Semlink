@@ -110,6 +110,9 @@ export class SemanticSearchView extends ItemView {
 	 *  buildingPersistentMenu：layout-change 高频触发下防止重复构建；
 	 *  persistentMenuRefresh：抽屉 render 闭包的句柄，会话落盘后刷新列表。 */
 	private persistentMenuOn = true;
+	/** 上一次 refreshMainTabUI 时是否在弹窗中——检测「首次进入弹窗」，
+	 *  首次进入时默认收起左侧菜单（用户点 ☰ 再展开）。 */
+	private lastInPopout = false;
 	private buildingPersistentMenu = false;
 	private persistentMenuRefresh: (() => void) | null = null;
 	/** 弹窗宽度联动：当前监听 resize 的弹窗 window（换窗/回侧栏时换绑）。 */
@@ -123,6 +126,7 @@ export class SemanticSearchView extends ItemView {
 	private headerRightIconsEl!: HTMLElement; // right icon group (ring + settings)
 	private settingsBtnEl!: HTMLElement;      // settings gear (ring sits left of it)
 	private firstQuestionEl!: HTMLElement; // second row: first question in small text
+	private firstQuestionTextEl: HTMLElement | null = null;
 	private firstQuestion = "";       // first user question (header subtitle)
 	private headerCompact = false;    // whether the subtitle row is visible
 	private contextRingEl!: HTMLElement | null; // context-usage donut
@@ -133,6 +137,11 @@ export class SemanticSearchView extends ItemView {
 	// Send-button state machine: idle(send) → loading(spin) → stop(abort).
 	private searchBtnEl!: HTMLButtonElement;
 	private isGenerating = false;
+	/** 排队跟进指令：生成中发送的消息先进队列，本轮结束后自动依次执行。
+	 *  content 是发送时输入区的克隆（文字+附件 chips 混排），dequeue 时
+	 *  原样回填输入区走正常 runSearch 路径。 */
+	private queuedFollowUps: Array<{ text: string; content: HTMLElement; segments: ReturnType<typeof this.snapshotSegments> }> = [];
+	private queueEl: HTMLElement | null = null;
 	/** Citation-marker visibility, toggled per view from the actions row.
 	 *  Default OFF — answers read clean; the toggle reveals [n] markers. */
 	private showCitations = false;
@@ -331,7 +340,7 @@ export class SemanticSearchView extends ItemView {
 		// only while the first question is scrolled under the header (see
 		// updateCompactHeader) so the conversation topic stays visible.
 		const firstQ = header.createDiv({ cls: "semlink-search-first-question" });
-		this.firstQuestionEl = firstQ;
+		this.firstQuestionTextEl = firstQ.createSpan({ cls: "semlink-search-first-question-text" });
 
 		// ── Conversation area (middle, scrollable) ──
 		this.statusEl = contentEl.createDiv({ cls: "semlink-search-status" });
@@ -363,13 +372,9 @@ export class SemanticSearchView extends ItemView {
 		// ── Input footer (bottom, fixed) ──
 		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
 
-		// Toolbar ABOVE the input box: model switcher (left) + new-chat pill
-		// (right), ZCode-style. The send/expand row stays inside the box.
-		const toolbarEl = footer.createDiv({ cls: "semlink-search-toolbar" });
-		const toolbarLeft = toolbarEl.createDiv({ cls: "semlink-search-toolbar-left" });
-		// Active chat model indicator: LLM icon + model name + "▾" — clicking
-		// opens the model-switcher popup (same pattern as the depth popup).
-		const modelTrigger = toolbarLeft.createSpan({ cls: "semlink-search-model-trigger" });
+		// 模型选择器（原独立工具栏行）：现在直接挂到输入卡底部行左端——
+		// 工具栏整行删除，把一行高度还给内容。创建于卡片之后移动过去。
+		const modelTrigger = footer.createSpan({ cls: "semlink-search-model-trigger" });
 		this.modelNameEl = modelTrigger.createSpan({ cls: "semlink-search-model-name" });
 		setSvgIcon(this.modelNameEl, llmIconSvg);
 		this.modelLabelEl = modelTrigger.createSpan({ cls: "semlink-search-model-label" });
@@ -383,23 +388,9 @@ export class SemanticSearchView extends ItemView {
 			e.stopPropagation();
 			this.toggleModelPopup();
 		});
-		this.registerDomEvent(document, "click", () => this.hideModelPopup());
-		// New-chat pill (right): fresh conversation — same action as the
-		// header house button, surfaced next to the input for reachability.
-		const toolbarRight = toolbarEl.createDiv({ cls: "semlink-search-toolbar-right" });
-		const newChatPill = toolbarRight.createEl("button", {
-			cls: "semlink-search-newchat",
-			attr: { "aria-label": t("searchNewChat") },
-		});
-		setIcon(newChatPill, "plus");
-		newChatPill.createSpan({ cls: "semlink-search-newchat-label", text: t("searchNewChat") });
-		// Default-hidden: on first load the welcome screen may render before
-		// (or after) this toolbar — start hidden and let
-		// updateHomeIconVisibility reveal it once a conversation exists.
-		newChatPill.addClass("is-hidden");
-		this.newChatPillEl = newChatPill;
-		newChatPill.addEventListener("click", () => this.newChatFromUi());
-
+		// 点外部关闭挂在 contentEl（随视图跨窗迁移）；弹层本身挂在 body
+		// 上、不经过 contentEl 冒泡，弹层内部的点击由各自行处理器关闭。
+		this.registerDomEvent(this.contentEl, "click", () => this.hideModelPopup());
 		const wrapper = footer.createDiv({ cls: "semlink-search-input-wrapper" });
 		// Drag & drop is handled on the WHOLE input wrapper. preventDefault +
 		// stopPropagation keeps Obsidian from treating the drop as a link
@@ -492,6 +483,8 @@ export class SemanticSearchView extends ItemView {
 			},
 			true,
 		);
+		// 排队跟进指令卡片容器（生成中发送的消息在此排队，卡片贴在输入行上方）
+		this.queueEl = wrapper.createDiv({ cls: "semlink-queue semlink-hidden" });
 		const inputRow = wrapper.createDiv({ cls: "semlink-search-input-row" });
 		// Keyboard hint (Ctrl+Enter newline / Enter send) — visible only while
 		// the input is expanded to the tall editor.
@@ -548,12 +541,16 @@ export class SemanticSearchView extends ItemView {
 		this.inputEl.addEventListener("input", () => {
 			this.syncAttachmentsFromInput();
 			this.sanitizeInputLayout();
+			// 生成中打字实时切换按钮形态：有内容=发送(入队)，空=停止。
+			if (this.isGenerating) {
+				this.setSendButtonState("stop");
+			}
 		});
 		// Cut: the browser will not delete contenteditable=false wiki links on
 		// its own — copy the selection and remove it via the Range API.
 		this.inputEl.addEventListener("cut", (e) => {
 			e.preventDefault();
-			const sel = window.getSelection();
+			const sel = this.viewWin.getSelection();
 			if (!sel || sel.rangeCount === 0 || !this.inputEl.contains(sel.getRangeAt(0).commonAncestorContainer)) {
 				return;
 			}
@@ -565,9 +562,10 @@ export class SemanticSearchView extends ItemView {
 			this.sanitizeInputLayout();
 		});
 
-		// Expand/send row inside the input box (the model switcher moved to
-		// the toolbar above the box).
+		// Expand/send row inside the input box：模型选择器在本行左端，
+		// 展开/发送按钮靠右（原独立工具栏行已删除）。
 		const modelEl = wrapper.createDiv({ cls: "semlink-search-model" });
+		modelEl.prepend(modelTrigger);
 
 		// Expand/collapse toggle left of the send button: grows the input to
 		// half the screen for long prompts, collapses back on click (and after
@@ -631,7 +629,12 @@ export class SemanticSearchView extends ItemView {
 		setIcon(searchBtn, "arrow-up");
 		searchBtn.addEventListener("click", () => {
 			if (this.isGenerating) {
-				// Stop button: abort the in-flight generation.
+				// 生成中：输入框有内容 = 发送（入队跟进指令）；空 = 中止。
+				if (this.extractInputText().trim()) {
+					void this.runSearch();
+					this.scrollToBottom();
+					return;
+				}
 				this.activeAskController?.abort();
 				this.setSendButtonState("idle");
 				return;
@@ -672,10 +675,27 @@ export class SemanticSearchView extends ItemView {
 
 	/** Send-button state machine: "idle"(arrow-up) | "stop"(solid square, aborts the run). */
 	private setSendButtonState(state: "idle" | "stop"): void {
+		// 生成中占位符提示「继续输入将排队」；空闲恢复常规占位符。
+		const ph = t(state === "stop" ? "searchQueueHint" : "searchPlaceholder");
+		this.inputEl.setAttr("data-placeholder", ph);
+		this.inputEl.setAttr("aria-label", ph);
+		const btn = this.searchBtnEl;
+		if (!btn) return;
+		// 生成中且输入框有内容 → 按钮切回发送形态（点击=入队跟进指令）；
+		// 生成中且输入为空 → 保持停止形态（点击=中止）。
+		if (state === "stop" && this.extractInputText().trim()) {
+			this.setSendButtonIcon("send");
+			return;
+		}
+		this.setSendButtonIcon(state);
+	}
+
+	/** 发送按钮形态：idle=发送、stop=停止、send=生成中的入队发送。 */
+	private setSendButtonIcon(state: "idle" | "stop" | "send"): void {
 		const btn = this.searchBtnEl;
 		if (!btn) return;
 		btn.empty();
-		if (state === "idle") {
+		if (state !== "stop") {
 			setIcon(btn, "arrow-up");
 			btn.setAttr("aria-label", t("searchSend"));
 			btn.setAttr("title", t("searchSend"));
@@ -709,6 +729,18 @@ export class SemanticSearchView extends ItemView {
 	private async runSearch(): Promise<void> {
 		const query = this.extractInputText().trim();
 		if (!query) return;
+		// 生成中发送 = 排队跟进指令：快照输入区（文字+chips），渲染成
+		// 待执行卡片，本轮结束后自动依次执行。
+		if (this.isGenerating) {
+			const userContent = this.inputEl.cloneNode(true) as HTMLElement;
+			const segments = this.snapshotSegments(userContent);
+			this.queuedFollowUps.push({ text: query, content: userContent, segments });
+			this.clearInputText();
+			this.renderFollowUpQueue();
+			// 清空是程序化操作（不触发 input 事件）——显式把按钮切回停止形态。
+			this.setSendButtonState("stop");
+			return;
+		}
 		if (!this.hasApiKey()) {
 			// No key → skip the hint entirely and bring the guide up right
 			// away (covers the skipped-guide state too).
@@ -1236,6 +1268,66 @@ export class SemanticSearchView extends ItemView {
 			this.isGenerating = false;
 			this.activeAskController = null;
 			this.setSendButtonState("idle");
+			// 队列里有排队的跟进指令 → 回填输入区并立即续跑。
+			if (this.queuedFollowUps.length > 0) {
+				void this.dequeueNextFollowUp();
+			}
+		}
+	}
+
+	/** 取出队首跟进指令：把快照的输入区内容原样回填（文字+chips），
+	 *  走正常 runSearch 路径（气泡/持久化/附件逻辑全部复用）。 */
+	private async dequeueNextFollowUp(): Promise<void> {
+		const item = this.queuedFollowUps.shift();
+		this.renderFollowUpQueue();
+		if (!item) return;
+		this.inputEl.replaceChildren(...Array.from(item.content.childNodes));
+		this.syncAttachmentsFromInput();
+		await this.runSearch();
+	}
+
+	/** 重渲染排队卡片列表（贴在输入框上方、白色卡片内部顶端）。 */
+	private renderFollowUpQueue(): void {
+		if (!this.queueEl) return;
+		this.queueEl.empty();
+		this.queueEl.toggleClass("semlink-hidden", this.queuedFollowUps.length === 0);
+		for (let i = 0; i < this.queuedFollowUps.length; i++) {
+			const item = this.queuedFollowUps[i];
+			const row = this.queueEl.createDiv({ cls: "semlink-queue-item" });
+			const texts = row.createDiv({ cls: "semlink-queue-texts" });
+			texts.createDiv({ cls: "semlink-queue-text", text: item.text });
+			const chips = item.content.querySelectorAll(".semlink-chip, .semlink-attach-chip");
+			if (chips.length > 0) {
+				texts.createDiv({ cls: "semlink-queue-attach", text: `📎 × ${chips.length}` });
+			}
+			const actions = row.createDiv({ cls: "semlink-queue-actions" });
+			// Steer：插队到队首——本轮结束后第一个执行（ZCode 同名语义的
+			// 排队版：不中断当前运行，但抢到下一个执行位）。
+			if (i > 0) {
+				const steerBtn = actions.createEl("button", { cls: "semlink-queue-steer", attr: { "aria-label": t("queueSteer"), title: t("queueSteer") } });
+				setIcon(steerBtn, "arrow-up-to-line");
+				steerBtn.createSpan({ cls: "semlink-queue-steer-label", text: t("queueSteer") });
+				steerBtn.addEventListener("click", () => {
+					const [steered] = this.queuedFollowUps.splice(i, 1);
+					this.queuedFollowUps.unshift(steered);
+					this.renderFollowUpQueue();
+				});
+			}
+			const editBtn = actions.createEl("button", { cls: "semlink-search-icon-btn clickable-icon", attr: { "aria-label": t("edit") } });
+			setIcon(editBtn, "pencil");
+			editBtn.addEventListener("click", () => {
+				this.queuedFollowUps.splice(i, 1);
+				this.inputEl.replaceChildren(...Array.from(item.content.childNodes));
+				this.syncAttachmentsFromInput();
+				this.renderFollowUpQueue();
+				this.inputEl.focus();
+			});
+			const delBtn = actions.createEl("button", { cls: "semlink-search-icon-btn clickable-icon", attr: { "aria-label": t("searchNewChat") } });
+			setIcon(delBtn, "trash-2");
+			delBtn.addEventListener("click", () => {
+				this.queuedFollowUps.splice(i, 1);
+				this.renderFollowUpQueue();
+			});
 		}
 	}
 
@@ -1326,7 +1418,7 @@ export class SemanticSearchView extends ItemView {
 		}
 		// No early return on an empty map: markers must STILL be wrapped so
 		// the show-sources toggle can hide them uniformly.
-		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+		const walker = this.viewDoc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
 			acceptNode: (node) => {
 				const parent = node.parentElement;
 				if (!parent) return NodeFilter.FILTER_REJECT;
@@ -1350,17 +1442,17 @@ export class SemanticSearchView extends ItemView {
 				last = m.index + m[0].length;
 			}
 			if (last < text.length) parts.push({ text: text.slice(last) });
-			const frag = document.createDocumentFragment();
+			const frag = this.viewDoc.createDocumentFragment();
 			for (const part of parts) {
 				if (part.text !== undefined) {
-					frag.appendChild(document.createTextNode(part.text));
+					frag.appendChild(this.viewDoc.createTextNode(part.text));
 					continue;
 				}
 				// Every marker becomes .semlink-cite-ref — hidden by default and
 				// revealed by the "show sources" toggle (CSS on the view root).
 				// Resolvable ones additionally become clickable links.
 				const target = part.n !== undefined ? pathByNumber.get(part.n) : undefined;
-				const ref = document.createElement("span");
+				const ref = this.viewDoc.createElement("span");
 				ref.className = target ? "semlink-cite-ref semlink-cite-link" : "semlink-cite-ref";
 				ref.setText(`[${part.n}]`);
 				if (target) {
@@ -1445,7 +1537,7 @@ export class SemanticSearchView extends ItemView {
 		const source = "[A-Za-z0-9\u2011\u2013\u2014\u4e00-\u9fff（）()．·._\\-/]+\\.md";
 		const candidate = new RegExp(source);
 		const global = new RegExp(source, "g");
-		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+		const walker = this.viewDoc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
 			acceptNode: (node) => {
 				const parent = node.parentElement;
 				if (!parent) return NodeFilter.FILTER_REJECT;
@@ -1471,13 +1563,13 @@ export class SemanticSearchView extends ItemView {
 			global.lastIndex = 0;
 			if (parts.length === 0) continue;
 			if (last < text.length) parts.push({ text: text.slice(last) });
-			const frag = document.createDocumentFragment();
+			const frag = this.viewDoc.createDocumentFragment();
 			for (const part of parts) {
 				if (part.text !== undefined) {
-					frag.appendChild(document.createTextNode(part.text));
+					frag.appendChild(this.viewDoc.createTextNode(part.text));
 					continue;
 				}
-				const link = document.createElement("span");
+				const link = this.viewDoc.createElement("span");
 				link.className = "semlink-cite-link";
 				link.setText(part.path!);
 				link.addEventListener("click", () => {
@@ -1518,8 +1610,8 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	/** 在预览 DOM 中找到包含锚文本的元素（跳过代码块），返回它以供滚动。 */
-	private findTextInPreview(root: HTMLElement, anchor: string): HTMLElement | null {
-		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+	private findTextInPreview(root: Element, anchor: string): HTMLElement | null {
+		const walker = this.viewDoc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
 			acceptNode: (node) => {
 				const tag = node.parentElement?.tagName;
 				return tag === "CODE" || tag === "PRE" ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
@@ -1613,7 +1705,7 @@ export class SemanticSearchView extends ItemView {
 			const sessionId = this.currentSessionId;
 			// Lock what the sharer sees INTO the link: UI language + light/dark.
 			const lang = getLang();
-			const theme = document.body.classList.contains("theme-dark") ? "dark" : "light";
+			const theme = this.viewDoc.body.classList.contains("theme-dark") ? "dark" : "light";
 			const sharedAt = Date.now();
 			const html = await renderSharePage(this.app, this.currentMessages, this.firstQuestion || t("shareTitle"), this, theme, sharedAt);
 			await this.plugin.shareServer.ensureStarted(this.plugin.settings.sharePort);
@@ -1716,7 +1808,7 @@ export class SemanticSearchView extends ItemView {
 	 */
 	private insertAttachmentChips(paths: string[]): void {
 		if (paths.length === 0) return;
-		const sel = window.getSelection();
+		const sel = this.viewWin.getSelection();
 		let range: Range | null = null;
 		let inInput = false;
 		if (sel && sel.rangeCount > 0) {
@@ -1731,7 +1823,7 @@ export class SemanticSearchView extends ItemView {
 			for (const path of paths) {
 				range.insertNode(this.createWikilink(path));
 				// A space after each link keeps surrounding words separated.
-				const space = document.createTextNode(" ");
+				const space = this.viewDoc.createTextNode(" ");
 				range.insertNode(space);
 				range.setStartAfter(space);
 				range.collapse(true);
@@ -1741,7 +1833,7 @@ export class SemanticSearchView extends ItemView {
 		} else {
 			for (const path of paths) {
 				this.inputEl.appendChild(this.createWikilink(path));
-				this.inputEl.appendChild(document.createTextNode(" "));
+				this.inputEl.appendChild(this.viewDoc.createTextNode(" "));
 			}
 		}
 		this.inputEl.focus();
@@ -1807,7 +1899,7 @@ export class SemanticSearchView extends ItemView {
 	 * attachment tracking); the rest becomes plain text (newlines as <br>).
 	 */
 	private insertTextWithWikilinks(text: string): void {
-		const sel = window.getSelection();
+		const sel = this.viewWin.getSelection();
 		if (!sel || sel.rangeCount === 0) return;
 		const range = sel.getRangeAt(0);
 		range.deleteContents();
@@ -1828,12 +1920,12 @@ export class SemanticSearchView extends ItemView {
 					insert(this.createWikilink(resolved));
 					added.push(resolved);
 				} else {
-					insert(document.createTextNode(part));
+					insert(this.viewDoc.createTextNode(part));
 				}
 			} else {
 				part.split(/\r?\n/).forEach((line, i) => {
 					if (i > 0) insert(createEl("br"));
-					insert(document.createTextNode(line));
+					insert(this.viewDoc.createTextNode(line));
 				});
 			}
 		}
@@ -1852,8 +1944,8 @@ export class SemanticSearchView extends ItemView {
 		this.inputEl.empty();
 		this.inputEl.focus();
 		// Place the caret at the start so insertTextWithWikilinks has a range.
-		const sel = window.getSelection();
-		const range = document.createRange();
+		const sel = this.viewWin.getSelection();
+		const range = this.viewDoc.createRange();
 		range.selectNodeContents(this.inputEl);
 		range.collapse(true);
 		sel?.removeAllRanges();
@@ -1938,7 +2030,7 @@ export class SemanticSearchView extends ItemView {
 
 	/** Insert a <br> at the caret (Ctrl+Enter). Works without execCommand. */
 	private insertLineBreakAtCaret(): void {
-		const sel = window.getSelection();
+		const sel = this.viewWin.getSelection();
 		if (!sel || sel.rangeCount === 0) return;
 		const range = sel.getRangeAt(0);
 		// Only act when the caret is inside our input.
@@ -2684,6 +2776,24 @@ export class SemanticSearchView extends ItemView {
 		});
 		const header = drawer.createDiv({ cls: "semlink-history-header" });
 		const titleEl = header.createDiv({ cls: "semlink-history-title", text: t("historyTitle") });
+		// 新对话入口（原输入区上方工具栏）：菜单标题行右侧、archive 左侧。
+		// 主页状态下隐藏（无会话可新开），与原 updateHomeIconVisibility 口径一致。
+		const drawerNewChat = header.createEl("button", {
+			cls: "semlink-search-newchat" + (!this.messagesEl.querySelector(".semlink-search-welcome") ? "" : " is-hidden"),
+			attr: { "aria-label": t("searchNewChat") },
+		});
+		setIcon(drawerNewChat, "plus");
+		drawerNewChat.createSpan({ cls: "semlink-search-newchat-label", text: t("searchNewChat") });
+		drawerNewChat.addEventListener("click", () => {
+			if (persistent) {
+				this.newChatFromUi();
+			} else {
+				// 浮层抽屉：先收起再新开，避免抽屉挡住新会话画面
+				closeBtn?.click();
+				this.newChatFromUi();
+			}
+		});
+		this.newChatPillEl = drawerNewChat;
 		// Far right: archive entry → dedicated view of archived chats
 		// (free tier: everything past the 5-active window; deletable there).
 		const archiveBtn = header.createEl("button", {
@@ -3198,7 +3308,9 @@ export class SemanticSearchView extends ItemView {
 			// 会话落盘与许可激活后的刷新都走它。
 			this.persistentMenuRefresh = render;
 		} else {
-			window.requestAnimationFrame(() => {
+			// rAF 必须取视图所在 window：主窗被遮挡/最小化时主窗 rAF 暂停，
+			// 弹窗里的抽屉会永远停在屏外（点 ☰ 无响应）。
+			this.viewWin.requestAnimationFrame(() => {
 				drawer.addClass("semlink-history-drawer-open");
 				backdrop?.addClass("semlink-history-backdrop-open");
 			});
@@ -3248,7 +3360,8 @@ export class SemanticSearchView extends ItemView {
 		if (drawer.hasClass("is-persistent")) return;
 		drawer.removeClass("semlink-history-drawer-open");
 		backdrop?.removeClass("semlink-history-backdrop-open");
-		window.setTimeout(() => {
+		// 视图所在 window 的 timer（主窗后台节流会拖慢弹窗里的移除）
+		this.viewWin.setTimeout(() => {
 			backdrop?.remove();
 			drawer.remove();
 		}, 300);
@@ -3264,6 +3377,27 @@ export class SemanticSearchView extends ItemView {
 
 	/** 视图是否已运行在独立弹窗里：popout 的 DOM 属于另一个 window/document，
 	 *  与主窗口的 document 不同。 */
+	/** 本视图当前所在的 window/document：侧栏与主窗实例是主 window，
+	 *  迁入弹窗后是弹窗自己的 window——contenteditable 的选区/Range/DOM
+	 *  构造必须用节点所在 window 的 API，跨 window 操作会抛
+	 *  WrongDocumentError（弹窗里点击建议卡无响应的根因）。 */
+	/** 懒创建后缓存的 body 弹层（模型弹层/tooltip）在视图跨窗迁移后会
+	 *  滞留在旧 window 的 body 上——显示前把它搬回当前 window 的 body
+	 *  （跨 document appendChild 自动 adopt，监听器保留）。 */
+	private repatriateToCurrentWindow(el: HTMLElement): void {
+		if (el.ownerDocument !== this.viewDoc) {
+			this.viewDoc.body.appendChild(el);
+			el.addClass("semlink-hidden");
+		}
+	}
+
+	private get viewDoc(): Document {
+		return this.contentEl.ownerDocument;
+	}
+	private get viewWin(): Window {
+		return this.contentEl.ownerDocument.defaultView ?? window;
+	}
+
 	private inPopoutWindow(): boolean {
 		return this.contentEl.ownerDocument.defaultView !== window;
 	}
@@ -3296,6 +3430,12 @@ export class SemanticSearchView extends ItemView {
 		// 独立弹窗与主区域标签页同享宽幅样式（底色/限宽/常显菜单）
 		this.contentEl.toggleClass("semlink-main-tab", isMain);
 		this.popoutBtnEl?.toggleClass("semlink-hidden", inPopout);
+		// 首次进入弹窗：默认收起左侧菜单——弹窗是聚焦对话的形态，
+		// 菜单点 ☰ 随时展开（窄幅 ≤600 的自动收起逻辑不受影响）。
+		if (inPopout && !this.lastInPopout) {
+			this.persistentMenuOn = false;
+		}
+		this.lastInPopout = inPopout;
 		// 独立弹窗：隐藏 Obsidian 的视图标题头（Semlink 名牌/图标），
 		// 对话区顶满整窗；窗口自身的系统标题栏负责拖动/关闭
 		this.contentEl.parentElement?.querySelector(":scope > .view-header")
@@ -3541,8 +3681,8 @@ export class SemanticSearchView extends ItemView {
 			// didn't flip (e.g. another session was loaded while scrolled
 			// down — the question text must follow the new session).
 			const text = this.truncateSubtitle(this.firstQuestion);
-			if (this.firstQuestionEl.textContent !== text) {
-				this.firstQuestionEl.textContent = text;
+			if (this.firstQuestionTextEl?.textContent !== text) {
+				this.firstQuestionTextEl?.replaceChildren(text);
 			}
 		}
 	}
@@ -3585,7 +3725,7 @@ export class SemanticSearchView extends ItemView {
 		if (!this.contextRingEl) return;
 		// Lazily create the tooltip on document.body (see onOpen comment).
 		if (!this.tooltipEl) {
-			this.tooltipEl = document.body.createDiv({ cls: "semlink-context-tooltip semlink-hidden" });
+			this.tooltipEl = this.viewDoc.body.createDiv({ cls: "semlink-context-tooltip semlink-hidden" });
 			// Hovering the tooltip itself keeps it open (otherwise moving the
 			// mouse from the ring onto the tooltip hides it immediately).
 			this.tooltipEl.addEventListener("mouseenter", () => {
@@ -3597,6 +3737,7 @@ export class SemanticSearchView extends ItemView {
 			this.tooltipEl.addEventListener("mouseleave", () => this.hideContextTooltip());
 		}
 		const el = this.tooltipEl;
+		this.repatriateToCurrentWindow(el);
 		const bd = this.lastBreakdown;
 		const used = bd?.used ?? 0;
 		// The capacity ceiling is FIXED by the active model — before any turn
@@ -3723,21 +3864,33 @@ export class SemanticSearchView extends ItemView {
 		// Lazily create the popup on document.body so fixed positioning is
 		// not thrown off by transformed/clipping ancestors.
 		if (!this.modelPopupEl) {
-			this.modelPopupEl = document.body.createDiv({ cls: "semlink-search-depth-popup semlink-search-model-popup semlink-hidden" });
+			this.modelPopupEl = this.viewDoc.body.createDiv({ cls: "semlink-search-depth-popup semlink-search-model-popup semlink-hidden" });
 		}
 		const popup = this.modelPopupEl;
+		this.repatriateToCurrentWindow(popup);
 		this.renderModelPopupContent(popup);
 
 		// Position ABOVE the trigger (bottom edge of the window is tight).
+		// 坐标一律取触发器所在 window（viewWin）——主窗 innerHeight 配弹窗
+		// rect 会把弹层打到屏幕中部。先显示、后按实测 rect 夹紧视口。
 		const rect = this.modelTriggerEl.getBoundingClientRect();
+		const vh = this.viewWin.innerHeight;
+		const vw = this.viewWin.innerWidth;
 		popup.style.left = rect.left + "px";
-		popup.style.bottom = (window.innerHeight - rect.top + 4) + "px";
+		popup.style.top = "";
+		popup.style.bottom = (vh - rect.top + 4) + "px";
 		popup.removeClass("semlink-hidden");
 
-		// Keep it inside the viewport.
-		const vw = window.innerWidth;
-		if (rect.left + popup.offsetWidth > vw - 8) {
-			popup.style.left = Math.max(8, vw - popup.offsetWidth - 8) + "px";
+		// 实测校验：弹层顶部越出视口、或压住触发器 → 改用 top 锚定在触发器上方。
+		const pr = popup.getBoundingClientRect();
+		if (pr.top < 8 || pr.bottom > rect.top - 2) {
+			popup.style.bottom = "auto";
+			popup.style.top = Math.max(8, Math.min(rect.top - pr.height - 4, vh - pr.height - 8)) + "px";
+		}
+		// 水平夹紧视口。
+		const pr2 = popup.getBoundingClientRect();
+		if (pr2.left + pr2.width > vw - 8) {
+			popup.style.left = Math.max(8, vw - pr2.width - 8) + "px";
 		}
 	}
 

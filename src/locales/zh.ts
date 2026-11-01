@@ -94,8 +94,6 @@ const zh: Record<keyof typeof en, string> = {
 	excludePathsDesc: "每行一个路径前缀：匹配的文件不索引、也不出现在检索结果里；保存时会移除已索引的匹配内容",
 	autoIndex: "自动索引",
 	autoEmbed: "自动嵌入",
-	newTabHome: "新建标签页显示 Semlink",
-	newTabHomeDesc: "新建标签页自动打开 Semlink 主页而不是空白状态——包括 + 按钮、Ctrl+T，以及关闭最后一个标签后留下的空白页",
 	popOutWindow: "弹出独立窗口",
 	popOutFailed: "当前环境不支持弹出窗口",
 	actions: "操作",
@@ -194,7 +192,9 @@ const zh: Record<keyof typeof en, string> = {
 
 // ──── Semantic Search View ────
 	searchViewTitle: "语义搜索",
-	searchPlaceholder: "有问题尽管问，还能拖入文档让我帮你处理哦",
+	searchPlaceholder: "随便问我",
+	searchQueueHint: "继续输入，将作为跟进指令排队执行",
+	queueSteer: "优先执行",
 	searchButton: "搜索",
 	searchSend: "发送",
 	searchStop: "停止生成",

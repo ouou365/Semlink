@@ -254,7 +254,6 @@ export default class SmartVaultPlugin extends Plugin {
 
 		// 新建标签页显示 Semlink 主页：等布局就绪后开始接管，避免在启动
 		// 恢复布局的中途替换视图。
-		this.app.workspace.onLayoutReady(() => this.setupNewTabHome());
 
 		// 对话浮窗回归侧栏：弹出的 popout 窗口关闭且已无任何 Semlink 视图
 		// 时，自动把主页放回右侧栏。延迟一个宏任务——window-close 触发时
@@ -579,6 +578,7 @@ export default class SmartVaultPlugin extends Plugin {
 			(q) => this.runDebugAsk(q),
 			() => this.runDebugReload(),
 			(path, line) => this.runDebugJump(path, line),
+			() => this.runDebugMeasure(),
 		);
 		try {
 			await server.start();
@@ -658,6 +658,160 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 		const scroller = (v.contentEl.querySelector(".markdown-preview-view") ?? v.contentEl) as HTMLElement | null;
 		return { mode, resolved, scrollTop: Math.round(scroller?.scrollTop ?? -1), scrollHeight: scroller?.scrollHeight ?? -1, expectedLine: line, totalLines, file: v.file?.path };
+	}
+
+	private async runDebugMeasure(): Promise<unknown> {
+		type WinLike = { document: Document; innerWidth: number; innerHeight: number; devicePixelRatio: number; getComputedStyle(el: Element): CSSStyleDeclaration; CSSStyleRule: typeof CSSStyleRule };
+		// 主窗 + 全部弹窗（floatingSplit 子树各持自己的 window）
+		const wins: WinLike[] = [window as unknown as WinLike];
+		const floats = (this.app.workspace as unknown as { floatingSplit?: { children?: Array<{ win?: WinLike }> } }).floatingSplit;
+		for (const c of floats?.children ?? []) {
+			if (c?.win) wins.push(c.win);
+		}
+		const out: Record<string, unknown> = {};
+		for (const w of wins) {
+			const view = w.document.querySelector(".semlink-search-view");
+			if (!view) continue;
+			const pick = (sel: string) => {
+				const el = w.document.querySelector(sel) as HTMLElement | null;
+				if (!el) return null;
+				const r = el.getBoundingClientRect();
+				const cs = w.getComputedStyle(el);
+				return {
+					rect: { top: Math.round(r.top), bottom: Math.round(r.bottom), height: Math.round(r.height), width: Math.round(r.width) },
+					padding: `${cs.paddingTop} ${cs.paddingRight} ${cs.paddingBottom} ${cs.paddingLeft}`,
+					margin: `${cs.marginTop} ${cs.marginRight} ${cs.marginBottom} ${cs.marginLeft}`,
+					display: cs.display,
+					alignItems: cs.alignItems,
+				};
+			};
+			// 头部左右按钮组的垂直中心对比（对齐诊断）
+			const sides = Array.from(w.document.querySelectorAll(".semlink-search-header-side")) as HTMLElement[];
+			const headerSides = sides.map((side) => {
+				const r = side.getBoundingClientRect();
+				const btn = side.querySelector("button") as HTMLElement | null;
+				const br = btn?.getBoundingClientRect();
+				return {
+					side: { top: Math.round(r.top), height: Math.round(r.height) },
+					firstBtnCenter: br ? Math.round(br.top + br.height / 2) : null,
+					display: w.getComputedStyle(side).display,
+					alignItems: w.getComputedStyle(side).alignItems,
+				};
+			});
+			// 找出给视图设置 padding 的样式表规则（含来源 href）——
+			// 12/12/32 的来源在插件样式表之外，需要定位是哪条规则。
+			const probeView = w.document.querySelector(".semlink-search-view") as HTMLElement | null;
+			const padRules: Array<{ href: string; selector: string; padding: string; important: boolean }> = [];
+			if (probeView) {
+				const inline = probeView.getAttribute("style") ?? "";
+				for (const sheet of Array.from(w.document.styleSheets)) {
+					let rules: CSSRuleList;
+					try { rules = sheet.cssRules; } catch { continue; }
+					for (const rule of Array.from(rules)) {
+						const styleRule = rule as CSSStyleRule;
+						if (!styleRule.selectorText || !styleRule.style) continue;
+						try {
+							if (!styleRule.style.paddingBottom) continue;
+							if (!probeView.matches(styleRule.selectorText)) continue;
+							padRules.push({
+								href: sheet.href?.split("/").slice(-1)[0] ?? "(inline)",
+								selector: styleRule.selectorText,
+								padding: `${styleRule.style.paddingTop} ${styleRule.style.paddingRight} ${styleRule.style.paddingBottom} ${styleRule.style.paddingLeft}`,
+								important: styleRule.style.getPropertyPriority("padding-bottom") === "important",
+							});
+						} catch { continue; }
+					}
+				}
+				if (inline) padRules.push({ href: "(inline)", selector: "style attr", padding: inline, important: false });
+			}
+			// 主页 ↔ 引导 hub 抖动诊断：临时切到 hub 量一次再切回（不落盘）。
+			let jitter: Record<string, unknown> | null = null;
+			// 视图对象（不是 DOM 元素）：messagesEl/renderWelcome 都在实例上
+			const semView = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)
+				.map((l) => l.view as unknown as {
+					contentEl?: HTMLElement; guideRequested?: boolean; messagesEl?: HTMLElement;
+					renderWelcome?: () => void; newChatFromUi?: () => void;
+				} | null)
+				.find((v) => v?.contentEl?.ownerDocument === w.document) ?? null;
+			const rectOf = (sel: string): { x: number; y: number; w: number; h: number } | null => {
+				const el = w.document.querySelector(sel) as HTMLElement | null;
+				if (!el) return null;
+				const r = el.getBoundingClientRect();
+				return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
+			};
+			if (semView?.messagesEl && semView.renderWelcome && !w.document.querySelector(".semlink-search-welcome")) {
+				// 停在会话里 → 先回到主页（会话已持久化，可从历史恢复）
+				semView.newChatFromUi?.();
+				await new Promise((r2) => setTimeout(r2, 400));
+			}
+			const dbg = {
+				hasSemView: !!semView,
+				hasMessages: !!semView?.messagesEl,
+				hasRender: typeof semView?.renderWelcome,
+				hasNewChat: typeof semView?.newChatFromUi,
+				welcomeCount: w.document.querySelectorAll(".semlink-search-welcome").length,
+				guideCount: w.document.querySelectorAll(".semlink-search-welcome-guide").length,
+				msgChildren: semView?.messagesEl?.children.length ?? -1,
+				msgFirstCls: semView?.messagesEl?.firstElementChild?.className ?? null,
+			};
+			if (semView?.messagesEl && semView.renderWelcome && w.document.querySelector(".semlink-search-welcome:not(.semlink-search-welcome-guide)")) {
+				const home = {
+					brand: rectOf(".semlink-search-brand-group"),
+					rightIcons: rectOf(".semlink-search-header-right"),
+					emoji: rectOf(".semlink-search-welcome-emoji"),
+					greeting: rectOf(".semlink-search-welcome-greeting"),
+				};
+				semView.guideRequested = true;
+				semView.messagesEl.empty();
+				semView.renderWelcome();
+				await new Promise((r2) => setTimeout(r2, 600));
+					const cs = w.document.querySelector(".semlink-guide-corners") as HTMLElement | null;
+					const csStyle = cs ? w.getComputedStyle(cs) : null;
+					const msgs = w.document.querySelector(".semlink-search-messages") as HTMLElement | null;
+					const msgsStyle = msgs ? w.getComputedStyle(msgs) : null;
+					const guide = {
+					cornersBox: cs && csStyle ? { margin: `${csStyle.marginTop} ${csStyle.marginRight} ${csStyle.marginBottom} ${csStyle.marginLeft}`, width: csStyle.width, parentCls: cs.parentElement?.className } : null,
+					messagesBox: msgs && msgsStyle ? { rect: rectOf(".semlink-search-messages"), padding: `${msgsStyle.paddingTop} ${msgsStyle.paddingRight} ${msgsStyle.paddingBottom} ${msgsStyle.paddingLeft}` } : null,
+					corners: rectOf(".semlink-guide-corners"),
+					brand: rectOf(".semlink-guide-corners .semlink-search-brand-group"),
+					rightIcons: rectOf(".semlink-guide-corners .semlink-search-header-right"),
+					emoji: rectOf(".semlink-guide-hub-emoji"),
+					name: rectOf(".semlink-guide-hub-name"),
+				};
+				semView.guideRequested = false;
+				semView.messagesEl.empty();
+				semView.renderWelcome();
+				await new Promise((r2) => setTimeout(r2, 600));
+				const d = (a: { x: number; y: number } | null, b: { x: number; y: number } | null) =>
+					a && b ? { dx: b.x - a.x, dy: b.y - a.y } : null;
+				jitter = {
+					home, guide,
+					brandDelta: d(home.brand, guide.brand),
+					rightIconsDelta: d(home.rightIcons, guide.rightIcons),
+					emojiDelta: d(home.emoji, guide.emoji),
+				};
+			}
+			out[`window_${Math.round(w.innerWidth)}x${Math.round(w.innerHeight)}@${w.devicePixelRatio}`] = {
+				dbg,
+				jitter,
+				padRules,
+				headerSides,
+				view: pick(".semlink-search-view"),
+				footer: pick(".semlink-search-footer"),
+				wrapper: pick(".semlink-search-input-wrapper"),
+				row: pick(".semlink-search-input-row"),
+				input: pick(".semlink-search-input"),
+				model: pick(".semlink-search-model"),
+			};
+		}
+		if (Object.keys(out).length === 0) {
+			// 没有任何窗口开着视图——主动唤起主区标签页实例再量一次。
+			await this.activateSearchView();
+			await new Promise((r) => window.setTimeout(r, 600));
+			const view = document.querySelector(".semlink-search-view");
+			if (!view) return { error: "search view did not open" };
+		}
+		return out;
 	}
 
 	private runDebugReload(): void {
@@ -863,30 +1017,6 @@ export default class SmartVaultPlugin extends Plugin {
 		(leaf?.view as SemanticSearchView | undefined)?.openSetupGuide(kind);
 	}
 
-	/** 新建标签页接管（设置可关）：Obsidian 的空白标签页（empty 视图）一律
-	 *  换成 Semlink 主页。+/Ctrl+T 新建、关闭最后一个标签后的空态、启动时
-	 *  恢复的空标签都汇入 active-leaf-change 这一个入口。延迟到下一个宏任务
-	 *  并二次确认视图仍是 empty——openLinkText 等内部流程会先建空叶再设置
-	 *  markdown 视图，二次确认避免抢在 Obsidian 前面顶掉文件标签页。 */
-	private setupNewTabHome(): void {
-		const swapToHome = (leaf: WorkspaceLeaf): void => {
-			window.setTimeout(() => {
-				if (!this.settings.newTabSemlink) return;
-				// 只接管主工作区的空白标签，左右侧栏里的空叶不动
-				if ((leaf as unknown as { containerEl: HTMLElement }).containerEl
-					.closest(".mod-right-split, .mod-left-split")) return;
-				if (leaf.view?.getViewType() !== "empty") return;
-				leaf.setViewState({ type: SEARCH_VIEW_TYPE, active: true }).catch((e) => {
-					console.warn("[Semlink] new-tab home swap failed:", e);
-				});
-			}, 0);
-		};
-		this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
-			if (leaf) swapToHome(leaf);
-		}));
-		// 事件注册晚于布局恢复：启动布局里已存在的空白标签收不到事件，主动扫一次
-		for (const leaf of this.app.workspace.getLeavesOfType("empty")) swapToHome(leaf);
-	}
 
 	private updateStatusBar(p: import("./src/types").IndexProgress) {
 		if (!this.statusBarEl) return;

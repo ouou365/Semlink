@@ -94,8 +94,6 @@ const t: Record<keyof typeof en, string> = {
 	excludePathsDesc: "Префиксы путей (по одному в строке). Совпадающие файлы не индексируются и не появляются в результатах поиска; при сохранении ранее проиндексированные совпадения удаляются из индекса",
 	autoIndex: "Автоиндексация",
 	autoEmbed: "Авто-эмбеддинг",
-	newTabHome: "Открывать Semlink в новых вкладках",
-	newTabHomeDesc: "Новые вкладки открывают главную страницу Semlink вместо пустого состояния — включая кнопку «+», Ctrl+T и пустое окно после закрытия последней вкладки",
 	popOutWindow: "Открыть в отдельном окне",
 	popOutFailed: "Отдельные окна здесь недоступны",
 	actions: "Действия",
@@ -194,7 +192,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── Semantic Search View ────
 	searchViewTitle: "Семантический поиск",
-	searchPlaceholder: "Спросите о чём угодно — или перетащите сюда документы, и я с ними разберусь",
+	searchPlaceholder: "Спросите о чём угодно",
+	searchQueueHint: "Продолжайте печатать — сообщение встанет в очередь",
+	queueSteer: "Приоритет",
 	searchButton: "Поиск",
 	searchSend: "Отправить",
 	searchStop: "Остановить",

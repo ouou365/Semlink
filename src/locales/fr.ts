@@ -93,8 +93,6 @@ const t: Record<keyof typeof en, string> = {
 	excludePathsDesc: "Préfixes de chemins (un par ligne). Les fichiers correspondants ne sont pas indexés et n'apparaissent jamais dans les résultats ; à l'enregistrement, les correspondances déjà indexées sont retirées de l'index",
 	autoIndex: "Indexation auto",
 	autoEmbed: "Embedding auto",
-	newTabHome: "Afficher Semlink dans les nouveaux onglets",
-	newTabHomeDesc: "Les nouveaux onglets ouvrent la page d'accueil Semlink au lieu de l'état vide — concerne le bouton +, Ctrl+T et la vue vide laissée après la fermeture du dernier onglet",
 	popOutWindow: "Ouvrir dans une fenêtre indépendante",
 	popOutFailed: "Les fenêtres indépendantes ne sont pas disponibles ici",
 	actions: "Actions",
@@ -193,7 +191,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── Semantic Search View ────
 	searchViewTitle: "Recherche sémantique",
-	searchPlaceholder: "Posez-moi n'importe quelle question — ou déposez des documents à traiter",
+	searchPlaceholder: "Posez-moi vos questions",
+	searchQueueHint: "Continuez à taper pour mettre les suivis en file",
+	queueSteer: "Prioriser",
 	searchButton: "Rechercher",
 	searchSend: "Envoyer",
 	searchStop: "Arrêter",

@@ -93,8 +93,6 @@ const t: Record<keyof typeof en, string> = {
 	excludePathsDesc: "每行一個路徑前綴：符合的檔案不索引、也不出現在檢索結果裡；儲存時會移除已索引的符合內容",
 	autoIndex: "自動索引",
 	autoEmbed: "自動嵌入",
-	newTabHome: "新增分頁顯示 Semlink",
-	newTabHomeDesc: "新增分頁自動開啟 Semlink 主頁而不是空白狀態——包括 + 按鈕、Ctrl+T，以及關閉最後一個分頁後留下的空白頁",
 	popOutWindow: "彈出獨立視窗",
 	popOutFailed: "目前環境不支援彈出視窗",
 	actions: "動作",
@@ -193,7 +191,9 @@ const t: Record<keyof typeof en, string> = {
 
 // ──── Semantic Search View ────
 	searchViewTitle: "語意搜尋",
-	searchPlaceholder: "有問題儘管問，也可以拖入文件讓我幫你處理喔",
+	searchPlaceholder: "有問題儘管問",
+	searchQueueHint: "繼續輸入，將作為跟進指令排隊執行",
+	queueSteer: "優先執行",
 	searchButton: "搜尋",
 	searchSend: "傳送",
 	searchStop: "停止產生",
