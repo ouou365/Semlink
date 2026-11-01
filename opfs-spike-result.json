@@ -1,0 +1,14 @@
+{
+  "startedAt": "2026-10-09T00:36:17.563Z",
+  "origin": "app://obsidian.md",
+  "secureContext": true,
+  "opfsMainThread": true,
+  "worker": {
+    "inWorker": true,
+    "opfsApiPresent": true,
+    "readBack": "hello from app://obsidian.md",
+    "asyncRoundTrip": true,
+    "syncAccessHandle": true,
+    "ok": true
+  }
+}

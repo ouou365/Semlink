@@ -109,6 +109,10 @@ export function renderOnboarding(
 	plugin: SmartVaultPlugin,
 	onFinish: () => void,
 	mode: "chat" | "embed" = "chat",
+	/** 「回到开始」（引导左上角 Get Started 图标）：forceStart() 为真时
+	 *  强制渲染流程第一步（供应商/品牌目录），只改显示、不动任何已保存
+	 *  进度；用户再次选择供应商时宿主经 onLeaveStart 复位标记。 */
+	controls?: { forceStart(): boolean; onLeaveStart(): void },
 ): void {
 	const root = container.createDiv({ cls: "semlink-guide" });
 
@@ -319,44 +323,47 @@ export function renderOnboarding(
 		applyProgress(plugin.progress.current);
 	};
 
-	const rerender = (): void => {
-		root.empty();
+		const rerender = (): void => {
+			root.empty();
 
-		renderIntro(root, mode);
+			renderIntro(root, mode);
 
-		// ONE step per mode: the model screen walks Provider → Key → Model.
-		// Chat mode is the first-run setup; embed mode (RAG tab's 开始配置)
-		// configures the embedding provider/model off EMBEDDING_CATALOG.
-		const isEmbed = mode === "embed";
-		const providerPicked = !!(isEmbed ? ob().embedProviderId : ob().providerId);
-		const active: 1 | 2 | 3 = !providerPicked ? 1
-			: !(isEmbed ? ob().embedReady : ob().chatReady) ? 2 : 3;
-		const sticky = root.createDiv({ cls: "semlink-guide-sticky-top" });
-		// 嵌入流的步骤语义：① Model ② Key ③ Embed；嵌入步整条打勾
-		const stepLabels = isEmbed
-			? [t("guideStep3"), t("guideStep2"), t("guideStepEmbedding")] as [string, string, string]
-			: undefined;
-		const onIndexStep = isEmbed && !!ob().embedModelPicked;
-		renderStepper(sticky, onIndexStep ? 3 : active, onIndexStep, undefined, undefined, stepLabels);
-		const modelsHost = sticky.createDiv({ cls: "semlink-guide-models" });
+			// ONE step per mode: the model screen walks Provider → Key → Model.
+			// Chat mode is the first-run setup; embed mode (RAG tab's 开始配置)
+			// configures the embedding provider/model off EMBEDDING_CATALOG.
+			const isEmbed = mode === "embed";
+			// 「回到开始」：只看第一步（供应商/品牌目录），已保存进度不动
+			const forced = controls?.forceStart?.() ?? false;
+			const providerPicked = forced ? false : !!(isEmbed ? ob().embedProviderId : ob().providerId);
+			const active: 1 | 2 | 3 = !providerPicked ? 1
+				: !(isEmbed ? ob().embedReady : ob().chatReady) ? 2 : 3;
+			const sticky = root.createDiv({ cls: "semlink-guide-sticky-top" });
+			// 嵌入流的步骤语义：① Model ② Key ③ Embed；嵌入步整条打勾
+			const stepLabels = isEmbed
+				? [t("guideStep3"), t("guideStep2"), t("guideStepEmbedding")] as [string, string, string]
+				: undefined;
+			const onIndexStep = isEmbed && !forced && !!ob().embedModelPicked;
+			renderStepper(sticky, onIndexStep ? 3 : active, onIndexStep, undefined, undefined, stepLabels);
+			const modelsHost = sticky.createDiv({ cls: "semlink-guide-models" });
 
-		if (isEmbed) {
-			// ── 最后一步：咖啡杯随嵌入进度上涨（含 开始/暂停/完成 状态机） ──
-			if (onIndexStep) {
-				renderEmbedIndexStep(modelsHost);
-				return;
-			}
-			// ── 嵌入模型（RAG 页签「开始配置」入口）── 配完即触发增量索引。
-			renderModelStep(root, plugin, {
-				kind: "embed",
-				providerId: ob().embedProviderId,
-				ready: ob().embedReady,
-				modelsHost,
-				onPickProvider: (p) => {
-					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), embedProviderId: p.id, embedReady: false };
-					void plugin.saveSettings();
-					rerender();
-				},
+			if (isEmbed) {
+				// ── 最后一步：咖啡杯随嵌入进度上涨（含 开始/暂停/完成 状态机） ──
+				if (onIndexStep) {
+					renderEmbedIndexStep(modelsHost);
+					return;
+				}
+				// ── 嵌入模型（RAG 页签「开始配置」入口）── 配完即触发增量索引。
+				renderModelStep(root, plugin, {
+					kind: "embed",
+					providerId: forced ? undefined : ob().embedProviderId,
+					ready: ob().embedReady,
+					modelsHost,
+					onPickProvider: (p) => {
+						controls?.onLeaveStart?.();
+						plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), embedProviderId: p.id, embedReady: false };
+						void plugin.saveSettings();
+						rerender();
+					},
 				onValidated: () => {
 					// Model-first：Key 验证通过即落定嵌入模型（供应商 + 第一步
 					// 选的 embedModelId），直接进咖啡杯索引步骤。自定义供应商
@@ -444,12 +451,13 @@ export function renderOnboarding(
 		// ── 对话模型（默认模式）── picking completes the guide.
 		renderModelStep(root, plugin, {
 			kind: "chat",
-			providerId: ob().providerId,
+			providerId: forced ? undefined : ob().providerId,
 			ready: ob().chatReady,
 			modelsHost,
 			onPickProvider: (p) => {
 				// 始终经过第二步的 Key 配置（已填的 Key 会预填，用户确认后
 				// Test & Save 再进模型步骤），即使该供应商早已有 Key。
+				controls?.onLeaveStart?.();
 				plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), providerId: p.id, chatReady: false };
 				void plugin.saveSettings();
 				rerender();
@@ -551,7 +559,7 @@ function renderIntro(root: HTMLElement, mode: "chat" | "embed" = "chat"): void {
 	intro.createDiv({ cls: "semlink-search-welcome-greeting", text: greeting });
 	intro.createDiv({
 		cls: "semlink-search-welcome-sub",
-		text: t(mode === "embed" ? "guideEmbedIntroSub" : "guideIntroSub"),
+		text: t(mode === "embed" ? "guideEmbedIntroSub" : "guideJourneySub"),
 	});
 }
 
@@ -1562,12 +1570,26 @@ export function renderGuideHub(
 
 	// 引导卡片顺序：Chat / Embedding 设置在上（新用户的主路径），
 	// Official site / Discord 放在下面。
+	// 主行动（紫色 accent）跟随配置状态：对话/嵌入未配好时高亮对应按钮
+	// 引导用户去配；已配好恢复普通白。判定口径与设置页上手清单一致
+	// （真实 providers 配置，而非引导流程的内部标记——直接在模型页配置
+	// 而没走引导的用户同样算完成）。官网按钮永远不用高亮色。
+	const providers = plugin.settings.providers;
+	const chatDone = providers.some(
+		(p) => !!p.apiKey.trim() && p.models.some((m) => (m.kind ?? "chat") === "chat" && m.enabled === true),
+	);
+	const embedKey = plugin.settings.embeddingModelKey;
+	const embedPid = embedKey.split("::")[0] ?? "";
+	const embedDone = providers.some(
+		(p) => !!p.apiKey.trim() && p.id === embedPid
+			&& p.models.some((m) => (m.kind ?? "chat") === "embedding" && `${p.id}::${m.id}` === embedKey),
+	);
 	row(
 		"bot",
 		t("hubChatTitle"),
 		t("hubChatDesc"),
 		t("hubOpen"),
-		false,
+		!chatDone,
 		() => onPick("chat"),
 	);
 	row(
@@ -1575,16 +1597,8 @@ export function renderGuideHub(
 		t("hubEmbedTitle"),
 		t("hubEmbedDesc"),
 		t("hubOpen"),
-		false,
+		!embedDone,
 		() => onPick("embed"),
-	);
-	row(
-		"globe",
-		t("hubSiteTitle"),
-		t("hubSiteDesc"),
-		t("hubVisit"),
-		true,
-		() => window.open("https://getsemlink.com/", "_blank"),
 	);
 	row(
 		"message-circle",
@@ -1593,5 +1607,13 @@ export function renderGuideHub(
 		t("hubJoin"),
 		false,
 		() => window.open("https://discord.gg/4HQRqJj92", "_blank"),
+	);
+	row(
+		"globe",
+		t("hubSiteTitle"),
+		t("hubSiteDesc"),
+		t("hubVisit"),
+		false,
+		() => window.open("https://getsemlink.com/", "_blank"),
 	);
 }

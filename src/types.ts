@@ -265,6 +265,9 @@ export interface SmartVaultSettings {
 	chunkOverlap: number;
 	excludePaths: string;
 	autoIndex: boolean;
+	/** 新建标签页显示 Semlink 主页：Obsidian 的空白标签页（empty 视图，
+	 *  含 +/Ctrl+T 新建、关闭最后标签后的空态）自动替换成侧栏同款主页。 */
+	newTabSemlink?: boolean;
 	/** 自动嵌入开关（RAG 页嵌入面板标题右侧）：关闭后索引只做分块、不再调
 	 *  嵌入 API；调度器实时读取，转换立即对后续笔记生效。 */
 	autoEmbed?: boolean;
@@ -391,6 +394,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	chunkOverlap: 100,
 	excludePaths: "templates/\n.git/\nnode_modules/",
 	autoIndex: true,
+	newTabSemlink: true,
 	autoEmbed: true,
 	maxRetries: 3,
 	batchSize: 64,

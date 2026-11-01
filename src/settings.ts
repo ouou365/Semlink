@@ -19,6 +19,7 @@ import { ShareQrModal } from "./share-modal";
 import { debugLog } from "./log";
 
 type SettingsTab = "general" | "model" | "mcp" | "embedding" | "share" | "git" | "bot";
+export type { SettingsTab };
 
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
@@ -32,6 +33,25 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	constructor(app: App, plugin: SmartVaultPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
+	}
+
+	/** 嵌入视图的设置屏（semlink-settings-screen）：把整套设置渲染进给定
+	 *  容器（替代设置弹窗）。可指定起始标签页；返回的 destroy 断开进度
+	 *  订阅等长生命周期资源并清空 DOM。 */
+	displayInto(container: HTMLElement, tab?: SettingsTab): void {
+		this.containerEl = container;
+		if (tab) this.activeTab = tab;
+		this.display();
+	}
+
+	/** 嵌入态退出：display() 只在“下一次 display”时清理订阅，嵌入屏退出
+	 *  后不会再 display——这里显式断开进度订阅与进行中的飞书扫码。 */
+	destroy(): void {
+		this.feishuScanHandle?.abort();
+		this.feishuScanHandle = null;
+		this.indexCardUnsub?.();
+		this.indexCardUnsub = null;
+		this.containerEl.empty();
 	}
 
 	/** Deep-link from the chat view's "Manage models" popup entry: reveal the
@@ -205,6 +225,19 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// ── 上手清单：状态自动判定，全部完成后整卡收起为完成态 ──
 		// （原「快速开始」行已被清单的「开始对话」动作覆盖，不再重复展示）
 		this.renderChecklistSection(containerEl);
+
+		// ── 新建标签页显示 Semlink 主页 ──
+		new Setting(containerEl)
+			.setName(t("newTabHome"))
+			.setDesc(t("newTabHomeDesc"))
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.newTabSemlink ?? true)
+					.onChange(async (value) => {
+						this.plugin.settings.newTabSemlink = value;
+						await this.plugin.saveSettings();
+					}),
+			);
 	}
 
 	/** 通用页的上手清单：对话模型 / 嵌入模型 / 首次问答 / 解锁，四项状态
@@ -1851,4 +1884,18 @@ class GitRepoModal extends Modal {
 			body.createDiv({ cls: "semlink-history-empty", text: t("historyNoMatch") });
 		}
 	}
+}
+
+/** 视图内嵌设置屏入口（search-view 的设置按钮/管理模型入口共用）：
+ *  实例化设置 Tab 并渲染进给定容器，返回 destroy 句柄供退出时清理。 */
+export function renderSettingsTabInto(
+	container: HTMLElement,
+	plugin: SmartVaultPlugin,
+	tab?: SettingsTab,
+): { destroy(): void } {
+	const view = new SmartVaultSettingTab(plugin.app, plugin);
+	view.displayInto(container, tab);
+	return {
+		destroy: () => view.destroy(),
+	};
 }

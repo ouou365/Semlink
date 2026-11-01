@@ -2427,6 +2427,42 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     position: relative;
 }
 
+/* ──── 可读宽度（主区域标签页实例）────
+   同一视图也会作为「新建标签页主页」出现在主工作区，那里远宽于侧栏。
+   内容列限宽居中；侧栏窄幅下 max-width 不生效，布局与原来一致。 */
+.semlink-search-view .semlink-search-header,
+.semlink-search-view .semlink-search-status,
+.semlink-search-view .semlink-search-messages,
+.semlink-search-view .semlink-search-footer {
+    width: 100%;
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* ──── 主区域标签页实例（新标签页主页）────
+   历史菜单常显：抽屉以 is-persistent 形态原地驻留为左栏，内容列用
+   padding-left 让位；菜单按钮只在显示/收起之间切换，不销毁 DOM。
+   底色仅浅色主题固定 #f6f6f6，深色主题跟随 Obsidian 主题避免刺眼。 */
+.theme-light .semlink-search-view.semlink-main-tab {
+    background: #f6f6f6;
+}
+.semlink-search-view.semlink-main-tab {
+    transition: padding-left 0.25s ease;
+}
+.semlink-search-view.semlink-main-tab.semlink-menu-persistent {
+    padding-left: 300px;
+}
+.semlink-history-drawer.is-persistent {
+    box-shadow: none;
+    z-index: 50;
+    transition: transform 0.25s ease;
+    transform: translateX(-100%);
+}
+.semlink-menu-persistent .semlink-history-drawer.is-persistent {
+    transform: translateX(0);
+}
+
 /* Full-panel drag guidance overlay: covers the whole view while a file is
    dragged over it, prompting the user to drop and attach to the chat. */
 .semlink-drag-overlay {
@@ -2859,8 +2895,10 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
  * icon left, purple brand center, language icon right — same classes in
  * markup) but flows inside the messages area instead of replacing the
  * view's fixed header row. The negative side margins cancel the messages
- * area's own 6px padding so the icons line up with the real header's. */
-.semlink-guide-corners {
+ * area's own 6px padding so the icons line up with the real header's.
+ * 双类选择器抬优先级：压过上方主标签页限宽规则的 margin-left/right:auto，
+ * 否则负边距失效，左上角按钮会比主页的菜单/Get Started 右移 6px。 */
+.semlink-search-view .semlink-guide-corners {
     position: static;
     flex-shrink: 0;
     z-index: auto;
@@ -2872,6 +2910,22 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 .semlink-search-welcome.semlink-search-welcome-guide {
     justify-content: flex-start;
     padding: 0 20px 32px;
+}
+
+/* ── 视图内嵌设置屏（替代设置弹窗）── chrome 同引导：隐藏输入 footer /
+   真实头部 / 状态行，设置屏自带返回条；内容顶对齐、通栏、左对齐。 */
+.semlink-search-view.semlink-settings-active .semlink-search-footer,
+.semlink-search-view.semlink-settings-active > .semlink-search-header,
+.semlink-search-view.semlink-settings-active .semlink-search-status {
+    display: none;
+}
+.semlink-search-welcome.semlink-settings-screen {
+    justify-content: flex-start;
+    align-items: stretch;
+    width: 100%;
+    gap: 0;
+    padding: 0 20px 40px;
+    text-align: start;
 }
 
 /* While the guide owns the welcome screen there is nothing to compose yet —

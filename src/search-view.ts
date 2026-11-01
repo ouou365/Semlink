@@ -19,6 +19,7 @@ import { brandLogoOf, formatContextWindow } from "./settings-models";
 import { LicenseModal } from "./license-modal";
 import { UsageModal } from "./usage-modal";
 import { guideInProgress, onboardingActive, renderGuideHub, renderOnboarding } from "./onboarding";
+import { renderSettingsTabInto, type SettingsTab } from "./settings";
 import type SmartVaultPlugin from "../main";
 import { SaveNoteModal } from "./save-note-modal";
 import { ShareQrModal } from "./share-modal";
@@ -104,8 +105,21 @@ export class SemanticSearchView extends ItemView {
 	private headerEl!: HTMLElement;   // top header (brand + icon sides)
 	private menuBtnEl: HTMLElement | null = null; // history drawer toggle
 	private guideHomeBtnEl: HTMLElement | null = null; // 菜单右侧：无对话=对话引导，有对话=回到主页
+	// ── 主区域（新标签页）实例的常显历史菜单 ──
+	/** persistentMenuOn：菜单按钮切换的用户偏好（每个视图会话重置为开）；
+	 *  buildingPersistentMenu：layout-change 高频触发下防止重复构建；
+	 *  persistentMenuRefresh：抽屉 render 闭包的句柄，会话落盘后刷新列表。 */
+	private persistentMenuOn = true;
+	private buildingPersistentMenu = false;
+	private persistentMenuRefresh: (() => void) | null = null;
+	/** 弹窗宽度联动：当前监听 resize 的弹窗 window（换窗/回侧栏时换绑）。 */
+	private popoutResizeWin: Window | null = null;
+	private readonly onPopoutResize = (): void => this.refreshMainTabUI();
 	/** Upgrade ✨ entry in the header — visible only on the free tier. */
 	private upgradeBtnEl: HTMLElement | null = null;
+	/** 对话浮窗按钮（设置左侧）：把当前视图整体迁入 Obsidian popout
+	 *  独立窗口；已在弹窗里时隐藏（refreshMainTabUI 随布局校正）。 */
+	private popoutBtnEl: HTMLElement | null = null;
 	private headerRightIconsEl!: HTMLElement; // right icon group (ring + settings)
 	private settingsBtnEl!: HTMLElement;      // settings gear (ring sits left of it)
 	private firstQuestionEl!: HTMLElement; // second row: first question in small text
@@ -146,6 +160,22 @@ export class SemanticSearchView extends ItemView {
 	 *  Discord, and the two setup guides as sub-entries), or the catalog
 	 *  a sub-entry walks ("chat" default / "embed" from the RAG tab). */
 	private guideMode: "hub" | "chat" | "embed" = "hub";
+	/** 引导内的「回到开始」（Get Started 图标触发）：临时强制渲染流程第一
+	 *  步（供应商/品牌目录），不清除任何已保存进度；用户再次选择供应商
+	 *  （onLeaveStart 回调）或离开引导时复位。 */
+	private guideStartOverride = false;
+	// ── 视图内嵌设置屏（替代设置弹窗，形态同 Get Started hub）──
+	/** 设置屏打开中：占据欢迎区， chrome 同引导（隐藏输入区/真实头部）。 */
+	private settingsMode = false;
+	private settingsModelTab = false;
+	/** 嵌入的设置 Tab 实例句柄（退出时 destroy 断开进度订阅）。 */
+	private settingsEmbed: { destroy(): void } | null = null;
+	/** 会话进行中打开设置屏的快照：退出后原样恢复对话。 */
+	private settingsConvSnapshot: {
+		sessionId: string | null;
+		firstQuestion: string;
+		messages: HistoryMessage[];
+	} | null = null;
 	/** Set when the user skips the guide. With no API key configured the
 	 *  guide is the default landing page on every fresh view open; skipping
 	 *  only dismisses it for the current view session, not forever. */
@@ -191,7 +221,8 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return t("searchViewTitle");
+		// 侧栏标签页/标签标题统一品牌名（主区域新标签页同款）
+		return "Semlink";
 	}
 
 	getIcon(): string {
@@ -214,7 +245,13 @@ export class SemanticSearchView extends ItemView {
 		});
 		this.menuBtnEl = menuBtn;
 		setIcon(menuBtn, "menu");
-		menuBtn.addEventListener("click", () => void this.showHistoryDrawer());
+		menuBtn.addEventListener("click", () => {
+			// 主区域实例：常显菜单已在 → 按钮变为收起/展开开关；侧栏实例照旧
+			// 弹出抽屉。构建中（history.load 的 await 间隙）先忽略点击。
+			if (this.buildingPersistentMenu) return;
+			if (this.hasPersistentMenu()) this.togglePersistentMenu();
+			else void this.showHistoryDrawer();
+		});
 		// 菜单右侧的动态按钮：主页（无对话）= 对话引导入口；有对话 = 回到主页。
 		// 具体形态由 updateHomeIconVisibility() 随会话状态切换。
 		const guideHomeBtn = leftIcons.createEl("button", {
@@ -258,6 +295,29 @@ export class SemanticSearchView extends ItemView {
 		upgradeBtn.addEventListener("click", () => {
 			new LicenseModal(this.app, this.plugin).open();
 		});
+		// 对话浮窗（设置左侧）：把侧栏里的视图整体迁入独立弹窗——主界面
+		// 可以最小化，单独使用对话。moveLeafToPopout 保留视图实例，当前
+		// 会话/引导状态不丢；已在弹窗中时该按钮由 refreshMainTabUI 隐藏。
+		const popoutBtn = rightIcons.createEl("button", {
+			cls: "semlink-search-icon-btn clickable-icon",
+			attr: { "aria-label": t("popOutWindow"), title: t("popOutWindow") },
+		});
+		this.popoutBtnEl = popoutBtn;
+		setIcon(popoutBtn, "picture-in-picture-2");
+		popoutBtn.addEventListener("click", () => {
+			try {
+				// 宽度需容纳常显菜单(300px)+对话区
+				this.app.workspace.moveLeafToPopout(this.leaf, {
+					size: { width: 780, height: 720 },
+				});
+				// 置位后，插件的 window-close 处理器会在弹窗关闭、且已无
+				// 任何 Semlink 视图时自动把主页放回右侧栏
+				this.plugin.semlinkPopoutActive = true;
+			} catch {
+				// 移动端或 Electron 过旧不支持 popout（API 文档明确会抛错）
+				new Notice(`Semlink: ${t("popOutFailed")}`);
+			}
+		});
 		const settingsBtn = rightIcons.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
 			attr: { "aria-label": t("settingsTitle") },
@@ -265,8 +325,7 @@ export class SemanticSearchView extends ItemView {
 		this.settingsBtnEl = settingsBtn;
 		setIcon(settingsBtn, "settings");
 		settingsBtn.addEventListener("click", () => {
-			(this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting.open();
-			(this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting.openTabById("semlink");
+			this.openSettingsScreen();
 		});
 		// Second header row: the first question in small text. It appears
 		// only while the first question is scrolled under the header (see
@@ -582,6 +641,11 @@ export class SemanticSearchView extends ItemView {
 		});
 
 		// 未配置提示已由引导/上手清单承载，不再显示纯文字提示。
+
+		// 主区域（新标签页）实例：常显历史菜单 + 专属底色。布局变化（拖动
+		// 换区）后由 layout-change 重新校正；侧栏实例两类样式都不挂。
+		this.refreshMainTabUI();
+		this.registerEvent(this.app.workspace.on("layout-change", () => this.refreshMainTabUI()));
 	}
 
 	protected async onClose(): Promise<void> {
@@ -593,6 +657,9 @@ export class SemanticSearchView extends ItemView {
 			this.modelPopupEl.remove();
 			this.modelPopupEl = null;
 		}
+		this.persistentMenuRefresh = null;
+		this.popoutResizeWin?.removeEventListener("resize", this.onPopoutResize);
+		this.popoutResizeWin = null;
 		this.contentEl.empty();
 	}
 
@@ -1998,6 +2065,11 @@ export class SemanticSearchView extends ItemView {
 	 *  providers are untouched). */
 	private openGuide(mode: "hub" | "chat" | "embed" = "hub"): void {
 		this.guideMode = mode;
+		// 从设置屏进入引导（清单「开始配置」等入口）：先退出设置屏
+		this.settingsMode = false;
+		this.settingsEmbed?.destroy();
+		this.settingsEmbed = null;
+		this.guideStartOverride = false;
 		this.guideRequested = true;
 		this.guideDismissed = false;
 		this.plugin.settings.onboarding = { done: false };
@@ -2039,9 +2111,15 @@ export class SemanticSearchView extends ItemView {
 		// The guide shows for first-run users, on demand via the header help
 		// icon (guideRequested), or while a run is mid-flight (the first
 		// saved key would otherwise make onboardingActive() drop the guide).
-		const guideMode = this.guideModeActive();
+		// 设置屏打开中：占据同一块欢迎区，引导 chrome 让位。
+		const guideMode = this.guideModeActive() && !this.settingsMode;
 		this.setGuideChrome(guideMode);
+		this.setSettingsChrome(this.settingsMode);
 
+		if (this.settingsMode) {
+			this.renderSettingsScreen();
+			return;
+		}
 		if (guideMode) {
 			// Top strip mirroring the real header (which guide mode hides):
 			// skip icon left, purple brand center, language + settings right.
@@ -2056,12 +2134,28 @@ export class SemanticSearchView extends ItemView {
 				// End a help-icon-triggered run too, or guideMode below would
 				// re-render the guide right after the skip.
 				this.guideRequested = false;
+				this.guideStartOverride = false;
 				this.guideDismissed = true;
 				this.plugin.settings.onboarding = { ...(this.plugin.settings.onboarding ?? {}), done: true };
 				void this.plugin.saveSettings();
 				this.messagesEl.empty();
 				this.renderWelcome();
 			});
+			// Get Started（回到开始）：仅 Chat/Embed setup 界面显示（hub 本身
+			// 就是出发点）。点击强制回到流程第一步（供应商/品牌目录，即
+			// guideJourneySub 欢迎语所在的界面），已保存的配置进度原样保留。
+			if (this.guideMode !== "hub") {
+				const startBtn = leftSide.createEl("button", {
+					cls: "semlink-search-icon-btn clickable-icon",
+					attr: { "aria-label": t("hubWelcome"), title: t("hubWelcome") },
+				});
+				setIcon(startBtn, "compass");
+				startBtn.addEventListener("click", () => {
+					this.guideStartOverride = true;
+					this.messagesEl.empty();
+					this.renderWelcome();
+				});
+			}
 			const brandGroup = corners.createDiv({ cls: "semlink-search-brand-group" });
 			const brand = brandGroup.createDiv({ cls: "semlink-search-logo" });
 			setIcon(brand, "semlink-logo");
@@ -2111,13 +2205,7 @@ export class SemanticSearchView extends ItemView {
 				attr: { "aria-label": t("openSettings"), title: t("openSettings") },
 			});
 			setIcon(guideSettingsBtn, "settings");
-			guideSettingsBtn.addEventListener("click", () => {
-				const app = this.app as unknown as {
-					setting: { open(): void; openTabById(id: string): void };
-				};
-				app.setting.open();
-				app.setting.openTabById("semlink");
-			});
+			guideSettingsBtn.addEventListener("click", () => this.openSettingsScreen());
 
 			// Modifier class: the guide fills the block top-down so the
 			// stepper can pin to the top while step content scrolls.
@@ -2130,6 +2218,9 @@ export class SemanticSearchView extends ItemView {
 					this.messagesEl.empty();
 					this.renderWelcome();
 				});
+				// 新用户欢迎：引导尚未完成（没配完也没跳过）时进入 hub，
+				// 彩带飘落表示欢迎；完成/跳过后再进来就不再放了。
+				if (!this.plugin.settings.onboarding?.done) this.showWelcomeConfetti();
 				this.updateHomeIconVisibility();
 				return;
 			}
@@ -2140,6 +2231,7 @@ export class SemanticSearchView extends ItemView {
 				// otherwise survive. Back to the hub: the user may want the
 				// other setup guide next.
 				this.guideRequested = false;
+				this.guideStartOverride = false;
 				this.guideMode = "hub";
 				this.messagesEl.empty();
 				this.renderWelcome();
@@ -2149,7 +2241,14 @@ export class SemanticSearchView extends ItemView {
 				this.updateModelLabel();
 				// 完成引导的彩带庆祝 🎉（跳过引导不触发）
 				this.showWelcomeConfetti();
-			}, mode);
+			}, mode, {
+				// 「回到开始」控制：Get Started 图标 → 强制渲染第一步；
+				// 用户再次选择供应商（onPickProvider 路径）即恢复正常流程。
+				forceStart: () => this.guideStartOverride,
+				onLeaveStart: () => {
+					this.guideStartOverride = false;
+				},
+			});
 			this.updateHomeIconVisibility();
 			return;
 		}
@@ -2191,6 +2290,73 @@ export class SemanticSearchView extends ItemView {
 	private setGuideChrome(active: boolean): void {
 		this.contentEl.toggleClass("semlink-guide-active", active);
 		if (!active) this.guideRequested = false;
+	}
+
+	/** 设置屏 chrome：与引导同款——隐藏输入 footer / 真实头部 / 状态行，
+	 *  设置屏自带返回条。 */
+	private setSettingsChrome(active: boolean): void {
+		this.contentEl.toggleClass("semlink-settings-active", active);
+	}
+
+	/** 打开视图内嵌设置屏（替代设置弹窗）：会话进行中先快照当前对话，
+	 *  退出时经 loadSession 原样恢复。modelTab 直达「管理模型」页。 */
+	private openSettingsScreen(opts?: { modelTab?: boolean }): void {
+		this.settingsModelTab = !!opts?.modelTab;
+		const onHome = !!this.messagesEl.querySelector(".semlink-search-welcome");
+		this.settingsConvSnapshot = onHome ? null : {
+			sessionId: this.currentSessionId,
+			firstQuestion: this.firstQuestion,
+			messages: [...this.currentMessages],
+		};
+		this.settingsMode = true;
+		this.messagesEl.empty();
+		this.renderWelcome();
+	}
+
+	private closeSettingsScreen(): void {
+		this.settingsMode = false;
+		this.settingsModelTab = false;
+		this.settingsEmbed?.destroy();
+		this.settingsEmbed = null;
+		this.setSettingsChrome(false);
+		this.messagesEl.empty();
+		const snap = this.settingsConvSnapshot;
+		this.settingsConvSnapshot = null;
+		if (snap && snap.sessionId && snap.messages.length > 0) {
+			// 从快照原样恢复对话（loadSession 会整屏重渲并滚动到底）
+			void this.loadSession({
+				id: snap.sessionId,
+				title: snap.firstQuestion,
+				messages: snap.messages,
+				createdAt: Date.now(),
+				updatedAt: Date.now(),
+			} as ChatSession);
+			return;
+		}
+		this.renderWelcome();
+	}
+
+	/** 设置屏：返回条 + 品牌 + 嵌入的完整设置 Tab（同 Get Started hub 的
+	 *  占屏形态）。宽度自适应：主区域限宽列 / 弹窗 / 侧栏通用。 */
+	private renderSettingsScreen(): void {
+		const corners = this.messagesEl.createDiv({ cls: "semlink-search-header semlink-guide-corners" });
+		const leftSide = corners.createDiv({ cls: "semlink-search-header-side" });
+		const backBtn = leftSide.createEl("button", {
+			cls: "semlink-search-icon-btn clickable-icon",
+			attr: { "aria-label": t("historyBack"), title: t("historyBack") },
+		});
+		setIcon(backBtn, "arrow-left");
+		backBtn.addEventListener("click", () => this.closeSettingsScreen());
+		const brandGroup = corners.createDiv({ cls: "semlink-search-brand-group" });
+		const brand = brandGroup.createDiv({ cls: "semlink-search-logo" });
+		setIcon(brand, "semlink-logo");
+		brandGroup.createSpan({ cls: "semlink-search-brand", text: "Semlink" });
+		const host = this.messagesEl.createDiv({ cls: "semlink-search-welcome semlink-settings-screen" });
+		this.settingsEmbed = renderSettingsTabInto(
+			host,
+			this.plugin,
+			this.settingsModelTab ? "model" : undefined,
+		);
 	}
 
 	/** Rough full-index estimate for the guide's final step: markdown notes
@@ -2388,6 +2554,7 @@ export class SemanticSearchView extends ItemView {
 		this.currentMessages.push(msg);
 		this.history.addMessage(this.currentSessionId, msg);
 		void this.history.save();
+		this.refreshPersistentMenu();
 	}
 
 	/** Record an assistant answer into the current session. */
@@ -2424,6 +2591,7 @@ export class SemanticSearchView extends ItemView {
 		this.currentMessages.push(msg);
 		this.history.addMessage(this.currentSessionId, msg);
 		void this.history.save();
+		this.refreshPersistentMenu();
 	}
 
 	/** Render a previously-saved session into the conversation area. */
@@ -2499,11 +2667,21 @@ export class SemanticSearchView extends ItemView {
 
 	// ── Chat history: drawer UI ──
 
-	/** Slide in a left-side drawer listing saved chat sessions. */
-	private async showHistoryDrawer(): Promise<void> {
+	/** Slide in a left-side drawer listing saved chat sessions. 主区域（新
+	 *  标签页）实例传 persistent=true：常驻左栏、无遮罩无关闭钮，点击会话
+	 *  不收起；同一个 leaf 里只允许存在一个（重复调用直接忽略）。 */
+	private async showHistoryDrawer(persistent = false): Promise<void> {
+		if (this.hasPersistentMenu()) {
+			// 常显菜单已在屏（含 LicenseModal 激活后的 reopen 回调路径）：
+			// 不再叠加浮层抽屉，只把列表按当前许可状态重渲染。
+			this.persistentMenuRefresh?.();
+			return;
+		}
 		await this.history.load();
-		const backdrop = this.contentEl.createDiv({ cls: "semlink-history-backdrop" });
-		const drawer = this.contentEl.createDiv({ cls: "semlink-history-drawer" });
+		const backdrop = persistent ? null : this.contentEl.createDiv({ cls: "semlink-history-backdrop" });
+		const drawer = this.contentEl.createDiv({
+			cls: "semlink-history-drawer" + (persistent ? " is-persistent" : ""),
+		});
 		const header = drawer.createDiv({ cls: "semlink-history-header" });
 		const titleEl = header.createDiv({ cls: "semlink-history-title", text: t("historyTitle") });
 		// Far right: archive entry → dedicated view of archived chats
@@ -2513,8 +2691,8 @@ export class SemanticSearchView extends ItemView {
 			attr: { "aria-label": t("historyArchiveBtn") },
 		});
 		setIcon(archiveBtn, "archive");
-		const closeBtn = header.createEl("button", { cls: "semlink-search-icon-btn clickable-icon" });
-		setIcon(closeBtn, "x");
+		const closeBtn = persistent ? null : header.createEl("button", { cls: "semlink-search-icon-btn clickable-icon" });
+		if (closeBtn) setIcon(closeBtn, "x");
 
 		const pro = this.plugin.licenseManager.isPro();
 		const freeLimit = this.plugin.licenseManager.freeHistoryLimit();
@@ -2554,7 +2732,6 @@ export class SemanticSearchView extends ItemView {
 		// Folder path currently being renamed inline (null = none).
 		let editingPath: string | null = null;
 
-		const allSessions = this.history.list();
 		// Paging counters live OUTSIDE render() so "Show more" survives
 		// re-renders (they were per-render locals once — the button reset
 		// itself on every click).
@@ -2566,10 +2743,10 @@ export class SemanticSearchView extends ItemView {
 		const PAGE = 100;
 
 		const render = (): void => {
-			// Recompute the active/archived split on EVERY render — the
-			// archive action mutates sessions in place and the list must
-			// reflect it immediately (a snapshot taken at drawer-open would
-			// keep showing just-archived chats).
+			// Re-list on EVERY render — the persistent (main-tab) menu is
+			// refreshed from live saves (new chats must appear), and the
+			// archive action mutates sessions in place.
+			const allSessions = this.history.list();
 			const all = allSessions.filter((x) => !x.archived); // active, newest first
 			const manuallyArchived = allSessions.filter((x) => x.archived);
 			list.empty();
@@ -3016,12 +3193,18 @@ export class SemanticSearchView extends ItemView {
 		});
 		render();
 
-		window.requestAnimationFrame(() => {
-			drawer.addClass("semlink-history-drawer-open");
-			backdrop.addClass("semlink-history-backdrop-open");
-		});
-		closeBtn.addEventListener("click", () => this.closeHistoryDrawer(backdrop, drawer));
-		backdrop.addEventListener("click", () => this.closeHistoryDrawer(backdrop, drawer));
+		if (persistent) {
+			// 常显菜单：无滑入动画、无遮罩/关闭钮；render 句柄交给视图，
+			// 会话落盘与许可激活后的刷新都走它。
+			this.persistentMenuRefresh = render;
+		} else {
+			window.requestAnimationFrame(() => {
+				drawer.addClass("semlink-history-drawer-open");
+				backdrop?.addClass("semlink-history-backdrop-open");
+			});
+			closeBtn?.addEventListener("click", () => this.closeHistoryDrawer(backdrop, drawer));
+			backdrop?.addEventListener("click", () => this.closeHistoryDrawer(backdrop, drawer));
+		}
 	}
 
 	/** Folder picker menu for a history session (Pro). */
@@ -3060,10 +3243,91 @@ export class SemanticSearchView extends ItemView {
 		menu.showAtMouseEvent(evt);
 	}
 
-	private closeHistoryDrawer(backdrop: HTMLElement, drawer: HTMLElement): void {
+	private closeHistoryDrawer(backdrop: HTMLElement | null, drawer: HTMLElement): void {
+		// 常显菜单不随会话点击/锁定弹窗路径收起——它只由菜单按钮开关。
+		if (drawer.hasClass("is-persistent")) return;
 		drawer.removeClass("semlink-history-drawer-open");
-		backdrop.removeClass("semlink-history-backdrop-open");
-		window.setTimeout(() => { backdrop.remove(); drawer.remove(); }, 300);
+		backdrop?.removeClass("semlink-history-backdrop-open");
+		window.setTimeout(() => {
+			backdrop?.remove();
+			drawer.remove();
+		}, 300);
+	}
+
+	// ── 主区域（新标签页）实例：常显历史菜单 ──
+
+	/** leaf 是否在主工作区（不在左右侧栏）。新标签页主页场景成立。 */
+	private isMainTab(): boolean {
+		const el = (this.leaf as unknown as { containerEl: HTMLElement }).containerEl;
+		return el.closest(".mod-right-split, .mod-left-split") === null;
+	}
+
+	/** 视图是否已运行在独立弹窗里：popout 的 DOM 属于另一个 window/document，
+	 *  与主窗口的 document 不同。 */
+	private inPopoutWindow(): boolean {
+		return this.contentEl.ownerDocument.defaultView !== window;
+	}
+
+	private hasPersistentMenu(): boolean {
+		return !!this.contentEl.querySelector(":scope > .semlink-history-drawer.is-persistent");
+	}
+
+	/** 菜单按钮在主区域实例的开关行为：只切显示状态，不销毁 DOM。 */
+	private togglePersistentMenu(): void {
+		this.persistentMenuOn = !this.contentEl.hasClass("semlink-menu-persistent");
+		this.contentEl.toggleClass("semlink-menu-persistent", this.persistentMenuOn);
+	}
+
+	/** 按当前 leaf 位置校正主区域样式与常显菜单（onOpen 与 layout-change 都走）。 */
+	private refreshMainTabUI(): void {
+		const isMain = this.isMainTab();
+		const inPopout = this.inPopoutWindow();
+		// 弹窗宽度联动：换绑 resize 监听到当前弹窗 window，跨越 600px
+		// 边界时经本方法自动增减常显菜单（onPopoutResize → 这里）
+		const popoutWin = inPopout ? this.contentEl.ownerDocument.defaultView ?? null : null;
+		if (this.popoutResizeWin && this.popoutResizeWin !== popoutWin) {
+			this.popoutResizeWin.removeEventListener("resize", this.onPopoutResize);
+			this.popoutResizeWin = null;
+		}
+		if (popoutWin && this.popoutResizeWin !== popoutWin) {
+			popoutWin.addEventListener("resize", this.onPopoutResize);
+			this.popoutResizeWin = popoutWin;
+		}
+		// 独立弹窗与主区域标签页同享宽幅样式（底色/限宽/常显菜单）
+		this.contentEl.toggleClass("semlink-main-tab", isMain);
+		this.popoutBtnEl?.toggleClass("semlink-hidden", inPopout);
+		// 独立弹窗：隐藏 Obsidian 的视图标题头（Semlink 名牌/图标），
+		// 对话区顶满整窗；窗口自身的系统标题栏负责拖动/关闭
+		this.contentEl.parentElement?.querySelector(":scope > .view-header")
+			?.toggleClass("semlink-hidden", inPopout);
+		// 弹窗窄幅（≤600px）：常显菜单自动收起，点菜单按钮出浮层抽屉
+		const persistent = isMain && !this.popoutWindowNarrow() && this.persistentMenuOn;
+		this.contentEl.toggleClass("semlink-menu-persistent", persistent);
+		if (!isMain || !persistent) {
+			// 拖回侧栏 / 弹窗窄幅 / 用户收起过：常显菜单就地拆除，
+			// 回落为浮层抽屉模式（宽幅恢复时由 resize 重建）
+			this.contentEl.querySelector(":scope > .semlink-history-drawer.is-persistent")?.remove();
+			this.persistentMenuRefresh = null;
+			return;
+		}
+		if (this.hasPersistentMenu() || this.buildingPersistentMenu) return;
+		// buildingPersistentMenu 同步置位——layout-change 高频连发时，
+		// history.load() 的 await 间隙里不会重复构建出第二个抽屉。
+		this.buildingPersistentMenu = true;
+		void this.showHistoryDrawer(true).finally(() => {
+			this.buildingPersistentMenu = false;
+		});
+	}
+
+	/** 弹窗是否处于窄幅（≤600px）：常显菜单收起，历史走浮层抽屉。 */
+	private popoutWindowNarrow(): boolean {
+		const win = this.contentEl.ownerDocument.defaultView;
+		return !!win && win.innerWidth <= 600;
+	}
+
+	/** 会话落盘后刷新常显菜单列表（浮层抽屉每次打开重建，无需此步）。 */
+	private refreshPersistentMenu(): void {
+		if (this.hasPersistentMenu()) this.persistentMenuRefresh?.();
 	}
 
 	/**
@@ -3583,16 +3847,7 @@ export class SemanticSearchView extends ItemView {
 
 	/** Open the plugin settings with the Model tab active ("Manage models"). */
 	private openModelSettings(): void {
-		const app = this.app as unknown as {
-			setting: {
-				open(): void;
-				openTabById(id: string): void;
-				activeTab?: { openModelTab?: () => void };
-			};
-		};
-		app.setting.open();
-		app.setting.openTabById("semlink");
-		app.setting.activeTab?.openModelTab?.();
+		this.openSettingsScreen({ modelTab: true });
 	}
 
 	/** 引导完成后的彩带庆祝 🎉：临时画布上撒彩色纸屑，约 2.8 秒后自毁。

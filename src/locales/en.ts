@@ -92,6 +92,10 @@ const en = {
 	excludePathsDesc: "Path prefixes (one per line). Matching files are not indexed and never appear in search results; on save, already-indexed matches are removed from the index",
 	autoIndex: "Auto Index",
 	autoEmbed: "Auto-embed",
+	newTabHome: "Show Semlink in new tabs",
+	newTabHomeDesc: "New tabs open the Semlink home page instead of the empty state — covers the + button, Ctrl+T, and the blank view left after closing the last tab",
+	popOutWindow: "Open in popup window",
+	popOutFailed: "Popup windows are not available here",
 	actions: "Actions",
 	sectionModel: "Model Settings",
 	sectionMcp: "MCP Service",
@@ -414,7 +418,7 @@ const en = {
 	attachAdded: "Added {n} dropped note(s)",
 	dragOverlayHint: "📎 Drop to attach to the chat",
 	searchRemoveAttachment: "Remove attachment",
-	cmdOpenSearch: "Open Semantic Search sidebar",
+	cmdOpenSearch: "Open Semlink sidebar",
 
 // ──── Chat Model Provider ────
 	sectionChat: "Chat Models",
@@ -541,6 +545,7 @@ const en = {
 	guideStep3: "Model",
 	guideIntroTitle: "👋 Welcome",
 	guideIntroSub: "Nice to meet you",
+	guideJourneySub: "Start your journey here",
 	guideKeyPlaceholder: "Paste API key (sk-…)",
 	guideGetKey: "Get key",
 	guidePrev: "Back",

@@ -2,7 +2,7 @@
 // Semlink - Plugin Entry Point
 // ========================================
 
-import { Notice, Plugin, FileSystemAdapter, WorkspaceSidedock, addIcon, MarkdownView, TFile } from "obsidian";
+import { Notice, Plugin, FileSystemAdapter, WorkspaceLeaf, WorkspaceSidedock, addIcon, MarkdownView, TFile } from "obsidian";
 import { debugLog, setDebugLogging } from "./src/log";
 import { join } from "path";
 import { DEFAULT_SETTINGS, DEFAULT_GIT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
@@ -60,6 +60,12 @@ export default class SmartVaultPlugin extends Plugin {
 	historyStore!: ChatHistoryStore;
 	watcher!: VaultWatcher;
 	pluginDir: string = "";
+
+	/** 对话浮窗状态：Semlink 视图已迁入独立 popout（弹出按钮置位）。
+	 *  该窗口关闭且全库已无 Semlink 视图时，window-close 处理器自动把
+	 *  主页放回右侧栏（视图实例随窗口销毁，重开为新实例，历史会话
+	 *  持久在库中，打开后可从历史继续）。 */
+	semlinkPopoutActive = false;
 
 	/** Watches for user activity so indexing yields while they're working. */
 	activityGate!: ActivityGate;
@@ -246,6 +252,23 @@ export default class SmartVaultPlugin extends Plugin {
 			leaf, this.store, this.client, this.app.vault, this.chatClient, this.historyStore, this,
 		));
 
+		// 新建标签页显示 Semlink 主页：等布局就绪后开始接管，避免在启动
+		// 恢复布局的中途替换视图。
+		this.app.workspace.onLayoutReady(() => this.setupNewTabHome());
+
+		// 对话浮窗回归侧栏：弹出的 popout 窗口关闭且已无任何 Semlink 视图
+		// 时，自动把主页放回右侧栏。延迟一个宏任务——window-close 触发时
+		// 窗口内的 leaf 可能尚未完成注销，等注销后再清点才准确。
+		this.registerEvent(this.app.workspace.on("window-close", () => {
+			if (!this.semlinkPopoutActive) return;
+			window.setTimeout(() => {
+				const stillOpen = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE).length > 0;
+				this.semlinkPopoutActive = false;
+				// 还有别的实例（如新标签页主页）在运行就不重复开
+				if (!stillOpen) void this.activateSearchView();
+			}, 0);
+		}));
+
 		// LAN share server: persisted share URLs keep working after a restart
 		// — with the registry non-empty the server comes up on plugin load
 		// (port from settings, auto-bumped when taken and re-persisted); a
@@ -302,7 +325,7 @@ export default class SmartVaultPlugin extends Plugin {
 		const logoInner = logoSvg.replace(/^[\s\S]*?<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
 		addIcon("semlink-logo", `<g transform="scale(0.09765625)">${logoInner}</g>`);
 
-		this.addRibbonIcon("semlink-logo", t("searchViewTitle"), () => {
+		this.addRibbonIcon("semlink-logo", "Semlink", () => {
 			void this.activateSearchView();
 		});
 
@@ -800,10 +823,16 @@ export default class SmartVaultPlugin extends Plugin {
 		modal.open();
 	}
 
-	/** Reveal (or create) the semantic-search view in the right sidebar. */
-	async activateSearchView(): Promise<void> {
+	/** Reveal (or create) the semantic-search view in the right sidebar.
+	 *  主区域标签页里可能也存在一个同类型实例（新标签页主页）：已有侧栏
+	 *  实例时优先聚焦侧栏，两者皆无才在右栏新建；返回实际聚焦的 leaf。 */
+	async activateSearchView(): Promise<WorkspaceLeaf | null> {
 		const { workspace } = this.app;
-		let leaf = workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
+		const leaves = workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+		// 已有实例时优先聚焦侧栏里的那个（containerEl 不在公开类型上，运行时存在）
+		let leaf: WorkspaceLeaf | null =
+			leaves.find((l) => (l as unknown as { containerEl: HTMLElement }).containerEl
+				.closest(".mod-right-split") !== null) ?? leaves[0] ?? null;
 		if (!leaf) {
 			leaf = workspace.getRightLeaf(false);
 			if (leaf) {
@@ -824,14 +853,39 @@ export default class SmartVaultPlugin extends Plugin {
 			}
 			workspace.setActiveLeaf(leaf, { focus: true });
 		}
+		return leaf ?? null;
 	}
 
 	/** 打开侧栏并进入对应的配置引导：chat = 对话目录（首次引导同款），
 	 *  embed = 嵌入专用目录（RAG 页「开始配置」），选完模型即触发索引。 */
 	async openSetupGuide(kind: "chat" | "embed" = "chat"): Promise<void> {
-		await this.activateSearchView();
-		const leaf = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
+		const leaf = await this.activateSearchView();
 		(leaf?.view as SemanticSearchView | undefined)?.openSetupGuide(kind);
+	}
+
+	/** 新建标签页接管（设置可关）：Obsidian 的空白标签页（empty 视图）一律
+	 *  换成 Semlink 主页。+/Ctrl+T 新建、关闭最后一个标签后的空态、启动时
+	 *  恢复的空标签都汇入 active-leaf-change 这一个入口。延迟到下一个宏任务
+	 *  并二次确认视图仍是 empty——openLinkText 等内部流程会先建空叶再设置
+	 *  markdown 视图，二次确认避免抢在 Obsidian 前面顶掉文件标签页。 */
+	private setupNewTabHome(): void {
+		const swapToHome = (leaf: WorkspaceLeaf): void => {
+			window.setTimeout(() => {
+				if (!this.settings.newTabSemlink) return;
+				// 只接管主工作区的空白标签，左右侧栏里的空叶不动
+				if ((leaf as unknown as { containerEl: HTMLElement }).containerEl
+					.closest(".mod-right-split, .mod-left-split")) return;
+				if (leaf.view?.getViewType() !== "empty") return;
+				leaf.setViewState({ type: SEARCH_VIEW_TYPE, active: true }).catch((e) => {
+					console.warn("[Semlink] new-tab home swap failed:", e);
+				});
+			}, 0);
+		};
+		this.registerEvent(this.app.workspace.on("active-leaf-change", (leaf) => {
+			if (leaf) swapToHome(leaf);
+		}));
+		// 事件注册晚于布局恢复：启动布局里已存在的空白标签收不到事件，主动扫一次
+		for (const leaf of this.app.workspace.getLeavesOfType("empty")) swapToHome(leaf);
 	}
 
 	private updateStatusBar(p: import("./src/types").IndexProgress) {
