@@ -24,6 +24,8 @@ export type { SettingsTab };
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
 	private activeTab: SettingsTab = "general";
+	/** 嵌入式设置屏（displayInto 进入）标记：跳过标题/标语/语言下拉块。 */
+	private embeddedHost = false;
 	/** Provider-list state (models management, embedded in the General tab):
 	 *  which provider's editor is expanded / which add card is open. */
 	private modelsState: ModelsTabState = { ...EMPTY_MODELS_TAB_STATE };
@@ -40,6 +42,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	 *  订阅等长生命周期资源并清空 DOM。 */
 	displayInto(container: HTMLElement, tab?: SettingsTab): void {
 		this.containerEl = container;
+		// 嵌入式设置屏（聊天视图内）省略标题/标语块：品牌在屏幕顶部
+		// corners 已有，语言切换挪到右上角图标——这里只剩 tabs + 面板。
+		this.embeddedHost = true;
 		if (tab) this.activeTab = tab;
 		this.display();
 	}
@@ -83,13 +88,15 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// panel inside a small window) rather than an inner container.
 		const winTop = window.scrollY;
 		rerenderSettingsTab(this);
+		// rAF 绑宿主文档的窗口：嵌入屏在弹窗里时主窗 rAF 会被遮挡节流。
+		const viewWin = this.containerEl.ownerDocument?.defaultView ?? window;
 		const restore = () => {
 			scrollers.forEach((s, i) => { s.scrollTop = tops[i]; });
-			if (winTop > 0) window.scrollTo(0, winTop);
+			if (winTop > 0) viewWin.scrollTo(0, winTop);
 		};
 		restore();
-		window.requestAnimationFrame(restore);
-		window.setTimeout(restore, 0);
+		viewWin.requestAnimationFrame(restore);
+		viewWin.setTimeout(restore, 0);
 	}
 
 	display(): void {
@@ -114,33 +121,36 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// Title heading row: brand text · version · language dropdown (right).
 		// Everything rides in the NAME element: heading-mode settings may hide
 		// the control area depending on host CSS — the name always renders.
-		const title = new Setting(containerEl).setName(t("settingsTitle")).setHeading();
-		title.nameEl.addClass("semlink-settings-heading-row");
-		// setName already wrote the text into nameEl — clear it before adding
-		// the structured children, or the title renders twice. Layout: title
-		// with the version stacked under it (left), language far right.
-		title.nameEl.empty();
-		const titleLeft = title.nameEl.createDiv({ cls: "semlink-settings-heading-left" });
-		titleLeft.createSpan({ cls: "semlink-settings-heading-text", text: t("settingsTitle") });
-		titleLeft.createSpan({ cls: "semlink-settings-tagline", text: t("settingsTagline") });
-		// Language switcher: saveSettings re-runs setLang and refreshes the
-		// language-dependent views; display() re-renders this panel so the
-		// settings UI itself follows the new language right away.
-		// Lang switcher lives as a DIRECT child of the setting-item root
-		// (sibling of .setting-item-info) — the root is already a flex row,
-		// so margin-left:auto right-aligns it without fighting name widths.
-		const langWrap = title.settingEl.createDiv({ cls: "semlink-settings-lang" });
-		new DropdownComponent(langWrap)
-			.addOptions({
-				auto: t("langAuto"),
-				...Object.fromEntries(LANGUAGES.map((l) => [l.value, l.label])),
-			})
-			.setValue(this.plugin.settings.language)
-			.onChange(async (value) => {
-				this.plugin.settings.language = value as SmartVaultSettings["language"];
-				await this.plugin.saveSettings();
-				rerenderSettingsTab(this);
-			});
+		// 嵌入式设置屏跳过：标题/标语与顶部品牌重复，语言在右上角图标。
+		if (!this.embeddedHost) {
+			const title = new Setting(containerEl).setName(t("settingsTitle")).setHeading();
+			title.nameEl.addClass("semlink-settings-heading-row");
+			// setName already wrote the text into nameEl — clear it before adding
+			// the structured children, or the title renders twice. Layout: title
+			// with the version stacked under it (left), language far right.
+			title.nameEl.empty();
+			const titleLeft = title.nameEl.createDiv({ cls: "semlink-settings-heading-left" });
+			titleLeft.createSpan({ cls: "semlink-settings-heading-text", text: t("settingsTitle") });
+			titleLeft.createSpan({ cls: "semlink-settings-tagline", text: t("settingsTagline") });
+			// Language switcher: saveSettings re-runs setLang and refreshes the
+			// language-dependent views; display() re-renders this panel so the
+			// settings UI itself follows the new language right away.
+			// Lang switcher lives as a DIRECT child of the setting-item root
+			// (sibling of .setting-item-info) — the root is already a flex row,
+			// so margin-left:auto right-aligns it without fighting name widths.
+			const langWrap = title.settingEl.createDiv({ cls: "semlink-settings-lang" });
+			new DropdownComponent(langWrap)
+				.addOptions({
+					auto: t("langAuto"),
+					...Object.fromEntries(LANGUAGES.map((l) => [l.value, l.label])),
+				})
+				.setValue(this.plugin.settings.language)
+				.onChange(async (value) => {
+					this.plugin.settings.language = value as SmartVaultSettings["language"];
+					await this.plugin.saveSettings();
+					rerenderSettingsTab(this);
+				});
+		}
 
 		// Tab navigation
 		this.renderTabNav(containerEl);
@@ -736,7 +746,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 分享按钮：开关左侧，把 semlink MCP 接入第三方客户端的说明
 		const shareBtn = card.createEl("button", {
 			cls: "semlink-mcp-icon-btn",
-			attr: { "aria-label": t("mcpShareTitle"), title: t("mcpShareTitle") },
+			attr: { "aria-label": t("mcpShareTitle") },
 		});
 		setIcon(shareBtn, "share-2");
 		shareBtn.addEventListener("click", (e) => {
@@ -898,7 +908,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					if (list.children.length === 0) rerenderSettingsTab(this);
 				};
 
-				const qrBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareQrCode"), title: t("shareQrCode") } });
+				const qrBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareQrCode") } });
 				setIcon(qrBtn, "qr-code");
 				qrBtn.addEventListener("click", () => {
 					// Same dialog as the chat share button: QR + copy +
@@ -911,7 +921,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					}).open();
 				});
 
-				const openBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareOpenBrowser"), title: t("shareOpenBrowser") } });
+				const openBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareOpenBrowser") } });
 				setIcon(openBtn, "external-link");
 				openBtn.addEventListener("click", () => {
 					window.open(url, "_blank");
@@ -1661,7 +1671,7 @@ class McpShareModal extends Modal {
 			textCol.createDiv({ cls: "semlink-mcp-share-desc", text: desc });
 			const copyBtn = head.createEl("button", {
 				cls: "semlink-mcp-icon-btn",
-				attr: { "aria-label": t("mcpShareCopy"), title: t("mcpShareCopy") },
+				attr: { "aria-label": t("mcpShareCopy") },
 			});
 			setIcon(copyBtn, "copy");
 			copyBtn.addEventListener("click", () => copy(code));
@@ -1880,10 +1890,11 @@ export function renderSettingsTabInto(
 	container: HTMLElement,
 	plugin: SmartVaultPlugin,
 	tab?: SettingsTab,
-): { destroy(): void } {
+): { destroy(): void; tab: SmartVaultSettingTab } {
 	const view = new SmartVaultSettingTab(plugin.app, plugin);
 	view.displayInto(container, tab);
 	return {
 		destroy: () => view.destroy(),
+		tab: view,
 	};
 }

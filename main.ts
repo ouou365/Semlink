@@ -578,7 +578,7 @@ export default class SmartVaultPlugin extends Plugin {
 			(q) => this.runDebugAsk(q),
 			() => this.runDebugReload(),
 			(path, line) => this.runDebugJump(path, line),
-			() => this.runDebugMeasure(),
+			(opts) => this.runDebugMeasure(opts),
 		);
 		try {
 			await server.start();
@@ -660,7 +660,143 @@ export default class SmartVaultPlugin extends Plugin {
 		return { mode, resolved, scrollTop: Math.round(scroller?.scrollTop ?? -1), scrollHeight: scroller?.scrollHeight ?? -1, expectedLine: line, totalLines, file: v.file?.path };
 	}
 
-	private async runDebugMeasure(): Promise<unknown> {
+	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string }): Promise<unknown> {
+		// 可选：先把搜索视图移入独立弹窗再量（弹窗实例的布局与主窗不同）。
+		if (opts?.popout) {
+			const leaf = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
+			if (leaf) {
+				await this.app.workspace.moveLeafToPopout(leaf, { size: { width: opts?.popout === true ? 420 : 780, height: opts?.popout === true ? 800 : 720 } });
+				await new Promise((r) => window.setTimeout(r, 800));
+			}
+		}
+		// 导航注入：nav="settings" 打开内嵌设置屏；nav=数字 点击第 N 个
+		// 设置 tab（0=通用 1=模型 2=RAG 3=Git 4=MCP 5=分享）。供截图走查。
+		let navDbg: Record<string, unknown> | null = null;
+		if (opts?.nav !== undefined) {
+			// 先把 Semlink 视图激活到前台（同一右栏里可能有笔记 tab 挡着），
+			// 并用 activateSearchView 返回的确切 leaf——getLeavesOfType[0]
+			// 可能是另一个不可见实例，nav 操作它等于白做。
+			const navLeaf = await this.activateSearchView();
+			await new Promise((r) => window.setTimeout(r, 500));
+			if (!navLeaf) {
+				await this.activateSearchView();
+				await new Promise((r) => window.setTimeout(r, 800));
+			}
+			const leafForNav = navLeaf ?? this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
+			const sv = leafForNav?.view as unknown as {
+				contentEl?: HTMLElement;
+				openSettingsScreen?: () => void;
+			} | null;
+			if (sv?.contentEl) {
+				if (opts.nav === "settings") {
+					sv.openSettingsScreen?.();
+					await new Promise((r) => window.setTimeout(r, 700));
+				} else if (typeof opts.nav === "number") {
+					sv.openSettingsScreen?.();
+					await new Promise((r) => window.setTimeout(r, 500));
+					// DOM .click() 在这个嵌入实例上不生效——直接改设置 tab
+					// 实例的 activeTab 并重渲染，确定性切换。
+					const ids = ["general", "model", "embedding", "git", "mcp", "share"] as const;
+					const inst = (sv as unknown as {
+						settingsEmbed?: { tab?: { activeTab?: string; display(): void } };
+					}).settingsEmbed?.tab;
+					navDbg = { hadInst: !!inst, instTab: inst?.activeTab ?? null };
+					if (inst && ids[opts.nav]) {
+						inst.activeTab = ids[opts.nav];
+						inst.display();
+						navDbg.switched = inst.activeTab;
+						const doc0 = sv.contentEl?.ownerDocument;
+						navDbg.domRightAfter = doc0?.querySelector(".semlink-settings-tab.is-active")?.textContent ?? null;
+						navDbg.docIsMain = doc0 === window.document;
+					} else {
+						const doc = sv.contentEl.ownerDocument;
+						const chips = doc.querySelectorAll(".semlink-settings-tabs button");
+						(chips[opts.nav] as HTMLElement | undefined)?.click();
+					}
+					await new Promise((r) => window.setTimeout(r, 700));
+				}
+			}
+		}
+		// 复现「点弹窗按钮后咖啡杯丢失」：进入嵌入引导 → 点真实弹窗按钮 →
+		// 按时间点扫描所有窗口里的 cup canvas（存在性 + 像素）。
+		const reproLog: Array<Record<string, unknown>> = [];
+		const probeCanvas = (tag: string): void => {
+			const wins: Document[] = [window.document];
+			const floats = (this.app.workspace as unknown as { floatingSplit?: { children?: Array<{ win?: Window }> } }).floatingSplit;
+			for (const c of floats?.children ?? []) {
+				if (c?.win?.document) wins.push(c.win.document);
+			}
+			for (const doc of wins) {
+				const c = doc.querySelector(".semlink-guide-index-cupcanvas") as HTMLCanvasElement | null;
+				let painted = -1;
+				if (c) {
+					try {
+						const ctx2 = c.getContext("2d");
+						if (ctx2) {
+							const img = ctx2.getImageData(0, 0, c.width, c.height).data;
+							let n = 0;
+							for (let i = 3; i < img.length; i += 16) if (img[i] > 0) n++;
+							painted = n;
+						}
+					} catch {
+						painted = -2;
+					}
+				}
+				const welcome = doc.querySelector(".semlink-search-welcome");
+				reproLog.push({
+					tag,
+					win: doc === window.document ? "main" : "popout",
+					canvas: !!c,
+					painted,
+					screen: welcome
+						? welcome.classList.contains("semlink-search-welcome-guide") ? "guide"
+							: welcome.classList.contains("semlink-settings-screen") ? "settings" : "home"
+						: "session-or-none",
+				});
+			}
+		};
+		if (opts?.repro) {
+			// 上一次复现可能把视图留在了弹窗里——先关掉弹窗让它回侧栏。
+			const floatsPre = (this.app.workspace as unknown as { floatingSplit?: { children?: Array<{ win?: { close?: () => void } }> } }).floatingSplit;
+			if (floatsPre?.children?.length) {
+				floatsPre.children[0]?.win?.close?.();
+				await new Promise((r) => window.setTimeout(r, 1200));
+			}
+			// reload 后视图可能根本没恢复（弹窗不进会话）——先唤起侧栏实例。
+			if (this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE).length === 0) {
+				await this.activateSearchView();
+				await new Promise((r) => window.setTimeout(r, 800));
+			}
+			const leaf0 = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
+			const sv = leaf0?.view as unknown as {
+				guideRequested?: boolean; guideMode?: string; messagesEl?: HTMLElement;
+				renderWelcome?: () => void; popoutBtnEl?: HTMLElement;
+			} | null;
+			if (sv?.messagesEl && sv.renderWelcome && sv.popoutBtnEl) {
+				sv.guideRequested = true;
+				sv.guideMode = "embed";
+				sv.messagesEl.empty();
+				sv.renderWelcome();
+				await new Promise((r) => window.setTimeout(r, 400));
+				probeCanvas("guide-in-sidebar");
+				sv.popoutBtnEl.click();
+				await new Promise((r) => window.setTimeout(r, 300));
+				probeCanvas("t+300ms-after-click");
+				await new Promise((r) => window.setTimeout(r, 1700));
+				probeCanvas("t+2000ms-after-click");
+			} else {
+				const all = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+				reproLog.push({
+					tag: "setup-failed",
+					leafCount: all.length,
+					leafs: all.map((l) => ({
+						hasView: !!l.view,
+						doc: l.view ? (l.view as unknown as { containerEl?: { ownerDocument?: Document } }).containerEl?.ownerDocument === window.document ? "main" : "popout" : "no-view",
+					})),
+					floats: floatsPre?.children?.length ?? 0,
+				});
+			}
+		}
 		type WinLike = { document: Document; innerWidth: number; innerHeight: number; devicePixelRatio: number; getComputedStyle(el: Element): CSSStyleDeclaration; CSSStyleRule: typeof CSSStyleRule };
 		// 主窗 + 全部弹窗（floatingSplit 子树各持自己的 window）
 		const wins: WinLike[] = [window as unknown as WinLike];
@@ -685,15 +821,18 @@ export default class SmartVaultPlugin extends Plugin {
 					alignItems: cs.alignItems,
 				};
 			};
-			// 头部左右按钮组的垂直中心对比（对齐诊断）
+			// 头部左右按钮组的垂直中心对比（对齐诊断）＋横向坐标（左右对称性诊断）
 			const sides = Array.from(w.document.querySelectorAll(".semlink-search-header-side")) as HTMLElement[];
 			const headerSides = sides.map((side) => {
 				const r = side.getBoundingClientRect();
-				const btn = side.querySelector("button") as HTMLElement | null;
-				const br = btn?.getBoundingClientRect();
+				const btns = Array.from(side.querySelectorAll("button")) as HTMLElement[];
 				return {
-					side: { top: Math.round(r.top), height: Math.round(r.height) },
-					firstBtnCenter: br ? Math.round(br.top + br.height / 2) : null,
+					side: { top: Math.round(r.top), height: Math.round(r.height), left: Math.round(r.left), right: Math.round(r.right) },
+					firstBtnCenter: btns.length ? Math.round(btns[0].getBoundingClientRect().top + btns[0].getBoundingClientRect().height / 2) : null,
+					buttons: btns.map((b) => {
+						const br = b.getBoundingClientRect();
+						return { left: Math.round(br.left), right: Math.round(br.right), w: Math.round(br.width), hidden: b.offsetParent === null };
+					}),
 					display: w.getComputedStyle(side).display,
 					alignItems: w.getComputedStyle(side).alignItems,
 				};
@@ -754,10 +893,12 @@ export default class SmartVaultPlugin extends Plugin {
 				msgChildren: semView?.messagesEl?.children.length ?? -1,
 				msgFirstCls: semView?.messagesEl?.firstElementChild?.className ?? null,
 			};
-			if (semView?.messagesEl && semView.renderWelcome && w.document.querySelector(".semlink-search-welcome:not(.semlink-search-welcome-guide)")) {
+			// jitter 诊断会切走再切回渲染（破坏设置屏/会话）——nav 注入时跳过。
+			if (opts?.nav === undefined && semView?.messagesEl && semView.renderWelcome && w.document.querySelector(".semlink-search-welcome:not(.semlink-search-welcome-guide)")) {
 				const home = {
 					brand: rectOf(".semlink-search-brand-group"),
 					rightIcons: rectOf(".semlink-search-header-right"),
+					leftIcons: rectOf(".semlink-search-view > .semlink-search-header .semlink-search-header-side:not(.semlink-search-header-right)"),
 					emoji: rectOf(".semlink-search-welcome-emoji"),
 					greeting: rectOf(".semlink-search-welcome-greeting"),
 				};
@@ -770,14 +911,15 @@ export default class SmartVaultPlugin extends Plugin {
 					const msgs = w.document.querySelector(".semlink-search-messages") as HTMLElement | null;
 					const msgsStyle = msgs ? w.getComputedStyle(msgs) : null;
 					const guide = {
-					cornersBox: cs && csStyle ? { margin: `${csStyle.marginTop} ${csStyle.marginRight} ${csStyle.marginBottom} ${csStyle.marginLeft}`, width: csStyle.width, parentCls: cs.parentElement?.className } : null,
-					messagesBox: msgs && msgsStyle ? { rect: rectOf(".semlink-search-messages"), padding: `${msgsStyle.paddingTop} ${msgsStyle.paddingRight} ${msgsStyle.paddingBottom} ${msgsStyle.paddingLeft}` } : null,
-					corners: rectOf(".semlink-guide-corners"),
-					brand: rectOf(".semlink-guide-corners .semlink-search-brand-group"),
-					rightIcons: rectOf(".semlink-guide-corners .semlink-search-header-right"),
-					emoji: rectOf(".semlink-guide-hub-emoji"),
-					name: rectOf(".semlink-guide-hub-name"),
-				};
+						cornersBox: cs && csStyle ? { margin: `${csStyle.marginTop} ${csStyle.marginRight} ${csStyle.marginBottom} ${csStyle.marginLeft}`, width: csStyle.width, parentCls: cs.parentElement?.className } : null,
+						messagesBox: msgs && msgsStyle ? { rect: rectOf(".semlink-search-messages"), padding: `${msgsStyle.paddingTop} ${msgsStyle.paddingRight} ${msgsStyle.paddingBottom} ${msgsStyle.paddingLeft}` } : null,
+						corners: rectOf(".semlink-guide-corners"),
+						brand: rectOf(".semlink-guide-corners .semlink-search-brand-group"),
+						rightIcons: rectOf(".semlink-guide-corners .semlink-search-header-right"),
+						leftIcons: rectOf(".semlink-guide-corners .semlink-search-header-side:not(.semlink-search-header-right)"),
+						emoji: rectOf(".semlink-guide-hub-emoji"),
+						name: rectOf(".semlink-guide-hub-name"),
+					};
 				semView.guideRequested = false;
 				semView.messagesEl.empty();
 				semView.renderWelcome();
@@ -791,11 +933,106 @@ export default class SmartVaultPlugin extends Plugin {
 					emojiDelta: d(home.emoji, guide.emoji),
 				};
 			}
+			// 对话列裁剪诊断：消息区与首条用户气泡/回答卡的横向坐标。
+			// 界面停在主页时先加载最近一次会话，复现有气泡的真实状态。
+			// sessionIdx：可指定加载第 N 个会话（0=最新）——用于对比
+			// 「有滚动条的长对话 vs 无滚动条的短对话」的卡片右缘。
+			// nav 注入（设置屏截图走查）时跳过——否则会把刚打开的设置屏
+			// 用会话顶掉。
+			if (opts?.nav === undefined && !w.document.querySelector(".semlink-msg-user-turn")) {
+				const sv = semView as unknown as {
+					history?: { load(): Promise<Array<Record<string, unknown>>> };
+					loadSession?: (s: unknown) => Promise<void>;
+				};
+				try {
+					const sessions = await sv.history?.load?.();
+					const pick = sessions?.[opts?.sessionIdx ?? 0];
+					if (pick) {
+						await sv.loadSession?.(pick);
+						await new Promise((r2) => setTimeout(r2, 600));
+					}
+				} catch { /* 诊断尽力而为 */ }
+			}
+			const msgsBox = (() => {
+				const m = w.document.querySelector(".semlink-search-messages") as HTMLElement | null;
+				if (!m) return null;
+				const r = m.getBoundingClientRect();
+				const cs = w.getComputedStyle(m);
+				return { rect: { left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width) }, padding: `${cs.paddingTop} ${cs.paddingRight} ${cs.paddingBottom} ${cs.paddingLeft}`, margin: `${cs.marginTop} ${cs.marginRight} ${cs.marginBottom} ${cs.marginLeft}` };
+			})();
 			out[`window_${Math.round(w.innerWidth)}x${Math.round(w.innerHeight)}@${w.devicePixelRatio}`] = {
 				dbg,
 				jitter,
 				padRules,
 				headerSides,
+				// 咖啡杯 canvas 探针：是否在本文档、尺寸、以及是否有非透明像素
+				cupProbe: (() => {
+					const c = w.document.querySelector(".semlink-guide-index-cupcanvas") as HTMLCanvasElement | null;
+					const r0 = c?.getBoundingClientRect();
+					let painted = -1;
+					try {
+						const ctx2 = c?.getContext("2d");
+						if (c && ctx2) {
+							const img = ctx2.getImageData(0, 0, c.width, c.height).data;
+							let n = 0;
+							for (let i = 3; i < img.length; i += 16) if (img[i] > 0) n++;
+							painted = n;
+						}
+					} catch {
+						painted = -2;
+					}
+					return {
+						inThisDoc: !!c && c.ownerDocument === w.document,
+						rect: r0 ? { left: Math.round(r0.left), top: Math.round(r0.top), w: Math.round(r0.width), h: Math.round(r0.height) } : null,
+						canvasW: c?.width ?? 0,
+						canvasH: c?.height ?? 0,
+						paintedSamples: painted,
+						// 界面判定：当前渲染的是哪一块
+						screen: {
+							indexstats: !!w.document.querySelector(".semlink-guide-indexstats"),
+							guide: !!w.document.querySelector(".semlink-search-welcome-guide"),
+							hub: !!w.document.querySelector(".semlink-guide-hub-card"),
+							home: !!w.document.querySelector(".semlink-search-welcome:not(.semlink-search-welcome-guide):not(.semlink-settings-screen)"),
+							settings: !!w.document.querySelector(".semlink-settings-screen"),
+							canvasTotal: w.document.querySelectorAll("canvas").length,
+						},
+					};
+				})(),
+				// 对话列裁剪诊断：消息区与首条用户气泡/回答卡的横向坐标
+				activeTab: (() => {
+					const t = w.document.querySelector(".semlink-settings-tab.is-active");
+					return (t ? t.textContent : null) + " chips=" + w.document.querySelectorAll(".semlink-settings-tabs button").length + " screen=" + !!w.document.querySelector(".semlink-settings-screen") + " roots=" + w.document.querySelectorAll(".semlink-settings-root").length;
+				})(),
+				msgsBox,
+				// 横向溢出诊断：scrollWidth 超过 clientWidth 说明卡片真的被裁
+				clipProbe: (() => {
+					const m = w.document.querySelector(".semlink-search-messages") as HTMLElement | null;
+					if (!m) return null;
+					const bubble = m.querySelector(".semlink-msg-turn:not(.semlink-msg-user-turn) .semlink-msg-bubble") as HTMLElement | null;
+					const br = bubble?.getBoundingClientRect();
+					const turn = m.querySelector(".semlink-msg-turn:not(.semlink-msg-user-turn)") as HTMLElement | null;
+					const tr = turn?.getBoundingClientRect();
+					return {
+						scrollW: m.scrollWidth,
+						clientW: m.clientWidth,
+						overflow: m.scrollWidth > m.clientWidth,
+						bubble: br ? { left: Math.round(br.left), right: Math.round(br.right), w: Math.round(br.width) } : null,
+						turn: tr ? { left: Math.round(tr.left), right: Math.round(tr.right), w: Math.round(tr.width) } : null,
+						// 右缘视觉诊断：边框/圆角/裁剪链
+						bubbleStyle: bubble ? ((cs2) => ({
+							borderRight: `${cs2.borderRightWidth} ${cs2.borderRightStyle} ${cs2.borderRightColor}`,
+							borderLeft: `${cs2.borderLeftWidth} ${cs2.borderLeftStyle} ${cs2.borderLeftColor}`,
+							radius: cs2.borderTopRightRadius,
+							overflowX: cs2.overflowX,
+							marginR: cs2.marginRight,
+							width: cs2.width,
+							maxWidth: cs2.maxWidth,
+						}))(w.getComputedStyle(bubble)) : null,
+						turnOverflow: turn ? w.getComputedStyle(turn).overflowX : null,
+					};
+				})(),
+				userBubble: rectOf(".semlink-msg-user-turn"),
+				answerCard: rectOf(".semlink-msg-turn:not(.semlink-msg-user-turn)"),
 				view: pick(".semlink-search-view"),
 				footer: pick(".semlink-search-footer"),
 				wrapper: pick(".semlink-search-input-wrapper"),
@@ -804,6 +1041,8 @@ export default class SmartVaultPlugin extends Plugin {
 				model: pick(".semlink-search-model"),
 			};
 		}
+		if (navDbg) out.navDbg = navDbg;
+		if (reproLog.length > 0) out.reproLog = reproLog;
 		if (Object.keys(out).length === 0) {
 			// 没有任何窗口开着视图——主动唤起主区标签页实例再量一次。
 			await this.activateSearchView();

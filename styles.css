@@ -2860,8 +2860,8 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 }
 
 .semlink-search-welcome-sub {
-    /* 与引导 hub 的 tagline 同规格（12.5px/text-muted） */
-    font-size: 12.5px;
+    /* 与引导 hub 的 tagline 同规格（14px/text-muted） */
+    font-size: 14px;
     font-weight: 400;
     color: var(--text-muted);
     max-width: 360px;
@@ -2950,7 +2950,9 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
  * view's fixed header row. The negative side margins cancel the messages
  * area's own 6px padding so the icons line up with the real header's.
  * 双类选择器抬优先级：压过上方主标签页限宽规则的 margin-left/right:auto，
- * 否则负边距失效，左上角按钮会比主页的菜单/Get Started 右移 6px。 */
+ * 否则负边距失效，左上角按钮会比主页的菜单/Get Started 右移 6px。
+ * 左右负边距必须对称：messages 的 scrollbar-gutter 两侧等宽预留，
+ * 单边补偿（旧弹窗 margin-left 16px）会让引导/设置屏左右图标不对称。 */
 .semlink-search-view .semlink-guide-corners {
     position: static;
     flex-shrink: 0;
@@ -2959,11 +2961,18 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     /* 显式拉伸：messages 列容器里某处改变了交叉轴行为 */
     align-self: stretch;
     width: calc(100% + 12px);
+    /* 左右内边距清零：条外沿已与主页头部框（view padding 12px 处）对齐，
+       .semlink-search-header 自带的 12px 横向内边距会让引导/设置屏图标
+       比主页图标多缩进 12px——清零后两侧图标与主页菜单/设置按钮逐像素
+       对齐（滚动条 gutter 两侧等宽，对称性不受影响）。 */
+    padding-left: 0;
+    padding-right: 0;
 }
-/* 弹窗实例：内容列两侧多出滚动条 gutter，引导头部条需右移校准才与
-   主页头部对齐（实测 dx -22 → 0）。侧栏实例不偏移，勿加。 */
-.semlink-search-view.semlink-main-tab .semlink-guide-corners {
-    margin: 0 -6px 0 16px;
+/* 弹窗/主区域实例：限宽规则 .semlink-main-tab .semlink-search-header
+   （max-width: 100%-32px）会误伤复用该类的引导条，导致条右侧短 44px、
+   品牌左偏 22px——引导条自己按 calc(100%+12px) 定宽，必须豁免。 */
+.semlink-search-view.semlink-main-tab .semlink-search-header.semlink-guide-corners {
+    max-width: none;
 }
 
 /* Guide mode: the welcome block hosts only the guide — flow top-down
@@ -3700,9 +3709,46 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     color: var(--text-muted);
 }
 
-/* Embed guide's final "Done" under the coffee cup. */
-.semlink-guide-index-done {
+/* Embed guide's final button row: 暂停/继续（次）＋ 完成（主）并排居中，
+   两个按钮等宽（flex 等分，统一宽度上限避免被文案撑得不一样宽）。 */
+.semlink-guide-index-btnrow {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
     margin-top: 10px;
+}
+
+.semlink-guide-index-btnrow .semlink-guide-save {
+    flex: 1 1 0;
+    min-width: 128px;
+    max-width: 168px;
+}
+
+/* 重新配置：降级为文本链接（次行动让位给主按钮「完成」）。!important
+   压过核心 app.css 的按钮默认底色/边框/阴影——任何层级的 button 规则
+   都不能把这条变回按钮脸。 */
+.semlink-search-welcome .semlink-guide-index-reconfig-link,
+.semlink-guide-index-reconfig-link {
+    display: block !important;
+    margin: 12px auto 0;
+    padding: 0 !important;
+    border: none !important;
+    background: none !important;
+    box-shadow: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    font-size: 12px !important;
+    color: var(--text-muted);
+    cursor: pointer;
+    text-decoration: underline transparent;
+    transition: color 0.12s ease, text-decoration-color 0.12s ease;
+}
+
+.semlink-search-welcome .semlink-guide-index-reconfig-link:hover,
+.semlink-guide-index-reconfig-link:hover {
+    color: var(--text-normal);
+    text-decoration-color: currentColor;
 }
 
 .semlink-guide-index-timeitem {
@@ -6359,7 +6405,7 @@ button.semlink-share-revoke:hover {
 	letter-spacing: .2px;
 }
 .semlink-guide-hub-tagline {
-	font-size: 12.5px;
+	font-size: 14px;
 	color: var(--text-muted);
 }
 .semlink-guide-hub-card {
@@ -6770,4 +6816,301 @@ button.semlink-share-revoke:hover {
 .semlink-queue-steer .svg-icon {
     width: 12px;
     height: 12px;
+}
+
+/* ══════════ 设置页窄幅重排（六个 tab，≤480px 容器） ══════════
+   子代理设计 + 人工审核整合版。断点沿用 .semlink-settings-root 的
+   container settings；720px 桶保持 481-720 中间态不变。 */
+
+@container settings (max-width: 480px) {
+    /* ── 公共基座：原生 Setting 行纵向堆叠 ──
+       Obsidian 核心只在视口 ≤750px 时堆叠 setting-item，桌面窄侧栏
+       （视口很宽）永远不触发 → 控制列 flex-shrink:0 把按钮硬顶在右、
+       名称被压没。容器查询补齐：信息列在上、控件整行在下。 */
+    .smart-vault-settings .setting-item {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+    }
+    .semlink-settings-root .setting-item-info {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .semlink-settings-root .setting-item-description {
+        overflow-wrap: anywhere;
+    }
+    .smart-vault-settings .setting-item .setting-item-control {
+        flex-shrink: 1;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+    .smart-vault-settings .setting-item .setting-item-control button {
+        min-height: 32px;
+    }
+    .smart-vault-settings .setting-item .setting-item-control > * {
+        flex: 1 1 auto;
+    }
+    .semlink-settings-root .setting-item-control input[type="text"],
+    .semlink-settings-root .setting-item-control input[type="password"],
+    .semlink-settings-root .setting-item-control input[type="number"],
+    .semlink-settings-root .setting-item-control input[type="search"] {
+        flex: 1 1 180px;
+        width: auto;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    /* ── 通用：许可证卡纵向漏斗 + 上手清单 + 语言下拉 ── */
+    .smart-vault-settings .semlink-license-card {
+        padding: 14px 14px;
+    }
+    .smart-vault-settings .semlink-license-card-inner {
+        padding: 12px 12px;
+    }
+    .smart-vault-settings .semlink-license-card-headline {
+        font-size: 18px;
+    }
+    .smart-vault-settings .semlink-license-card-pricerow {
+        flex-wrap: wrap;
+        row-gap: 2px;
+    }
+    .smart-vault-settings .semlink-license-card-apply.mod-cta {
+        flex: 1 1 100%;
+        text-align: center;
+        padding: 10px 14px;
+    }
+    .smart-vault-settings .semlink-license-card-keyrow {
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
+    .smart-vault-settings .semlink-license-card-input {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+    .smart-vault-settings .semlink-license-card-keyrow .semlink-license-card-apply {
+        flex: 1 1 100%;
+        text-align: center;
+    }
+    .smart-vault-settings .semlink-license-card-footrow {
+        flex-wrap: wrap;
+        row-gap: 6px;
+    }
+    .semlink-checklist {
+        padding: 12px 12px 8px;
+    }
+    .semlink-checklist-row {
+        gap: 10px;
+    }
+    .semlink-checklist-label {
+        min-width: 0;
+    }
+    .semlink-checklist-action {
+        padding: 5px 10px;
+    }
+    .smart-vault-settings .semlink-settings-lang select.dropdown {
+        max-width: 100%;
+    }
+
+    /* ── MCP / 分享：服务器卡确定性两行 ──
+       main 恰好吃满首行（图标36+间距10），按钮组/开关必然折到第二行；
+       720 块的 flex:1 1 0 让 main 无限收缩、折行永不触发——这里压过。 */
+    .semlink-mcp-server {
+        row-gap: 8px;
+    }
+    .semlink-mcp-server .semlink-mcp-server-main {
+        flex: 1 1 calc(100% - 46px);
+    }
+    .semlink-mcp-server .semlink-mcp-server-toggle {
+        margin-left: auto;
+    }
+    .semlink-mcp-server .semlink-mcp-server-sub {
+        font-size: 11px;
+    }
+    .semlink-mcp-server .semlink-mcp-server-actions {
+        flex: 1 1 100%;
+        margin-left: 0;
+        justify-content: flex-end;
+    }
+
+    /* ── Git：Pro 门禁卡两行（说明独占首行，解锁按钮整行） ── */
+    .semlink-settings-root .semlink-pro-gate {
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
+    .semlink-settings-root .semlink-pro-gate .semlink-pro-gate-text {
+        flex: 1 1 calc(100% - 50px);
+        min-width: 0;
+    }
+    .semlink-settings-root .semlink-pro-gate button {
+        flex: 1 1 100%;
+        text-align: center;
+        margin-left: 0;
+    }
+
+    /* ── 模型：provider 列表 → 顶部横向滚动 chip 条 ──
+       720 块的「顶栏列表 max-height:220px」在 300px 下吃掉近半屏——
+       chip 条把 provider 面板压到一行高。拖拽事件绑在行元素上，横向
+       拖 chip 重排/归档原样生效；grip 在触屏本就无效，隐藏零损失。 */
+    .smart-vault-settings .semlink-mt-providers {
+        max-height: none;
+        overflow: visible;
+        padding-bottom: 4px;
+    }
+    .smart-vault-settings .semlink-mt-provider-list {
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 2px 2px 6px;
+        scrollbar-width: none;
+    }
+    .smart-vault-settings .semlink-mt-provider-list::-webkit-scrollbar {
+        display: none;
+    }
+    .smart-vault-settings .semlink-mt-provider {
+        flex: 0 0 auto;
+        padding: 5px 10px;
+        gap: 6px;
+        border: 1px solid var(--background-modifier-border);
+        border-radius: 999px;
+        background: var(--background-secondary);
+    }
+    .smart-vault-settings .semlink-mt-provider.is-active {
+        border-color: var(--interactive-accent);
+        background: hsla(var(--interactive-accent-hsl), 0.12);
+    }
+    .smart-vault-settings .semlink-mt-provider .semlink-mt-provider-grip,
+    .smart-vault-settings .semlink-mt-provider .semlink-mt-provider-count,
+    .smart-vault-settings .semlink-mt-provider .semlink-mt-folder-count {
+        display: none;
+    }
+    .smart-vault-settings .semlink-mt-provider.is-nested {
+        margin-left: 0;
+    }
+    .smart-vault-settings .semlink-mt-provider.is-folder {
+        border-style: dashed;
+    }
+    .smart-vault-settings .semlink-mt-provider-logo .semlink-mt-logo-svg,
+    .smart-vault-settings .semlink-mt-provider-logo svg,
+    .smart-vault-settings .semlink-mt-provider-logo .semlink-provider-fallback {
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
+    }
+    .smart-vault-settings .semlink-mt-provider-name {
+        max-width: 11ch;
+    }
+    .smart-vault-settings .semlink-mt-provider .semlink-mt-provider-gear {
+        display: none;
+    }
+    .smart-vault-settings .semlink-mt-provider.is-active .semlink-mt-provider-gear {
+        display: flex;
+    }
+    @supports (hover: hover) {
+        .smart-vault-settings .semlink-mt-provider:hover .semlink-mt-provider-gear {
+            display: flex;
+        }
+    }
+
+    /* 模型行：去 grip、收紧间距，保持两行结构（名称跑马灯依赖
+       nowrap + JS 测宽，不可改多行） */
+    .smart-vault-settings .semlink-mt-model {
+        gap: 8px;
+        padding: 7px 8px;
+    }
+    .smart-vault-settings .semlink-mt-model .semlink-mt-provider-grip {
+        display: none;
+    }
+    .smart-vault-settings .semlink-mt-model-logo .semlink-mt-logo-svg,
+    .smart-vault-settings .semlink-mt-model-logo svg,
+    .smart-vault-settings .semlink-mt-model-logo .semlink-provider-fallback {
+        width: 22px;
+        height: 22px;
+    }
+    .smart-vault-settings .semlink-mt-model-name {
+        font-size: 12.5px;
+    }
+    .smart-vault-settings .semlink-mt-model-ctx {
+        font-size: 11px;
+    }
+    .smart-vault-settings .semlink-mt-showing {
+        flex-wrap: wrap;
+        row-gap: 6px;
+    }
+    .smart-vault-settings .semlink-mt-add-model {
+        padding: 6px 10px;
+    }
+    .smart-vault-settings .semlink-mt-configure {
+        padding: 6px 16px;
+    }
+
+    /* ── RAG：双面板单列堆叠 + 标题百分比升级为主数字 ── */
+    .semlink-index-panels {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    .semlink-index-card {
+        padding: 10px 12px;
+        margin: 0;
+    }
+    .semlink-index-card-head {
+        gap: 8px;
+        margin-bottom: 4px;
+    }
+    .semlink-index-card-title {
+        font-size: 15px;
+    }
+    .semlink-index-card-row {
+        font-size: 12px;
+        padding: 2px 0;
+    }
+}
+
+/* ── 分享页空状态（此前无任何样式，全宽度生效） ── */
+.semlink-share-tab-empty {
+    padding: 22px 14px;
+    border: 1px dashed var(--background-modifier-border);
+    border-radius: 10px;
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+/* ── 设置屏窄幅：tab 栏吸附顶部（单行不折行）──
+   根节点 flex 列 + 面板内部滚动：tabs 排在标题与面板之间（自然顺序），
+   面板撑满剩余高度就地滚动——tab 栏恒在顶部可见，不再折行。 */
+@container settings (max-width: 480px) {
+    .semlink-search-welcome.semlink-settings-screen {
+        height: 100%;
+        padding: 0 12px 0;
+    }
+    .semlink-settings-root > .semlink-settings-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        gap: 4px;
+        margin: 10px -12px 10px;
+        padding: 0 10px 8px;
+        background: var(--background-primary);
+        border-bottom: 1px solid var(--background-modifier-border);
+    }
+    .semlink-settings-root > .semlink-settings-tab {
+        flex: 1 1 auto;
+        text-align: center;
+        white-space: nowrap;
+        padding: 8px 6px;
+        border-radius: 8px;
+    }
+    .semlink-settings-root > .semlink-settings-tab.is-active {
+        background: hsla(var(--interactive-accent-hsl), 0.14);
+        color: var(--interactive-accent);
+        border-color: transparent;
+    }
+    .semlink-settings-screen > .semlink-settings-panel {
+        max-height: none;
+        padding-bottom: 10px;
+    }
 }

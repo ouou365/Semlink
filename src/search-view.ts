@@ -173,6 +173,9 @@ export class SemanticSearchView extends ItemView {
 	 *  步（供应商/品牌目录），不清除任何已保存进度；用户再次选择供应商
 	 *  （onLeaveStart 回调）或离开引导时复位。 */
 	private guideStartOverride = false;
+	/** 引导的来源界面（返回按钮的去向）：设置页「配置/开始配置」进来是
+	 *  settings；主页帮助图标/首次运行没有明确来源，返回即回主页。 */
+	private guideReturn: "home" | "settings" = "home";
 	// ── 视图内嵌设置屏（替代设置弹窗，形态同 Get Started hub）──
 	/** 设置屏打开中：占据欢迎区， chrome 同引导（隐藏输入区/真实头部）。 */
 	private settingsMode = false;
@@ -309,16 +312,34 @@ export class SemanticSearchView extends ItemView {
 		// 会话/引导状态不丢；已在弹窗中时该按钮由 refreshMainTabUI 隐藏。
 		const popoutBtn = rightIcons.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
-			attr: { "aria-label": t("popOutWindow"), title: t("popOutWindow") },
+			attr: { "aria-label": t("popOutWindow") },
 		});
 		this.popoutBtnEl = popoutBtn;
 		setIcon(popoutBtn, "picture-in-picture-2");
 		popoutBtn.addEventListener("click", () => {
 			try {
 				// 宽度需容纳常显菜单(300px)+对话区
+				const startDoc = this.contentEl.ownerDocument;
 				this.app.workspace.moveLeafToPopout(this.leaf, {
 					size: { width: 780, height: 720 },
 				});
+				// moveLeafToPopout 返回时 DOM 可能还没搬进弹窗窗口（窗口创建
+				// 异步）——立刻重渲染只会把 canvas 挂回旧窗口（循环绑着被
+				// 遮挡的主窗 rAF，咖啡杯空白数秒）。轮询等真正迁移完成再
+				// 强制重渲染一次，canvas 一出生就挂在弹窗窗口。
+				const waitAdopt = (): void => {
+					let tries = 0;
+					const tick = (): void => {
+						tries++;
+						if (this.contentEl.ownerDocument !== startDoc || tries > 80) {
+							this.adoptLeafWindow(true);
+							return;
+						}
+						window.setTimeout(tick, 50);
+					};
+					tick();
+				};
+				waitAdopt();
 				// 置位后，插件的 window-close 处理器会在弹窗关闭、且已无
 				// 任何 Semlink 视图时自动把主页放回右侧栏
 				this.plugin.semlinkPopoutActive = true;
@@ -648,7 +669,36 @@ export class SemanticSearchView extends ItemView {
 		// 主区域（新标签页）实例：常显历史菜单 + 专属底色。布局变化（拖动
 		// 换区）后由 layout-change 重新校正；侧栏实例两类样式都不挂。
 		this.refreshMainTabUI();
-		this.registerEvent(this.app.workspace.on("layout-change", () => this.refreshMainTabUI()));
+		this.registerEvent(this.app.workspace.on("layout-change", () => {
+			this.refreshMainTabUI();
+			this.adoptLeafWindow();
+		}));
+	}
+
+	/** 视图记录的所在文档（adoptLeafWindow 用它判断整叶迁移）。 */
+	private lastViewDoc: Document | null = null;
+
+	/** 视图整叶在主窗 ↔ 弹窗之间迁移后，把引导区重渲染到当前窗口。
+	 *  引导里的咖啡杯 canvas 动画循环绑在挂载时的窗口上（coffee-canvas
+	 *  另有 1s 探测器兜底，但旧窗口被遮挡后定时器同样被节流，感知要
+	 *  ~3s）；迁移后当场重渲染——canvas 直接挂载在当前窗口，弹窗里秒出。
+	 *  会话视图不受影响（无 canvas）。force：lastViewDoc 已与当前文档
+	 *  一致时也重渲染（moveLeafToPopout 同步完成，调用时序上可能"看似
+	 *  未迁移"，但 DOM 已在别的窗口）。 */
+	private adoptLeafWindow(force = false): void {
+		const doc = this.contentEl.ownerDocument;
+		if (!force) {
+			if (this.lastViewDoc === null) {
+				this.lastViewDoc = doc;
+				return;
+			}
+			if (doc === this.lastViewDoc) return;
+		}
+		this.lastViewDoc = doc;
+		if (this.guideModeActive() && !this.settingsMode) {
+			this.messagesEl.empty();
+			this.renderWelcome();
+		}
 	}
 
 	protected async onClose(): Promise<void> {
@@ -698,7 +748,6 @@ export class SemanticSearchView extends ItemView {
 		if (state !== "stop") {
 			setIcon(btn, "arrow-up");
 			btn.setAttr("aria-label", t("searchSend"));
-			btn.setAttr("title", t("searchSend"));
 		} else {
 			// Custom solid stop icon (ring + filled square): Obsidian's icon
 			// set has no filled stop variant, so inline the SVG directly.
@@ -709,7 +758,6 @@ export class SemanticSearchView extends ItemView {
 			svg.createSvg("path", { attr: { fill: "currentColor", d: "M512 64c60.5 0 119.2 11.8 174.4 35.2 53.3 22.6 101.3 54.9 142.4 96 41.2 41.2 73.5 89.1 96 142.4C948.2 392.8 960 451.5 960 512s-11.8 119.2-35.2 174.4c-22.6 53.3-54.9 101.3-96 142.4-41.2 41.2-89.1 73.5-142.4 96C631.2 948.2 572.5 960 512 960s-119.2-11.8-174.4-35.2c-53.3-22.6-101.3-54.9-142.4-96-41.2-41.2-73.5-89.1-96-142.4C75.8 631.2 64 572.5 64 512s11.8-119.2 35.2-174.4c22.6-53.3 54.9-101.3 96-142.4 41.2-41.2 89.1-73.5 142.4-96C392.8 75.8 451.5 64 512 64m0-64C229.2 0 0 229.2 0 512s229.2 512 512 512 512-229.2 512-512S794.8 0 512 0z" } });
 			svg.createSvg("path", { attr: { fill: "currentColor", d: "M716 304H308c-2.2 0-4 1.8-4 4v408c0 2.2 1.8 4 4 4h408c2.2 0 4-1.8 4-4V308c0-2.2-1.8-4-4-4z" } });
 			btn.setAttr("aria-label", t("searchStop"));
-			btn.setAttr("title", t("searchStop"));
 		}
 	}
 
@@ -723,7 +771,6 @@ export class SemanticSearchView extends ItemView {
 		setSvgIcon(btn, this.inputExpanded ? collapseIconSvg : expandIconSvg);
 		const label = t(this.inputExpanded ? "searchCollapseInput" : "searchExpandInput");
 		btn.setAttr("aria-label", label);
-		btn.setAttr("title", label);
 	}
 
 	private async runSearch(): Promise<void> {
@@ -1304,7 +1351,7 @@ export class SemanticSearchView extends ItemView {
 			// Steer：插队到队首——本轮结束后第一个执行（ZCode 同名语义的
 			// 排队版：不中断当前运行，但抢到下一个执行位）。
 			if (i > 0) {
-				const steerBtn = actions.createEl("button", { cls: "semlink-queue-steer", attr: { "aria-label": t("queueSteer"), title: t("queueSteer") } });
+				const steerBtn = actions.createEl("button", { cls: "semlink-queue-steer", attr: { "aria-label": t("queueSteer") } });
 				setIcon(steerBtn, "arrow-up-to-line");
 				steerBtn.createSpan({ cls: "semlink-queue-steer-label", text: t("queueSteer") });
 				steerBtn.addEventListener("click", () => {
@@ -1782,8 +1829,9 @@ export class SemanticSearchView extends ItemView {
 
 		if (added.length === 0) return;
 		// Defer DOM mutation (chips + notice) off the drop event so the UI
-		// doesn't jank; a single frame later is imperceptible.
-		window.requestAnimationFrame(() => {
+		// doesn't jank; a single frame later is imperceptible. rAF 绑视图
+		// 所在窗口（遮挡窗口的 rAF 会停摆）。
+		this.viewWin.requestAnimationFrame(() => {
 			this.insertAttachmentChips(added);
 			new Notice(t("attachAdded").replace("{n}", String(added.length)));
 		});
@@ -2147,16 +2195,18 @@ export class SemanticSearchView extends ItemView {
 	 *  置" / "开始配置") walks the matching catalog directly — no hub. The
 	 *  hub is only for the generic entries (help icon / Get Started). */
 	openSetupGuide(kind: "chat" | "embed" = "chat"): void {
-		this.openGuide(kind);
+		this.openGuide(kind, "settings");
 	}
 
 	/** Open the guide area (help icon, Get Started, or asking without any
 	 *  API key). Always lands on the GENERIC HUB first — a previous run's
 	 *  "chat"/"embed" selection never sticks. Only openSetupGuide passes an
 	 *  explicit mode to skip the hub. A fresh run resets step ① (configured
-	 *  providers are untouched). */
-	private openGuide(mode: "hub" | "chat" | "embed" = "hub"): void {
+	 *  providers are untouched). `from` records the originating screen for
+	 *  the guide's back button (settings screen vs home). */
+	private openGuide(mode: "hub" | "chat" | "embed" = "hub", from: "home" | "settings" = "home"): void {
 		this.guideMode = mode;
+		this.guideReturn = from;
 		// 从设置屏进入引导（清单「开始配置」等入口）：先退出设置屏
 		this.settingsMode = false;
 		this.settingsEmbed?.destroy();
@@ -2217,12 +2267,22 @@ export class SemanticSearchView extends ItemView {
 			// skip icon left, purple brand center, language + settings right.
 			const corners = this.messagesEl.createDiv({ cls: "semlink-search-header semlink-guide-corners" });
 			const leftSide = corners.createDiv({ cls: "semlink-search-header-side" });
-			const skipBtn = leftSide.createEl("button", {
+			// 返回（左侧唯一按钮）：setup 页 → 回 Get Started（hub），进度
+			// 保留；hub → 回来源界面（设置页进来回设置页；无明确来源/主页
+			// 进来 → 结束引导回主页）。
+			const backBtn = leftSide.createEl("button", {
 				cls: "semlink-search-icon-btn clickable-icon",
-				attr: { "aria-label": t("guideSkip") },
+				attr: { "aria-label": t("historyBack") },
 			});
-			setIcon(skipBtn, "x");
-			skipBtn.addEventListener("click", () => {
+			setIcon(backBtn, "arrow-left");
+			backBtn.addEventListener("click", () => {
+				if (this.guideMode !== "hub") {
+					this.guideMode = "hub";
+					this.guideStartOverride = false;
+					this.messagesEl.empty();
+					this.renderWelcome();
+					return;
+				}
 				// End a help-icon-triggered run too, or guideMode below would
 				// re-render the guide right after the skip.
 				this.guideRequested = false;
@@ -2230,24 +2290,13 @@ export class SemanticSearchView extends ItemView {
 				this.guideDismissed = true;
 				this.plugin.settings.onboarding = { ...(this.plugin.settings.onboarding ?? {}), done: true };
 				void this.plugin.saveSettings();
-				this.messagesEl.empty();
-				this.renderWelcome();
-			});
-			// Get Started（回到开始）：仅 Chat/Embed setup 界面显示（hub 本身
-			// 就是出发点）。点击强制回到流程第一步（供应商/品牌目录，即
-			// guideJourneySub 欢迎语所在的界面），已保存的配置进度原样保留。
-			if (this.guideMode !== "hub") {
-				const startBtn = leftSide.createEl("button", {
-					cls: "semlink-search-icon-btn clickable-icon",
-					attr: { "aria-label": t("hubWelcome"), title: t("hubWelcome") },
-				});
-				setIcon(startBtn, "compass");
-				startBtn.addEventListener("click", () => {
-					this.guideStartOverride = true;
+				if (this.guideReturn === "settings") {
+					this.openSettingsScreen();
+				} else {
 					this.messagesEl.empty();
 					this.renderWelcome();
-				});
-			}
+				}
+			});
 			const brandGroup = corners.createDiv({ cls: "semlink-search-brand-group" });
 			const brand = brandGroup.createDiv({ cls: "semlink-search-logo" });
 			setIcon(brand, "semlink-logo");
@@ -2255,46 +2304,14 @@ export class SemanticSearchView extends ItemView {
 			const rightSide = corners.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
 			const langBtn = rightSide.createEl("button", {
 				cls: "semlink-search-icon-btn clickable-icon",
-				attr: { "aria-label": t("language"), title: t("language") },
+				attr: { "aria-label": t("language") },
 			});
 			setIcon(langBtn, "languages");
-			// Persisting via saveSettings drives the whole chain: it calls
-			// setLang and refreshLanguage() on this view, which rebuilds the
-			// welcome in the new language. Calling setLang alone (as an
-			// earlier version did) changes nothing on screen.
-			const switchLang = (lang: Lang): void => {
-				this.plugin.settings.language = lang;
-				void this.plugin.saveSettings();
-			};
-			langBtn.addEventListener("click", () => {
-				// All UI languages from the registry (native labels), not just
-				// zh/en — the guide must be reachable in every language. The
-				// active one is marked with the accent color (no checkmark).
-				const menu = new Menu();
-				for (const l of LANGUAGES) {
-					menu.addItem((item) => {
-						item.setTitle(l.label).onClick(() => switchLang(l.value));
-						if (l.value === getLang()) {
-							// titleEl isn't in the pinned Obsidian typings yet —
-							// it exists at runtime (menu item's label span).
-							const titleEl = (item as unknown as { titleEl: HTMLElement }).titleEl;
-							titleEl.addClass("semlink-lang-active");
-						}
-					});
-				}
-				// Anchor to the BUTTON, right-aligned: the menu's right edge
-				// meets the button's right edge (top-left anchoring alone
-				// would let the menu run past the panel edge). Clicking the
-				// button anywhere opens the menu at this same spot.
-				const rect = langBtn.getBoundingClientRect();
-				menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
-				const menuEl = (menu as unknown as { menuEl?: HTMLElement }).menuEl;
-				if (menuEl) menuEl.style.left = `${rect.right - menuEl.offsetWidth}px`;
-			});
+			langBtn.addEventListener("click", () => this.openLanguageMenu(langBtn));
 			// 设置按钮（语言切换右侧）：不走引导直接打开插件设置页
 			const guideSettingsBtn = rightSide.createEl("button", {
 				cls: "semlink-search-icon-btn clickable-icon",
-				attr: { "aria-label": t("openSettings"), title: t("openSettings") },
+				attr: { "aria-label": t("openSettings") },
 			});
 			setIcon(guideSettingsBtn, "settings");
 			guideSettingsBtn.addEventListener("click", () => this.openSettingsScreen());
@@ -2331,8 +2348,9 @@ export class SemanticSearchView extends ItemView {
 				// 触发器立即显示刚选中的模型（否则要重开视图才刷新）。
 				if (this.hasApiKey()) this.statusEl.setText("");
 				this.updateModelLabel();
-				// 完成引导的彩带庆祝 🎉（跳过引导不触发）
-				this.showWelcomeConfetti();
+				// 完成引导的彩带庆祝 🎉（跳过引导不触发）。嵌入引导的 Done
+				// 只是索引转后台 + 回主页，不放礼花。
+				if (mode !== "embed") this.showWelcomeConfetti();
 			}, mode, {
 				// 「回到开始」控制：Get Started 图标 → 强制渲染第一步；
 				// 用户再次选择供应商（onPickProvider 路径）即恢复正常流程。
@@ -2435,7 +2453,7 @@ export class SemanticSearchView extends ItemView {
 		const leftSide = corners.createDiv({ cls: "semlink-search-header-side" });
 		const backBtn = leftSide.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
-			attr: { "aria-label": t("historyBack"), title: t("historyBack") },
+			attr: { "aria-label": t("historyBack") },
 		});
 		setIcon(backBtn, "arrow-left");
 		backBtn.addEventListener("click", () => this.closeSettingsScreen());
@@ -2443,12 +2461,46 @@ export class SemanticSearchView extends ItemView {
 		const brand = brandGroup.createDiv({ cls: "semlink-search-logo" });
 		setIcon(brand, "semlink-logo");
 		brandGroup.createSpan({ cls: "semlink-search-brand", text: "Semlink" });
+		// 右上角：语言切换（标题块省略后语言挪到这里，与左侧返回对称，
+		// 品牌仍居中）。
+		const rightSide = corners.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
+		const langBtn = rightSide.createEl("button", {
+			cls: "semlink-search-icon-btn clickable-icon",
+			attr: { "aria-label": t("language") },
+		});
+		setIcon(langBtn, "languages");
+		langBtn.addEventListener("click", () => this.openLanguageMenu(langBtn));
 		const host = this.messagesEl.createDiv({ cls: "semlink-search-welcome semlink-settings-screen" });
 		this.settingsEmbed = renderSettingsTabInto(
 			host,
 			this.plugin,
 			this.settingsModelTab ? "model" : undefined,
 		);
+	}
+
+	/** 语言切换菜单（引导页与设置屏共用）：列出全部 UI 语言（原生标签），
+	 *  当前项高亮；菜单右缘对齐锚点按钮右缘。saveSettings 驱动 setLang +
+	 *  refreshLanguage，语言相关的界面随之重建。 */
+	private openLanguageMenu(anchor: HTMLElement): void {
+		const menu = new Menu();
+		for (const l of LANGUAGES) {
+			menu.addItem((item) => {
+				item.setTitle(l.label).onClick(() => {
+					this.plugin.settings.language = l.value;
+					void this.plugin.saveSettings();
+				});
+				if (l.value === getLang()) {
+					// titleEl isn't in the pinned Obsidian typings yet — it
+					// exists at runtime (menu item's label span).
+					const titleEl = (item as unknown as { titleEl: HTMLElement }).titleEl;
+					titleEl.addClass("semlink-lang-active");
+				}
+			});
+		}
+		const rect = anchor.getBoundingClientRect();
+		menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
+		const menuEl = (menu as unknown as { menuEl?: HTMLElement }).menuEl;
+		if (menuEl) menuEl.style.left = `${rect.right - menuEl.offsetWidth}px`;
 	}
 
 	/** Rough full-index estimate for the guide's final step: markdown notes
@@ -2506,7 +2558,6 @@ export class SemanticSearchView extends ItemView {
 			if (onHome && !this.guideHomeBtnEl.firstChild) setIcon(this.guideHomeBtnEl, "circle-help");
 			const label = onHome ? t("guideTitle") : t("searchNewChat");
 			this.guideHomeBtnEl.setAttr("aria-label", label);
-			this.guideHomeBtnEl.setAttr("title", label);
 			this.guideHomeBtnEl.onclick = onHome
 				? () => this.openGuide()
 				: () => this.newChatFromUi();
@@ -2521,15 +2572,12 @@ export class SemanticSearchView extends ItemView {
 		// Header icon tooltips.
 		if (this.menuBtnEl) {
 			this.menuBtnEl.setAttr("aria-label", t("historyTitle"));
-			this.menuBtnEl.setAttr("title", t("historyTitle"));
 		}
 		if (this.settingsBtnEl) {
 			this.settingsBtnEl.setAttr("aria-label", t("settingsTitle"));
-			this.settingsBtnEl.setAttr("title", t("settingsTitle"));
 		}
 		if (this.upgradeBtnEl) {
 			this.upgradeBtnEl.setAttr("aria-label", t("upgradeProBtn"));
-			this.upgradeBtnEl.setAttr("title", t("upgradeProBtn"));
 		}
 		if (this.guideHomeBtnEl) {
 			this.guideHomeBtnEl.onclick = this.messagesEl.querySelector(".semlink-search-welcome")
@@ -2747,8 +2795,9 @@ export class SemanticSearchView extends ItemView {
 		this.scrollToBottom();
 		// After the last await, layout can still settle (code highlight,
 		// image decode, font swap) — re-pin on the next frames so the bottom
-		// row ends up fully visible.
-		requestAnimationFrame(() => this.scrollToBottom());
+		// row ends up fully visible. rAF 绑视图所在窗口（弹窗里主窗被遮挡
+		// 时 window rAF 会停摆，重钉延迟数秒）。
+		this.viewWin.requestAnimationFrame(() => this.scrollToBottom());
 		window.setTimeout(() => this.scrollToBottom(), 80);
 		this.scrollToBottom();
 		// scrollToBottom may not fire a scroll event when the session is
@@ -4026,8 +4075,8 @@ export class SemanticSearchView extends ItemView {
 		const parts = Array.from({ length: 140 }, () => ({
 			x: w / 2 + (Math.random() - 0.5) * 90,
 			y: h * 0.32,
-			vx: (Math.random() - 0.5) * 9,
-			vy: -(Math.random() * 8 + 4),
+			vx: (Math.random() - 0.5) * 11,
+			vy: -(Math.random() * 10 + 6),
 			rot: Math.random() * Math.PI * 2,
 			vr: (Math.random() - 0.5) * 0.3,
 			w: 5 + Math.random() * 6,
@@ -4042,7 +4091,7 @@ export class SemanticSearchView extends ItemView {
 			ctx.clearRect(0, 0, w, h);
 			let alive = false;
 			for (const p of parts) {
-				p.vy += 0.22;
+				p.vy += 0.3;
 				p.x += p.vx;
 				p.y += p.vy;
 				p.rot += p.vr;
@@ -4051,7 +4100,7 @@ export class SemanticSearchView extends ItemView {
 				ctx.save();
 				ctx.translate(p.x, p.y);
 				ctx.rotate(p.rot);
-				ctx.globalAlpha = Math.max(0, 1 - t / 2600);
+				ctx.globalAlpha = Math.max(0, 1 - t / 1300);
 				ctx.fillStyle = p.color;
 				if (p.circle) {
 					ctx.beginPath();
@@ -4062,10 +4111,15 @@ export class SemanticSearchView extends ItemView {
 				}
 				ctx.restore();
 			}
-			if (alive && t < 2800) window.requestAnimationFrame(tick);
+			if (alive && t < 1600) viewWin.requestAnimationFrame(tick);
 			else canvas.remove();
 		};
-		window.requestAnimationFrame(tick);
+		// 动画循环绑在视图所在窗口：canvas 在弹窗文档里，主窗 window 的
+		// rAF 会被遮挡节流——礼花卡成幻灯片（同咖啡杯的跨窗口问题）。
+		// 同步先画一帧（咖啡杯同款）：点击后立即起爆，不等 rAF 第一拍；
+		// tick 内部会自调度后续帧。
+		const viewWin = this.viewWin;
+		tick();
 	}
 
 	private hideModelPopup(): void {

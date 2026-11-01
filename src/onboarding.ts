@@ -177,14 +177,29 @@ export function renderOnboarding(
 		const fileNameEl = fileEl.createSpan({ cls: "semlink-guide-index-file-name" });
 		const fileProgEl = fileEl.createSpan({ cls: "semlink-guide-index-file-prog" });
 		const timerow = hero.createDiv({ cls: "semlink-guide-index-timerow" });
-		const doneBtn = hero.createEl("button", {
-			cls: "semlink-guide-save semlink-guide-primary semlink-guide-index-done",
+		// 按钮行：暂停/继续（次按钮）＋ 完成（主按钮）。完成 = 嵌入转后台
+		// 继续运行，退出引导回主页（不暂停调度器）。
+		const btnRow = hero.createDiv({ cls: "semlink-guide-index-btnrow" });
+		const pauseBtn = btnRow.createEl("button", {
+			cls: "semlink-guide-save semlink-guide-secondary semlink-guide-index-done",
 			text: t("guideIndexPause"),
+		});
+		const doneBtn = btnRow.createEl("button", {
+			cls: "semlink-guide-save semlink-guide-primary semlink-guide-index-finish",
+			text: t("guideFinishIndex"),
+		});
+		doneBtn.addEventListener("click", () => {
+			unsub();
+			coffee.destroy();
+			plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), done: true };
+			void plugin.saveSettings();
+			onFinish();
 		});
 		// 重新配置：快照当前嵌入模型键，停掉进行中的索引（换模型后旧嵌入
 		// 没有意义，且 reindexAll 需要调度器空闲），回到第一步（选模型）。
+		// 降级为文本链接：主行动让位给「完成」。
 		const reconfigBtn = hero.createEl("button", {
-			cls: "semlink-guide-save semlink-guide-secondary semlink-guide-index-reconfig",
+			cls: "semlink-guide-index-reconfig-link",
 			text: t("guideReconfig"),
 		});
 		reconfigBtn.addEventListener("click", () => {
@@ -231,14 +246,15 @@ export function renderOnboarding(
 		let state: "running" | "paused" | "done" = "running";
 		let sawBusy = false; // 本步是否见过运行中的进度（进入时可能残留旧 completed）
 		const setBtnAction = (text: string, onClick: () => void): void => {
-			doneBtn.setText(text);
-			doneBtn.onclick = onClick;
+			pauseBtn.setText(text);
+			pauseBtn.onclick = onClick;
 		};
 		// 注意：setBtn 必须声明在 applyProgress 与下方首次调用之前——
 		// applyProgress 末尾会调用 setBtn()，声明顺序不对会触发 TDZ
 		// （"Cannot access before initialization"），按钮点击事件永远绑不上。
 		const setBtn = (): void => {
 			if (state === "paused") {
+				pauseBtn.removeClass("semlink-hidden");
 				setBtnAction(t("guideIndexResume"), () => {
 					state = "running";
 					plugin.scheduler.resume();
@@ -246,14 +262,11 @@ export function renderOnboarding(
 					applyProgress(plugin.progress.current);
 				});
 			} else if (state === "done") {
-				setBtnAction(t("guideFinishIndex"), () => {
-					unsub();
-					coffee.destroy();
-					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), done: true };
-					void plugin.saveSettings();
-					onFinish();
-				});
+				// 索引自然完成：暂停/继续退场，只剩主按钮「完成」（回主页）。
+				pauseBtn.addClass("semlink-hidden");
+				pauseBtn.onclick = null;
 			} else {
+				pauseBtn.removeClass("semlink-hidden");
 				setBtnAction(t("guideIndexPause"), () => {
 					state = "paused";
 					plugin.scheduler.pause();

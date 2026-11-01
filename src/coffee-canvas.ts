@@ -106,15 +106,22 @@ export function mountCoffeeCanvas(
 	container: HTMLElement,
 	opts: { modelLogoSvg?: string; modelName: string; onModelReady?: () => void },
 ): CoffeeCanvas {
-	const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+	// 动画循环必须挂在 canvas 所属的窗口上：视图可能整叶迁入独立弹窗，
+	// 弹窗盖住主窗口时主窗 rAF 会被节流暂停——挂在主窗上杯子一帧都画
+	// 不出来（弹窗引导页白卡）。ownerDocument.defaultView 即所属窗口。
+	// 迁移是原样搬移 DOM（canvas 挂载窗口 ≠ 迁移后窗口），因此 viewWin
+	// 需要可变 + 迁移探测器（见下方 adoptTimer）。
+	let viewWin: Window = container.ownerDocument?.defaultView ?? window;
+	let dpr = Math.min(2, Math.max(1, viewWin.devicePixelRatio || 1));
 	const canvas = container.createEl("canvas", { cls: "semlink-guide-index-cupcanvas" });
 	// The scene is narrow (cup + saucer + a tag overhead) — cap the canvas at
 	// 200 logical px and let CSS center it. Filling the full panel width
 	// (×dpr) cost 3-4× the pixels for empty margin on both sides.
 	const w = Math.min(container.clientWidth || 200, 200);
 	// Tall sky: the document cards need room above AND below without
-	// crowding the latte chip or the rim.
-	const h = 150;
+	// crowding the latte chip or the rim. 顶上留白收紧：场景整体上移 16px，
+	// 画布同步缩短（水花/奶泡标签都相对 cupY 定位，跟着一起移）。
+	const h = 134;
 	canvas.width = Math.round(w * dpr);
 	canvas.height = Math.round(h * dpr);
 	canvas.style.width = `${w}px`;
@@ -124,6 +131,34 @@ export function mountCoffeeCanvas(
 		return { setLevel() {}, setBrewing() {}, pour() {}, stream() {}, celebrate() {}, destroy() {}, getStats: () => null };
 	}
 	ctx.scale(dpr, dpr);
+
+	// --- 跨窗口迁移自适应 ---
+	// 视图整叶在主窗 ↔ 弹窗之间迁移时，DOM 原样搬移、canvas 换了所属
+	// 文档，但旧窗口的 rAF 循环不会自己发现——旧窗口被遮挡后 rAF 停摆，
+	// 杯子就冻结/空白。旧窗口的 setTimeout/setInterval 即使被节流也仍会
+	// 触发，用它做探测器：发现所属文档变化就换绑循环到当前窗口（顺带
+	// 校正 DPI）。setLevel 等外部调用也顺路探测（索引中约每秒一次）。
+	const adoptViewWin = (): boolean => {
+		if (!canvas.isConnected) {
+			window.clearInterval(adoptTimer);
+			return false;
+		}
+		const migrated = canvas.ownerDocument?.defaultView ?? window;
+		if (migrated === viewWin) return false;
+		viewWin.cancelAnimationFrame(raf);
+		viewWin = migrated;
+		const newDpr = Math.min(2, Math.max(1, viewWin.devicePixelRatio || 1));
+		if (newDpr !== dpr) {
+			dpr = newDpr;
+			// 重设 width/height 会一并重置 2D 上下文的变换矩阵，重新缩放。
+			canvas.width = Math.round(w * dpr);
+			canvas.height = Math.round(h * dpr);
+			ctx.scale(dpr, dpr);
+		}
+		ensureLoop();
+		return true;
+	};
+	const adoptTimer = window.setInterval(adoptViewWin, 1000);
 
 	// --- jank diagnostics ---
 	const mountedAt = performance.now();
@@ -164,7 +199,7 @@ export function mountCoffeeCanvas(
 	const cupW = 62;
 	const cupH = 74;
 	const cupX = (w - cupW) / 2;
-	const cupY = 56;
+	const cupY = 40;
 	const cupCX = cupX + cupW / 2;
 
 	// Static gradients — created once, reused every frame (per-frame gradient
@@ -239,11 +274,11 @@ export function mountCoffeeCanvas(
 	const frame = (now: number): void => {
 		// Schedule the next frame FIRST — an exception in the draw code must
 		// never silently kill the loop (that froze the cup on one frame).
-		raf = window.requestAnimationFrame(frame);
+		raf = viewWin.requestAnimationFrame(frame);
 		try {
 			if (!canvas.isConnected) {
 				running = false;
-				window.cancelAnimationFrame(raf);
+				viewWin.cancelAnimationFrame(raf);
 				return;
 			}
 			// A late rAF callback means the MAIN THREAD was busy elsewhere
@@ -514,7 +549,7 @@ export function mountCoffeeCanvas(
 				if (!idleSince) idleSince = now;
 				if (now - idleSince > 3000) {
 					running = false;
-					window.cancelAnimationFrame(raf);
+					viewWin.cancelAnimationFrame(raf);
 					return;
 				}
 			} else {
@@ -531,7 +566,7 @@ export function mountCoffeeCanvas(
 		running = true;
 		idleSince = 0;
 		last = performance.now();
-		raf = window.requestAnimationFrame(frame);
+		raf = viewWin.requestAnimationFrame(frame);
 	};
 
 	// Paint the idle scene immediately — an empty cup waiting to brew.
@@ -539,23 +574,36 @@ export function mountCoffeeCanvas(
 	// settings tab's display() BEFORE its container is inserted into the
 	// document — in that state the idle scene would silently never paint
 	// (no progress events flow when idle to retry). Wait for the attach.
-	if (canvas.isConnected) {
+	/** 启动循环并【同步】画出第一帧（静态空杯）。rAF 要等下一拍——跨窗口
+	 *  迁移/弹窗创建期间可能迟迟不来，画布会空白好几秒；同步首帧让杯子
+	 *  在挂载瞬间就可见（该帧随 DOM 迁移一起搬走，迁移后依然有内容）。
+	 *  注意把 last 拨后 100ms：frame 的 30fps 节流器会吞掉 dt<28ms 的帧，
+	 *  dt=0 的同步首帧若不绕开就一像素都画不上。 */
+	const startWithIdleFrame = (): void => {
 		ensureLoop();
+		if (!running) return;
+		last = performance.now() - 100;
+		frame(last + 100);
+	};
+	if (canvas.isConnected) {
+		startWithIdleFrame();
 	} else {
 		const attachWatch = new MutationObserver(() => {
 			if (canvas.isConnected) {
 				attachWatch.disconnect();
-				ensureLoop();
+				startWithIdleFrame();
 			}
 		});
-		attachWatch.observe(document.documentElement, { childList: true, subtree: true });
+		// 观察所属文档（弹窗实例的 document 与主窗不同）。
+		attachWatch.observe(canvas.ownerDocument.documentElement, { childList: true, subtree: true });
 		// Safety valve: stop watching if the canvas is discarded before it
 		// is ever attached (tab re-rendered mid-flight).
-		window.setTimeout(() => attachWatch.disconnect(), 30_000);
+		viewWin.setTimeout(() => attachWatch.disconnect(), 30_000);
 	}
 
 	return {
 		setLevel(pct, splash) {
+			adoptViewWin();
 			const t = Math.max(0, Math.min(1, pct / 100));
 			// Splash only when the level actually moved — repeated identical
 			// events would keep the surface at max turbulence forever.
@@ -569,10 +617,12 @@ export function mountCoffeeCanvas(
 			ensureLoop();
 		},
 		setBrewing(b) {
+			adoptViewWin();
 			brewing = b;
 			if (b) ensureLoop();
 		},
 		pour(fileName) {
+			adoptViewWin();
 			// A new note still wobbles the chip even mid-stream — file changes
 			// are seconds apart, so the wobble reads as per-note feedback.
 			latteWobble = 1;
@@ -607,7 +657,8 @@ export function mountCoffeeCanvas(
 			ensureLoop();
 		},
 		destroy() {
-			window.cancelAnimationFrame(raf);
+			window.clearInterval(adoptTimer);
+			viewWin.cancelAnimationFrame(raf);
 			running = false;
 			canvas.remove();
 		},
@@ -656,7 +707,8 @@ export function mountTicketDeck(
 	container: HTMLElement,
 	width?: number,
 ): { setFiles(files: Array<{ name: string; progress: string }>): void } {
-	const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+	// 与 mountCoffeeCanvas 同理：DPI 取 canvas 所属窗口（弹窗可能不同）。
+	const dpr = Math.min(2, Math.max(1, (container.ownerDocument?.defaultView ?? window).devicePixelRatio || 1));
 	const canvas = container.createEl("canvas", { cls: "semlink-guide-index-deckcanvas" });
 	const w = width ?? Math.max(120, Math.min(container.clientWidth || 200, 200));
 	const h = 50;

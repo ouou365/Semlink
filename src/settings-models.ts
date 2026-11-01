@@ -2545,6 +2545,8 @@ export function renderModelsTab(
 	state: ModelsTabState,
 	refresh: () => void,
 ): void {
+	// rAF/滚动绑定宿主文档的窗口：嵌入屏在弹窗里时主窗 rAF 会被遮挡节流。
+	const viewWin = containerEl.ownerDocument?.defaultView ?? window;
 	const providers = plugin.settings.providers;
 	const userFolders = plugin.settings.providerFolders ?? (plugin.settings.providerFolders = []);
 	const st = state as {
@@ -2740,7 +2742,7 @@ export function renderModelsTab(
 	if (typeof ResizeObserver !== "undefined") {
 		// 回调推迟到下一帧执行：回调内写高度会改变被观察元素在同一帧内的
 		// 尺寸，同步处理会构成 observer loop —— rAF 打断这个环。
-		const ro = new ResizeObserver(() => window.requestAnimationFrame(() => fitPaneHeight()));
+		const ro = new ResizeObserver(() => viewWin.requestAnimationFrame(() => fitPaneHeight()));
 		const scroller = wrap.closest(
 			".vertical-tab-content, .vertical-tab-content-container, .modal-content",
 		);
@@ -3217,11 +3219,11 @@ export function renderModelsTab(
 				}
 				rh.appendChild(frag);
 				if (cursor < shown.length) {
-					requestAnimationFrame(buildChunk);
+					viewWin.requestAnimationFrame(buildChunk);
 				} else {
 					rh.scrollTop = keepScroll;
 					// 跑马灯标记等全部行挂载完成后统一测量
-					requestAnimationFrame(() => markOverflowNames());
+					viewWin.requestAnimationFrame(() => markOverflowNames());
 				}
 			};
 			const markOverflowNames = (): void => {

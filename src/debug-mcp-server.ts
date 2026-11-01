@@ -18,7 +18,7 @@ export type DebugAskRunner = (question: string) => Promise<unknown>;
 export type DebugJumpRunner = (path: string, line: number) => Promise<unknown>;
 
 /** measure 工具执行器：由 main.ts 注入——回报输入区相关元素的实际布局。 */
-export type DebugMeasureRunner = () => Promise<unknown>;
+export type DebugMeasureRunner = (opts?: { popout?: boolean }) => Promise<unknown>;
 
 interface JsonRpcRequest {
 	jsonrpc: "2.0";
@@ -75,7 +75,11 @@ const MEASURE_TOOL = {
 		"Measure the chat input footer layout in the main window: bounding rects " +
 		"and computed paddings/margins of .semlink-search-view, -footer, " +
 		"-input-wrapper, -input-row, -input. For diagnosing spacing issues.",
-	inputSchema: { type: "object", properties: {}, required: [] },
+	inputSchema: {
+		type: "object",
+		properties: { popout: { type: "boolean", description: "Move the search view into a popout window first, then measure the popout instance." }, repro: { type: "boolean", description: "Reproduce the guide-to-popout coffee-cup loss: open embed guide in sidebar, click the real popout button, probe the canvas over time." } },
+		required: [],
+	},
 };
 
 const RELOAD_TOOL = {
@@ -205,7 +209,7 @@ export class DebugMcpServer {
 						if (!jp || !(jl > 0)) throw new Error("jump needs path and a positive line");
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runJump?.(jp, jl)) ?? { error: "no jump runner" }, null, 2) }] };
 					} else if (params.name === "measure") {
-						result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.()) ?? { error: "no measure runner" }, null, 2) }] };
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
 					} else {
 						result = await this.handleAsk(params);
 					}
