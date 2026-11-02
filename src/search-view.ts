@@ -1171,20 +1171,28 @@ export class SemanticSearchView extends ItemView {
 				// answer's thinking section will show.
 				const liveSteps: ThinkingStep[] = firstStep ? [firstStep] : [];
 				const liveBody = loadingEl.createDiv({ cls: "semlink-thinking-live-body" });
+				// 思考预览的跟随开关：滚动位置贴底（96px 内）= 跟随，用户上翻
+				// = 暂停，翻回底部 = 恢复。用布尔状态而非每次更新前采样——
+				// 爆发式增长（网络抖动后多个 delta 一帧涌入）不产生 scroll
+				// 事件也不破坏状态，任意规模的帧间增长都追得上；采样阈值
+				// 会被一帧多行突破（深层思考不跟随的根因之一）。程序化滚动
+				// 落在底部 → 监听器自愈回 true，无需区分滚动来源。
+				let followThinking = true;
+				liveBody.addEventListener("scroll", () => {
+					followThinking = liveBody.scrollHeight - liveBody.scrollTop - liveBody.clientHeight < 96;
+				});
 				// Steps rendered so far. New steps are APPENDED (never a full
 				// re-render) so an expanded tool call stays expanded while the
 				// model keeps producing steps.
 				let renderedSteps = 0;
 				const refreshLiveBody = (): void => {
 					if (liveBody.hasClass("semlink-hidden")) return;
-					// Sticky scroll on BOTH scrollers: the outer conversation
-					// (each new step pushes the loading line/answer further
-					// down) and the live body itself. Sampled BEFORE appending,
-					// and only while the user is already at the bottom —
-					// scrolling up to read earlier content must not be fought.
+					// 外层会话滚动条 sticky 跟随：采样必须在追加步骤之前
+					// （增长后贴底状态已被破坏）。200px 阈值吸收步骤间的
+					// 常规增长；内滚（liveBody）走 followThinking 布尔开关，
+					// 对帧间爆发增长免疫——见 liveBody 创建处的注释。
 					const m = this.messagesEl;
-					const outerNearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 120;
-					const nearBottom = liveBody.scrollHeight - liveBody.scrollTop - liveBody.clientHeight < 40;
+					const outerNearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 200;
 					while (renderedSteps < liveSteps.length) {
 						this.renderThinkingSteps(liveBody, [liveSteps[renderedSteps]]);
 						renderedSteps++;
@@ -1192,7 +1200,7 @@ export class SemanticSearchView extends ItemView {
 					// Keep the live reasoning stream last — steps rendered after
 					// it must not push it into the middle of the list.
 					if (liveReasonEl) liveBody.appendChild(liveReasonEl);
-					if (nearBottom) liveBody.scrollTop = liveBody.scrollHeight;
+					if (followThinking) liveBody.scrollTop = liveBody.scrollHeight;
 					if (outerNearBottom) this.scrollToBottom();
 				};
 				// Live reasoning-model thinking stream (OpenAI reasoning_content
@@ -1210,6 +1218,10 @@ export class SemanticSearchView extends ItemView {
 					liveReasonScheduled = true;
 					this.viewWin.requestAnimationFrame(() => {
 						liveReasonScheduled = false;
+						// 外层 sticky 采样必须在 setText 之前：增长发生后贴底
+						// 状态已被破坏，再采样就永远判为"不在底部"。
+						const outerNearBottom =
+							this.messagesEl.scrollHeight - this.messagesEl.scrollTop - this.messagesEl.clientHeight < 200;
 						if (!liveReasonEl) {
 							liveReasonEl = liveBody.createDiv({ cls: "semlink-live-reasoning" });
 						} else {
@@ -1220,10 +1232,9 @@ export class SemanticSearchView extends ItemView {
 						// fight the user. The full text repaints on re-expand since
 						// every callback carries the ACCUMULATED text.
 						if (liveBody.hasClass("semlink-hidden")) return;
-						const m = this.messagesEl;
-						const outerNearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 120;
-						const nearBottom = liveBody.scrollHeight - liveBody.scrollTop - liveBody.clientHeight < 40;
-						if (nearBottom) liveBody.scrollTop = liveBody.scrollHeight;
+						// 内滚跟随走布尔开关（followThinking，见 liveBody 的
+						// scroll 监听），对帧间爆发增长免疫。
+						if (followThinking) liveBody.scrollTop = liveBody.scrollHeight;
 						if (outerNearBottom) this.scrollToBottom();
 					});
 				};
@@ -1301,8 +1312,8 @@ export class SemanticSearchView extends ItemView {
 						},
 						(step) => {
 							// A new thinking step arrived — refresh the live
-							// thinking preview. No auto-scroll: the user reads
-							// from top to bottom during generation.
+							// thinking preview (which auto-follows to the
+							// bottom during generation, see refreshLiveBody).
 							liveSteps.push(step);
 							refreshLiveBody();
 						},
