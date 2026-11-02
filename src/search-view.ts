@@ -120,9 +120,13 @@ export class SemanticSearchView extends ItemView {
 	private readonly onPopoutResize = (): void => this.refreshMainTabUI();
 	/** Upgrade ✨ entry in the header — visible only on the free tier. */
 	private upgradeBtnEl: HTMLElement | null = null;
-	/** 对话浮窗按钮（设置左侧）：把当前视图整体迁入 Obsidian popout
-	 *  独立窗口；已在弹窗里时隐藏（refreshMainTabUI 随布局校正）。 */
+	/** 对话浮窗按钮（设置左侧）：双形态——侧栏/主区域实例弹出独立窗口
+	 *  （picture-in-picture-2），弹窗实例收回侧栏（minimize-2）。图标与
+	 *  提示由 refreshMainTabUI 随所在位置切换。 */
 	private popoutBtnEl: HTMLElement | null = null;
+	/** 上一次 refreshMainTabUI 时按钮所处的形态（false=弹出态，true=收回态），
+	 *  用于仅在翻转时重设图标/提示。 */
+	private lastPopoutBtnDocked: boolean | null = null;
 	private headerRightIconsEl!: HTMLElement; // right icon group (ring + settings)
 	private settingsBtnEl!: HTMLElement;      // settings gear (ring sits left of it)
 	private firstQuestionEl!: HTMLElement; // second row: first question in small text
@@ -307,9 +311,10 @@ export class SemanticSearchView extends ItemView {
 		upgradeBtn.addEventListener("click", () => {
 			new LicenseModal(this.app, this.plugin).open();
 		});
-		// 对话浮窗（设置左侧）：把侧栏里的视图整体迁入独立弹窗——主界面
-		// 可以最小化，单独使用对话。moveLeafToPopout 保留视图实例，当前
-		// 会话/引导状态不丢；已在弹窗中时该按钮由 refreshMainTabUI 隐藏。
+		// 对话浮窗（设置左侧）：同一颗按钮双形态——侧栏/主区域实例弹出
+		// （picture-in-picture-2），独立弹窗实例收回侧栏（minimize-2）。
+		// 两个方向都保留视图实例，当前会话/引导状态不丢；图标与提示由
+		// refreshMainTabUI 随所在位置切换。
 		const popoutBtn = rightIcons.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
 			attr: { "aria-label": t("popOutWindow") },
@@ -317,6 +322,11 @@ export class SemanticSearchView extends ItemView {
 		this.popoutBtnEl = popoutBtn;
 		setIcon(popoutBtn, "picture-in-picture-2");
 		popoutBtn.addEventListener("click", () => {
+			// 已在弹窗中：收回侧栏（保留实例，方向与弹出相反）
+			if (this.inPopoutWindow()) {
+				this.dockPopoutBack();
+				return;
+			}
 			try {
 				// 宽度需容纳常显菜单(300px)+对话区
 				const startDoc = this.contentEl.ownerDocument;
@@ -701,6 +711,67 @@ export class SemanticSearchView extends ItemView {
 		}
 	}
 
+	/** 独立弹窗 → 侧栏：叶级搬运——moveLeafToPopout 的精确镜像，弹窗里是
+	 *  什么内容，收回后就是什么内容。
+	 *  moveLeafToPopout 源码（app.js 已核实）：parent.removeChild(leaf) +
+	 *  setDimension(null) + 目标 tabs.insertChild(-1, leaf)——在工作区树上
+	 *  搬同一个叶对象，视图不经过任何生命周期（不跑 onClose/onOpen/load），
+	 *  会话、滚动位置、内嵌设置屏、引导状态全部原样保留。
+	 *  弃用的 open(view) 方案（两个坑都已实证）：View.open() 会重跑
+	 *  load()+onOpen() 全量重建 UI（收回即重置）；且旧叶残留 view 引用，
+	 *  detach() 内部无条件 view.close() 会把活视图当场关掉。
+	 *  本版本运行时没有 moveLeafToTab（已核实），此叶级搬运即其等价物：
+	 *  getRightLeaf(false) 确保侧栏 tabs 容器存在（源码核实：总是追加新
+	 *  叶），借锚点叶的 parent 拿到容器，搬入本叶后弃置锚点。 */
+	private dockPopoutBack(): void {
+		try {
+			const ws = this.app.workspace;
+			const anchor = ws.getRightLeaf(false);
+			if (!anchor || anchor === this.leaf) return;
+			const tabs = (anchor as unknown as { parent: unknown }).parent as
+				{ insertChild: (index: number, leaf: WorkspaceLeaf) => void } | null;
+			if (!tabs) return;
+			const oldLeaf = this.leaf;
+			const startDoc = this.contentEl.ownerDocument;
+			// ① 从弹窗树摘下本叶（视图不动）——弹窗腾空后自动关窗
+			(oldLeaf.parent as unknown as { removeChild: (l: WorkspaceLeaf) => void } | null)
+				?.removeChild(oldLeaf);
+			const dim = oldLeaf as unknown as { setDimension?: (v: string | null) => void };
+			if (typeof dim.setDimension === "function") dim.setDimension(null);
+			// ② 同一叶插入侧栏 tabs——内容零重置
+			tabs.insertChild(-1, oldLeaf);
+			// ③ 立即选中本 tab（源码核实：tabs 容器只把 currentTab 的 DOM
+			//     setChildrenInPlace 挂进页面）——不立刻选中，本叶 DOM 仍留在
+			//     弹窗文档里，弹窗一关就被销毁，侧栏标签沦为空壳且
+			//     setActiveLeaf 的迟到选中救不回来。
+			(tabs as unknown as { selectTab?: (l: WorkspaceLeaf) => void }).selectTab?.(oldLeaf);
+			// ④ 弃置锚点叶（tabs 容器保留，本叶已选中其中）
+			anchor.detach();
+			this.plugin.semlinkPopoutActive = false;
+			// ⑤ 侧栏可能折叠：展开并聚焦；setActiveLeaf 此时 isAttached 已就绪，
+			//    会补上 mod-active 状态与焦点
+			if (ws.rightSplit.collapsed) ws.rightSplit.expand();
+			ws.setActiveLeaf(oldLeaf, { focus: true });
+			// ⑥ DOM 已随选中迁入主文档，强制重渲染一次（canvas 等 rAF 循环换绑窗口）
+			const waitAdopt = (): void => {
+				let tries = 0;
+				const tick = (): void => {
+					tries++;
+					if (this.contentEl.ownerDocument !== startDoc || tries > 80) {
+						this.adoptLeafWindow(true);
+						return;
+					}
+					window.setTimeout(tick, 50);
+				};
+				tick();
+			};
+			waitAdopt();
+		} catch (e) {
+			console.warn("[Semlink] dock back failed:", e);
+			new Notice(`Semlink: ${t("dockBackFailed")}`);
+		}
+	}
+
 	protected async onClose(): Promise<void> {
 		if (this.tooltipEl) {
 			this.tooltipEl.remove();
@@ -917,6 +988,14 @@ export class SemanticSearchView extends ItemView {
 				let streamText = "";
 				let shownText = "";
 				let typeTimer: number | null = null;
+				// The window the typewriter interval lives on. The view may sit in
+				// a POPOUT window while `window` stays the main window — timers on
+				// an occluded main window are throttled to ~1 Hz by Chromium,
+				// which freezes the typewriter (the popout bug: body text not
+				// streaming). Always create/clear on the captured window, and
+				// re-anchor to the current viewWin on every start so a mid-stream
+				// popout→sidebar migration self-heals on the next delta.
+				let typeTimerWin: Window | null = null;
 				let typeRendering = false;
 				let typeTicks = 0;
 				// Set when any streamed text reached the UI. A round's interim
@@ -924,12 +1003,29 @@ export class SemanticSearchView extends ItemView {
 				// preview — startDots restores it when the flag is still set
 				// from a PREVIOUS round; the real answer leaves it collapsed.
 				let streamShown = false;
-				const stopTypewriter = (): void => {
-					if (typeTimer !== null) {
-						window.clearInterval(typeTimer);
-						typeTimer = null;
-					}
-				};
+				// Live reasoning-model thinking stream element (OpenAI
+				// reasoning_content / Anthropic thinking_delta). Declared here —
+				// BEFORE startDots/refreshLiveBody are first CALLED — both
+				// manipulate it. EPHEMERAL: never recorded into thinking steps
+				// or history; startDots detaches it each round.
+				let liveReasonEl: HTMLElement | null = null;
+				let liveReasonPending = "";
+				let liveReasonScheduled = false;
+					const stopTypewriter = (): void => {
+						if (typeTimer !== null) {
+							// Clear on the window that CREATED the interval — timer
+							// ids are per-window; a stale id after a popout close
+							// is a harmless no-op there. A DESTROYED popout window
+							// may refuse property access — swallow that too.
+							try {
+								typeTimerWin?.clearInterval(typeTimer);
+							} catch {
+								/* destroyed window — timer died with it */
+							}
+							typeTimer = null;
+							typeTimerWin = null;
+						}
+					};
 				const renderShown = async (): Promise<void> => {
 					if (typeRendering) return;
 					typeRendering = true;
@@ -974,17 +1070,33 @@ export class SemanticSearchView extends ItemView {
 					// always the moment we catch up so the tail never lags.
 					if (typeTicks % 4 === 0 || shownText.length >= streamText.length) void renderShown();
 				};
-				const startTypewriter = (): void => {
-					if (typeTimer === null) typeTimer = window.setInterval(typeTick, 30);
-				};
+					const startTypewriter = (): void => {
+						// Always stop + recreate on the CURRENT view window (never
+						// reuse a timer anchored to a previous window): while the
+						// view lives in a popout, a main-window interval is throttled
+						// to ~1 Hz once the main window is occluded — the reveal
+						// would crawl at a few chars/second and the answer would
+						// effectively pop in only when the final render swaps in.
+						stopTypewriter();
+						typeTimerWin = this.viewWin;
+						typeTimer = typeTimerWin.setInterval(typeTick, 30);
+					};
 
 				// Status indicator: the elapsed-seconds counter ticks along once
 				// per second (the phase label itself stays static — no dots).
 				let answerAnim: number | null = null;
+				let answerAnimWin: Window | null = null;
 				const stopAnswerAnim = (): void => {
 					if (answerAnim !== null) {
-						window.clearInterval(answerAnim);
+						// Same per-window rule as the typewriter timer above
+						// (destroyed popout windows are swallowed the same way).
+						try {
+							answerAnimWin?.clearInterval(answerAnim);
+						} catch {
+							/* destroyed window — timer died with it */
+						}
 						answerAnim = null;
+						answerAnimWin = null;
 					}
 				};
 				const startDots = (label: string): void => {
@@ -997,6 +1109,12 @@ export class SemanticSearchView extends ItemView {
 					shownText = "";
 					stopTypewriter();
 					streamInner.empty();
+					// New round — drop the previous round's live reasoning text
+					// (the round's own reasoning will repopulate it).
+					if (liveReasonEl) {
+						liveReasonEl.detach();
+						liveReasonEl = null;
+					}
 					// The previous round's interim flash collapsed the thinking
 					// preview — restore it; the real answer re-collapses when
 					// its own text starts arriving.
@@ -1019,8 +1137,9 @@ export class SemanticSearchView extends ItemView {
 								.replace("{status}", label) + "）";
 						loadingDotsSpan.textContent = "";
 					};
-					answerAnim = window.setInterval(render, 1000);
-					render();
+						answerAnimWin = this.viewWin;
+						answerAnim = answerAnimWin.setInterval(render, 1000);
+						render();
 				};
 				// Agentic mode: no retrieval phase — the wait before the first
 				// model round is model thinking. Round-start / tool / stream
@@ -1070,8 +1189,43 @@ export class SemanticSearchView extends ItemView {
 						this.renderThinkingSteps(liveBody, [liveSteps[renderedSteps]]);
 						renderedSteps++;
 					}
+					// Keep the live reasoning stream last — steps rendered after
+					// it must not push it into the middle of the list.
+					if (liveReasonEl) liveBody.appendChild(liveReasonEl);
 					if (nearBottom) liveBody.scrollTop = liveBody.scrollHeight;
 					if (outerNearBottom) this.scrollToBottom();
+				};
+				// Live reasoning-model thinking stream (OpenAI reasoning_content
+				// / Anthropic thinking_delta): a dim plain-text block appended
+				// after the steps, text replaced wholesale per delta. DOM work is
+				// coalesced to one write per animation frame (deltas arrive every
+				// ~15ms) on the VIEW window so a popout instance keeps updating
+				// while the main window is occluded.
+				const showLiveReasoning = (text: string): void => {
+					// The answer body already took over — never resurrect the
+					// thinking preview behind it.
+					if (streamShown) return;
+					liveReasonPending = text;
+					if (liveReasonScheduled) return;
+					liveReasonScheduled = true;
+					this.viewWin.requestAnimationFrame(() => {
+						liveReasonScheduled = false;
+						if (!liveReasonEl) {
+							liveReasonEl = liveBody.createDiv({ cls: "semlink-live-reasoning" });
+						} else {
+							liveBody.appendChild(liveReasonEl);
+						}
+						liveReasonEl.setText(liveReasonPending);
+						// Manually collapsed preview: keep the text current, don't
+						// fight the user. The full text repaints on re-expand since
+						// every callback carries the ACCUMULATED text.
+						if (liveBody.hasClass("semlink-hidden")) return;
+						const m = this.messagesEl;
+						const outerNearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 120;
+						const nearBottom = liveBody.scrollHeight - liveBody.scrollTop - liveBody.clientHeight < 40;
+						if (nearBottom) liveBody.scrollTop = liveBody.scrollHeight;
+						if (outerNearBottom) this.scrollToBottom();
+					});
 				};
 				refreshLiveBody();
 				loadingTextEl.addClass("is-open");
@@ -1171,6 +1325,10 @@ export class SemanticSearchView extends ItemView {
 							// so thinking, answer, and source cards all share ONE
 							// numbering space.
 							results.map((r) => r.notePath),
+							// Reasoning-model thinking text (reasoning_content /
+							// thinking_delta) — live into the thinking preview,
+							// ephemeral (cleared each round by startDots).
+							(text) => showLiveReasoning(text),
 						);
 						const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
 						stopAnswerAnim();
@@ -3478,7 +3636,15 @@ export class SemanticSearchView extends ItemView {
 		}
 		// 独立弹窗与主区域标签页同享宽幅样式（底色/限宽/常显菜单）
 		this.contentEl.toggleClass("semlink-main-tab", isMain);
-		this.popoutBtnEl?.toggleClass("semlink-hidden", inPopout);
+		// 弹出/收回按钮（设置左侧）双形态：侧栏=弹出独立窗口
+		// （picture-in-picture-2），弹窗=收回侧栏（picture-in-picture——↖ 箭头
+		// 飞回主框 + 右下小窗，是 PiP-2 的官方反向搭档）。仅在形态翻转时重设
+		// 图标/提示（布局事件高频触发，避免反复重画 SVG）。
+		if (this.popoutBtnEl && this.lastPopoutBtnDocked !== inPopout) {
+			this.lastPopoutBtnDocked = inPopout;
+			setIcon(this.popoutBtnEl, inPopout ? "picture-in-picture" : "picture-in-picture-2");
+			this.popoutBtnEl.setAttribute("aria-label", inPopout ? t("dockBackWindow") : t("popOutWindow"));
+		}
 		// 首次进入弹窗：默认收起左侧菜单——弹窗是聚焦对话的形态，
 		// 菜单点 ☰ 随时展开（窄幅 ≤600 的自动收起逻辑不受影响）。
 		if (inPopout && !this.lastInPopout) {
@@ -3729,19 +3895,12 @@ export class SemanticSearchView extends ItemView {
 			// Keep the subtitle in sync even when the compact state itself
 			// didn't flip (e.g. another session was loaded while scrolled
 			// down — the question text must follow the new session).
-			const text = this.truncateSubtitle(this.firstQuestion);
-			if (this.firstQuestionTextEl?.textContent !== text) {
-				this.firstQuestionTextEl?.replaceChildren(text);
+			// 全文写入，截断交给 CSS（flex + min-width:0 + ellipsis）：可显示
+			// 字数随头部可用宽度自然增减，不再写死 20 字上限。
+			if (this.firstQuestionTextEl?.textContent !== this.firstQuestion) {
+				this.firstQuestionTextEl?.replaceChildren(this.firstQuestion);
 			}
 		}
-	}
-
-	/** Keep the subtitle to at most 20 characters, appending "..." when cut.
-	 *  Unicode-safe (emoji etc. are never split in half). */
-	private truncateSubtitle(text: string): string {
-		const chars = Array.from(text);
-		if (chars.length <= 20) return text;
-		return chars.slice(0, 20).join("") + "...";
 	}
 
 	/** Update the context-usage donut with the latest turn's token count. */

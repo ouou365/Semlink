@@ -96,6 +96,8 @@ const t: Record<keyof typeof en, string> = {
 	autoIndex: "Indicizzazione automatica",
 	autoEmbed: "Embedding automatico",
 	popOutWindow: "Apri in finestra separata",
+	dockBackWindow: "Torna alla barra laterale",
+	dockBackFailed: "Impossibile tornare alla barra laterale",
 	popOutFailed: "Le finestre separate non sono disponibili qui",
 	actions: "Azioni",
 	sectionModel: "Impostazioni modello",

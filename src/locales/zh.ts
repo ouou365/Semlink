@@ -95,6 +95,8 @@ const zh: Record<keyof typeof en, string> = {
 	autoIndex: "自动索引",
 	autoEmbed: "自动嵌入",
 	popOutWindow: "弹出独立窗口",
+	dockBackWindow: "恢复到侧边栏",
+	dockBackFailed: "无法恢复到侧边栏",
 	popOutFailed: "当前环境不支持弹出窗口",
 	actions: "操作",
 	sectionModel: "模型设置",

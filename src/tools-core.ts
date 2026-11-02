@@ -242,6 +242,27 @@ export const TOOL_SPECS: ToolSpec[] = [
 		description: "Git: push commits to the configured GitHub/Gitee remote. Pro feature — local snapshots are free, remotes require a Pro license.",
 		parameters: { type: "object", properties: {} },
 	},
+	{
+		name: "web_search",
+		description:
+			"Web search (DeepSeek hosted API): search the PUBLIC web for facts beyond the vault — current events, external docs, anything the notes cannot answer. Returns ranked cards (title, site, date, authority, URL, summary). Supports site:, -site: and quoted syntax; ori_question should carry the user's original phrasing to sharpen intent. Only registered when a DeepSeek provider with an API key is configured.",
+		parameters: {
+			type: "object",
+			properties: {
+				query: { type: "string", description: "Search query (1-128 chars; supports site:, -site:, \"quotes\")" },
+				count: { type: "number", description: "Result count 1-10 (default 8)" },
+				ori_question: { type: "string", description: "The user's original question phrasing (optional, improves intent)" },
+				need_content: { type: "boolean", description: "Include clipped page body instead of summary (default false)" },
+			},
+			required: ["query"],
+		},
+	},
+	{
+		name: "mcp_info",
+		description:
+			"MCP introspection: Semlink's own MCP server (port, auth status, running state, exposed tools, the connect JSON for external clients) plus every external MCP server the user has configured (type, endpoint, enabled). Secrets are masked. Use for questions like \"怎么在别的客户端里连 Semlink MCP\" / \"我配置了哪些 MCP 服务器\" / MCP connectivity troubleshooting.",
+		parameters: { type: "object", properties: {} },
+	},
 ];
 
 export interface ToolCoreDeps {
@@ -265,10 +286,22 @@ export interface ToolCoreDeps {
 		restore(path: string, ref: string): Promise<string>;
 		push(): Promise<string>;
 	} | null;
+	/** DeepSeek 网页搜索（POST /v1/tools/search）。缺省/null 时 web_search
+	 *  不注册——可用性由是否存在带 Key 的 DeepSeek 供应商决定（见
+	 *  web-search.ts 的 available()）。 */
+	web?: {
+		search(query: string, count: number, oriQuestion: string | null, needContent: boolean): Promise<string>;
+	} | null;
+	/** MCP 自省（服务端配置 + 外部服务器清单，密钥脱敏）。缺省/null 时
+	 *  mcp_info 返回不可用文案（工具本体无条件注册）。 */
+	mcpInfo?: (() => Promise<string>) | null;
 }
 
 /** git_* 工具名集合（可用性过滤用：服务缺位时不注册）。 */
 export const GIT_TOOL_NAMES = new Set(["git_status", "git_log", "git_diff", "git_commit", "git_restore", "git_push"]);
+
+/** web_search 工具名集合（同上：web 服务缺位时不注册）。 */
+export const WEB_TOOL_NAMES = new Set(["web_search"]);
 
 /** 解析设置里的 excludePaths（每行一个前缀）。与索引侧同源同语义。 */
 export function parseExcludePaths(raw: string): string[] {
@@ -362,6 +395,12 @@ export class ToolCore {
 					return this.deps.git ? await this.deps.git.restore(String(a.path ?? ""), String(a.ref ?? "HEAD")) : "Error: Git integration is disabled (Settings → Git)";
 				case "git_push":
 					return this.deps.git ? await this.deps.git.push() : "Error: Git integration is disabled (Settings → Git)";
+				case "web_search":
+					return this.deps.web
+						? await this.deps.web.search(String(a.query ?? ""), Number(a.count) || 8, (a.ori_question as string) ?? null, Boolean(a.need_content))
+						: "Error: Web search is not available (needs a DeepSeek provider with an API key — Settings → Models)";
+				case "mcp_info":
+					return this.deps.mcpInfo ? await this.deps.mcpInfo() : "Error: MCP info is not available in this surface";
 				default:
 					return `Error: unknown tool "${name}"`;
 			}

@@ -7,6 +7,7 @@ import { debugLog, setDebugLogging } from "./src/log";
 import { join } from "path";
 import { DEFAULT_SETTINGS, DEFAULT_GIT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
 import { GitService } from "./src/git-service";
+import { WebSearchService } from "./src/web-search";
 import { UsageStore } from "./src/usage-store";
 import { migrateLegacyCatalogBases, sanitizeProviderOrder, syncCatalogModels } from "./src/settings-models";
 import { VectorStore } from "./src/vector-store";
@@ -57,6 +58,8 @@ export default class SmartVaultPlugin extends Plugin {
 	noteShare!: NoteShare;
 	/** Git 集成：本地自动快照免费，远程推送（GitHub/Gitee）Pro 门控。 */
 	gitService!: GitService;
+	/** DeepSeek 网页搜索：复用带 Key 的 DeepSeek 聊天供应商，无则 web_search 不注册。 */
+	webSearch!: WebSearchService;
 	historyStore!: ChatHistoryStore;
 	watcher!: VaultWatcher;
 	pluginDir: string = "";
@@ -131,6 +134,8 @@ export default class SmartVaultPlugin extends Plugin {
 
 		this.queue = new IndexQueue(this.store);
 		this.client = new EmbeddingClient(this.settings);
+		// DeepSeek 网页搜索：供应商配置现读（换 Key/换供应商即时生效）
+		this.webSearch = new WebSearchService({ getSettings: () => this.settings });
 		// Git 集成（桌面端）：vault 根为仓库目录；任何文件事件都重置自动
 		// 快照的防抖计时（默认 1 分钟内无变化才提交——全自动，不询问）。
 		this.gitService = new GitService(
@@ -142,7 +147,7 @@ export default class SmartVaultPlugin extends Plugin {
 		this.registerEvent(this.app.vault.on("create", () => this.gitService.schedule()));
 		this.registerEvent(this.app.vault.on("delete", () => this.gitService.schedule()));
 		this.registerEvent(this.app.vault.on("rename", () => this.gitService.schedule()));
-		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault, () => this.app.workspace.getActiveFile()?.path ?? null, () => this.settings.excludePaths, this.gitService);
+		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault, () => this.app.workspace.getActiveFile()?.path ?? null, () => this.settings.excludePaths, this.gitService, this.webSearch, () => this.mcpInfoText());
 		this.chatClient = new ChatClient(this.settings, this.chatTools);
 		// Single shared chat-history store: the search view writes to it and
 		// the LAN share server renders from it, so re-opened share URLs see
@@ -532,6 +537,43 @@ export default class SmartVaultPlugin extends Plugin {
 
 	// ──── MCP Server ────
 
+	/** mcp_info 工具的实现：服务端配置 + 外部客户端连接 JSON + 已接入的
+	 *  外部 MCP 服务器清单。密钥只报"已设置/未设置"，外部服务器的
+	 *  Authorization/Token 类头值打码——工具结果会进模型上下文，不回明文。 */
+	private async mcpInfoText(): Promise<string> {
+		const s = this.settings;
+		const keySet = !!s.mcpApiKey?.trim();
+		const running = !!this.mcpServer;
+		const baseUrl = `http://127.0.0.1:${s.mcpPort}`;
+		const maskHeaders = (headers?: Record<string, string>): string => {
+			if (!headers || Object.keys(headers).length === 0) return "";
+			const parts = Object.entries(headers).map(([k, v]) =>
+				/auth|token|key|secret/i.test(k) ? `${k}=***` : `${k}=${v}`,
+			);
+			return ` headers: ${parts.join(", ")}`;
+		};
+		const lines: string[] = [];
+		lines.push(`Semlink MCP server: ${s.mcpEnabled === false ? "disabled in settings" : running ? "running" : "enabled but not running"} | ${baseUrl}`);
+		lines.push(`Auth: ${keySet ? "key set (send as Authorization: Bearer <key>)" : "no key required"}`);
+		const tools = running ? this.mcpServer?.toolNames() ?? [] : [];
+		if (tools.length > 0) lines.push(`Tools exposed (${tools.length}): ${tools.join(", ")}`);
+		const connect: Record<string, unknown> = { url: baseUrl };
+		if (keySet) connect.headers = { Authorization: `Bearer <your-key>` };
+		lines.push(`Connect JSON for external clients:\n${JSON.stringify({ mcpServers: { semlink: connect } }, null, 2)}`);
+
+		const clients = s.mcpClientServers ?? [];
+		if (clients.length === 0) {
+			lines.push("External MCP servers: none configured (Settings → MCP to add)");
+		} else {
+			lines.push(`External MCP servers (${clients.length}):`);
+			for (const c of clients) {
+				const endpoint = c.type === "stdio" ? [c.command, ...(c.args ? c.args.split(/\s+/) : [])].filter(Boolean).join(" ") : c.url ?? "";
+				lines.push(`- [${c.enabled ? "enabled" : "disabled"}] ${c.name} (${c.type}) → ${endpoint}${maskHeaders(c.headers)}`);
+			}
+		}
+		return lines.join("\n");
+	}
+
 	async startMcpServer() {
 		if (this.mcpServer) return;
 
@@ -544,6 +586,8 @@ export default class SmartVaultPlugin extends Plugin {
 			this.app.vault,
 			() => this.app.workspace.getActiveFile()?.path ?? null,
 			this.gitService,
+			this.webSearch,
+			() => this.mcpInfoText(),
 		);
 
 		try {

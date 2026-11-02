@@ -846,6 +846,10 @@
 }
 
 .smart-vault-settings .semlink-settings-tab.is-active {
+    /* 选中态打底：主题色 14% 淡染（与窄幅重排 ≤480 容器的配方一致）——
+       显式声明背景，压掉主题/Obsidian 按钮默认样式渗进来的白底灰底，
+       宽窄两种布局的选中观感统一 */
+    background: hsla(var(--interactive-accent-hsl), 0.14);
     color: var(--interactive-accent);
     border-color: var(--interactive-accent);
     font-weight: 600;
@@ -2580,6 +2584,13 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
 
 /* 紧凑头部：首问直接顶替品牌组（logo+Semlink）且并入同一行——
    头部从两行收成一行，滚动读长回答时省出一整行高度给内容。 */
+/* compact 锁单行：头部的 wrap 是为欢迎态服务的（首问整行折到品牌下方），
+   但 flex 换行按假想宽度（flex-basis）判定，发生在 min-width 收缩之前——
+   长标题（basis=auto=全文宽）会把右侧图标组挤到第二行。compact 锁
+   nowrap 后标题经 min-width:0 收缩 + ellipsis 吃掉图标以外的全部宽度。 */
+.semlink-search-header--compact {
+    flex-wrap: nowrap;
+}
 .semlink-search-header--compact .semlink-search-brand-group {
     display: none;
 }
@@ -2595,6 +2606,18 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     font-size: 14px;
     font-weight: 600;
     color: var(--text-normal);
+}
+
+/* 省略号落在文字 span 上：容器是 flex（flex 容器自身的 text-overflow 不
+   生效），span 可收缩（min-width:0）+ ellipsis——可显示字数随头部可用
+   宽度自然增减，超宽才在末尾出省略号。 */
+.semlink-search-first-question-text {
+    display: block;
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 .semlink-search-header--compact .semlink-search-header-right {
     order: 2;
@@ -5275,6 +5298,31 @@ body .semlink-msg-user::selection {
     padding: 4px 8px;
 }
 
+/* Live reasoning-model thinking stream (reasoning_content / thinking_delta)
+   inside the auto-expanded thinking preview: dimmer than recorded thoughts
+   (it is transient raw reasoning, not a step), plain text, tail indicator. */
+.semlink-live-reasoning {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-faint);
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 2px 0 6px;
+    padding: 4px 8px;
+}
+
+.semlink-live-reasoning::after {
+    content: "▍";
+    color: var(--text-faint);
+    animation: semlink-reason-blink 1s steps(2, start) infinite;
+}
+
+@keyframes semlink-reason-blink {
+    to {
+        visibility: hidden;
+    }
+}
+
 /* One-line reference source rows */
 .semlink-search-source-row {
     display: flex;
@@ -6276,9 +6324,12 @@ button.semlink-share-revoke:hover {
 
 /* ── RAG 页：索引进度卡片 ── */
 .semlink-index-card {
-	/* 主题变量而非硬编码浅色：深色模式下 #fafafa 会变成近白卡片，
-	   叠加浅色主题文字后浅底浅字、对比度崩溃（与思考卡片同一类病）。 */
-	background: var(--background-secondary);
+	/* primary 底 + 发丝边框（而非 secondary 底）：secondary（≈#f2f3f5）与
+	   弹窗主区底色 #f6f6f6 几乎同色，卡片在弹窗里"隐形"（用户报障）——
+	   primary 白底在灰页弹窗里靠底色区分，白页侧栏里靠边框区分，两种
+	   宿主都成立；深色模式同理随变量走，不硬编码浅色。 */
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
 	border-radius: 12px;
 	padding: 12px 16px;
 	margin: 4px 0 14px;

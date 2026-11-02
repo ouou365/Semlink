@@ -94,6 +94,8 @@ const t: Record<keyof typeof en, string> = {
 	autoIndex: "自動索引",
 	autoEmbed: "自動嵌入",
 	popOutWindow: "彈出獨立視窗",
+	dockBackWindow: "恢復到側邊欄",
+	dockBackFailed: "無法恢復到側邊欄",
 	popOutFailed: "目前環境不支援彈出視窗",
 	actions: "動作",
 	sectionModel: "模型設定",

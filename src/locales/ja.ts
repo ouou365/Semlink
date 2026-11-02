@@ -94,6 +94,8 @@ const t: Record<keyof typeof en, string> = {
 	autoIndex: "自動インデックス",
 	autoEmbed: "自動埋め込み",
 	popOutWindow: "ポップアップウィンドウで開く",
+	dockBackWindow: "サイドバーに戻す",
+	dockBackFailed: "サイドバーに戻せませんでした",
 	popOutFailed: "この環境ではポップアップウィンドウは利用できません",
 	actions: "アクション",
 	sectionModel: "モデル設定",

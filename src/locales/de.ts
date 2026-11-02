@@ -94,6 +94,8 @@ const t: Record<keyof typeof en, string> = {
 	autoIndex: "Auto-Index",
 	autoEmbed: "Auto-Embedding",
 	popOutWindow: "In eigenem Fenster öffnen",
+	dockBackWindow: "Zurück zur Seitenleiste",
+	dockBackFailed: "Konnte nicht zur Seitenleiste zurückkehren",
 	popOutFailed: "Hier werden Popup-Fenster nicht unterstützt",
 	actions: "Aktionen",
 	sectionModel: "Modelleinstellungen",

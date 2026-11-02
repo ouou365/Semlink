@@ -9,10 +9,10 @@ import { VectorStore } from "./vector-store";
 import { EmbeddingClient } from "./embedding-client";
 import { ProgressTracker } from "./progress";
 import { Scheduler } from "./scheduler";
-import { TOOL_SPECS, ToolCore, parseExcludePaths } from "./tools-core";
+import { TOOL_SPECS, GIT_TOOL_NAMES, WEB_TOOL_NAMES, ToolCore, parseExcludePaths } from "./tools-core";
 import type { SmartVaultSettings } from "./types";
 import type { GitService } from "./git-service";
-import { GIT_TOOL_NAMES } from "./tools-core";
+import type { WebSearchService } from "./web-search";
 
 /** Tool arguments read from tools/call params — only fields this server uses. */
 interface ToolCallArgs {
@@ -63,6 +63,8 @@ export class McpServer {
 	private getActiveNote: () => string | null;
 	/** Git 集成（null = 未启用，git_* 工具不进 tools/list）。 */
 	private git: GitService | null;
+	/** DeepSeek 网页搜索（null = 无服务，web_search 不进 tools/list）。 */
+	private web: WebSearchService | null;
 	private core: ToolCore;
 
 	constructor(
@@ -74,6 +76,8 @@ export class McpServer {
 		vault: Vault,
 		getActiveNote: () => string | null = () => null,
 		git: GitService | null = null,
+		web: WebSearchService | null = null,
+		mcpInfo: (() => Promise<string>) | null = null,
 	) {
 		this.store = store;
 		this.client = client;
@@ -83,6 +87,7 @@ export class McpServer {
 		this.vault = vault;
 		this.getActiveNote = getActiveNote;
 		this.git = git;
+		this.web = web;
 		this.core = new ToolCore({
 			store,
 			client,
@@ -91,11 +96,20 @@ export class McpServer {
 			// 每次现读：updateSettings 换对象后依然指向最新规则
 			excludedPaths: () => parseExcludePaths(this.settings.excludePaths),
 			git,
+			web,
+			mcpInfo,
 			progress: () => this.progress.current,
 			reindex: async (path, force) => {
 				await this.toolReindex(path, force);
 			},
 		});
+	}
+
+	/** 当前暴露给客户端的工具名列表（mcp_info 自省用，过滤口径同
+	 *  handleToolsList）。 */
+	toolNames(): string[] {
+		const webOk = this.web?.available() ?? false;
+		return TOOL_SPECS.filter((t) => (this.git || !GIT_TOOL_NAMES.has(t.name)) && (webOk || !WEB_TOOL_NAMES.has(t.name))).map((t) => t.name);
 	}
 
 	updateSettings(settings: SmartVaultSettings) {
@@ -226,7 +240,7 @@ export class McpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = McpServer.handleToolsList(this.git);
+					result = McpServer.handleToolsList(this.git, this.web);
 					break;
 				case "tools/call":
 					result = await this.handleToolsCall(params || {});
@@ -275,12 +289,13 @@ export class McpServer {
 		};
 	}
 
-	private static handleToolsList(git: GitService | null) {
+	private static handleToolsList(git: GitService | null, web: WebSearchService | null) {
 		// MCP 规范的工具字段是 inputSchema；ToolCore 内部是 OpenAI 风格的
 		// parameters——直接透传缺 inputSchema，严格客户端（官方 SDK）解析
 		// 工具列表直接失败（"failed to retrieve its tool list"）。
+		const webOk = web?.available() ?? false;
 		return {
-			tools: TOOL_SPECS.filter((t) => git || !GIT_TOOL_NAMES.has(t.name)).map((t) => ({
+			tools: TOOL_SPECS.filter((t) => (git || !GIT_TOOL_NAMES.has(t.name)) && (webOk || !WEB_TOOL_NAMES.has(t.name))).map((t) => ({
 				name: t.name,
 				description: t.description ?? "",
 				inputSchema: t.parameters,

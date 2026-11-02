@@ -93,6 +93,8 @@ const en = {
 	autoIndex: "Auto Index",
 	autoEmbed: "Auto-embed",
 	popOutWindow: "Open in popup window",
+	dockBackWindow: "Dock back to sidebar",
+	dockBackFailed: "Couldn't dock back to the sidebar",
 	popOutFailed: "Popup windows are not available here",
 	actions: "Actions",
 	sectionModel: "Model Settings",

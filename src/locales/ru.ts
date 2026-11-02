@@ -95,6 +95,8 @@ const t: Record<keyof typeof en, string> = {
 	autoIndex: "Автоиндексация",
 	autoEmbed: "Авто-эмбеддинг",
 	popOutWindow: "Открыть в отдельном окне",
+	dockBackWindow: "Вернуть на боковую панель",
+	dockBackFailed: "Не удалось вернуть на боковую панель",
 	popOutFailed: "Отдельные окна здесь недоступны",
 	actions: "Действия",
 	sectionModel: "Настройки моделей",

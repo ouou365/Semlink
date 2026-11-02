@@ -133,6 +133,10 @@ interface OpenAIUsage {
 /** Delta payload of an OpenAI-compatible stream chunk. */
 interface OpenAIStreamDelta {
 	content?: string;
+	/** Thinking-mode reasoning text (DeepSeek: reasoning_content, OpenRouter:
+	 *  reasoning) — streamed before content/tool deltas. */
+	reasoning_content?: string;
+	reasoning?: string;
 	tool_calls?: Array<{
 		index?: number;
 		id?: string;
@@ -599,6 +603,11 @@ export class ChatClient {
 		 *  tool results continue from N+1. ONE numbering space for thinking,
 		 *  the final answer, and the rendered source cards. */
 		contextNotePaths: string[] = [],
+		/** Reasoning-model thinking text (OpenAI delta.reasoning_content /
+		 *  Anthropic thinking_delta), forwarded live with the ACCUMULATED text
+		 *  each time — the UI replaces what it shows, mirroring `onStream`.
+		 *  Ephemeral by design: never recorded into thinking steps or history. */
+		onThinkingDelta?: (text: string) => void,
 	): Promise<ChatResult> {
 		// Use the SELECTED model (and its owning provider) — the model switcher
 		// may pick any model from any configured provider.
@@ -651,8 +660,8 @@ export class ChatClient {
 		};
 		const dispatch = (): Promise<ChatResult> =>
 			provider.apiFormat === "anthropic"
-				? this.chatAnthropic(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, citeRegistry, onStream, onRoundStart, onThinking, onRoundSuccess, signal)
-				: this.chatOpenAI(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, citeRegistry, onStream, onRoundStart, onThinking, onRoundSuccess, signal);
+				? this.chatAnthropic(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, citeRegistry, onStream, onRoundStart, onThinking, onRoundSuccess, signal, onThinkingDelta)
+				: this.chatOpenAI(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, citeRegistry, onStream, onRoundStart, onThinking, onRoundSuccess, signal, onThinkingDelta);
 
 		for (;;) {
 			totalAttempts++;
@@ -1080,6 +1089,7 @@ export class ChatClient {
 		onThinking?: (step: ThinkingStep) => void,
 		onRoundSuccess?: () => void,
 		signal?: AbortSignal,
+		onThinkingDelta?: (text: string) => void,
 	): Promise<ChatResult> {
 		const baseUrl = provider.baseUrl.replace(/\/+$/, "");
 		const openaiUrl = chatEndpoint(baseUrl, provider.wirePath, "/v1/chat/completions");
@@ -1184,6 +1194,10 @@ export class ChatClient {
 				{ model, messages, stream: true, stream_options: { include_usage: true } },
 				undefined,
 				signal,
+				// The pre-analysis round carries no answer — but for thinking-mode
+				// models it is the LONGEST silent phase. Stream its reasoning so
+				// the UI shows the thought process from the very first seconds.
+				onThinkingDelta,
 			);
 			onRoundSuccess?.();
 			if (analysisStream.usageTokens) usageTokens = Math.max(usageTokens, analysisStream.usageTokens);
@@ -1280,6 +1294,7 @@ export class ChatClient {
 					body,
 					onStream,
 					signal,
+					onThinkingDelta,
 				);
 			} catch (e) {
 				if (!submitRound || signal?.aborted || (e as Error)?.name === "AbortError") throw e;
@@ -1293,6 +1308,7 @@ export class ChatClient {
 					{ ...body, tools: undefined, tool_choice: undefined },
 					onStream,
 					signal,
+					onThinkingDelta,
 				);
 			}
 			onRoundSuccess?.();
@@ -1302,6 +1318,17 @@ export class ChatClient {
 			cacheHits.push(...stream.cacheHits);
 			if (stream.content) lastText = stream.content;
 
+			// 思考流落盘：思考模式（reasoning_content）的本轮推理记成 💭 步骤。
+			// 此前只做实时预览、回合结束即弃——最终思考面板只剩工具调用，
+			// 模型的真实推理文字全部蒸发（用户报障：思考过程消失）。放在
+			// submitCall/draft 分支之前，保证最终轮与 gap-bounce 轮也入档；
+			// 时间序上 reasoning 先于 interim content 与工具调用。
+			if (stream.reasoning?.trim()) {
+				const step: ThinkingStep = { type: "thought", text: stream.reasoning.trim() };
+				thinking.push(step);
+				onThinking?.(step);
+			}
+
 			// Forced submit call: the answer arrives as the tool call's
 			// `answer` argument. Deltas were streamed live out of the partial
 			const submitCall = stream.toolCalls.find((tc) => tc?.function?.name === SUBMIT_TOOL_NAME);
@@ -1309,7 +1336,7 @@ export class ChatClient {
 				const submitted = this.parseSubmittedAnswer(submitCall.function.arguments || "", stream.content);
 				let answer = submitted.answer;
 				if (stream.finishReason === "length" && answer.trim()) {
-					const cont = await this.continueTruncatedAnswer(openaiUrl, provider, model, messages, answer, onStream, signal);
+					const cont = await this.continueTruncatedAnswer(openaiUrl, provider, model, messages, answer, onStream, signal, onThinkingDelta);
 					usageIn += cont.roundIn;
 					usageOut += cont.roundOut;
 					answer = cont.text;
@@ -1377,7 +1404,7 @@ export class ChatClient {
 					const submitted = this.parseSubmittedAnswer(rawArgs, stream.content);
 					let answer = submitted.answer;
 					if (stream.finishReason === "length" && answer.trim()) {
-						const cont = await this.continueTruncatedAnswer(openaiUrl, provider, model, messages, answer, onStream, signal);
+						const cont = await this.continueTruncatedAnswer(openaiUrl, provider, model, messages, answer, onStream, signal, onThinkingDelta);
 						usageIn += cont.roundIn;
 						usageOut += cont.roundOut;
 						answer = cont.text;
@@ -1491,14 +1518,19 @@ export class ChatClient {
 	 *  body live: submit rounds stream the `answer` argument out of the
 	 *  partial JSON; tool-attached rounds start live-forwarding content once
 	 *  it passes ANSWER_LIVE_THRESHOLD with no tool_call delta (and one-shot
-	 *  at round end otherwise); no-tool rounds stream every delta. */
+	 *  at round end otherwise); no-tool rounds stream every delta.
+	 *  `onThinkingDelta` receives the accumulated reasoning-model thinking
+	 *  text (delta.reasoning_content / delta.reasoning) as it streams — the
+	 *  visible progress during the long silent phase thinking-mode models
+	 *  (DeepSeek R/v-series, o-series) spend before content/tool calls. */
 	private async streamOpenAIChat(
 		url: string,
 		provider: ChatProvider,
 		body: OpenAIChatBody,
 		onStream?: (text: string) => void,
 		signal?: AbortSignal,
-	): Promise<{ content: string; toolCalls: OpenAIToolCall[]; finishReason: string; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
+		onThinkingDelta?: (text: string) => void,
+	): Promise<{ content: string; reasoning: string; toolCalls: OpenAIToolCall[]; finishReason: string; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
 		let resp: Response;
 		try {
 			// SSE streaming: requestUrl buffers the whole body and cannot deliver
@@ -1539,6 +1571,9 @@ export class ChatClient {
 		}
 
 		let content = "";
+		// Reasoning-model thinking text, accumulated across deltas (forwarded
+		// whole each time — the UI replaces, not appends).
+		let reasoning = "";
 		let finishReason = "";
 		let usageTokens = 0;
 		let roundIn = 0;
@@ -1558,6 +1593,15 @@ export class ChatClient {
 			const choice = json?.choices?.[0];
 			const delta = choice?.delta;
 			if (choice?.finish_reason) finishReason = choice.finish_reason;
+			// Thinking-mode models stream their reasoning in a dedicated field
+			// (DeepSeek: reasoning_content, OpenRouter: reasoning) BEFORE any
+			// content/tool deltas — forward it live so the UI can show the
+			// thought process instead of a frozen status line.
+			const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning;
+			if (typeof reasoningDelta === "string" && reasoningDelta) {
+				reasoning += reasoningDelta;
+				onThinkingDelta?.(reasoning);
+			}
 			if (typeof delta?.content === "string" && delta.content) {
 				content += delta.content;
 				// Live forward: no-tool rounds stream every delta; tool-attached
@@ -1625,7 +1669,7 @@ export class ChatClient {
 			onStream(content);
 		}
 
-		return { content, toolCalls: calls, finishReason, usageTokens, cacheHits, roundIn, roundOut };
+		return { content, reasoning, toolCalls: calls, finishReason, usageTokens, cacheHits, roundIn, roundOut };
 	}
 
 	/** streamOpenAIChat with the output budget attached (unless the caller set
@@ -1638,18 +1682,19 @@ export class ChatClient {
 		body: OpenAIChatBody,
 		onStream?: (text: string) => void,
 		signal?: AbortSignal,
-	): Promise<{ content: string; toolCalls: OpenAIToolCall[]; finishReason: string; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
+		onThinkingDelta?: (text: string) => void,
+	): Promise<{ content: string; reasoning: string; toolCalls: OpenAIToolCall[]; finishReason: string; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number }> {
 		const effective: OpenAIChatBody = body.max_tokens !== undefined ? body
 			: this.outputBudget > 0 ? { ...body, max_tokens: this.outputBudget } : body;
 		try {
-			return await this.streamOpenAIChat(url, provider, effective, onStream, signal);
+			return await this.streamOpenAIChat(url, provider, effective, onStream, signal, onThinkingDelta);
 		} catch (e) {
 			const status = (e as { status?: number } | null)?.status;
 			const msg = String((e as Error)?.message || e || "");
 			if (status === 400 && body.max_tokens === undefined && this.outputBudget > 0 && /max[_ ]?tokens|output|length|context/i.test(msg)) {
 				this.outputBudget = this.outputBudget >= 16384 ? 8192 : this.outputBudget >= 8192 ? 4096 : 0;
 				console.warn(`[Semlink] provider rejected max_tokens, retrying with budget=${this.outputBudget || "default"}:`, msg);
-				return this.streamOpenAIWithBudget(url, provider, body, onStream, signal);
+				return this.streamOpenAIWithBudget(url, provider, body, onStream, signal, onThinkingDelta);
 			}
 			throw e;
 		}
@@ -1668,6 +1713,7 @@ export class ChatClient {
 		partial: string,
 		onStream?: (text: string) => void,
 		signal?: AbortSignal,
+		onThinkingDelta?: (text: string) => void,
 	): Promise<{ text: string; roundIn: number; roundOut: number }> {
 		let answer = partial;
 		let totalIn = 0;
@@ -1682,6 +1728,7 @@ export class ChatClient {
 				{ model, messages, stream: true, stream_options: { include_usage: true } },
 				(text) => onStream?.(answer + text),
 				signal,
+				onThinkingDelta,
 			);
 			totalIn += r.roundIn;
 			totalOut += r.roundOut;
@@ -1700,6 +1747,7 @@ export class ChatClient {
 		body: AnthropicChatBody,
 		onStream?: (text: string) => void,
 		signal?: AbortSignal,
+		onThinkingDelta?: (text: string) => void,
 	): Promise<{
 		contentBlocks: ContentBlock[];
 		toolUses: AnthropicToolUse[];
@@ -1711,14 +1759,14 @@ export class ChatClient {
 		rawToolInputs: Record<string, string>;
 	}> {
 		try {
-			return await this.streamAnthropicChat(url, provider, body, onStream, signal);
+			return await this.streamAnthropicChat(url, provider, body, onStream, signal, onThinkingDelta);
 		} catch (e) {
 			const status = (e as { status?: number } | null)?.status;
 			const msg = String((e as Error)?.message || e || "");
 			if (status === 400 && body.max_tokens > 4096 && /max[_ ]?tokens|output|length|context/i.test(msg)) {
 				this.outputBudget = Math.max(4096, Math.floor(body.max_tokens / 2));
 				console.warn(`[Semlink] provider rejected max_tokens, retrying with budget=${this.outputBudget}:`, msg);
-				return this.streamAnthropicWithBudget(url, provider, { ...body, max_tokens: this.outputBudget }, onStream, signal);
+				return this.streamAnthropicWithBudget(url, provider, { ...body, max_tokens: this.outputBudget }, onStream, signal, onThinkingDelta);
 			}
 			throw e;
 		}
@@ -1736,6 +1784,7 @@ export class ChatClient {
 		partial: string,
 		onStream?: (text: string) => void,
 		signal?: AbortSignal,
+		onThinkingDelta?: (text: string) => void,
 	): Promise<{ text: string; roundIn: number; roundOut: number }> {
 		let answer = partial;
 		let totalIn = 0;
@@ -1756,6 +1805,7 @@ export class ChatClient {
 				},
 				(text) => onStream?.(answer + text),
 				signal,
+				onThinkingDelta,
 			);
 			totalIn += r.roundIn;
 			totalOut += r.roundOut;
@@ -1785,6 +1835,7 @@ export class ChatClient {
 		onThinking?: (step: ThinkingStep) => void,
 		onRoundSuccess?: () => void,
 		signal?: AbortSignal,
+		onThinkingDelta?: (text: string) => void,
 	): Promise<ChatResult> {
 		const baseUrl = provider.baseUrl.replace(/\/+$/, "");
 		const anthropicUrl = chatEndpoint(baseUrl, provider.wirePath, "/v1/messages");
@@ -1878,7 +1929,9 @@ export class ChatClient {
 				system: systemPrompt,
 				messages,
 				stream: true,
-			}, undefined, signal);
+			}, undefined, signal,
+			// Stream the analysis round's extended thinking (see OpenAI path).
+			onThinkingDelta);
 			onRoundSuccess?.();
 			if (analysisStream.usageTokens) usageTokens = Math.max(usageTokens, analysisStream.usageTokens);
 			usageIn += analysisStream.roundIn || 0;
@@ -1969,6 +2022,7 @@ export class ChatClient {
 					body,
 					onStream,
 					signal,
+					onThinkingDelta,
 				);
 			} catch (e) {
 				if (!submitRound || signal?.aborted || (e as Error)?.name === "AbortError") throw e;
@@ -1982,6 +2036,7 @@ export class ChatClient {
 					{ ...body, tools: undefined, tool_choice: undefined },
 					onStream,
 					signal,
+					onThinkingDelta,
 				);
 			}
 			onRoundSuccess?.();
@@ -1989,6 +2044,20 @@ export class ChatClient {
 			usageIn += stream.roundIn || 0;
 			usageOut += stream.roundOut || 0;
 			cacheHits.push(...stream.cacheHits);
+
+			// 思考流落盘（extended thinking）：同 OpenAI 的 reasoning_content
+			// 路径——本轮 thinking 块记成 💭 步骤，最终思考面板与历史保留
+			// 推理文字；时间序在 interim content 与工具调用之前。
+			const reasoningText = (stream.contentBlocks ?? [])
+				.filter((b) => b?.type === "thinking")
+				.map((b) => String(b.thinking ?? ""))
+				.join("\n")
+				.trim();
+			if (reasoningText) {
+				const step: ThinkingStep = { type: "thought", text: reasoningText };
+				thinking.push(step);
+				onThinking?.(step);
+			}
 
 			// Forced submit call: the answer arrives as the tool_use input.
 			// Deltas were streamed live out of the partial JSON; the final
@@ -2016,7 +2085,7 @@ export class ChatClient {
 				// stop_reason "max_tokens" cut the answer mid-generation — the
 				// model DID answer, just not fully. Continue it to completion.
 				if (stream.stopReason === "max_tokens" && submitted.trim()) {
-					const cont = await this.continueAnthropicTruncated(anthropicUrl, provider, model, systemPrompt, messages, submitted, onStream, signal);
+					const cont = await this.continueAnthropicTruncated(anthropicUrl, provider, model, systemPrompt, messages, submitted, onStream, signal, onThinkingDelta);
 					usageIn += cont.roundIn;
 					usageOut += cont.roundOut;
 					submitted = cont.text;
@@ -2183,13 +2252,15 @@ export class ChatClient {
 
 	/** Stream one Anthropic messages round. When `onStream` is provided, each
 	 * text delta is forwarded live — the caller only passes it for rounds with
-	 * no tools attached (guaranteed final answers). */
+	 * no tools attached (guaranteed final answers). `onThinkingDelta` receives
+	 * the accumulated extended-thinking text (thinking_delta events) live. */
 	private async streamAnthropicChat(
 		url: string,
 		provider: ChatProvider,
 		body: AnthropicChatBody,
 		onStream?: (text: string) => void,
 		signal?: AbortSignal,
+		onThinkingDelta?: (text: string) => void,
 	): Promise<{
 		contentBlocks: ContentBlock[];
 		toolUses: AnthropicToolUse[];
@@ -2309,6 +2380,10 @@ export class ChatClient {
 					}
 				} else if (delta?.type === "thinking_delta" && delta.thinking) {
 					if (blocks[idx]) blocks[idx].thinking! += delta.thinking;
+					// Extended thinking streams live — same visible-progress role
+					// as reasoning_content on the OpenAI-format path.
+					const acc = blocks[idx]?.thinking;
+					if (acc) onThinkingDelta?.(acc);
 				} else if (delta?.type === "input_json_delta") {
 					const block = blocks[idx];
 					if (block && block.type === "tool_use") {
