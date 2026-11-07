@@ -171,78 +171,6 @@
     font-size: 12px;
 }
 
-/* ──── MCP tab: server card list (Cherry-Studio style) ──── */
-.semlink-mcp-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin: 4px 0 14px;
-}
-
-.semlink-mcp-count {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-normal);
-}
-
-.semlink-mcp-search {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: min(320px, 50%);
-    height: 36px;
-    padding: 0 12px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 10px;
-    background: var(--background-primary);
-}
-
-.semlink-mcp-search:focus-within {
-    border-color: var(--interactive-accent);
-}
-
-.semlink-mcp-search-icon {
-    display: flex;
-    align-items: center;
-    color: var(--text-faint);
-}
-
-.semlink-mcp-search-icon .svg-icon {
-    width: 15px;
-    height: 15px;
-}
-
-.semlink-mcp-search-input {
-    flex: 1 1 0;
-    min-width: 0;
-    height: 100%;
-    border: none;
-    background: transparent;
-    box-shadow: none;
-}
-
-.semlink-mcp-search-input:focus,
-.semlink-mcp-search-input:focus-visible {
-    box-shadow: none;
-    outline: none;
-}
-
-.semlink-mcp-installed-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin: 0 0 8px;
-}
-
-/* 分享 / New 按钮组推到行最右侧（分享的 auto 外边距把整组顶过去） */
-.semlink-mcp-installed-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text-normal);
-}
-
 .semlink-mcp-icon-btn {
     display: flex;
     align-items: center;
@@ -262,71 +190,6 @@
     color: var(--text-normal);
 }
 
-.semlink-mcp-list {
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 10px;
-    background: var(--background-primary);
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-
-.semlink-mcp-server {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-}
-
-.semlink-mcp-server-icon {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    flex-shrink: 0;
-    border-radius: 10px;
-    background: var(--background-secondary);
-    color: var(--text-muted);
-}
-
-.semlink-mcp-server-icon .svg-icon {
-    width: 17px;
-    height: 17px;
-}
-
-/* 运行状态点：绿色，挂在图标右下角 */
-.semlink-mcp-server-dot {
-    position: absolute;
-    right: -1px;
-    bottom: -1px;
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--color-green);
-    border: 2px solid var(--background-primary);
-}
-
-.semlink-mcp-server-main {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.semlink-mcp-server-name {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text-normal);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 /* 答案正文里的 [n] 引用链接：可点击打开对应笔记 */
 .semlink-cite-link {
     color: var(--interactive-accent);
@@ -337,20 +200,6 @@
 .semlink-cite-link:hover {
     text-decoration: underline;
 }
-.semlink-mcp-server-sub {
-    font-size: 11.5px;
-    color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.semlink-mcp-server-toggle {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-}
-
 /* ──── Edit MCP server modal ──── */
 .semlink-mcp-edit-modal {
     width: min(560px, 92vw);
@@ -364,7 +213,7 @@
 
 .semlink-mcp-edit-segrow {
     display: flex;
-    justify-content: flex-end;
+    justify-content: flex-start;
     margin-bottom: 12px;
 }
 
@@ -385,6 +234,12 @@
     cursor: pointer;
 }
 
+.semlink-mcp-edit-seg button {
+    transition: transform 0.1s ease-out, background 0.1s ease-out, color 0.1s ease-out;
+}
+.semlink-mcp-edit-seg button:active {
+    transform: scale(0.97);
+}
 .semlink-mcp-edit-seg button.is-active {
     background: var(--interactive-accent);
     color: var(--text-on-accent);
@@ -450,52 +305,6 @@
     user-select: all;
 }
 
-/* 能力清单：tools / resources / prompts */
-.semlink-mcp-edit-caps {
-    margin-top: 14px;
-    padding: 10px 12px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 10px;
-    background: var(--background-secondary);
-}
-
-.semlink-mcp-edit-caps-title {
-    font-size: 12.5px;
-    font-weight: 700;
-    color: var(--text-normal);
-    margin-bottom: 6px;
-}
-
-.semlink-mcp-cap-row {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 2px 0;
-    min-width: 0;
-}
-
-.semlink-mcp-cap-name {
-    flex-shrink: 0;
-    font-family: var(--font-monospace);
-    font-size: 11.5px;
-    color: var(--text-normal);
-}
-
-.semlink-mcp-cap-desc {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 11.5px;
-    color: var(--text-muted);
-}
-
-.semlink-mcp-cap-empty {
-    font-size: 11.5px;
-    color: var(--text-faint);
-    margin-top: 6px;
-}
-
 /* Settings tabs */
 /* Flex children must be allowed to shrink below their content size —
    inputs and long nowrap spans otherwise force the settings panel into
@@ -505,253 +314,12 @@
 .smart-vault-settings .setting-item-name,
 .smart-vault-settings .setting-item-control,
 .smart-vault-settings .semlink-license-card,
-.smart-vault-settings .semlink-license-card-inner,
-.smart-vault-settings .semlink-license-card-keyrow,
-.smart-vault-settings .semlink-license-card-input,
+.smart-vault-settings .semlink-license-keyinput,
 .smart-vault-settings .semlink-settings-heading-row,
 .smart-vault-settings .semlink-settings-heading-left {
     min-width: 0;
 }
 
-/* License card (settings General tab) — conversion-first: badge + big
-   headline, one-line free reassurance, price anchor card with a large $3
-   and struck regular price, quiet key row. */
-.smart-vault-settings .semlink-license-card {
-    background: var(--background-secondary);
-    background: color-mix(in srgb, var(--interactive-accent) 11%, transparent);
-    border: 1px solid color-mix(in srgb, var(--interactive-accent) 22%, transparent);
-    border-radius: 14px;
-    padding: 18px 20px;
-    margin-bottom: 18px;
-}
-
-.smart-vault-settings .semlink-license-card-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-}
-
-.smart-vault-settings .semlink-license-card-logo {
-    display: flex;
-    align-items: center;
-    /* Logo strokes use currentColor — accent makes it the brand purple. */
-    color: var(--interactive-accent);
-}
-
-.smart-vault-settings .semlink-license-card-logo .svg-icon {
-    width: 22px;
-    height: 22px;
-}
-
-.smart-vault-settings .semlink-license-card-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-normal);
-}
-
-.smart-vault-settings .semlink-license-card-pro-pill {
-    background: linear-gradient(135deg, var(--interactive-accent), var(--text-accent));
-    color: var(--text-on-accent);
-    font-size: 11px;
-    font-weight: 700;
-    border-radius: 999px;
-    padding: 3px 12px;
-    letter-spacing: 0.02em;
-}
-
-.smart-vault-settings .semlink-license-card-footrow {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 14px;
-    color: var(--text-muted);
-    font-size: 12.5px;
-}
-
-.smart-vault-settings .semlink-license-card-eye {
-    display: flex;
-    align-items: center;
-    color: var(--text-muted);
-    cursor: pointer;
-}
-
-.smart-vault-settings .semlink-license-card-eye:hover {
-    color: var(--text-normal);
-}
-
-.smart-vault-settings .semlink-license-card-eye .svg-icon {
-    width: 14px;
-    height: 14px;
-}
-
-.smart-vault-settings .semlink-license-card-deactivate {
-    margin-left: auto;
-    background: none;
-    border: none;
-    box-shadow: none;
-    padding: 0;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 12.5px;
-}
-
-.smart-vault-settings .semlink-license-card-deactivate:hover {
-    color: var(--text-error);
-}
-
-.smart-vault-settings .semlink-license-card-devrow {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-}
-
-.smart-vault-settings .semlink-license-card-devlabel {
-    color: var(--text-muted);
-    font-size: 13px;
-}
-
-.smart-vault-settings .semlink-license-card-dots {
-    display: flex;
-    gap: 6px;
-}
-
-.smart-vault-settings .semlink-license-card-dots span {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: transparent;
-    border: 1.5px solid var(--background-modifier-border);
-}
-
-.smart-vault-settings .semlink-license-card-dots span.is-used {
-    background: var(--interactive-accent);
-    border-color: var(--interactive-accent);
-}
-
-.smart-vault-settings .semlink-license-card-devcount {
-    color: var(--text-muted);
-    font-size: 12.5px;
-    font-variant-numeric: tabular-nums;
-}
-
-.smart-vault-settings .semlink-license-card-badge {
-    background: var(--interactive-accent);
-    color: var(--text-on-accent);
-    font-size: 11px;
-    font-weight: 700;
-    border-radius: 999px;
-    padding: 2px 10px;
-    letter-spacing: 0.02em;
-}
-
-.smart-vault-settings .semlink-license-card-headline {
-    font-size: 20px;
-    font-weight: 700;
-    line-height: 1.3;
-    color: var(--text-normal);
-    margin-bottom: 4px;
-}
-
-.smart-vault-settings .semlink-license-card-freeline {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 14px;
-}
-
-.smart-vault-settings .semlink-license-card-inner {
-    background: var(--background-primary);
-    border-radius: 10px;
-    padding: 14px 16px;
-}
-
-.smart-vault-settings .semlink-license-card-pricerow {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    margin-bottom: 12px;
-}
-
-.smart-vault-settings .semlink-license-card-price {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--text-normal);
-    line-height: 1;
-}
-
-.smart-vault-settings .semlink-license-card-was {
-    font-size: 14px;
-    color: var(--text-muted);
-    text-decoration: line-through;
-}
-
-.smart-vault-settings .semlink-license-card-lifetime {
-    font-size: 12.5px;
-    color: var(--text-muted);
-}
-
-.smart-vault-settings .semlink-license-card-actions {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-}
-
-.smart-vault-settings .semlink-license-card-note {
-    color: var(--text-muted);
-    font-size: 13px;
-}
-
-.smart-vault-settings .semlink-license-card-keyrow {
-    display: flex;
-    align-items: stretch;
-    gap: 10px;
-    margin-top: 12px;
-}
-
-.smart-vault-settings .semlink-license-card-input {
-    flex: 1 1 auto;
-    border-radius: 10px;
-    padding: 8px 14px;
-    background: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
-    font-size: 13px;
-}
-
-/* Busy state: inline spinner so the network wait (up to ~24s across
-   retries) reads as progress instead of a dead button. */
-.smart-vault-settings .semlink-license-card-apply.is-busy::before {
-    content: "";
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    margin-right: 8px;
-    vertical-align: -2px;
-    border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
-    border-top-color: currentColor;
-    border-radius: 50%;
-    animation: semlink-spin 0.8s linear infinite;
-}
-
-@keyframes semlink-spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-.smart-vault-settings .semlink-license-card-apply {
-    border-radius: 10px;
-    padding: 8px 18px;
-    font-weight: 600;
-    white-space: nowrap;
-    font-size: 13px;
-}
-
-.smart-vault-settings .semlink-license-card-key {
-    color: var(--text-muted);
-    font-size: 13px;
-    align-self: center;
-}
 
 /* The heading setting must be allowed to SHRINK: Obsidian's
    .setting-item-info flex shorthand carries flex-shrink:0, so the row
@@ -815,44 +383,120 @@
     text-overflow: ellipsis;
 }
 
-.smart-vault-settings .semlink-settings-tabs {
+/* ── iOS 式设置导航：一级列表 + 详情面板 ──
+   宽幅（容器 >480px，iPad 形态）：左列表右详情，点击切换；
+   窄幅（≤480px，iPhone 形态）：列表/详情互斥显示（见文件尾容器查询块），
+   逐级返回。列表是白色圆角卡片（灰底页面上自带对比，同 iOS 分组卡）。 */
+.semlink-settings-layout {
+    /* 横向 tab 栏在上、内容在下：任何宽度同构（旧竖排菜单列 + 宽幅分栏
+       已废弃，无窄幅互斥层级） */
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-bottom: 18px;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
-.smart-vault-settings .semlink-settings-tab {
+.semlink-settings-menu-col {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+}
+
+/* 分段控件轨道（iOS segmented control）：灰底胶囊条，白拇指表达选中 */
+.semlink-settings-menu {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 2px;
+    width: 100%;
+    padding: 3px;
+    background: var(--sl-fill);
+    border-radius: 10px;
+}
+
+.semlink-settings-detail {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.semlink-settings-menu-item {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 10px;
     background: transparent;
-    /* Bordered chip tabs: every tab shows a hairline border; the ACTIVE one
-       swaps it to the accent color (no underline mechanism). Button shadow
-       stays killed so themes can't paint a faint line under inactive tabs. */
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 8px;
+    border: none;
     box-shadow: none;
-    filter: none;
-    color: var(--text-muted);
+    border-radius: var(--sl-radius-inner);
     cursor: pointer;
-    font-size: 14px;
-    padding: 5px 14px;
-    transition: color 0.15s ease, border-color 0.15s ease;
+    color: var(--text-normal);
+    font-size: 13.5px;
+    text-align: center;
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.smart-vault-settings .semlink-settings-tab:hover {
-    background: transparent;
-    border-color: var(--text-faint);
-    box-shadow: none;
+/* hover 只在真指针设备生效：触摸屏首触会触发 hover 粘滞，按压反馈
+   已由 :active 承担（同契约）。 */
+@media (hover: hover) and (pointer: fine) {
+    .semlink-settings-menu-item:hover {
+        background: var(--sl-hover);
+    }
+}
+
+.semlink-settings-menu-item.is-active {
+    /* 选中段背景/阴影在 8045 区以 0-3-0 提级声明——这里 (0-2-0) 会被
+       「压回裸 button 皮肤」的 blanket 规则（0-2-0 靠后源序）压成透明
+       （实测 computed backgroundColor rgba(0,0,0,0)，白拇指曾从未渲染） */
     color: var(--text-normal);
 }
 
-.smart-vault-settings .semlink-settings-tab.is-active {
-    /* 选中态打底：主题色 14% 淡染（与窄幅重排 ≤480 容器的配方一致）——
-       显式声明背景，压掉主题/Obsidian 按钮默认样式渗进来的白底灰底，
-       宽窄两种布局的选中观感统一 */
-    background: hsla(var(--interactive-accent-hsl), 0.14);
-    color: var(--interactive-accent);
-    border-color: var(--interactive-accent);
-    font-weight: 600;
+.semlink-settings-menu-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--sl-secondary-text);
+}
+
+.semlink-settings-menu-item.is-active .semlink-settings-menu-icon {
+    color: var(--text-normal);
+}
+
+.semlink-settings-menu-icon .svg-icon,
+.semlink-settings-menu-icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+.semlink-settings-menu-label {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.semlink-settings-menu-item.is-active .semlink-settings-menu-label {
+    font-weight: 550;
+    color: var(--text-normal);
+}
+
+.semlink-settings-menu-item:focus-visible {
+    outline: 2px solid hsla(var(--interactive-accent-hsl), 0.5);
+    outline-offset: -2px;
 }
 
 /* Models tab: TypingMind-style two panes — provider list (left) + the
@@ -878,8 +522,7 @@
     height: 100%;
 }
 
-.semlink-settings-root .setting-item-heading,
-.semlink-settings-root .semlink-settings-tabs {
+.semlink-settings-root .setting-item-heading {
     flex-shrink: 0;
 }
 
@@ -893,66 +536,516 @@
        max-height 直接钉在视口上：内容超高就地在面板内滚动，
        内容不超时无滚动条，两种宿主布局都正确。 */
     overflow-y: auto;
+    overflow-x: hidden;
     max-height: calc(100vh - 230px);
 }
-
-.smart-vault-settings .semlink-mt {
-    display: flex;
-    gap: 16px;
-    align-items: stretch;
-    min-width: 0;
-    flex: 1 1 auto;
-    min-height: 500px;
+/* 内嵌设置屏解除上面的 100vh 钉死：屏形态渲染在搜索视图内，高度由视图
+   flex 链提供（welcome flex:1 → layout/detail flex），确定性远高于 100vh
+   差值（弹窗/侧栏/主区各自失真量不同）。链通了面板就地滚动，Model
+   列表/行卡 fill 到面板底并在卡内独立滚动。 */
+.semlink-search-view .semlink-settings-panel {
+    max-height: none;
+}
+/* ── 滚动条纪律（评审）────────────────────────────────────────────
+   横向滚动在设置页没有合法场景：内容该换行/收缩而非横移，
+   overflow-x 一律 hidden（真正的宽度 bug 由 overflowers 探针抓）。
+   纵向滚动保留但细画：经典粗滚动条贴着卡片右缘是廉价感来源——
+   8px 圆角拇指 + 透明轨道，hover 加深。三个滚动容器统一：
+   设置面板 / Model 供应商列表 / Model 模型行卡。 */
+.semlink-settings-root .semlink-settings-panel::-webkit-scrollbar,
+.smart-vault-settings .semlink-mt-providers::-webkit-scrollbar,
+.smart-vault-settings .semlink-mt-rows::-webkit-scrollbar {
+    width: 8px;
+}
+.semlink-settings-root .semlink-settings-panel::-webkit-scrollbar-track,
+.smart-vault-settings .semlink-mt-providers::-webkit-scrollbar-track,
+.smart-vault-settings .semlink-mt-rows::-webkit-scrollbar-track {
+    background: transparent;
+}
+.semlink-settings-root .semlink-settings-panel::-webkit-scrollbar-thumb,
+.smart-vault-settings .semlink-mt-providers::-webkit-scrollbar-thumb,
+.smart-vault-settings .semlink-mt-rows::-webkit-scrollbar-thumb {
+    background: var(--sl-sep);
+    border-radius: 4px;
+}
+.semlink-settings-root .semlink-settings-panel::-webkit-scrollbar-thumb:hover,
+.smart-vault-settings .semlink-mt-providers::-webkit-scrollbar-thumb:hover,
+.smart-vault-settings .semlink-mt-rows::-webkit-scrollbar-thumb:hover {
+    background: var(--sl-secondary-text);
+}
+/* 面板是 flex column：卡片等直接子项必须禁收缩——否则高度链紧张时卡片
+   被按比例压扁，overflow:hidden 下内容直接裁切且无滚动可救（RAG 页宽档
+   整块 Embedding 状态不可达的根因，评审 P0）。 */
+/* 内容列（用户拍板"左右空间充分利用"）：上限放宽到 720 并**靠左**——
+   居中构图在超宽窗口下左侧拖出大空白（弹窗 1080 限宽 + margin auto
+   叠加所致）。设置屏自身在 settings-active 时另行豁免 main-tab 的
+   1080 限宽（见 6281 规则的覆盖），布局完整吃满窗口宽。 */
+.semlink-settings-root .semlink-settings-panel > * {
+    flex-shrink: 0;
+    width: 100%;
+    max-width: 720px;
+    /* content-box 下 width:100% 会把卡片自身 padding 加到容器宽之外
+       （412+16×2=444，横向滚动条的来源）——显式 border-box。 */
+    box-sizing: border-box;
+}
+/* Model 页三栏（中栏 300 + 右栏弹性）需要整个面板宽：720 上限会压住
+   三栏布局。其余 tab 保持 720 靠左不变。 */
+.semlink-settings-root .semlink-settings-panel > .semlink-mt {
+    max-width: none;
+}
+/* 组标题回归自身设计：4px 对齐边距 + 撑满（曾被子项居中规则的
+   margin-inline:auto 改写成右缘超面板 8-16px 的隐形溢出源——探针
+   widest[right] 抓到）。 */
+.semlink-settings-root .semlink-settings-panel > .semlink-card-title {
+    width: auto;
+    max-width: none;
+    margin-inline: 4px;
 }
 
-.smart-vault-settings .semlink-mt-providers,
-.smart-vault-settings .semlink-mt-models {
+/* ── Model 页：Cherry 式布局（容器 >720）──────────────────────
+   顶部横向 tab 栏 | 供应商列表（中栏）| 内联配置表单（右栏），
+   点谁配谁、无钻入。≤720 放不下两栏：退化为单列 + 钻入（is-drilled），
+   ‹ 供应商 返回行回列表。窄幅形态是基线（下方），宽幅两栏是增强。 */
+.smart-vault-settings .semlink-mt {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
     min-height: 0;
+    /* 撑满面板剩余高度：覆盖子项基线 flex-shrink:0（grow 不受影响），
+       列表卡才能延伸到面板底；fitPaneHeight（TS）为原生设置页兜底。 */
+    flex: 1 1 auto;
+}
+
+/* 钻入显隐（仅 ≤720）：供应商列表 ↔ 配置栏互斥 */
+@container settings (max-width: 720px) {
+    .smart-vault-settings .semlink-mt.is-drilled .semlink-mt-providers {
+        display: none;
+    }
+    .smart-vault-settings .semlink-mt:not(.is-drilled) .semlink-mt-config {
+        display: none;
+    }
+}
+
+/* 两栏基线：全宽纵列（≤720 钻入形态）。基线在前，宽幅容器块在后——
+   同权重靠源序，容器块的 300px 定宽才能赢过基线的 flex:1。 */
+.smart-vault-settings .semlink-mt-providers,
+.smart-vault-settings .semlink-mt-config {
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    /* min-width:0：缺省 min-width:auto 会被行内容（nowrap 名称/搜索框）
+       顶出容器——横向滚动条与 Add 钮被裁掉的根因。 */
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 宽幅三栏：中栏定宽 300，右栏弹性吃满剩余宽度；两栏等高，各自内部
+   滚动（中栏滚列表、右栏滚整份配置表单）——Cherry 的 master-detail。 */
+@container settings (min-width: 721px) {
+    .smart-vault-settings .semlink-mt {
+        flex-direction: row;
+        align-items: stretch;
+        gap: 16px;
+    }
+    .smart-vault-settings .semlink-mt-providers {
+        flex: 0 0 240px;
+        width: auto;
+    }
+    .smart-vault-settings .semlink-mt-config {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-y: auto;
+        /* 滚动呼吸位：表单滚到底不贴缘 */
+        padding-bottom: 10px;
+    }
+    /* 窄幅钻入残留的返回行：跨过 720 边界后 DOM 不重渲染，宽幅下藏掉
+       （状态自愈：宽幅点任意供应商即按三栏语义重建配置栏） */
+    .smart-vault-settings .semlink-mt-config .semlink-mt-back {
+        display: none;
+    }
+    /* 设置根改 flex 弹性填充（基线的 height:100% 量的是 messages 内容盒，
+       没扣顶条+gap，整屏高出视口 ~56px → 页级滚动条贴着窗口右缘）。
+       扣掉后 messages 无溢出，滚动只发生在面板/两栏内部。 */
+    .semlink-search-messages .semlink-settings-root {
+        height: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
 }
 
 .smart-vault-settings .semlink-mt-providers {
-    width: 292px;
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    border-right: 1px solid var(--background-modifier-border);
-    padding-right: 10px;
-    min-width: 0;
+    gap: 8px;
+    /* 白卡（用户拍板）：中栏列表整列白底圆角，与右栏表单的灰底分节
+       形成主次——列表是"选东西"的白卡，配置是"填东西"的纸面。
+       左右 14px 内衬让搜索胶囊与行的留白一致（用户反馈）。 */
+    padding: 8px 14px 10px;
+    background: var(--sl-card);
+    border-radius: 10px;
 }
 
-.smart-vault-settings .semlink-mt-providers-head {
+.smart-vault-settings .semlink-mt-config {
+    gap: 0;
+    /* 白卡与中栏同构（用户拍板"右侧也增加白色的底"）：分节表单落在
+       白底上，节间 hairline 继续分层；输入框白底靠边框区分 */
+    padding: 4px 14px 16px;
+    background: var(--sl-card);
+    border-radius: 10px;
+}
+
+/* ── 中栏（供应商列表）：Cherry 式扁平板式 ───────────────────── */
+/* 顶部搜索：iOS 式灰底圆角胶囊，放大镜居左 */
+.smart-vault-settings .semlink-mt-prov-search {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0 4px;
+    gap: 8px;
+    height: 34px;
+    padding: 0 10px;
+    background: var(--sl-fill);
+    border-radius: var(--sl-radius-inner);
+    flex-shrink: 0;
 }
 
-.smart-vault-settings .semlink-mt-providers-title {
-    font-weight: 600;
-    color: var(--text-normal);
+.smart-vault-settings .semlink-mt-prov-search-icon {
+    display: flex;
+    align-items: center;
+    color: var(--sl-tertiary);
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-mt-prov-search-icon .svg-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.smart-vault-settings .semlink-mt-prov-search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    font-size: 13px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    /* 聚焦态画在外层胶囊上（accent 光圈），内层 input 的默认描边隐藏
+       ——双层描边叠加是用户反馈的怪样来源 */
+}
+
+.smart-vault-settings .semlink-mt-prov-search-input:focus,
+.smart-vault-settings .semlink-mt-prov-search-input:focus-visible {
+    outline: none;
+    box-shadow: none;
+    /* 聚焦时主题会给 input 刷白底（灰胶囊里浮出白色圆角块）——一并压住 */
+    background: transparent;
+    border: none;
+}
+
+.smart-vault-settings .semlink-mt-prov-search:focus-within {
+    box-shadow: 0 0 0 2px hsla(var(--interactive-accent-hsl), 0.3);
+}
+
+/* 模型节行内搜索同款：input 描边/底色隐藏，聚焦圈画在胶囊上 */
+.smart-vault-settings .semlink-mt-search .semlink-mt-search-input:focus,
+.smart-vault-settings .semlink-mt-search .semlink-mt-search-input:focus-visible {
+    outline: none;
+    box-shadow: none;
+    background: transparent;
+    border: none;
+}
+
+.smart-vault-settings .semlink-mt-search:focus-within {
+    box-shadow: 0 0 0 2px hsla(var(--interactive-accent-hsl), 0.3);
+}
+
+/* ＋ 添加：通栏描边钮（基座 ghost 提供质感，这里给通栏形态） */
+.smart-vault-settings .semlink-mt-add-row {
+    flex-shrink: 0;
+    padding: 2px 0 0;
 }
 
 .smart-vault-settings .semlink-mt-add {
-    background: transparent;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 6px;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 14px;
+    width: 100%;
+    font-size: 13.5px;
     line-height: 1;
-    padding: 2px 8px;
+    padding: 8px 10px;
 }
 
-.smart-vault-settings .semlink-mt-add:hover {
-    color: var(--interactive-accent);
-    border-color: var(--interactive-accent);
+/* 状态胶囊：ON 绿（已配置且总开关开）/ OFF 灰（总开关关），无 Key 无徽标 */
+.smart-vault-settings .semlink-mt-provider-pill {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    padding: 4px 9px;
+    border-radius: 999px;
 }
 
-.smart-vault-settings .semlink-mt-head-actions {
+.smart-vault-settings .semlink-mt-provider-pill.is-on {
+    color: var(--color-green);
+    background: color-mix(in srgb, var(--color-green) 13%, transparent);
+}
+
+.smart-vault-settings .semlink-mt-provider-pill.is-off {
+    color: var(--sl-tertiary);
+    background: var(--sl-fill);
+}
+
+/* ── 右栏（内联配置表单）：无卡片分节，节间 hairline ──────────── */
+.smart-vault-settings .semlink-mt-config-section {
+    padding: 14px 4px 16px;
+}
+
+.smart-vault-settings .semlink-mt-config-section + .semlink-mt-config-section {
+    border-top: 1px solid var(--sl-sep);
+}
+
+.smart-vault-settings .semlink-mt-config-head {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    /* 上下对称内边距：align-items:center 在内容盒里居中，上 2/下 12 的
+       不对称内边距会让开关与名称整体高出头部视觉中心（用户反馈） */
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--sl-sep);
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-mt-config-name {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-normal);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 外链 / 竖点菜单：行内图标钮 */
+.smart-vault-settings .semlink-mt-config-link,
+.smart-vault-settings .semlink-mt-config-kebab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    color: var(--sl-secondary-text);
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-mt-config-link:hover,
+.smart-vault-settings .semlink-mt-config-kebab:hover {
+    background: var(--sl-hover);
+}
+
+.smart-vault-settings .semlink-mt-config-link .svg-icon,
+.smart-vault-settings .semlink-mt-config-link svg,
+.smart-vault-settings .semlink-mt-config-kebab .svg-icon,
+.smart-vault-settings .semlink-mt-config-kebab svg {
+    width: 15px;
+    height: 15px;
+}
+
+/* 总开关推到最右 */
+.smart-vault-settings .semlink-mt-config-master {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+/* 总开关降为中型规格（40×24 / 18 钮）：表单行的 51×31 大开关浮在只有
+   15px 图标的标题行里比例失衡，圆钮投影叠在紫轨道上还显"外凸"——
+   头部控件与行内图标同档才协调。规格覆盖基线（0-3-0 > 0-2-0）。 */
+.smart-vault-settings .semlink-mt-config-master .checkbox-container {
+    width: 40px;
+    min-width: 40px;
+    height: 24px;
+    border-radius: 12px;
+}
+
+.smart-vault-settings .semlink-mt-config-master .checkbox-container::after {
+    width: 18px;
+    height: 18px;
+    top: 3px;
+    left: 3px;
+    border-radius: 9px;
+    /* 圆钮投影收敛：大投影在小轨道外会晕出一圈"外凸"脏边（用户反馈
+       的怪样来源），贴边微影保一点立体感即可 */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.smart-vault-settings .semlink-mt-config-master .checkbox-container.is-enabled::after,
+.smart-vault-settings .semlink-mt-config-master .checkbox-container.is-checked::after {
+    transform: translateX(16px);
+}
+
+/* 节标题：Cherry 的"粗体大标题 + 行内控件"韵律 */
+.smart-vault-settings .semlink-mt-config-label {
+    font-size: 14.5px;
+    font-weight: 650;
+    color: var(--text-normal);
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-mt-config-labelrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+/* 协议下拉（API 地址节标题行右缘） */
+.smart-vault-settings .semlink-mt-config-fmt {
+    margin-left: auto;
+    max-width: 130px;
+    font-size: 12.5px;
+}
+
+/* 密钥行：输入框 + 眼睛 + 检测 三件套 */
+.smart-vault-settings .semlink-mt-config-keyrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.smart-vault-settings .semlink-mt-config-input {
+    flex: 1 1 auto;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--sl-radius-inner);
+    background: var(--background-primary);
+    font-size: 13px;
+}
+
+.smart-vault-settings .semlink-mt-config-input:focus-visible {
+    outline: 2px solid hsla(var(--interactive-accent-hsl), 0.45);
+    outline-offset: 0;
+}
+
+.smart-vault-settings .semlink-mt-config-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    color: var(--sl-secondary-text);
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-mt-config-icon-btn:hover {
+    background: var(--sl-hover);
+}
+
+.smart-vault-settings .semlink-mt-config-icon-btn .svg-icon,
+.smart-vault-settings .semlink-mt-config-icon-btn svg {
+    width: 15px;
+    height: 15px;
+}
+
+/* 检测钮：主色描边小钮 */
+.semlink-settings-root .semlink-mt-config-detect {
+    flex-shrink: 0;
+    height: 34px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 550;
+    border: 1px solid hsla(var(--interactive-accent-hsl), 0.45);
+    border-radius: var(--sl-radius-inner);
+    background: transparent;
+    color: var(--interactive-accent);
+    cursor: pointer;
+}
+
+.semlink-settings-root .semlink-mt-config-detect:hover:not(:disabled) {
+    background: hsla(var(--interactive-accent-hsl), 0.08);
+}
+
+.semlink-settings-root .semlink-mt-config-detect:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+/* 检测结果行：绿成功 / 红失败（含原因），字下留行 */
+.smart-vault-settings .semlink-mt-config-status {
+    min-height: 18px;
+    margin-top: 8px;
+    font-size: 12.5px;
+    color: var(--sl-tertiary);
+}
+
+.smart-vault-settings .semlink-mt-config-status.is-ok {
+    color: var(--color-green);
+}
+
+.smart-vault-settings .semlink-mt-config-status.is-err {
+    color: var(--text-error);
+}
+
+/* 行下辅助文案行：左"获取密钥"链接（蓝），可扩展右侧灰提示 */
+.smart-vault-settings .semlink-mt-config-hintrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 18px;
+    margin-top: 2px;
+}
+
+.smart-vault-settings .semlink-mt-config-getkey {
+    padding: 0;
+    background: none;
+    border: none;
+    box-shadow: none;
+    color: var(--interactive-accent);
+    font-size: 12.5px;
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-mt-config-getkey:hover {
+    text-decoration: underline;
+}
+
+/* 模型端点预览行 */
+.smart-vault-settings .semlink-mt-config-preview {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--sl-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 模型节计数徽标 */
+.smart-vault-settings .semlink-mt-config-chip {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--sl-fill);
+    color: var(--sl-secondary-text);
+    flex-shrink: 0;
+}
+
+/* 模型节行内搜索：紧凑胶囊（基座 mt-search 提供 clear 钮逻辑） */
+.smart-vault-settings .semlink-mt-search.is-compact {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 28px;
+    padding: 0 8px;
+    background: var(--sl-fill);
+}
+
+.smart-vault-settings .semlink-mt-search.is-compact .semlink-mt-search-input {
+    font-size: 12.5px;
 }
 
 /* 文件夹行复用 .semlink-mt-provider 的布局（图标 = 成员中最热门供应商），
@@ -979,36 +1072,62 @@
     height: 14px;
 }
 
-.smart-vault-settings .semlink-mt-folder-count {
-    color: var(--text-muted);
-    font-size: 12px;
-}
-
+/* 供应商列表（中栏）：Cherry 式扁平——无卡片容器，行即胶囊（hover/选中
+   圆角底），卡内滚动链保留在列内 */
 .smart-vault-settings .semlink-mt-provider-list {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 2px;
     flex: 1 1 auto;
+    /* flex 滚动链：允许被列压缩到内容高度以下，滚动发生在列内（行数多时） */
+    min-height: 0;
+    /* 无额外内衬：行与顶部搜索框同宽对齐（用户拍板） */
+    padding: 0;
 }
 
+/* 行高 44px（用户拍板，普通行与文件夹行统一）：HIG 触达标准行高 */
 .smart-vault-settings .semlink-mt-provider {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 7px 10px;
+    padding: 0 10px;
     border-radius: 8px;
     cursor: pointer;
     min-width: 0;
+    height: 44px;
+    transition: background 0.1s ease-out;
 }
 
-/* 左侧移动滑块：拖动调整供应商顺序 */
+.smart-vault-settings .semlink-mt-provider:hover {
+    background: var(--sl-hover);
+}
+
+/* （文件夹行旧"名称+成员汇总"两行款及其 44px 加高覆盖已删——现在
+   文件夹头与普通行同为单行内容，统一吃基线 44px 行高。） */
+
+/* 可点行按压态：hover 底（契约 §3.1）——div 行无 app.css 冲突，无需提级 */
+.smart-vault-settings .semlink-mt-provider:active {
+    background: var(--background-modifier-hover);
+}
+
+/* 左侧移动滑块：拖动调整供应商顺序。Cherry 式安静列表——滑块槽位
+   常驻预留（宽度固定，行内容不因悬停位移），悬停仅透明度淡入。 */
 .smart-vault-settings .semlink-mt-provider-grip {
     display: flex;
     align-items: center;
+    justify-content: center;
     flex-shrink: 0;
+    width: 16px;
     color: var(--text-faint);
     cursor: grab;
+    opacity: 0;
+    transition: opacity 0.12s ease-out;
+}
+
+.smart-vault-settings .semlink-mt-provider:hover .semlink-mt-provider-grip,
+.smart-vault-settings .semlink-mt-provider.is-dragging .semlink-mt-provider-grip {
+    opacity: 1;
 }
 
 .smart-vault-settings .semlink-mt-provider-grip:hover {
@@ -1024,32 +1143,50 @@
     height: 13px;
 }
 
-/* 重排落点：插入到该行之前（供应商行与模型行通用） */
+/* 重排落点：目标行顶缘 2px accent 插入线（行贴卡，虚线框只留给
+   文件夹归档语义，见 .is-folder.is-droptarget）（供应商行与模型行通用） */
 .smart-vault-settings .semlink-mt-provider.is-droptarget-row,
 .smart-vault-settings .semlink-mt-model.is-droptarget-row {
-    outline: 1.5px dashed var(--interactive-accent);
-    outline-offset: -1.5px;
+    position: relative;
 }
 
-.smart-vault-settings .semlink-mt-provider:hover {
-    background: var(--background-modifier-hover);
+.smart-vault-settings .semlink-mt-provider.is-droptarget-row::before,
+.smart-vault-settings .semlink-mt-model.is-droptarget-row::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    background: var(--interactive-accent);
+    border-radius: 1px;
+    z-index: 1;
+    pointer-events: none;
 }
 
+/* 拖动中的源行：淡化让位 */
+.smart-vault-settings .semlink-mt-provider.is-dragging,
+.smart-vault-settings .semlink-mt-model.is-dragging {
+    opacity: 0.45;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .smart-vault-settings .semlink-mt-provider:hover {
+        background: var(--background-modifier-hover);
+    }
+}
+
+/* 选中供应商：accent 淡染（主题变量，深浅色自适应） */
 .smart-vault-settings .semlink-mt-provider.is-active {
-    background: #eeeeee;
-}
-
-/* 深色主题：#eeeeee 会刺眼，改用半透明白叠加 */
-body.theme-dark .smart-vault-settings .semlink-mt-provider.is-active {
-    background: rgba(255, 255, 255, 0.09);
+    background: hsla(var(--interactive-accent-hsl), 0.12);
 }
 
 .smart-vault-settings .semlink-mt-provider-logo .semlink-mt-logo-svg,
 .smart-vault-settings .semlink-mt-provider-logo svg,
 .smart-vault-settings .semlink-mt-provider-logo .semlink-provider-fallback {
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
 }
 
 .smart-vault-settings .semlink-mt-provider-info {
@@ -1063,43 +1200,6 @@ body.theme-dark .smart-vault-settings .semlink-mt-provider.is-active {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-.smart-vault-settings .semlink-mt-provider-count {
-    color: var(--text-muted);
-    font-size: 12px;
-}
-
-.smart-vault-settings .semlink-mt-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--text-faint);
-    flex-shrink: 0;
-}
-
-.smart-vault-settings .semlink-mt-dot.is-green {
-    background: #10b981;
-}
-
-.smart-vault-settings .semlink-mt-dot.is-orange {
-    background: #f59e0b;
-}
-
-.smart-vault-settings .semlink-mt-provider-gear {
-    display: flex;
-    align-items: center;
-    color: var(--text-muted);
-    cursor: pointer;
-}
-
-.smart-vault-settings .semlink-mt-provider-gear .svg-icon {
-    width: 15px;
-    height: 15px;
-}
-
-.smart-vault-settings .semlink-mt-provider-gear:hover {
-    color: var(--text-normal);
 }
 
 .smart-vault-settings .semlink-mt-provider-del {
@@ -1124,95 +1224,149 @@ body.theme-dark .smart-vault-settings .semlink-mt-provider.is-active {
     color: var(--text-error);
 }
 
-.smart-vault-settings .semlink-mt-provider-del:hover {
-    color: var(--text-error);
+/* 钻入态返回行：‹ 供应商（accent 色，紧贴搜索框上方） */
+.smart-vault-settings .semlink-mt-back {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
+    padding: 2px 0;
+    background: none;
+    border: none;
+    box-shadow: none;
+    color: var(--interactive-accent);
+    font-size: 13px;
+    font-weight: 550;
+    cursor: pointer;
+    text-align: left;
 }
 
-.smart-vault-settings .semlink-mt-models {
-    flex: 1 1 auto;
-    min-width: 0;
+.smart-vault-settings .semlink-mt-back .svg-icon,
+.smart-vault-settings .semlink-mt-back svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* 搜索字段：iOS 式灰底圆角 + 左侧放大镜 + 右侧圆形清除钮（有词时显） */
+.smart-vault-settings .semlink-mt-search {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 10px;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--sl-radius-inner);
+}
+
+/* 聚焦圈统一画在胶囊上（见 .semlink-mt-prov-search:focus-within） */
+
+.smart-vault-settings .semlink-mt-search-icon {
+    display: flex;
+    align-items: center;
+    color: var(--text-faint);
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-mt-search-icon .svg-icon {
+    width: 15px;
+    height: 15px;
 }
 
 .smart-vault-settings .semlink-mt-search-input {
-    width: 100%;
-    border-radius: 10px;
-    padding: 9px 14px;
-    font-size: 14px;
-    background: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
-}
-
-.smart-vault-settings .semlink-mt-showing {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-}
-
-.smart-vault-settings .semlink-mt-showing-count {
+    flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    height: 100%;
+    padding: 0;
+    font-size: 13.5px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
 }
 
+/* 0-2-1（元素选择器 +1）：刻意保留的圆形灰底，要同时赢过 app.css
+   button:not(.clickable-icon) 与下方 blanket 的 transparent */
+.semlink-settings-root button.semlink-mt-search-clear {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--background-modifier-hover);
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform 0.1s ease-out;
+}
+
+.smart-vault-settings .semlink-mt-search.has-value .semlink-mt-search-clear {
+    display: flex;
+}
+
+.smart-vault-settings .semlink-mt-search-clear:active {
+    transform: scale(0.94);
+}
+
+.smart-vault-settings .semlink-mt-search-clear .svg-icon {
+    width: 12px;
+    height: 12px;
+}
+
+/* 右栏主行动（＋ 添加模型）：基座 primary 提供质感，这里只留防挤压钩子 */
 .smart-vault-settings .semlink-mt-add-model {
     flex-shrink: 0;
-    color: var(--interactive-accent);
-    font-weight: 600;
-    font-size: 12.5px;
-    padding: 2px 4px;
+    margin-left: auto;
 }
 
-.smart-vault-settings .semlink-mt-add-model:hover {
-    text-decoration: underline;
-}
-
-/* 未配置 Key 时 showing 行右侧的紫色"配置"按钮 */
-.smart-vault-settings .semlink-mt-configure {
-    flex-shrink: 0;
-    padding: 3px 14px;
-    font-size: 12.5px;
-    font-weight: 600;
-}
-
-.smart-vault-settings .semlink-mt-showing {
-    color: var(--text-muted);
-    font-size: 12.5px;
-    padding: 0 4px;
-}
-
+/* 模型列表卡：卡即滚动容器，行贴卡边，行间 hairline 由 .semlink-card 生成 */
 .smart-vault-settings .semlink-mt-rows {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 0;
     flex: 1 1 auto;
+    /* 同 provider-list：钻入列撑满剩余高度，超高在卡内滚动 */
+    min-height: 0;
 }
 
 .smart-vault-settings .semlink-mt-model {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 8px 10px;
-    border-radius: 10px;
+    padding: 8px 16px;
     min-width: 0;
+    min-height: 44px;
+    cursor: pointer;
+    transition: background 0.1s ease-out;
 }
 
-.smart-vault-settings .semlink-mt-model:hover,
-.smart-vault-settings .semlink-mt-model.is-selected {
-    background: #eeeeee;
+/* hover 门控触摸设备（首触粘滞）；按压反馈 :active 不门控 */
+@media (hover: hover) and (pointer: fine) {
+    .smart-vault-settings .semlink-mt-model:hover {
+        background: var(--background-modifier-hover);
+    }
 }
 
-body.theme-dark .smart-vault-settings .semlink-mt-model:hover,
-body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
-    background: rgba(255, 255, 255, 0.09);
+.smart-vault-settings .semlink-mt-model:active {
+    background: var(--background-modifier-hover);
 }
 
+/* 关态行：内容淡化让开关状态一眼可辨，开关钮本身保持可读可点 */
+.smart-vault-settings .semlink-mt-model > :not(.semlink-mt-model-toggle) {
+    transition: opacity 0.15s ease-out;
+}
+
+.smart-vault-settings .semlink-mt-model.is-off > :not(.semlink-mt-model-toggle) {
+    opacity: 0.55;
+}
+
+/* 模型行 logo 隐藏（单列钻入态模型行从简：名称 + 上下文 + 开关）；
+   尺寸规则保留以便回退。 */
 .smart-vault-settings .semlink-mt-model-logo {
+    display: none;
     flex-shrink: 0;
 }
 
@@ -1296,114 +1450,54 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     flex-shrink: 0;
 }
 
+/* 无供应商空态：虚线卡 = 图标 + 一句话 + 下一步动作（契约 §3.6） */
 .smart-vault-settings .semlink-mt-empty {
-    color: var(--text-muted);
-    padding: 20px;
-    text-align: center;
-}
-
-/* Models tab: DSH-style provider list */
-.smart-vault-settings .semlink-provider-rows {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-}
-
-.smart-vault-settings .semlink-provider-row {
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 8px;
-    background: var(--background-secondary);
-    overflow: hidden;
-}
-
-.smart-vault-settings .semlink-provider-row.is-open {
-    border-color: var(--interactive-accent);
-}
-
-/* Rows are draggable to reorder — grab cursor + drop feedback. */
-.smart-vault-settings .semlink-provider-row[draggable="true"] {
-    cursor: grab;
-}
-
-.smart-vault-settings .semlink-provider-row[draggable="true"]:active {
-    cursor: grabbing;
-}
-
-.smart-vault-settings .semlink-provider-row.is-dragging {
-    opacity: 0.5;
-}
-
-.smart-vault-settings .semlink-provider-row.is-drag-over {
-    border-color: var(--interactive-accent);
-    box-shadow: 0 0 0 1px var(--interactive-accent);
-}
-
-.smart-vault-settings .semlink-provider-row-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 8px 12px;
-    cursor: pointer;
-    user-select: none;
-}
-
-/* Provider rows are draggable to reorder — the grip icon shows the
-   affordance (also a drag source itself, like the model rows). Plain icon:
-   no button background/border, just the grab cursor. */
-.smart-vault-settings .semlink-provider-grip {
-    cursor: grab;
-    color: var(--text-muted);
-    flex-shrink: 0;
-    display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 4px;
-    margin-right: -4px;
-}
-
-.smart-vault-settings .semlink-provider-grip:active {
-    cursor: grabbing;
-}
-
-.smart-vault-settings .semlink-provider-row-head:hover {
-    background: var(--background-modifier-hover);
-}
-
-.smart-vault-settings .semlink-row-chevron {
-    font-size: 10px;
-    color: var(--text-muted);
-    transition: transform 0.15s ease;
-    flex-shrink: 0;
-}
-
-.smart-vault-settings .semlink-provider-row.is-open .semlink-row-chevron {
-    transform: rotate(90deg);
-}
-
-.smart-vault-settings .semlink-provider-identity {
-    display: flex;
-    align-items: center;
     gap: 8px;
-    min-width: 0;
-    flex: 1;
+    min-height: 140px;
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    line-height: 1.45;
+    border: 1.5px dashed var(--background-modifier-border);
+    border-radius: var(--sl-radius-card);
 }
 
-.smart-vault-settings .semlink-provider-logo {
-    width: 18px;
-    height: 18px;
-    display: inline-flex;
+.smart-vault-settings .semlink-mt-empty-icon {
+    display: flex;
+    color: var(--text-faint);
+}
+
+.smart-vault-settings .semlink-mt-empty-icon .svg-icon {
+    width: 24px;
+    height: 24px;
+}
+
+/* 搜索零命中：卡内空态（结构同上，收在 .semlink-card 里不加边框） */
+.smart-vault-settings .semlink-mt-noresults {
+    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
-    /* Keep mono brand marks stable across row states. */
-    color: var(--text-normal);
+    gap: 8px;
+    min-height: 120px;
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    line-height: 1.45;
 }
 
-.smart-vault-settings .semlink-provider-logo svg {
-    width: 100%;
-    height: 100%;
-    display: block;
+/* 模型弹窗内联校验错误行（AddModelModal 即输即校） */
+.smart-vault-settings .semlink-field-error {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--text-error);
+    margin-top: 4px;
 }
 
 /* Fallback identity circle for providers without a known brand logo
@@ -1420,120 +1514,6 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     color: var(--text-muted);
     font-size: 11px;
     font-weight: 600;
-}
-
-.smart-vault-settings .semlink-provider-name {
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.smart-vault-settings .semlink-provider-tag {
-    font-size: 11px;
-    line-height: 1;
-    padding: 3px 6px;
-    border-radius: 4px;
-    background: var(--background-modifier-hover);
-    color: var(--text-muted);
-    flex-shrink: 0;
-}
-
-.smart-vault-settings .semlink-provider-dot,
-.semlink-guide .semlink-provider-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-.smart-vault-settings .semlink-provider-dot.is-configured,
-.semlink-guide .semlink-provider-dot.is-configured {
-    background: var(--color-green);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-green) 25%, transparent);
-}
-
-.smart-vault-settings .semlink-provider-dot.is-missing,
-.semlink-guide .semlink-provider-dot.is-missing {
-    background: var(--color-red);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-red) 25%, transparent);
-}
-
-/* Guide cards append the dot to the card itself — push it to the right
- * edge like the old ✓ roundel it replaces. */
-.semlink-guide .semlink-guide-card .semlink-provider-dot {
-    margin-left: auto;
-}
-
-.smart-vault-settings .semlink-provider-badge {
-    font-size: 11px;
-    line-height: 1;
-    padding: 3px 6px;
-    border-radius: 4px;
-    background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
-    color: var(--interactive-accent);
-    flex-shrink: 0;
-}
-
-.smart-vault-settings .semlink-provider-actions {
-    display: flex;
-    gap: 6px;
-    flex-shrink: 0;
-}
-
-/* The editor area is hidden while the row is collapsed — an empty editor
-   would otherwise add a white padded strip below the row head. */
-.smart-vault-settings .semlink-provider-row:not(.is-open) .semlink-provider-editor {
-    display: none;
-}
-
-.smart-vault-settings .semlink-provider-editor {
-    border-top: 1px solid var(--background-modifier-border);
-    padding: 12px;
-    background: var(--background-primary);
-}
-
-.smart-vault-settings .semlink-btn {
-    padding: 4px 10px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 6px;
-    background: var(--background-primary);
-    color: var(--text-normal);
-    cursor: pointer;
-    font-size: 13px;
-}
-
-.smart-vault-settings .semlink-btn:hover {
-    background: var(--background-modifier-hover);
-}
-
-.smart-vault-settings .semlink-btn-danger {
-    color: var(--text-error);
-    border-color: color-mix(in srgb, var(--text-error) 40%, transparent);
-}
-
-.smart-vault-settings .semlink-btn-danger:hover {
-    background: color-mix(in srgb, var(--text-error) 10%, transparent);
-}
-
-.smart-vault-settings .semlink-btn-cta {
-    background: var(--interactive-accent);
-    border-color: var(--interactive-accent);
-    color: var(--text-on-accent);
-}
-
-.smart-vault-settings .semlink-btn-cta:hover {
-    background: var(--interactive-accent-hover);
-    color: var(--text-on-accent);
-}
-
-.smart-vault-settings .semlink-provider-add {
-    margin-top: 14px;
-}
-
-.smart-vault-settings .semlink-provider-add-actions {
-    display: flex;
-    gap: 8px;
 }
 
 /* Add-provider step 1: flowing catalog chips (logo + name, content-width,
@@ -1562,9 +1542,11 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     transition: border-color 0.12s ease, background 0.12s ease;
 }
 
-.smart-vault-settings .semlink-add-provider-card:hover {
-    border-color: var(--interactive-accent);
-    background: var(--background-modifier-hover);
+@media (hover: hover) and (pointer: fine) {
+    .smart-vault-settings .semlink-add-provider-card:hover {
+        border-color: var(--interactive-accent);
+        background: var(--background-modifier-hover);
+    }
 }
 
 .smart-vault-settings .semlink-add-provider-star {
@@ -1910,19 +1892,22 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     display: none;
 }
 
+/* iOS 文本框观感：无边框灰底填充（systemFill），聚焦换 accent 细环
+   （原先聚焦把阴影清空导致无焦点指示，可访问性欠账一并补上） */
 .smart-vault-settings .semlink-editor-input {
     width: 100%;
     margin-bottom: 16px;
     padding: 11px 14px;
-    border: 1px solid var(--background-modifier-border);
+    border: none;
     border-radius: 10px;
-    background: var(--background-primary);
+    background: var(--sl-fill, rgba(118, 118, 128, 0.12));
     font-size: 14px;
+    color: var(--text-normal);
+    transition: box-shadow 0.15s ease-out;
 }
 
-/* 聚焦时不要主题默认的 box-shadow 光晕 */
 .smart-vault-settings .semlink-editor-input:focus {
-    box-shadow: none;
+    box-shadow: 0 0 0 2px hsla(var(--interactive-accent-hsl), 0.45);
     outline: none;
 }
 
@@ -2127,20 +2112,22 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     border-radius: 6px;
 }
 
+/* iOS 文本框观感：无边框灰底填充（systemFill 12%）+ 聚焦 accent 细环 */
 .smart-vault-settings .semlink-input {
     flex: 1;
     min-width: 0;
-    padding: 5px 8px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 6px;
-    background: var(--background-primary);
+    padding: 6px 10px;
+    border: none;
+    border-radius: var(--sl-radius-inner, 8px);
+    background: var(--sl-fill, rgba(118, 118, 128, 0.12));
     color: var(--text-normal);
     font-size: 13px;
+    transition: background 0.15s ease-out, box-shadow 0.15s ease-out;
 }
 
 .smart-vault-settings .semlink-input:focus {
-    border-color: var(--interactive-accent);
     outline: none;
+    box-shadow: 0 0 0 2px hsla(var(--interactive-accent-hsl), 0.45);
 }
 
 .smart-vault-settings .semlink-input-ctx {
@@ -2977,9 +2964,15 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
  * 左右负边距必须对称：messages 的 scrollbar-gutter 两侧等宽预留，
  * 单边补偿（旧弹窗 margin-left 16px）会让引导/设置屏左右图标不对称。 */
 .semlink-search-view .semlink-guide-corners {
-    position: static;
+    /* 顶部导航不受页面滚动影响（用户指出）：窄幅下设置面板 max-height:none
+       （整页在 messages 里滚），返回条此前会随页滚走。sticky 钉在滚动口
+       顶部；不透明底让内容从下方穿过时不透出。引导条与设置屏返回条同构
+       （.semlink-settings-corners 复用 .semlink-guide-corners），一并生效。 */
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--sl-bg-grouped, var(--background-primary));
     flex-shrink: 0;
-    z-index: auto;
     margin: 0 -6px;
     /* 显式拉伸：messages 列容器里某处改变了交叉轴行为 */
     align-self: stretch;
@@ -3017,8 +3010,42 @@ body.theme-dark .smart-vault-settings .semlink-mt-model.is-selected {
     align-items: stretch;
     width: 100%;
     gap: 0;
-    padding: 0 20px 40px;
+    /* 左缘 8px（用户拍板"靠左"充分利用宽度）：20px 的呼吸留白在宽屏
+       就是拖出的死空白。 */
+    padding: 0 8px 40px;
     text-align: start;
+    /* 弹性填充替代基线 height:100%：messages 内容盒没扣顶条+gap，
+       height:100% 会整屏高出视口 ~56px → 页级滚动条贴窗口右缘。
+       flex 后 root 高度=扣完顶条的剩余空间，页级零溢出，滚动只发生在
+       面板/两栏内部。窄幅菜单页的页面滚动靠内容溢出 bleed（root
+       overflow visible）→ messages 承载，与本规则无关。 */
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* 设置屏入场：150ms 淡入 + 4px 上浮（对话 ↔ 设置是全屏内容互换，
+   零过渡的瞬间互换是生硬感的主要来源）。退出不做对称动画——
+   返回要快于进入。顶条（返回/品牌/语言）与内容同曲线，避免错拍。 */
+.semlink-search-welcome.semlink-settings-screen,
+.semlink-search-header.semlink-settings-corners {
+    animation: semlink-settings-enter 0.15s ease-out;
+}
+@keyframes semlink-settings-enter {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* 宽幅切 tab：120ms 纯 opacity 防生硬（窄幅让位给钻入滑入不叠加）。
+   连点重触发由 JS 摘/挂 class 完成（settings.ts renderPanel）。 */
+.semlink-settings-panel.is-swapping {
+    animation: semlink-fade-in 0.12s ease-out;
 }
 
 /* While the guide owns the welcome screen there is nothing to compose yet —
@@ -4757,9 +4784,8 @@ body .semlink-msg-user::selection {
 	flex: 1 1 0;
 	/* 主页 welcome 容器 text-align:center 会继承进来——输入文字/占位符必须居左 */
 	text-align: left;
-	/* 空态时贴合一行文字：min-height 撑出的内部空白在视觉上成了
-	   「文字与按钮之间的洞」。多行输入时仍随内容长高（max-height 封顶）。 */
-	min-height: 0;
+	/* 空态也保持约一行半的可点击高度；多行输入时随内容长高（max-height 封顶）。 */
+	min-height: 35px;
 	max-height: 160px;
 	overflow-x: hidden;
 	overflow-y: auto;
@@ -5044,6 +5070,23 @@ body .semlink-msg-user::selection {
 }
 
 .semlink-msg-answer.markdown-rendered pre {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+/* 回答卡内的宽内容不得撑破消息列：img/video/svg 的固有宽度不可收缩，
+   其 min-content 会沿 flex 链（答案卡→turn→消息列→视图根）层层上传，
+   把整列/整个视图撑出窗口外——窄幅弹窗下右侧边框被整块裁掉。
+   表格同理降级为块级滚动容器：宽表在卡片内横向滚动，而不是撑破布局。 */
+.semlink-msg-assistant img,
+.semlink-msg-assistant video,
+.semlink-msg-assistant svg {
+    max-width: 100%;
+    height: auto;
+}
+
+.semlink-msg-answer.markdown-rendered table {
+    display: block;
     max-width: 100%;
     overflow-x: auto;
 }
@@ -6020,42 +6063,6 @@ body .semlink-msg-user::selection {
 	color: var(--text-muted);
 	line-height: 1.55;
 }
-.semlink-share-row {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 7px 10px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 8px;
-	background: var(--background-secondary);
-}
-.semlink-share-url {
-	flex: 1;
-	min-width: 0;
-	font-family: var(--font-monospace);
-	font-size: 12.5px;
-	color: var(--text-muted);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	user-select: all;
-}
-.semlink-share-copy {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 5px;
-	cursor: pointer;
-	background: none;
-	border: none;
-	border-radius: 6px;
-	color: var(--text-muted);
-}
-.semlink-share-copy:hover {
-	background: var(--background-modifier-hover);
-	color: var(--text-normal);
-}
-
 /* Off-screen holder for rendering shared conversation markdown. */
 .semlink-share-offscreen {
 	position: absolute;
@@ -6078,35 +6085,6 @@ body .semlink-msg-user::selection {
 	border-color: var(--text-accent);
 }
 
-/* ── Share revoke button ── */
-/* Modal-scoped + button tag: outspecifies theme globals like button,
-   button:hover that would otherwise repaint the hover state. Default is a
-   quiet white/ink outline button; hover turns it solid error red. */
-.semlink-share-modal button.semlink-share-revoke,
-button.semlink-share-revoke {
-	margin-top: 4px;
-	padding: 7px 14px;
-	cursor: pointer;
-	border-radius: 8px;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-primary, #fff);
-	color: var(--text-normal, #000);
-	font-size: 13px;
-	font-weight: 600;
-	transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
-}
-.semlink-share-modal button.semlink-share-revoke:hover,
-button.semlink-share-revoke:hover {
-	background: var(--text-error, #c54444);
-	border-color: var(--text-error, #c54444);
-	color: #fff;
-}
-
-/* Share rows (MCP card anatomy) in the paused state. */
-.semlink-mcp-server.is-paused {
-	opacity: 0.62;
-}
-
 /* ── Share QR popup ── */
 .semlink-share-qr {
 	display: flex;
@@ -6121,16 +6099,6 @@ button.semlink-share-revoke:hover {
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 10px;
 	shape-rendering: crispEdges;
-}
-
-
-/* Share rows: action buttons in one horizontal row, pinned right. */
-.semlink-mcp-server-actions {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	flex: none;
-	margin-left: auto;
 }
 
 
@@ -6174,7 +6142,6 @@ button.semlink-share-revoke:hover {
 	flex-direction: column;
 }
 .semlink-mcp-client-modal .semlink-mcp-edit-segrow {
-	justify-content: flex-start;
 	position: sticky;
 	top: 0;
 	z-index: 2;
@@ -6192,109 +6159,6 @@ button.semlink-share-revoke:hover {
 }
 
 /* ── 通用页：上手清单（中性卡片 + 时间轴圆点 + 进度条） ── */
-.semlink-checklist {
-	background: var(--background-secondary);
-	border-radius: 14px;
-	padding: 14px 18px 10px;
-	/* margin-top: 18px; */
-}
-.semlink-checklist-head {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-}
-.semlink-checklist-title {
-	font-size: 13.5px;
-	font-weight: 600;
-	color: var(--text-normal);
-}
-.semlink-checklist-progress {
-	font-size: 12px;
-	color: var(--text-muted);
-	font-variant-numeric: tabular-nums;
-}
-.semlink-checklist-bar {
-	height: 6px;
-	border-radius: 3px;
-	background: var(--background-modifier-border);
-	margin: 9px 0 4px;
-	overflow: hidden;
-}
-.semlink-checklist-bar-fill {
-	height: 100%;
-	width: 0%;
-	border-radius: 3px;
-	background: var(--interactive-accent);
-	transition: width 0.25s ease;
-}
-.semlink-checklist-row {
-	position: relative;
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding: 8px 0;
-}
-/* 时间轴连接线：相邻两行的圆点之间 */
-.semlink-checklist-row + .semlink-checklist-row::before {
-	content: "";
-	position: absolute;
-	left: 10px;
-	top: -8px;
-	height: 16px;
-	width: 1.5px;
-	background: var(--background-modifier-border);
-}
-.semlink-checklist-icon {
-	position: relative;
-	z-index: 1;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 21px;
-	height: 21px;
-	border-radius: 50%;
-	color: var(--text-faint);
-	background: var(--background-primary);
-	box-shadow: 0 0 0 1.5px var(--background-modifier-border);
-}
-.semlink-checklist-icon svg {
-	width: 13px;
-	height: 13px;
-}
-.semlink-checklist-row.is-done .semlink-checklist-icon {
-	background: var(--interactive-accent);
-	box-shadow: none;
-	color: #ffffff;
-}
-.semlink-checklist-label {
-	flex: 1 1 auto;
-	font-size: 13.5px;
-	color: var(--text-normal);
-}
-.semlink-checklist-row.is-done .semlink-checklist-label {
-	color: var(--text-muted);
-}
-.semlink-checklist-action {
-	flex-shrink: 0;
-	font-size: 12.5px;
-	padding: 5px 14px;
-	border-radius: 8px;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-primary);
-	color: var(--text-normal);
-	cursor: pointer;
-	transition: border-color 0.12s ease, color 0.12s ease;
-}
-.semlink-checklist-action:hover {
-	border-color: var(--interactive-accent);
-	color: var(--interactive-accent);
-}
-.semlink-checklist.is-complete .semlink-checklist-bar-fill {
-	background: var(--interactive-accent);
-}
-.semlink-checklist.is-complete .semlink-checklist-label {
-	text-decoration: none;
-}
 
 
 /* 嵌入引导索引步：当前正在嵌入的文本行 */
@@ -6320,70 +6184,6 @@ button.semlink-share-revoke:hover {
 	flex: 0 0 auto;
 	white-space: nowrap;
 	font-variant-numeric: tabular-nums;
-}
-
-/* ── RAG 页：索引进度卡片 ── */
-.semlink-index-card {
-	/* primary 底 + 发丝边框（而非 secondary 底）：secondary（≈#f2f3f5）与
-	   弹窗主区底色 #f6f6f6 几乎同色，卡片在弹窗里"隐形"（用户报障）——
-	   primary 白底在灰页弹窗里靠底色区分，白页侧栏里靠边框区分，两种
-	   宿主都成立；深色模式同理随变量走，不硬编码浅色。 */
-	background: var(--background-primary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 12px;
-	padding: 12px 16px;
-	margin: 4px 0 14px;
-}
-.semlink-index-card-head {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 12px;
-	margin-bottom: 6px;
-}
-.semlink-index-card-title {
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--text-normal);
-}
-/* 面板标题右侧的功能开关（索引/自动嵌入总开关）：
-   固定尺寸防挤压，center 对齐压过 head 的 baseline。 */
-.semlink-index-card-head .semlink-index-card-toggle {
-	flex: 0 0 auto;
-	align-self: center;
-}
-.semlink-index-card-value {
-	color: var(--text-normal);
-	font-variant-numeric: tabular-nums;
-	text-align: right;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.semlink-index-card-row {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 3px 0;
-	font-size: 12.5px;
-}
-.semlink-index-card-label {
-	color: var(--text-muted);
-	flex-shrink: 0;
-}
-
-/* 标题行的数值与块数值统一右对齐 */
-
-/* ── 索引/嵌入双面板：左右并列，窄幅自动堆叠 ── */
-.semlink-index-panels {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-	gap: 10px;
-	margin: 4px 0 14px;
-}
-.semlink-index-panels .semlink-index-card {
-	margin: 0;
 }
 
 /* ── 笔记分享：editor header 两态图标 ──
@@ -6585,169 +6385,21 @@ button.semlink-share-revoke:hover {
 	flex-shrink: 0;
 }
 
-/* ── Git 仓库浏览弹窗：搜索 + 文件树（文件夹折叠/计数，文件点击打开） ── */
-.semlink-git-repo-modal .modal-content {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	overflow: hidden;
-}
-.semlink-git-repo-search {
-	width: 100%;
-	padding: 6px 10px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 8px;
-	background: var(--background-primary);
-	font-size: 13px;
-}
-.semlink-git-repo-count {
-	font-size: 12px;
-	color: var(--text-muted);
-}
-.semlink-git-repo-body {
-	overflow: auto;
-	min-height: 200px;
-	max-height: 55vh;
-	padding-right: 4px;
-}
-.semlink-git-repo-body-inner {
-	/* 子树容器：折叠重绘以行为单位，不需要额外装饰 */
-}
-.semlink-git-repo-row {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 4px 6px;
-	border-radius: 6px;
-	font-size: 13px;
-	cursor: pointer;
-	color: var(--text-normal);
-	min-width: 0;
-}
-.semlink-git-repo-row:hover {
-	background: var(--background-modifier-hover);
-}
-.semlink-git-repo-row.is-file .semlink-git-repo-name {
-	color: var(--text-muted);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.semlink-git-repo-chev {
-	display: flex;
-	flex-shrink: 0;
-	color: var(--text-muted);
-}
-.semlink-git-repo-chev .svg-icon,
-.semlink-git-repo-chev svg {
-	width: 14px;
-	height: 14px;
-}
-.semlink-git-repo-name {
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.semlink-git-repo-count {
-	flex-shrink: 0;
-	font-size: 11px;
-	color: var(--text-muted);
-	background: var(--background-modifier-border);
-	border-radius: 999px;
-	padding: 0 .42rem;
-	line-height: 1.4;
-}
 
-/* ── Git 仓库浏览：面包屑导航（根 / A / B，点击回跳） ── */
-.semlink-git-repo-crumbs {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 2px;
-	font-size: 12.5px;
-	min-height: 22px;
-}
-.semlink-git-repo-crumb {
-	color: var(--interactive-accent);
-	cursor: pointer;
-	border-radius: 4px;
-	padding: 1px 4px;
-}
-.semlink-git-repo-crumb:hover {
-	background: var(--background-modifier-hover);
-}
-.semlink-git-repo-crumb.is-current {
-	color: var(--text-normal);
-	font-weight: 600;
-	cursor: default;
-}
-.semlink-git-repo-crumb.is-current:hover {
-	background: none;
-}
-.semlink-git-repo-crumb-sep {
-	color: var(--text-faint);
-}
+@container settings (max-width: 560px) {
+    /* Model 页单列钻入已是全宽级通用形态（见 .semlink-mt 基线），
+       窄幅无需额外规则；这里只保留真正窄幅专属的条目。 */
 
-/* ── Git 未初始化态：整页只有一个居中的主行动按钮 ── */
-.semlink-git-init-btn {
-	display: block;
-	width: 100%;
-	padding: 12px;
-	font-size: 14px;
-	border-radius: 10px;
-	margin-top: 12px;
-}
-
-/* ══════════ 设置页响应式（容器查询，作用域 .semlink-settings-root） ══════════ */
-
-/* 窄容器（侧栏 / 窄弹窗）≤720px：模型页双栏堆叠、MCP 行折行、
-   许可证卡折行、内嵌屏面板高度随容器（100vh 在侧栏里是整窗高度，失真）。 */
-@container settings (max-width: 720px) {
-    /* 模型页：左栏 provider 列表从侧栏变顶栏 */
-    .smart-vault-settings .semlink-mt {
-        flex-direction: column;
-        min-height: 0;
-    }
-    .smart-vault-settings .semlink-mt-providers {
-        width: 100%;
-        border-right: none;
-        border-bottom: 1px solid var(--background-modifier-border);
-        padding-right: 0;
-        padding-bottom: 10px;
-        max-height: 220px;
-        overflow-y: auto;
-    }
-    .smart-vault-settings .semlink-mt-models {
-        min-height: 320px;
-    }
-
-    /* MCP / Share 服务器行：窄幅允许换行，toggle 靠右独立成行 */
-    .semlink-mcp-server {
-        flex-wrap: wrap;
-    }
-    .semlink-mcp-server .semlink-mcp-server-main {
-        flex: 1 1 0;
-        min-width: 0;
-    }
-    .semlink-mcp-server .semlink-mcp-server-toggle {
-        margin-left: auto;
-    }
-
-    /* 许可证卡内部行折行 */
-    .smart-vault-settings .semlink-license-card *,
-    .smart-vault-settings .semlink-license-card {
-        flex-wrap: wrap;
-    }
-
-    /* 内嵌设置屏：面板高度随容器 flex 撑满，不按 100vh 钉死 */
-    .semlink-settings-screen .semlink-settings-root .semlink-settings-panel {
-        max-height: none;
-        flex: 1 1 auto;
+    /* 密钥行不再折行：输入框 flex-1 + 激活钮行内固定宽——通栏 disabled
+       淡紫大块像"没填完的填空"，一行式是表单的干净解 */
+    .semlink-license-keyrow .semlink-license-apply {
+        flex: 0 0 auto;
+        min-width: 88px;
     }
 }
 
 /* 极窄容器 ≤480px：标题/问候纵排、卡片内边距收紧、语言下拉放开限宽 */
-@container settings (max-width: 480px) {
+@container settings (max-width: 560px) {
     .smart-vault-settings .semlink-settings-heading-left {
         display: flex;
         flex-direction: column;
@@ -6755,9 +6407,6 @@ button.semlink-share-revoke:hover {
     }
     .smart-vault-settings .semlink-settings-lang select.dropdown {
         max-width: none;
-    }
-    .semlink-mcp-server {
-        padding: 8px 10px;
     }
     .smart-vault-settings .setting-item {
         padding-top: 12px;
@@ -6831,6 +6480,14 @@ button.semlink-share-revoke:hover {
 .semlink-search-view.semlink-main-tab .semlink-search-footer {
     max-width: min(1080px, calc(100% - 32px));
 }
+/* 设置屏豁免 1080 限宽（用户拍板"左右空间充分利用"）：设置布局自带
+   菜单列+面板的两栏宽度管理，1080+margin auto 会在宽窗左侧拖出大空白
+   且压住 Model 双列。 */
+.semlink-search-view.semlink-main-tab.semlink-settings-active .semlink-search-header,
+.semlink-search-view.semlink-main-tab.semlink-settings-active .semlink-search-status,
+.semlink-search-view.semlink-main-tab.semlink-settings-active .semlink-search-messages {
+    max-width: none;
+}
 
 
 /* 视图根 padding 清零：同特异性覆盖核心 app.css 的
@@ -6872,8 +6529,8 @@ button.semlink-share-revoke:hover {
 /* ══════════ 设置页窄幅重排（六个 tab，≤480px 容器） ══════════
    子代理设计 + 人工审核整合版。断点沿用 .semlink-settings-root 的
    container settings；720px 桶保持 481-720 中间态不变。 */
+@container settings (max-width: 720px) {
 
-@container settings (max-width: 480px) {
     /* ── 公共基座：原生 Setting 行纵向堆叠 ──
        Obsidian 核心只在视口 ≤750px 时堆叠 setting-item，桌面窄侧栏
        （视口很宽）永远不触发 → 控制列 flex-shrink:0 把按钮硬顶在右、
@@ -6911,79 +6568,22 @@ button.semlink-share-revoke:hover {
         max-width: 100%;
     }
 
-    /* ── 通用：许可证卡纵向漏斗 + 上手清单 + 语言下拉 ── */
-    .smart-vault-settings .semlink-license-card {
-        padding: 14px 14px;
+    /* ── 通用：许可卡窄幅收紧 + 清单行收紧 ── */
+    .semlink-license-card {
+        padding: 12px 14px;
     }
-    .smart-vault-settings .semlink-license-card-inner {
-        padding: 12px 12px;
-    }
-    .smart-vault-settings .semlink-license-card-headline {
-        font-size: 18px;
-    }
-    .smart-vault-settings .semlink-license-card-pricerow {
-        flex-wrap: wrap;
-        row-gap: 2px;
-    }
-    .smart-vault-settings .semlink-license-card-apply.mod-cta {
-        flex: 1 1 100%;
-        text-align: center;
-        padding: 10px 14px;
-    }
-    .smart-vault-settings .semlink-license-card-keyrow {
-        flex-wrap: wrap;
-        row-gap: 8px;
-    }
-    .smart-vault-settings .semlink-license-card-input {
-        flex: 1 1 100%;
-        min-width: 0;
-    }
-    .smart-vault-settings .semlink-license-card-keyrow .semlink-license-card-apply {
-        flex: 1 1 100%;
-        text-align: center;
-    }
-    .smart-vault-settings .semlink-license-card-footrow {
-        flex-wrap: wrap;
-        row-gap: 6px;
-    }
-    .semlink-checklist {
-        padding: 12px 12px 8px;
+    .semlink-license-price {
+        font-size: 24px;
     }
     .semlink-checklist-row {
         gap: 10px;
-    }
-    .semlink-checklist-label {
-        min-width: 0;
-    }
-    .semlink-checklist-action {
-        padding: 5px 10px;
+        padding: 8px 12px;
     }
     .smart-vault-settings .semlink-settings-lang select.dropdown {
         max-width: 100%;
     }
 
-    /* ── MCP / 分享：服务器卡确定性两行 ──
-       main 恰好吃满首行（图标36+间距10），按钮组/开关必然折到第二行；
-       720 块的 flex:1 1 0 让 main 无限收缩、折行永不触发——这里压过。 */
-    .semlink-mcp-server {
-        row-gap: 8px;
-    }
-    .semlink-mcp-server .semlink-mcp-server-main {
-        flex: 1 1 calc(100% - 46px);
-    }
-    .semlink-mcp-server .semlink-mcp-server-toggle {
-        margin-left: auto;
-    }
-    .semlink-mcp-server .semlink-mcp-server-sub {
-        font-size: 11px;
-    }
-    .semlink-mcp-server .semlink-mcp-server-actions {
-        flex: 1 1 100%;
-        margin-left: 0;
-        justify-content: flex-end;
-    }
-
-    /* ── Git：Pro 门禁卡两行（说明独占首行，解锁按钮整行） ── */
+    /* ── Pro 门禁卡两行（说明独占首行，解锁按钮整行） ── */
     .semlink-settings-root .semlink-pro-gate {
         flex-wrap: wrap;
         row-gap: 8px;
@@ -6998,50 +6598,11 @@ button.semlink-share-revoke:hover {
         margin-left: 0;
     }
 
-    /* ── 模型：provider 列表 → 顶部横向滚动 chip 条 ──
-       720 块的「顶栏列表 max-height:220px」在 300px 下吃掉近半屏——
-       chip 条把 provider 面板压到一行高。拖拽事件绑在行元素上，横向
-       拖 chip 重排/归档原样生效；grip 在触屏本就无效，隐藏零损失。 */
-    .smart-vault-settings .semlink-mt-providers {
-        max-height: none;
-        overflow: visible;
-        padding-bottom: 4px;
-    }
-    .smart-vault-settings .semlink-mt-provider-list {
-        flex-direction: row;
-        align-items: center;
-        gap: 6px;
-        flex: 0 0 auto;
-        overflow-x: auto;
-        overflow-y: hidden;
-        padding: 2px 2px 6px;
-        scrollbar-width: none;
-    }
-    .smart-vault-settings .semlink-mt-provider-list::-webkit-scrollbar {
-        display: none;
-    }
+    /* ── 模型：竖向收紧（契约 §5a 竖向滚动优先——窄幅不再用横滚 chip 条，
+       与宽幅统一为竖向分组卡列表，只收紧行高与图标；拖拽/开关/跑马灯
+       原样保留；单列钻入后名称不再限宽，卡片全宽即名称全宽） ── */
     .smart-vault-settings .semlink-mt-provider {
-        flex: 0 0 auto;
-        padding: 5px 10px;
-        gap: 6px;
-        border: 1px solid var(--background-modifier-border);
-        border-radius: 999px;
-        background: var(--background-secondary);
-    }
-    .smart-vault-settings .semlink-mt-provider.is-active {
-        border-color: var(--interactive-accent);
-        background: hsla(var(--interactive-accent-hsl), 0.12);
-    }
-    .smart-vault-settings .semlink-mt-provider .semlink-mt-provider-grip,
-    .smart-vault-settings .semlink-mt-provider .semlink-mt-provider-count,
-    .smart-vault-settings .semlink-mt-provider .semlink-mt-folder-count {
-        display: none;
-    }
-    .smart-vault-settings .semlink-mt-provider.is-nested {
-        margin-left: 0;
-    }
-    .smart-vault-settings .semlink-mt-provider.is-folder {
-        border-style: dashed;
+        padding: 8px 12px;
     }
     .smart-vault-settings .semlink-mt-provider-logo .semlink-mt-logo-svg,
     .smart-vault-settings .semlink-mt-provider-logo svg,
@@ -7050,29 +6611,11 @@ button.semlink-share-revoke:hover {
         height: 18px;
         border-radius: 5px;
     }
-    .smart-vault-settings .semlink-mt-provider-name {
-        max-width: 11ch;
-    }
-    .smart-vault-settings .semlink-mt-provider .semlink-mt-provider-gear {
-        display: none;
-    }
-    .smart-vault-settings .semlink-mt-provider.is-active .semlink-mt-provider-gear {
-        display: flex;
-    }
-    @supports (hover: hover) {
-        .smart-vault-settings .semlink-mt-provider:hover .semlink-mt-provider-gear {
-            display: flex;
-        }
-    }
-
-    /* 模型行：去 grip、收紧间距，保持两行结构（名称跑马灯依赖
-       nowrap + JS 测宽，不可改多行） */
+    /* 模型行：收紧间距，保持两行结构（名称跑马灯依赖 nowrap + JS 测宽，
+       不可改多行） */
     .smart-vault-settings .semlink-mt-model {
         gap: 8px;
-        padding: 7px 8px;
-    }
-    .smart-vault-settings .semlink-mt-model .semlink-mt-provider-grip {
-        display: none;
+        padding: 7px 12px;
     }
     .smart-vault-settings .semlink-mt-model-logo .semlink-mt-logo-svg,
     .smart-vault-settings .semlink-mt-model-logo svg,
@@ -7086,82 +6629,1494 @@ button.semlink-share-revoke:hover {
     .smart-vault-settings .semlink-mt-model-ctx {
         font-size: 11px;
     }
-    .smart-vault-settings .semlink-mt-showing {
-        flex-wrap: wrap;
-        row-gap: 6px;
+
+    /* ── MCP：服务卡行窄幅收紧 ── */
+    .semlink-share-row {
+        padding: 8px 14px;
     }
-    .smart-vault-settings .semlink-mt-add-model {
-        padding: 6px 10px;
+    .semlink-mcp-card .semlink-row {
+        padding: 10px 14px;
     }
-    .smart-vault-settings .semlink-mt-configure {
-        padding: 6px 16px;
+    .semlink-mcp-url-row .semlink-mcp-url-feedback {
+        display: none;
     }
 
-    /* ── RAG：双面板单列堆叠 + 标题百分比升级为主数字 ── */
-    .semlink-index-panels {
-        grid-template-columns: 1fr;
-        gap: 8px;
+    /* ── RAG：状态卡窄幅收紧（行 padding 10/14、hero 数字 20px） ── */
+    .semlink-rag-status .semlink-row {
+        padding: 10px 14px;
     }
-    .semlink-index-card {
-        padding: 10px 12px;
-        margin: 0;
+    .semlink-rag-hero {
+        padding: 10px 14px 6px;
     }
-    .semlink-index-card-head {
-        gap: 8px;
-        margin-bottom: 4px;
+    .semlink-rag-hero-value {
+        font-size: 20px;
     }
-    .semlink-index-card-title {
-        font-size: 15px;
-    }
-    .semlink-index-card-row {
-        font-size: 12px;
-        padding: 2px 0;
+    .semlink-rag-bar {
+        margin-left: 14px;
+        margin-right: 14px;
+        width: auto;
     }
 }
 
-/* ── 分享页空状态（此前无任何样式，全宽度生效） ── */
-.semlink-share-tab-empty {
-    padding: 22px 14px;
-    border: 1px dashed var(--background-modifier-border);
-    border-radius: 10px;
-    color: var(--text-muted);
-    font-size: 13px;
-    text-align: center;
-    margin-bottom: 16px;
-}
-
-/* ── 设置屏窄幅：tab 栏吸附顶部（单行不折行）──
-   根节点 flex 列 + 面板内部滚动：tabs 排在标题与面板之间（自然顺序），
-   面板撑满剩余高度就地滚动——tab 栏恒在顶部可见，不再折行。 */
-@container settings (max-width: 480px) {
+/* ── 设置屏窄幅：iPhone 形态（横向 tab 栏 + 面板常显）──
+   旧窄幅"列表 ↔ 详情互斥钻入"已随竖排菜单列废弃：tab 栏任何宽度都
+   常驻在面板上方，窄幅只收紧分段尺寸并收起图标（五段并排，纯文字
+   才放得下）。高度链照旧：layout flex 列填满、面板内部滚动。 */
+@container settings (max-width: 560px) {
     .semlink-search-welcome.semlink-settings-screen {
         height: 100%;
         padding: 0 12px 0;
     }
-    .semlink-settings-root > .semlink-settings-tabs {
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        scrollbar-width: none;
-        gap: 4px;
-        margin: 10px -12px 10px;
-        padding: 0 10px 8px;
-        background: var(--background-primary);
-        border-bottom: 1px solid var(--background-modifier-border);
+    .semlink-settings-layout {
+        gap: 10px;
     }
-    .semlink-settings-root > .semlink-settings-tab {
-        flex: 1 1 auto;
-        text-align: center;
-        white-space: nowrap;
-        padding: 8px 6px;
-        border-radius: 8px;
+    .semlink-settings-menu-item {
+        /* 五段均分后单段 ~65px：只留文字（图标收起），字号随段宽降一档 */
+        font-size: 12.5px;
+        padding: 0 6px;
     }
-    .semlink-settings-root > .semlink-settings-tab.is-active {
-        background: hsla(var(--interactive-accent-hsl), 0.14);
-        color: var(--interactive-accent);
-        border-color: transparent;
+    .semlink-settings-menu-item .semlink-settings-menu-icon {
+        display: none;
     }
-    .semlink-settings-screen > .semlink-settings-panel {
-        max-height: none;
+    .semlink-settings-screen .semlink-settings-panel {
         padding-bottom: 10px;
     }
 }
+
+/* 纯 opacity 淡入：reduced-motion 降级、面板切换、行内错误提示共用 */
+@keyframes semlink-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* ── 压回 Obsidian 的裸 button 默认皮肤 ──
+   app.css 的 button:not(.clickable-icon)（:not 参数计入特异性，实为
+   0-1-1）给每个按钮塞 --input-shadow 描边环 + interactive-normal 底色，
+   压过插件 (0-1-0) 的 box-shadow:none/background:none——菜单行、折叠头、
+   清单摘要行因此带环和白胶囊（行与行的环拼成通栏"黑线"，暗色模式下
+   底色发灰）。
+   特异性天平：本规则用 :where(button) 把元素选择器降零，恰为 0-2-0——
+   高于 app.css 的 0-1-1（同靠后源序更稳），低于/平于按钮三级体系与
+   各裸按钮 hover/active 态（均 0-2-0，源序在本规则之后，稳赢）。
+   搜索清除钮是刻意灰底，已单独提到 0-2-1。
+   作用域只限设置根：ConfirmModal 等独立弹窗只有 smart-vault-settings
+   类、按钮依赖 Obsidian 原生皮肤，不能被这里透明化。 */
+.semlink-settings-root :where(button):not(.clickable-icon) {
+    box-shadow: none;
+    background-color: transparent;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   iOS 质感设计契约 · 基座（v1.1）
+   令牌 / 分组卡 / 行 / 按钮三级 —— 全设置页共用，其他页只引用不重定义。
+   原则优先级：可打断 > 一致 > 精致；深色模式全走主题变量。
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+    --sl-radius-card: 12px;
+    --sl-radius-inner: 8px;
+    --sl-space-1: 4px;
+    --sl-space-2: 8px;
+    --sl-space-3: 12px;
+    --sl-space-4: 16px;
+}
+
+/* 分组卡：相关设置收进同一张卡，行间 hairline 分隔 */
+.semlink-card {
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--sl-radius-card);
+    overflow: hidden;
+}
+.semlink-card > * + * {
+    border-top: 1px solid var(--background-modifier-border);
+}
+.semlink-card-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+    margin: 10px 4px 6px;
+}
+
+/* 行：label 列（标题+说明）+ 控件列 */
+.semlink-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sl-space-3);
+    min-height: 44px;
+    padding: 10px 16px;
+}
+.semlink-row-label {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.semlink-row-title {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--text-normal);
+}
+.semlink-row-desc {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+.semlink-row-value {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+.semlink-row-control {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+.semlink-row.is-clickable {
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    font: inherit;
+}
+/* 0-2-0 提级：button 行（git 仓库状态行）要赢回 blanket 的 transparent；div 行不受影响 */
+.semlink-settings-root .semlink-row.is-clickable:active {
+    background: var(--background-modifier-hover);
+}
+
+/* 按钮三级：primary 每屏唯一 / secondary 次行动 / ghost 行内小操作 */
+.smart-vault-settings :is(.semlink-btn-primary, .semlink-btn-secondary, .semlink-btn-ghost) {
+    height: 32px;
+    padding: 0 14px;
+    border: none;
+    box-shadow: none;
+    border-radius: var(--sl-radius-inner);
+    font-size: 13.5px;
+    font-weight: 550;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.12s ease-out, background 0.1s ease-out, color 0.1s ease-out;
+}
+/* CupertinoButton 按压反馈：整钮 pressedOpacity 0.4——iOS 惯例是按压
+   淡出而非缩放/加深（react-cupertino-ui 按钮规格 pressedOpacity="0.4"） */
+.smart-vault-settings :is(.semlink-btn-primary, .semlink-btn-secondary, .semlink-btn-ghost):active {
+    opacity: 0.4;
+}
+.smart-vault-settings :is(.semlink-btn-primary, .semlink-btn-secondary, .semlink-btn-ghost):focus-visible {
+    outline: 2px solid hsla(var(--interactive-accent-hsl), 0.5);
+    outline-offset: 1px;
+}
+.smart-vault-settings .semlink-btn-primary {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+.smart-vault-settings .semlink-btn-primary:hover {
+    background: var(--interactive-accent-hover);
+}
+.smart-vault-settings .semlink-btn-secondary {
+    background: hsla(var(--interactive-accent-hsl), 0.12);
+    color: var(--interactive-accent);
+}
+.smart-vault-settings .semlink-btn-secondary:hover {
+    background: hsla(var(--interactive-accent-hsl), 0.18);
+}
+.smart-vault-settings .semlink-btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+}
+.smart-vault-settings .semlink-btn-ghost:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+.smart-vault-settings .semlink-btn-ghost.mod-danger {
+    color: var(--text-error);
+}
+.smart-vault-settings .semlink-btn-ghost.mod-danger:hover {
+    background: color-mix(in srgb, var(--text-error) 10%, transparent);
+    color: var(--text-error);
+}
+.smart-vault-settings :is(.semlink-btn-primary, .semlink-btn-secondary, .semlink-btn-ghost)[disabled] {
+    opacity: 0.45;
+    cursor: default;
+}
+.smart-vault-settings :is(.semlink-btn-primary, .semlink-btn-secondary, .semlink-btn-ghost)[disabled]:active {
+    opacity: 0.45;
+}
+
+/* ── Cupertino 开关几何（react-cupertino-ui CupertinoSwitch 规格）────
+   51×31 轨道 / 27px 圆钮（四周 2px 内距）/ 药丸圆角 / 白钮带双层投影。
+   on 色走主题紫（用户拍板保持紫色主题，弃用 iOS 系统绿）；
+   弹簧曲线带轻微回弹；减动效时全程关闭过渡。 */
+.smart-vault-settings .checkbox-container {
+    position: relative;
+    width: 51px;
+    min-width: 51px;
+    height: 31px;
+    border-radius: 16px;
+    background-color: var(--sl-fill, rgba(118, 118, 128, 0.12));
+    box-shadow: none;
+    transition: background-color 0.2s ease-out;
+}
+.smart-vault-settings .checkbox-container::after {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 27px;
+    height: 27px;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25), 0 0 1px rgba(0, 0, 0, 0.15);
+    transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.15);
+}
+.smart-vault-settings .checkbox-container.is-enabled,
+.smart-vault-settings .checkbox-container.is-checked {
+    background-color: var(--interactive-accent);
+}
+.smart-vault-settings .checkbox-container.is-enabled::after,
+.smart-vault-settings .checkbox-container.is-checked::after {
+    transform: translateX(20px);
+}
+.smart-vault-settings .semlink-btn-block {
+    width: 100%;
+    height: 40px;
+}
+
+/* busy spinner（激活/停用/CTA 共用） */
+.semlink-settings-root :is(.semlink-license-cta, .semlink-license-apply, .semlink-license-deactivate).is-busy::before {
+    content: "";
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-right: 8px;
+    border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: semlink-spin 0.8s linear infinite;
+}
+
+/* ═══ 通用页：许可营销卡（白卡材质，与功能卡同一节奏） ═══
+   曾用 accent 淡染整卡：营销页语言搬进设置页、一屏五处紫，已废弃——
+   紫色只留给 badge 与 CTA 两处，卡体回归分组白卡。 */
+.semlink-license-card {
+    background: var(--sl-card, var(--background-primary));
+    border: none;
+    border-radius: var(--sl-radius-card);
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    min-width: 0;
+}
+.semlink-license-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.semlink-license-card-logo {
+    display: flex;
+    color: var(--interactive-accent);
+}
+.semlink-license-card-logo .svg-icon {
+    width: 20px;
+    height: 20px;
+}
+.semlink-license-card-title {
+    font-size: 15px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    color: var(--text-normal);
+}
+.semlink-license-card-badge {
+    margin-left: auto;
+    background: hsla(var(--interactive-accent-hsl), 0.14);
+    color: var(--interactive-accent);
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 3px 10px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+.semlink-license-headline {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    color: var(--text-normal);
+    margin-bottom: 2px;
+}
+.semlink-license-sub {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+}
+.semlink-license-pricerow {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.semlink-license-price {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: var(--text-normal);
+}
+.semlink-license-was {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+.semlink-license-lifetime {
+    font-size: 12px;
+    color: var(--text-faint);
+}
+.semlink-license-note {
+    display: block;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-muted);
+    padding: 4px 0;
+}
+/* CTA 收一档（40→36）：白卡里通栏大块紫已经足够重，不再加高 */
+.smart-vault-settings .semlink-license-cta {
+    height: 36px;
+}
+
+/* 密钥激活卡（中性设置卡） */
+.semlink-license-keycard {
+    margin-bottom: 20px;
+    padding: 12px 16px 14px;
+}
+.semlink-license-keylabel {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin: 0 2px 8px;
+}
+.semlink-license-keyrow {
+    display: flex;
+    gap: var(--sl-space-2);
+    min-width: 0;
+}
+.semlink-license-keyinput {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: var(--sl-radius-inner);
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-secondary);
+    font-size: 13px;
+}
+.semlink-license-keyinput:focus-visible {
+    outline: 2px solid hsla(var(--interactive-accent-hsl), 0.5);
+    outline-offset: 1px;
+}
+.semlink-license-keyinput.is-error {
+    border-color: var(--text-error);
+}
+.semlink-license-keyerror {
+    display: none;
+    margin-top: 6px;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--text-error);
+}
+.semlink-license-keycard.has-error .semlink-license-keyerror {
+    display: block;
+    /* 淡入引导视线而非突袭：错误出现时用户往往正盯着输入框 */
+    animation: semlink-fade-in 0.15s ease-out;
+}
+
+/* Pro 态：营销退场，一条设置行 */
+.semlink-license-procard {
+    margin-bottom: var(--sl-space-3);
+}
+/* Pro 态：营销退场，一条设置行 */
+.semlink-license-procard {
+    margin-bottom: var(--sl-space-3);
+}
+.semlink-license-pro-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sl-space-3);
+    min-height: 52px;
+    padding: 10px 16px;
+}
+.semlink-license-pro-logo {
+    display: flex;
+    color: var(--interactive-accent);
+}
+.semlink-license-pro-logo .svg-icon {
+    width: 20px;
+    height: 20px;
+}
+.semlink-license-pro-info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.semlink-license-pro-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+.semlink-license-pro-desc {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* ╕═ 通用页：快速开始清单 ╕ */
+.semlink-checklist {
+    margin-bottom: 20px;
+}
+.semlink-checklist-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 4px 6px;
+}
+.semlink-checklist-head .semlink-card-title {
+    margin: 0;
+}
+.semlink-checklist-meter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.semlink-checklist-meter-seg {
+    width: 22px;
+    height: 4px;
+    border-radius: 2px;
+    overflow: hidden;
+    background: var(--background-modifier-border);
+}
+.semlink-checklist-meter-fill {
+    display: block;
+    height: 100%;
+    width: 100%;
+    /* scaleX 替代 width 动画：合成层属性，过渡不触发重排 */
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+    background: var(--interactive-accent);
+    transition: transform 0.2s ease-out;
+}
+.semlink-checklist-meter-count {
+    font-size: 12px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+    margin-left: 2px;
+}
+.semlink-checklist.is-complete .semlink-checklist-meter-count {
+    color: var(--interactive-accent);
+    font-weight: 600;
+}
+.semlink-checklist-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sl-space-3);
+    min-height: 44px;
+    padding: 8px 16px;
+}
+.semlink-checklist-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    color: var(--text-faint);
+    transition: background 0.15s ease-out, color 0.15s ease-out;
+}
+.semlink-checklist-icon svg {
+    width: 12px;
+    height: 12px;
+}
+.semlink-checklist-row.is-done .semlink-checklist-icon {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+.semlink-checklist-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 14px;
+    color: var(--text-normal);
+}
+.semlink-checklist-row.is-done .semlink-checklist-label {
+    color: var(--text-muted);
+}
+.semlink-checklist-row.is-done .semlink-checklist-action {
+    background: transparent;
+    color: var(--text-muted);
+}
+/* 完成收起态：整卡折为单行摘要，点按展开回看 */
+.semlink-checklist-summary {
+    display: none;
+    width: 100%;
+    align-items: center;
+    gap: var(--sl-space-3);
+    min-height: 44px;
+    padding: 8px 16px;
+    background: none;
+    border: none;
+    box-shadow: none;
+    font: inherit;
+    color: var(--text-normal);
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.1s ease-out;
+}
+/* 0-2-0 提级：赢回 blanket 的 transparent（button 元素） */
+.semlink-settings-root .semlink-checklist-summary:active {
+    background: var(--background-modifier-hover);
+}
+.semlink-checklist-summary:focus-visible {
+    outline: 2px solid hsla(var(--interactive-accent-hsl), 0.5);
+    outline-offset: -2px;
+}
+.semlink-checklist-summary-icon {
+    display: flex;
+    color: var(--interactive-accent);
+}
+.semlink-checklist-summary-text {
+    font-size: 14px;
+    font-weight: 500;
+}
+.semlink-checklist-summary-count {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+.semlink-checklist-summary-chevron {
+    display: flex;
+    color: var(--text-faint);
+    transition: transform 0.15s ease-out;
+}
+.semlink-checklist.is-expanded .semlink-checklist-summary-chevron {
+    transform: rotate(180deg);
+}
+.semlink-checklist.is-complete:not(.is-expanded) .semlink-checklist-rows {
+    display: none;
+}
+.semlink-checklist.is-complete:not(.is-expanded) .semlink-checklist-summary {
+    display: flex;
+}
+
+/* ╕═ RAG 页：状态卡（索引/嵌入两块 hero）+ 配置/维护分组卡 ╕ */
+.semlink-rag-card,
+.semlink-rag-status {
+	margin-bottom: var(--sl-space-4);
+}
+/* 块间 hairline 由 .semlink-card > * + * 自动提供 */
+.semlink-rag-hero {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sl-space-3);
+	padding: 12px 16px 8px;
+}
+.semlink-rag-hero-left {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+.semlink-rag-hero-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-muted);
+	letter-spacing: 0.02em;
+}
+/* loader 仅 is-running 时显示并转圈，平时不占位 */
+.semlink-rag-hero-spin {
+	display: none;
+	color: var(--interactive-accent);
+}
+.semlink-rag-hero-spin svg,
+.semlink-rag-hero-spin .svg-icon {
+	width: 12px;
+	height: 12px;
+}
+.semlink-rag-block.is-running .semlink-rag-hero-spin {
+	display: flex;
+	animation: semlink-spin 1s linear infinite;
+}
+.semlink-rag-hero-value {
+	font-size: 22px;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+	line-height: 1.1;
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+	flex-shrink: 0;
+}
+.semlink-rag-hero-value.is-empty {
+	color: var(--text-faint);
+	font-weight: 500;
+}
+/* 4px 进度条：border 色槽底 + accent fill（0.2s scaleX 过渡，不触重排） */
+.semlink-rag-bar {
+	height: 4px;
+	border-radius: 2px;
+	overflow: hidden;
+	background: var(--background-modifier-border);
+	margin: 0 16px;
+}
+.semlink-rag-bar-fill {
+	display: block;
+	height: 100%;
+	width: 100%;
+	transform: scaleX(0);
+	transform-origin: 0 50%;
+	background: var(--interactive-accent);
+	transition: transform 0.2s ease-out;
+}
+/* 数值行：紧凑 36px，标签左、数值右（tabular） */
+.semlink-rag-stat {
+	min-height: 36px;
+}
+.semlink-rag-stat-label {
+	font-size: 12.5px;
+	color: var(--text-muted);
+	flex-shrink: 0;
+}
+.semlink-rag-stat-value {
+	margin-left: auto;
+	font-size: 12.5px;
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ╕═ 高级选项折叠（RAG 高级项 / MCP 调试共用）：
+   chevron setIcon 一次，开合用 CSS rotate(90deg)；body 展开瞬间
+   播 reveal 动画（animationend 自移除）；头行带按压缩放 ╕ */
+.semlink-collapse-head {
+	display: flex;
+	align-items: center;
+	gap: var(--sl-space-2);
+	width: 100%;
+	padding: 10px 4px;
+	background: none;
+	border: none;
+	box-shadow: none;
+	font: inherit;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-muted);
+	letter-spacing: 0.02em;
+	text-align: left;
+	cursor: pointer;
+	border-radius: var(--sl-radius-inner);
+	transition: transform 0.1s ease-out, background 0.1s ease-out;
+}
+/* 0-2-0 提级：赢回 blanket 的 transparent（button 元素） */
+.semlink-settings-root .semlink-collapse-head:active {
+    transform: scale(0.98);
+    background: var(--background-modifier-hover);
+}
+.semlink-collapse-head:focus-visible {
+	outline: 2px solid hsla(var(--interactive-accent-hsl), 0.5);
+	outline-offset: 1px;
+}
+.semlink-collapse-chevron {
+	display: flex;
+	color: var(--text-faint);
+	transition: transform 0.15s ease-out;
+}
+.semlink-collapse-head.is-open .semlink-collapse-chevron {
+	transform: rotate(90deg);
+}
+.semlink-collapse-body.semlink-anim {
+	animation: semlink-collapse-reveal 0.18s ease-out;
+}
+@keyframes semlink-collapse-reveal {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+}
+
+/* 排除路径弹窗：右对齐实时计数（「将排除 {n} 条路径」） */
+.semlink-exclude-count {
+	margin-top: 6px;
+	font-size: 12px;
+	color: var(--text-faint);
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+/* ╕═ MCP 页：导语 + 内置/外部服务卡（图标槽/状态点/状态 pill/URL 行/导航行） ╕ */
+.semlink-mcp-lede {
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--text-muted);
+	margin: 0 4px 10px;
+}
+.semlink-mcp-card {
+	margin-bottom: var(--sl-space-4);
+}
+/* 图标槽：34px，内置服务 accent 淡染底 / 外部服务中性底 */
+.semlink-mcp-icon {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	flex-shrink: 0;
+	border-radius: 10px;
+	background: hsla(var(--interactive-accent-hsl), 0.12);
+	color: var(--interactive-accent);
+}
+.semlink-mcp-icon.is-neutral {
+	background: var(--background-secondary);
+	color: var(--text-muted);
+}
+.semlink-mcp-icon-img {
+	display: flex;
+}
+.semlink-mcp-icon-img svg,
+.semlink-mcp-icon-img .svg-icon {
+	width: 17px;
+	height: 17px;
+}
+/* 状态点：10px 圆，挂在图标右下角。运行=绿呼吸 2.4s / 停止=灰静止 / 失败=红 */
+.semlink-mcp-dot {
+	position: absolute;
+	right: -2px;
+	bottom: -2px;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--text-faint);
+	border: 2px solid var(--background-primary);
+}
+.semlink-mcp-icon.is-running .semlink-mcp-dot {
+	background: var(--color-green);
+	animation: semlink-mcp-breath 2.4s ease-in-out infinite;
+}
+.semlink-mcp-icon.is-error .semlink-mcp-dot {
+	background: var(--text-error);
+}
+@keyframes semlink-mcp-breath {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.5; }
+}
+/* 名称 + 状态 pill 一行 */
+.semlink-mcp-name-line {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.semlink-mcp-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.semlink-mcp-pill {
+	flex-shrink: 0;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 2px 8px;
+	border-radius: 999px;
+	letter-spacing: 0.02em;
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+}
+.semlink-mcp-pill.is-running,
+.semlink-mcp-pill.is-on {
+	background: color-mix(in srgb, var(--color-green) 14%, transparent);
+	color: var(--color-green);
+}
+.semlink-mcp-pill.is-error {
+	background: color-mix(in srgb, var(--text-error) 12%, transparent);
+	color: var(--text-error);
+}
+/* URL 行：monospace 地址（ellipsis 防御）+「已复制」反馈 + copy 图标钮 */
+.semlink-mcp-url-row .semlink-row-label {
+	display: flex;
+	align-items: center;
+	gap: var(--sl-space-2);
+	flex-direction: row;
+}
+.semlink-mcp-url {
+	font-family: var(--font-monospace);
+	font-size: 12px;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+.semlink-mcp-url-feedback {
+	font-size: 12px;
+	color: var(--interactive-accent);
+	white-space: nowrap;
+	flex-shrink: 0;
+	opacity: 0;
+	transition: opacity 0.15s ease-out;
+}
+.semlink-mcp-url-row.is-copied .semlink-mcp-url-feedback {
+	opacity: 1;
+}
+.semlink-mcp-copy-btn {
+	width: 30px;
+	padding: 0;
+	flex-shrink: 0;
+}
+.semlink-mcp-url-row.is-copied .semlink-mcp-copy-btn {
+	color: var(--interactive-accent);
+}
+/* 导航行：右缘 chevron */
+.semlink-mcp-chevron {
+	display: flex;
+	color: var(--text-faint);
+	flex-shrink: 0;
+}
+.semlink-mcp-chevron svg,
+.semlink-mcp-chevron .svg-icon {
+	width: 16px;
+	height: 16px;
+}
+/* 调试折叠头：标签 + 说明双行 */
+.semlink-collapse-labels {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	text-align: left;
+}
+.semlink-collapse-desc {
+	font-size: 12.5px;
+	font-weight: 400;
+	letter-spacing: 0;
+	color: var(--text-faint);
+	margin-top: 2px;
+	/* 折叠头是 <button>：app.css 的按钮 white-space:nowrap 会被子 span
+	   继承，窄幅下说明句一行撑破面板（MCP Debug servers 实测 294>236）。
+	   说明句是普通文本，显式恢复换行。 */
+	white-space: normal;
+}
+.semlink-mcp-debug-head {
+	margin: 4px 4px 12px;
+	width: calc(100% - 8px);
+}
+
+/* 弹窗：字段包（label + input + 行内错误行 12.5px 红） */
+.semlink-mcp-field {
+	display: flex;
+	flex-direction: column;
+	margin-bottom: 12px;
+	min-width: 0;
+}
+.semlink-mcp-field .semlink-editor-input {
+	margin-bottom: 0;
+}
+.semlink-mcp-field-error {
+	display: none;
+	margin-top: 4px;
+	font-size: 12.5px;
+	line-height: 1.45;
+	color: var(--text-error);
+}
+.semlink-mcp-field.has-error .semlink-mcp-field-error {
+	display: block;
+}
+.semlink-mcp-field.has-error .semlink-editor-input {
+	border-color: var(--text-error);
+}
+/* JSON 视图的复制按钮 */
+.semlink-mcp-json-copy {
+	margin-top: 10px;
+	align-self: flex-start;
+}
+
+/* （详情页内大标题已移除：窄幅顶条品牌位/宽幅菜单胶囊承担归属，面板内同名标题属重复。） */
+.semlink-share-lede {
+	font-size: 12.5px;
+	line-height: 1.55;
+	color: var(--text-muted);
+	margin: -6px 4px 12px;
+}
+/* 空状态（契约 §3.6）：icon + 一句话，纵向居中于卡内，min-height 96px */
+.semlink-share-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--sl-space-2);
+	min-height: 96px;
+	padding: 20px 16px;
+	text-align: center;
+	margin-bottom: var(--sl-space-4);
+}
+.semlink-share-empty-icon {
+	display: flex;
+	color: var(--text-faint);
+}
+.semlink-share-empty-icon svg,
+.semlink-share-empty-icon .svg-icon {
+	width: 24px;
+	height: 24px;
+}
+.semlink-share-empty-text {
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--text-muted);
+	max-width: 30em;
+}
+/* 已共享列表：行内两行（标题+时间 / URL），行尾复制/删除 ghost 钮 */
+.semlink-share-list {
+	margin-bottom: var(--sl-space-4);
+}
+.semlink-share-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+.semlink-share-icon svg,
+.semlink-share-icon .svg-icon {
+	width: 16px;
+	height: 16px;
+}
+.semlink-share-main {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+.semlink-share-line1 {
+	display: flex;
+	align-items: baseline;
+	gap: var(--sl-space-2);
+	min-width: 0;
+}
+.semlink-share-title {
+	flex: 0 1 auto;
+	min-width: 0;
+	font-size: 14px;
+	font-weight: 550;
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.semlink-share-time {
+	margin-left: auto;
+	flex-shrink: 0;
+	font-size: 12px;
+	/* 三级灰(30%)升二级(60%)（评审 P2）：URL 是每行要复制的关键数据，
+	   不能是最淡的文本。 */
+	color: var(--sl-secondary-text);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.semlink-share-url {
+	font-family: var(--font-monospace);
+	font-size: 12px;
+	color: var(--sl-secondary-text);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+.semlink-share-actions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex-shrink: 0;
+}
+.semlink-share-act {
+	width: 30px;
+	padding: 0;
+}
+.semlink-share-act.is-copied {
+	color: var(--interactive-accent);
+}
+
+/* ╕═ 分享详情弹窗（ShareQrModal）：条目名 + 200px 二维码 + 全显地址
+   + 复制/打开双按钮 + 红色通栏停止共享 ╕ */
+.semlink-shareq-head {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	text-align: center;
+	margin-bottom: 10px;
+}
+.semlink-shareq-name {
+	font-size: 16px;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+	line-height: 1.2;
+	color: var(--text-normal);
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.semlink-shareq-sub {
+	font-size: 12px;
+	color: var(--text-faint);
+}
+.semlink-share-qr {
+	display: flex;
+	justify-content: center;
+	padding: 6px 0 14px;
+}
+.semlink-share-qr-img svg {
+	display: block;
+	width: 200px;
+	height: 200px;
+	background: #fff;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	shape-rendering: crispEdges;
+}
+.semlink-shareq-url {
+	padding: 8px 12px;
+	border-radius: var(--sl-radius-inner);
+	background: var(--background-secondary);
+	font-family: var(--font-monospace);
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--text-muted);
+	word-break: break-all;
+	user-select: all;
+}
+.semlink-shareq-actions {
+	display: flex;
+	gap: 10px;
+	margin-top: 12px;
+}
+.semlink-shareq-actions > button {
+	flex: 1 1 0;
+	min-width: 0;
+}
+/* 红色通栏「停止共享」：secondary 变体 + 危险色（实底 hover = error 色） */
+.semlink-shareq-revoke {
+	margin-top: 10px;
+	background: color-mix(in srgb, var(--text-error) 12%, transparent);
+	color: var(--text-error);
+}
+.semlink-shareq-revoke:hover {
+	background: var(--text-error);
+	color: var(--text-on-accent);
+}
+
+/* ╕═ 契约 §4 无障碍强制 ╕ */
+@media (prefers-reduced-motion: reduce) {
+    .smart-vault-settings :is(.semlink-btn-primary, .semlink-btn-secondary, .semlink-btn-ghost):active {
+        transform: none;
+    }
+    .smart-vault-settings :is(.semlink-btn-primary, .semlink-btn-secondary, .semlink-btn-ghost) {
+        transition: opacity 0.15s ease-out;
+    }
+    /* 开关几何过渡一并关（弹簧回弹在减动效下不适用；状态切换瞬时不闪烁） */
+    .smart-vault-settings .checkbox-container,
+    .smart-vault-settings .checkbox-container::after {
+        transition: none;
+    }
+    .semlink-checklist-meter-fill,
+    .semlink-checklist-summary-chevron,
+    .semlink-checklist-icon {
+        transition: none;
+    }
+    .semlink-collapse-chevron {
+        transition: none;
+    }
+    .semlink-collapse-body.semlink-anim {
+        animation: none;
+    }
+    .semlink-rag-block.is-running .semlink-rag-hero-spin,
+    .semlink-mcp-icon.is-running .semlink-mcp-dot {
+        animation: none;
+    }
+    /* 模型页：跑马灯是无限动画，减动效时退化为静态省略号 */
+    .smart-vault-settings .semlink-mt-model-name.is-overflow:hover .semlink-mt-model-name-track {
+        animation: none;
+    }
+    .smart-vault-settings .semlink-mt-search-clear:active {
+        transform: none;
+    }
+    /* 设置屏动效降级：面板切换动画直接关（内容出现即可）；旧导航钻入/
+       弹回淡入已随互斥层级废弃。 */
+    .semlink-search-welcome.semlink-settings-screen,
+    .semlink-search-header.semlink-settings-corners {
+        animation: semlink-fade-in 0.15s ease-out;
+    }
+    .semlink-settings-panel.is-swapping {
+        animation: none;
+    }
+}
+@media (prefers-reduced-transparency: reduce) {
+    /* 营销卡已是白卡实底，无需降透明处理；badge 仍为淡染，保留实底化 */
+    .smart-vault-settings .semlink-btn-secondary {
+        background: var(--background-modifier-hover);
+    }
+    .semlink-license-card-badge {
+        background: var(--background-modifier-hover);
+    }
+    .semlink-shareq-revoke {
+        background: var(--background-modifier-hover);
+    }
+    /* 模型页：选中供应商的 accent 淡染改实底 */
+    .smart-vault-settings .semlink-mt-provider.is-active {
+        background: var(--background-modifier-hover);
+    }
+}
+
+/* ── MCP 打磨：URL 行内嵌 flex（label 容器非 flex 会让长 URL 挤飞 copy 钮）
+   与调试折叠头两行高度自洽 ── */
+.semlink-mcp-url-row .semlink-row-label {
+	display: flex;
+	align-items: center;
+	gap: var(--sl-space-2);
+}
+.semlink-mcp-debug-head {
+	height: auto;
+	padding: 10px 12px;
+}
+.semlink-collapse-labels {
+	gap: 2px;
+}
+.semlink-collapse-desc {
+	margin-top: 0;
+	line-height: 1.35;
+}
+.semlink-mcp-copy-btn .svg-icon,
+.semlink-mcp-copy-btn svg {
+	width: 16px;
+	height: 16px;
+}
+.semlink-mcp-copy-icon {
+	display: flex;
+	color: var(--text-muted);
+}
+.semlink-mcp-copy-icon svg {
+	width: 16px;
+	height: 16px;
+}
+.semlink-mcp-url-row.is-copied .semlink-mcp-copy-icon {
+	color: var(--interactive-accent);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   iOS HIG 视觉精修层 v2（apple-hig skill 对齐）
+   依据 iOS 分组列表的真实材质系统：
+   · 分组底色 systemGroupedBackground + 无边框白卡（深色 black + #1C1C1E）
+   · 内缩 hairline 分隔线（0.5px 观感，左让位图标列）
+   · 大标题 20px/700、组标题 13px 灰、行 44pt、8pt 网格留白
+   · 开关 = 主题紫（用户拍板保持紫色主题，弃用 iOS 系统绿）；控件填充 = 12% 灰；chevron = 三级灰
+   只覆盖观感，不改结构。深浅主题成对定义。
+   ═══════════════════════════════════════════════════════════════ */
+/* （压回 app.css 裸 button 默认皮肤的规则在契约层之前——那里必须
+   早于 .semlink-btn-* 的底色定义，见上方注释。） */
+
+.semlink-settings-root {
+    --sl-bg-grouped: #f6f6f6;                 /* 与主页同灰（曾用 iOS #f2f2f7，用户拍板统一主页色） */
+    --sl-card: #ffffff;                        /* secondarySystemGroupedBackground */
+    --sl-sep: rgba(60, 60, 67, 0.29);          /* separator */
+    --sl-secondary-text: rgba(60, 60, 67, 0.6); /* secondaryLabel */
+    --sl-tertiary: rgba(60, 60, 67, 0.3);      /* tertiaryLabel */
+    --sl-hover: rgba(0, 0, 0, 0.045);
+    --sl-active: rgba(0, 0, 0, 0.09);          /* 选中胶囊：明显高于 hover（4.5%），
+                                                  否则选中态淡到不可感知（用户实测反馈） */
+    --sl-fill: rgba(118, 118, 128, 0.12);      /* systemGray4 12% 控件填充 */
+    background: var(--sl-bg-grouped);
+}
+.theme-dark .semlink-settings-root {
+    --sl-bg-grouped: #000000;
+    --sl-card: #1c1c1e;
+    --sl-sep: rgba(84, 84, 88, 0.65);
+    --sl-secondary-text: rgba(235, 235, 245, 0.6);
+    --sl-tertiary: rgba(235, 235, 245, 0.3);
+    --sl-hover: rgba(255, 255, 255, 0.06);
+    --sl-active: rgba(255, 255, 255, 0.12);
+    --sl-fill: rgba(120, 120, 128, 0.24);
+}
+/* 分组灰涂满整个 leaf：设置屏激活时 view 自身上底色——否则 root 的
+   底色与宿主 #f6f6f6（.theme-light .semlink-main-tab，0-3-0）形成
+   两层背景接缝（色块套色块）。带 .theme-light/-dark 前缀提到 0-3-0 同级
+   靠后源序胜出；变量定义在 view 上让 root 与 view 同值同源。
+   灰值统一主页 #f6f6f6。 */
+.theme-light .semlink-search-view.semlink-settings-active,
+.semlink-search-view.semlink-settings-active {
+    --sl-bg-grouped: #f6f6f6;
+    background: var(--sl-bg-grouped);
+}
+.theme-dark .semlink-search-view.semlink-settings-active {
+    --sl-bg-grouped: #000000;
+    background: var(--sl-bg-grouped);
+}
+
+/* 内嵌设置屏 / 弹窗宿主统一分组底色 */
+.semlink-search-welcome.semlink-settings-screen {
+    background: var(--sl-bg-grouped);
+}
+
+/* 卡：无边框白卡、10px 圆角（iOS inset grouped 精确值） */
+.semlink-settings-root .semlink-card {
+    background: var(--sl-card);
+    border: none;
+    border-radius: 10px;
+}
+/* 相邻块分隔：内缩 hairline（左 16px 让位内容列），替代通栏 border */
+.semlink-settings-root .semlink-card > * + * {
+    border-top: none;
+}
+.semlink-settings-root .semlink-card > * {
+    position: relative;
+}
+.semlink-settings-root .semlink-card > * + *::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 16px;
+    right: 0;
+    height: 1px;
+    background: var(--sl-sep);
+    pointer-events: none;
+}
+/* Obsidian 弹窗宿主底色非分组灰时保留极淡描边防隐形 */
+.modal .semlink-settings-root .semlink-card {
+    border: 1px solid var(--sl-sep);
+}
+
+/* 组标题：iOS 分组头（13px 灰，与卡内容左对齐） */
+.semlink-settings-root .semlink-card-title {
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0.03em;
+    color: var(--sl-secondary-text);
+    margin: 0 16px 7px;
+}
+.semlink-settings-root .semlink-checklist-head {
+    margin: 0 16px 7px;
+}
+.semlink-settings-root .semlink-checklist-head .semlink-card-title {
+    margin: 0;
+}
+
+/* 行：44pt、留白 8pt 网格、正文层级 */
+.semlink-settings-root .semlink-row {
+    padding: 11px 16px;
+}
+.semlink-settings-root .semlink-row-title {
+    font-size: 14px;
+    font-weight: 430;
+}
+.semlink-settings-root .semlink-row-desc {
+    color: var(--sl-secondary-text);
+}
+.semlink-settings-root .semlink-row-value {
+    font-size: 13px;
+    color: var(--sl-secondary-text);
+}
+
+/* 说明句统一二级灰 */
+.semlink-share-lede,
+.semlink-mcp-lede,
+.semlink-license-keylabel,
+.semlink-license-note,
+.semlink-license-sub {
+    color: var(--sl-secondary-text);
+}
+
+/* tab 栏（横向分段控件）：结构/配色全部在基线层（390 区）——这里只保留
+   后序必须赢回的两条按压态（blanket transparent 的 0-2-0 提级）与键盘
+   焦点环共用组。旧"macOS 侧栏胶囊行"式样已随竖排菜单列废弃。 */
+@media (hover: hover) and (pointer: fine) {
+    .semlink-settings-root .semlink-settings-menu-item:hover {
+        background: var(--sl-hover);
+    }
+}
+.semlink-settings-root .semlink-settings-menu-item:active {
+    background: var(--sl-hover);
+    transform: none;
+}
+/* 选中段：白拇指浮起（用户拍板：紫淡染在灰轨道上发闷，白底更脆）。
+   0-3-0 提级赢回 blanket 的 transparent/box-shadow:none——白底 + 一档
+   加重的阴影 + 0.5px 发丝环，在 12% 灰轨道上读得出凸起 */
+.semlink-settings-root .semlink-settings-menu-item.is-active {
+    background: var(--sl-card);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+/* 键盘焦点环：一级导航与可点行（MCP URL/导航行、分享行等 role=button）
+   与按钮三级体系同配方，offset -2 让描边贴行内缘不外溢卡片 */
+.semlink-settings-menu-item:focus-visible,
+.semlink-row.is-clickable:focus-visible {
+    outline: 2px solid hsla(var(--interactive-accent-hsl), 0.5);
+    outline-offset: -2px;
+}
+
+/* 开关沿用主题 accent：与聊天视图同一控件同一颜色——用户感知到的是
+   "体系"，而不是"进设置换了个皮肤"（曾试过 iOS 系统绿仅设置作用域，
+   半套体系比不一致更难受，已废弃）。 */
+
+/* 控件填充与输入：12% 灰、无边框、10px 圆角（Git 行内输入拆除后只剩
+   许可证密钥框用本组；license 区块的基线 border 款被此处同权重后序覆盖） */
+.semlink-license-keyinput,
+.semlink-license-keyinput:focus-visible {
+    background: var(--sl-fill);
+    border: none;
+    border-radius: 10px;
+}
+.semlink-license-keyinput:focus-visible {
+    outline: 2px solid hsla(var(--interactive-accent-hsl), 0.45);
+    outline-offset: 0;
+}
+.semlink-license-pricecard {
+    background: var(--sl-fill);
+}
+.semlink-mt-search-input {
+    color: var(--text-normal);
+}
+.semlink-mt-search-input:focus {
+    background: var(--sl-fill);
+    border: none;
+}
+
+/* 进度条/计量：轨道 12% 灰（覆盖基线的 border 灰） */
+.semlink-rag-bar {
+    background: var(--sl-fill);
+}
+
+/* chevron / 时间 / URL 等三级灰（share-time/url 已升二级，移出本组） */
+.semlink-mcp-row-chevron,
+.semlink-checklist-summary-chevron,
+.semlink-mcp-url,
+.semlink-mcp-status.is-stopped,
+.semlink-mcp-status-dot.is-stopped,
+.semlink-checklist-summary-count,
+.semlink-checklist-meter-count,
+.semlink-mcp-status.is-stopped,
+.semlink-mcp-status-dot.is-stopped {
+    color: var(--sl-tertiary);
+    background: var(--sl-fill);
+}
+.semlink-mcp-status-dot.is-stopped {
+    background: var(--sl-tertiary);
+}
+
+/* 图标槽 / 搜索清钮 / 摘要行按压统一 hover 灰 */
+.semlink-share-icon,
+.semlink-mcp-icon.is-neutral {
+    background: var(--sl-fill);
+    color: var(--sl-secondary-text);
+}
+
+/* 状态 pill（已启用/已停用）中性灰底 */
+.semlink-mcp-status {
+    background: var(--sl-fill);
+}
+
+/* 窄幅留白对齐 8pt 网格 */
+@container settings (max-width: 560px) {
+    .semlink-search-welcome.semlink-settings-screen {
+        padding: 8px 16px 24px;
+    }
+    /* （旧"菜单卡吃满整行宽"规则已删：菜单列改为横向分段控件，基线即
+       width:100%，无需窄幅桶再钉。） */
+    /* 窄幅行 padding 收到 14px：hairline 内缩 16px 会比文本列多出 2px
+       （评审 P2 对齐），分隔线随行内缩。 */
+    .semlink-settings-root .semlink-card > * + *::before {
+        left: 14px;
+    }
+    /* 行标题独占整行（评审 P1）：时间与标题抢宽把中文标题挤到 4 字。
+       时间在详情弹窗仍可见。 */
+    .semlink-share-time {
+        display: none;
+    }
+}
+
+/* 无障碍：降透明 → 实底；降动效已由基座覆盖 */
+@media (prefers-reduced-transparency: reduce) {
+    .semlink-settings-root {
+        --sl-fill: rgba(118, 118, 128, 0.28);
+    }
+}
+
+/* （开关统一品牌色：原 .is-checked/.is-enabled 两条 iOS 绿覆盖已删，
+   让 Obsidian 的 accent 开关在设置页与聊天视图同色。） */
+
+/* ── HIG v2.1 修正：分隔线只属于「行」，非行容器卡关闭 ──
+   注意：hairline 生成器是 0-2-0（.semlink-settings-root .semlink-card > * + *::before），
+   本清单必须带同样的 .semlink-settings-root 前缀（0-2-0 + 靠后源序）才能赢——
+   曾经写成单类（0-1-0）导致整块规则长期失效，空状态卡再现游离横线。 */
+.semlink-settings-root .semlink-share-empty > * + *::before,
+.semlink-settings-root .semlink-license-keycard > * + *::before,
+.semlink-settings-root .semlink-license-pricecard > * + *::before,
+.semlink-settings-root .semlink-license-card > * + *::before,
+.semlink-settings-root .semlink-mt-empty > * + *::before,
+.semlink-settings-root .semlink-mt-noresults > * + *::before {
+    content: none;
+}
+
+/* ── 分享行行动按钮图标显式尺寸（同 MCP copy 图标病根） ── */
+.semlink-share-act {
+    width: 30px;
+    padding: 0;
+}
+.semlink-share-act svg,
+.semlink-share-act .svg-icon {
+    width: 16px;
+    height: 16px;
+}
+/* 危险态双钩子（评审 P2）：TS 挂 mod-danger（全站约定），CSS 曾只写
+   .is-danger 导致删除钮灰得不红——两个类名都认。 */
+.semlink-share-act.is-danger,
+.semlink-share-act.mod-danger {
+    color: var(--text-error);
+}
+.semlink-share-act.is-danger:hover,
+.semlink-share-act.mod-danger:hover {
+    background: color-mix(in srgb, var(--text-error) 10%, transparent);
+}
+
+/* ── 宽幅菜单卡贴内容高度（通高白卡+大段空白是噪音） ── */
+
+.semlink-share-act-icon {
+	display: flex;
+	color: var(--text-muted);
+}
+.semlink-share-act-icon svg {
+	width: 16px;
+	height: 16px;
+}
+.semlink-share-act.is-copied .semlink-share-act-icon {
+	color: var(--interactive-accent);
+}
+.semlink-share-act.is-danger .semlink-share-act-icon,
+.semlink-share-act.mod-danger .semlink-share-act-icon {
+	color: var(--text-error);
+}
+
+/* ── （旧 HIG v2.2 左列容器规则已删：竖排菜单卡改为横向分段控件，
+       menu-col 基线即整行宽，见 390 区。品牌头/菜单值提示的历史清理
+       注释一并移除。） ── */

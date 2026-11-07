@@ -19,7 +19,7 @@ import { brandLogoOf, formatContextWindow } from "./settings-models";
 import { LicenseModal } from "./license-modal";
 import { UsageModal } from "./usage-modal";
 import { guideInProgress, onboardingActive, renderGuideHub, renderOnboarding } from "./onboarding";
-import { renderSettingsTabInto, type SettingsTab } from "./settings";
+import { renderSettingsTabInto, type SettingsTab, type SmartVaultSettingTab } from "./settings";
 import type SmartVaultPlugin from "../main";
 import { SaveNoteModal } from "./save-note-modal";
 import { ShareQrModal } from "./share-modal";
@@ -183,9 +183,19 @@ export class SemanticSearchView extends ItemView {
 	// ── 视图内嵌设置屏（替代设置弹窗，形态同 Get Started hub）──
 	/** 设置屏打开中：占据欢迎区， chrome 同引导（隐藏输入区/真实头部）。 */
 	private settingsMode = false;
-	private settingsModelTab = false;
+	/** 屏幕切换 breadcrumbs（调试探针）：设置屏曾被幽灵路径自动关回主页，
+	 *  measure 经 winState 回读这条轨迹定位元凶。仅内存，不影响行为。 */
+	screenTrace: string[] = [];
+	private pushTrace(tag: string): void {
+		const t = new Date();
+		const ts = `${String(t.getMinutes()).padStart(2, "0")}:${String(t.getSeconds()).padStart(2, "0")}.${String(t.getMilliseconds()).padStart(3, "0")}`;
+		this.screenTrace.push(`${ts} ${tag}`);
+		if (this.screenTrace.length > 60) this.screenTrace.splice(0, this.screenTrace.length - 60);
+	}
+	/** 设置屏深链的初始详情页（undefined = 一级列表）。 */
+	private settingsInitialTab: SettingsTab | undefined = undefined;
 	/** 嵌入的设置 Tab 实例句柄（退出时 destroy 断开进度订阅）。 */
-	private settingsEmbed: { destroy(): void } | null = null;
+	private settingsEmbed: { destroy(): void; tab: SmartVaultSettingTab } | null = null;
 	/** 会话进行中打开设置屏的快照：退出后原样恢复对话。 */
 	private settingsConvSnapshot: {
 		sessionId: string | null;
@@ -321,43 +331,7 @@ export class SemanticSearchView extends ItemView {
 		});
 		this.popoutBtnEl = popoutBtn;
 		setIcon(popoutBtn, "picture-in-picture-2");
-		popoutBtn.addEventListener("click", () => {
-			// 已在弹窗中：收回侧栏（保留实例，方向与弹出相反）
-			if (this.inPopoutWindow()) {
-				this.dockPopoutBack();
-				return;
-			}
-			try {
-				// 宽度需容纳常显菜单(300px)+对话区
-				const startDoc = this.contentEl.ownerDocument;
-				this.app.workspace.moveLeafToPopout(this.leaf, {
-					size: { width: 780, height: 720 },
-				});
-				// moveLeafToPopout 返回时 DOM 可能还没搬进弹窗窗口（窗口创建
-				// 异步）——立刻重渲染只会把 canvas 挂回旧窗口（循环绑着被
-				// 遮挡的主窗 rAF，咖啡杯空白数秒）。轮询等真正迁移完成再
-				// 强制重渲染一次，canvas 一出生就挂在弹窗窗口。
-				const waitAdopt = (): void => {
-					let tries = 0;
-					const tick = (): void => {
-						tries++;
-						if (this.contentEl.ownerDocument !== startDoc || tries > 80) {
-							this.adoptLeafWindow(true);
-							return;
-						}
-						window.setTimeout(tick, 50);
-					};
-					tick();
-				};
-				waitAdopt();
-				// 置位后，插件的 window-close 处理器会在弹窗关闭、且已无
-				// 任何 Semlink 视图时自动把主页放回右侧栏
-				this.plugin.semlinkPopoutActive = true;
-			} catch {
-				// 移动端或 Electron 过旧不支持 popout（API 文档明确会抛错）
-				new Notice(`Semlink: ${t("popOutFailed")}`);
-			}
-		});
+		popoutBtn.addEventListener("click", () => this.togglePopout());
 		const settingsBtn = rightIcons.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
 			attr: { "aria-label": t("settingsTitle") },
@@ -390,6 +364,7 @@ export class SemanticSearchView extends ItemView {
 			window.setInterval(() => {
 				const key = this.welcomeKeyForHour();
 				if (key === this.currentWelcomeKey) return;
+				this.pushTrace(`60s-timer slot ${this.currentWelcomeKey}->${key} settings=${this.settingsMode}`);
 				// Same predicate renderWelcome uses: never wipe the guide (and
 				// its in-progress form input) while it owns the screen.
 				if (this.guideModeActive()) return;
@@ -471,21 +446,25 @@ export class SemanticSearchView extends ItemView {
 
 		let panelDragDepth = 0;
 		const isSessionDrag = (e: DragEvent): boolean => !!e.dataTransfer?.types.includes("text/semlink-session");
+		// 设置屏/引导屏不支持拖放附加（用户指出：overlay 压暗整个设置界面
+		// 且无输入框可落）——直接放行给 Obsidian 默认行为（拖文件=打开），
+		// 不显示 overlay、不抢 drop。
+		const dragSuppressed = (): boolean => this.settingsMode || this.guideModeActive();
 		contentEl.addEventListener("dragover", (e) => {
-			if (isSessionDrag(e)) return;
+			if (isSessionDrag(e) || dragSuppressed()) return;
 			e.preventDefault();
 			e.stopPropagation();
 			if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
 		});
 		contentEl.addEventListener("dragenter", (e) => {
-			if (isSessionDrag(e)) return;
+			if (isSessionDrag(e) || dragSuppressed()) return;
 			e.preventDefault();
 			e.stopPropagation();
 			panelDragDepth++;
 			this.dragOverlayEl.removeClass("semlink-hidden");
 		});
 		contentEl.addEventListener("dragleave", (e) => {
-			if (isSessionDrag(e)) return;
+			if (isSessionDrag(e) || dragSuppressed()) return;
 			e.preventDefault();
 			e.stopPropagation();
 			panelDragDepth = Math.max(0, panelDragDepth - 1);
@@ -708,6 +687,45 @@ export class SemanticSearchView extends ItemView {
 		if (this.guideModeActive() && !this.settingsMode) {
 			this.messagesEl.empty();
 			this.renderWelcome();
+		}
+	}
+
+	/** 对话顶栏与设置屏共用：弹出 ↔ 收回（双形态按钮的动作）。 */
+	private togglePopout(): void {
+		// 已在弹窗中：收回侧栏（保留实例，方向与弹出相反）
+		if (this.inPopoutWindow()) {
+			this.dockPopoutBack();
+			return;
+		}
+		try {
+			// 宽度需容纳常显菜单(300px)+对话区
+			const startDoc = this.contentEl.ownerDocument;
+			this.app.workspace.moveLeafToPopout(this.leaf, {
+				size: { width: 780, height: 720 },
+			});
+			// moveLeafToPopout 返回时 DOM 可能还没搬进弹窗窗口（窗口创建
+			// 异步）——立刻重渲染只会把 canvas 挂回旧窗口（循环绑着被
+			// 遮挡的主窗 rAF，咖啡杯空白数秒）。轮询等真正迁移完成再
+			// 强制重渲染一次，canvas 一出生就挂在弹窗窗口。
+			const waitAdopt = (): void => {
+				let tries = 0;
+				const tick = (): void => {
+					tries++;
+					if (this.contentEl.ownerDocument !== startDoc || tries > 80) {
+						this.adoptLeafWindow(true);
+						return;
+					}
+					window.setTimeout(tick, 50);
+				};
+				tick();
+			};
+			waitAdopt();
+			// 置位后，插件的 window-close 处理器会在弹窗关闭、且已无
+			// 任何 Semlink 视图时自动把主页放回右侧栏
+			this.plugin.semlinkPopoutActive = true;
+		} catch {
+			// 移动端或 Electron 过旧不支持 popout（API 文档明确会抛错）
+			new Notice(`Semlink: ${t("popOutFailed")}`);
 		}
 	}
 
@@ -2374,10 +2392,12 @@ export class SemanticSearchView extends ItemView {
 	 *  providers are untouched). `from` records the originating screen for
 	 *  the guide's back button (settings screen vs home). */
 	private openGuide(mode: "hub" | "chat" | "embed" = "hub", from: "home" | "settings" = "home"): void {
+		this.pushTrace(`openGuide mode=${mode} from=${from}`);
 		this.guideMode = mode;
 		this.guideReturn = from;
 		// 从设置屏进入引导（清单「开始配置」等入口）：先退出设置屏
 		this.settingsMode = false;
+		this.settingsInitialTab = undefined;
 		this.settingsEmbed?.destroy();
 		this.settingsEmbed = null;
 		this.guideStartOverride = false;
@@ -2414,6 +2434,7 @@ export class SemanticSearchView extends ItemView {
 	 * hidden (setGuideChrome).
 	 */
 	private renderWelcome(): void {
+		this.pushTrace(`renderWelcome mode=${this.settingsMode ? "settings" : this.guideModeActive() ? "guide" : "home"}`);
 		// Track the greeting slot + language in every mode so the 60s timer
 		// only reacts to real time-slot changes and refreshLanguage only
 		// rebuilds the welcome when the language actually changed.
@@ -2578,9 +2599,11 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	/** 打开视图内嵌设置屏（替代设置弹窗）：会话进行中先快照当前对话，
-	 *  退出时经 loadSession 原样恢复。modelTab 直达「管理模型」页。 */
-	private openSettingsScreen(opts?: { modelTab?: boolean }): void {
-		this.settingsModelTab = !!opts?.modelTab;
+	 *  退出时经 loadSession 原样恢复。tab 深链直达详情页（窄幅为钻入态）；
+	 *  modelTab 是旧布尔入口，等价 tab:"model"。 */
+	private openSettingsScreen(opts?: { tab?: SettingsTab; modelTab?: boolean }): void {
+		this.pushTrace(`openSettingsScreen tab=${String(opts?.tab ?? opts?.modelTab ? "model" : "default")}`);
+		this.settingsInitialTab = opts?.tab ?? (opts?.modelTab ? "model" : undefined);
 		const onHome = !!this.messagesEl.querySelector(".semlink-search-welcome");
 		this.settingsConvSnapshot = onHome ? null : {
 			sessionId: this.currentSessionId,
@@ -2593,8 +2616,9 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	private closeSettingsScreen(): void {
+		this.pushTrace(`closeSettingsScreen snap=${this.settingsConvSnapshot ? "yes" : "no"}`);
 		this.settingsMode = false;
-		this.settingsModelTab = false;
+		this.settingsInitialTab = undefined;
 		this.settingsEmbed?.destroy();
 		this.settingsEmbed = null;
 		this.setSettingsChrome(false);
@@ -2616,23 +2640,46 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	/** 设置屏：返回条 + 品牌 + 嵌入的完整设置 Tab（同 Get Started hub 的
-	 *  占屏形态）。宽度自适应：主区域限宽列 / 弹窗 / 侧栏通用。 */
+	 *  占屏形态）。宽度自适应：主区域限宽列 / 弹窗 / 侧栏通用。
+	 *  顶条 ←  = 退出设置屏（导航已改为横向 tab 栏，无逐级返回层级）。
+	 *  中央品牌字恒为「设置」。 */
 	private renderSettingsScreen(): void {
-		const corners = this.messagesEl.createDiv({ cls: "semlink-search-header semlink-guide-corners" });
+		// semlink-settings-corners：入场淡入动画 + reduced-motion 豁免的
+		// 作用域钩子（corners 类与主页/引导共用，不能直接动画共享类）。
+		const corners = this.messagesEl.createDiv({ cls: "semlink-search-header semlink-guide-corners semlink-settings-corners" });
 		const leftSide = corners.createDiv({ cls: "semlink-search-header-side" });
 		const backBtn = leftSide.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
 			attr: { "aria-label": t("historyBack") },
 		});
 		setIcon(backBtn, "arrow-left");
-		backBtn.addEventListener("click", () => this.closeSettingsScreen());
+		backBtn.addEventListener("click", () => {
+			this.closeSettingsScreen();
+		});
 		const brandGroup = corners.createDiv({ cls: "semlink-search-brand-group" });
-		const brand = brandGroup.createDiv({ cls: "semlink-search-logo" });
-		setIcon(brand, "semlink-logo");
-		brandGroup.createSpan({ cls: "semlink-search-brand", text: "Semlink" });
-		// 右上角：语言切换（标题块省略后语言挪到这里，与左侧返回对称，
-		// 品牌仍居中）。
+		// 设置屏不放品牌 logo（用户拍板）：中央只留页面名文字，恒为「设置」
+		// ——tab 归属由页内横向 tab 栏的高亮表达，无需随导航同步。
+		brandGroup.createSpan({ cls: "semlink-search-brand", text: t("settingsMenuTitle") });
+		// 右上角：独立弹窗按钮（语言左侧，用户需求）+ 语言切换（标题块
+		// 省略后语言挪到这里，与左侧返回对称，品牌仍居中）。弹窗按钮与
+		// 聊天顶栏同款：图标统一用 picture-in-picture-2（用户拍板，收回
+		// 态不再换 minimize-2），aria 提示仍随所在位置翻转。
 		const rightSide = corners.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
+		const inPop = this.inPopoutWindow();
+		const popBtn = rightSide.createEl("button", {
+			cls: "semlink-search-icon-btn clickable-icon",
+			attr: { "aria-label": inPop ? t("dockBackWindow") : t("popOutWindow") },
+		});
+		setIcon(popBtn, "picture-in-picture-2");
+		popBtn.addEventListener("click", () => {
+			this.togglePopout();
+			// 迁移/收回是异步 DOM 搬迁——按钮本体随 leaf 保留，稍后按新
+			// 位置翻转提示（图标固定，下一次设置屏重渲也会自然正确）。
+			window.setTimeout(() => {
+				const nowPop = this.inPopoutWindow();
+				popBtn.setAttr("aria-label", nowPop ? t("dockBackWindow") : t("popOutWindow"));
+			}, 1200);
+		});
 		const langBtn = rightSide.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
 			attr: { "aria-label": t("language") },
@@ -2640,11 +2687,7 @@ export class SemanticSearchView extends ItemView {
 		setIcon(langBtn, "languages");
 		langBtn.addEventListener("click", () => this.openLanguageMenu(langBtn));
 		const host = this.messagesEl.createDiv({ cls: "semlink-search-welcome semlink-settings-screen" });
-		this.settingsEmbed = renderSettingsTabInto(
-			host,
-			this.plugin,
-			this.settingsModelTab ? "model" : undefined,
-		);
+		this.settingsEmbed = renderSettingsTabInto(host, this.plugin, this.settingsInitialTab);
 	}
 
 	/** 语言切换菜单（引导页与设置屏共用）：列出全部 UI 语言（原生标签），
@@ -2772,6 +2815,7 @@ export class SemanticSearchView extends ItemView {
 		// user's in-progress form input.
 		const welcome = this.messagesEl.querySelector(".semlink-search-welcome");
 		if (welcome && getLang() !== this.welcomeLang) {
+			this.pushTrace(`refreshLanguage re-render ${this.welcomeLang}->${getLang()}`);
 			this.messagesEl.empty();
 			this.renderWelcome();
 		}
@@ -2821,6 +2865,7 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	private doNewChat(): void {
+		this.pushTrace("doNewChat");
 		this.startNewSession();
 		this.messagesEl.empty();
 		this.statusEl.textContent = "";
@@ -2905,6 +2950,27 @@ export class SemanticSearchView extends ItemView {
 
 	/** Render a previously-saved session into the conversation area. */
 	private async loadSession(session: ChatSession): Promise<void> {
+		const stack = (new Error().stack ?? "").split("\n").slice(2, 6).map((s) => s.trim().replace(/^at /, "")).join(" <- ");
+		this.pushTrace(`loadSession id=${String(session.id).slice(0, 8)} exitSettings=${this.settingsMode} via=${stack.slice(0, 160)}`);
+		// ── 界面状态守卫（跳转到会话时 header/footer 消失的根因）────────
+		// 设置屏/引导屏开着时 root 挂着 settings-active/guide-active，CSS
+		// 据此 display:none 真实 header/footer/status；历史菜单等入口若在
+		// 此时 loadSession，会话渲染出来但 chrome 全消失。任何会话跳转都
+		// 先退干净（目标会话以参数为准，设置快照丢弃；引导本次不再弹出）。
+		if (this.settingsMode) {
+			this.settingsMode = false;
+			this.settingsInitialTab = undefined;
+			this.settingsEmbed?.destroy();
+			this.settingsEmbed = null;
+			this.settingsConvSnapshot = null;
+			this.setSettingsChrome(false);
+		}
+		if (this.guideModeActive()) {
+			this.guideRequested = false;
+			this.guideDismissed = true;
+			this.guideStartOverride = false;
+			this.setGuideChrome(false);
+		}
 		this.currentSessionId = session.id;
 		this.currentMessages = [...session.messages];
 		// Header subtitle = the session's first question (same as live chats).
@@ -3647,13 +3713,12 @@ export class SemanticSearchView extends ItemView {
 		}
 		// 独立弹窗与主区域标签页同享宽幅样式（底色/限宽/常显菜单）
 		this.contentEl.toggleClass("semlink-main-tab", isMain);
-		// 弹出/收回按钮（设置左侧）双形态：侧栏=弹出独立窗口
-		// （picture-in-picture-2），弹窗=收回侧栏（picture-in-picture——↖ 箭头
-		// 飞回主框 + 右下小窗，是 PiP-2 的官方反向搭档）。仅在形态翻转时重设
-		// 图标/提示（布局事件高频触发，避免反复重画 SVG）。
+		// 弹出/收回按钮（设置左侧）：图标统一 picture-in-picture-2（用户拍板，
+		// 收回态不再换反向搭档图标）；aria 提示仍随所在位置翻转。仅在形态
+		// 翻转时重设提示（布局事件高频触发，避免反复重画 SVG）。
 		if (this.popoutBtnEl && this.lastPopoutBtnDocked !== inPopout) {
 			this.lastPopoutBtnDocked = inPopout;
-			setIcon(this.popoutBtnEl, inPopout ? "picture-in-picture" : "picture-in-picture-2");
+			setIcon(this.popoutBtnEl, "picture-in-picture-2");
 			this.popoutBtnEl.setAttribute("aria-label", inPopout ? t("dockBackWindow") : t("popOutWindow"));
 		}
 		// 首次进入弹窗：默认收起左侧菜单——弹窗是聚焦对话的形态，
@@ -4217,9 +4282,9 @@ export class SemanticSearchView extends ItemView {
 		});
 	}
 
-	/** Open the plugin settings with the Model tab active ("Manage models"). */
+	/** Open the plugin settings with the Model detail active ("Manage models"). */
 	private openModelSettings(): void {
-		this.openSettingsScreen({ modelTab: true });
+		this.openSettingsScreen({ tab: "model" });
 	}
 
 	/** 引导完成后的彩带庆祝 🎉：临时画布上撒彩色纸屑，约 2.8 秒后自毁。

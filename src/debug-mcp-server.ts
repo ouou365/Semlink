@@ -20,6 +20,9 @@ export type DebugJumpRunner = (path: string, line: number) => Promise<unknown>;
 /** measure 工具执行器：由 main.ts 注入——回报输入区相关元素的实际布局。 */
 export type DebugMeasureRunner = (opts?: { popout?: boolean }) => Promise<unknown>;
 
+/** shot 工具执行器：由 main.ts 注入——Electron capturePage 截取窗口 PNG。 */
+export type DebugShotRunner = (opts?: { target?: string | number; resize?: { index?: number; width: number; height: number } }) => Promise<unknown>;
+
 interface JsonRpcRequest {
 	jsonrpc: "2.0";
 	id?: string | number | null;
@@ -74,10 +77,51 @@ const MEASURE_TOOL = {
 	description:
 		"Measure the chat input footer layout in the main window: bounding rects " +
 		"and computed paddings/margins of .semlink-search-view, -footer, " +
-		"-input-wrapper, -input-row, -input. For diagnosing spacing issues.",
+		"-input-wrapper, -input-row, -input. For diagnosing spacing issues. " +
+			"Also drives UI for walkthroughs: nav=\"settings\" opens the embedded " +
+			"settings screen; nav=0..4 switches to Model/RAG/MCP/Share/Pro " +
+			"detail (narrow container drills in, so detail pages become visible). " +
+			"Always reports winState: every Semlink view instance with its window " +
+			"kind (popout / sidebar-left / sidebar-right / main-area), viewport and " +
+			"OS window size, and the settings container breakpoint (narrow ≤480 / " +
+			"mid ≤720 / wide).",
 	inputSchema: {
 		type: "object",
-		properties: { popout: { type: "boolean", description: "Move the search view into a popout window first, then measure the popout instance." }, repro: { type: "boolean", description: "Reproduce the guide-to-popout coffee-cup loss: open embed guide in sidebar, click the real popout button, probe the canvas over time." } },
+		properties: {
+			popout: { type: "boolean", description: "Move the search view into a popout window first, then measure the popout instance." },
+			width: { type: "number", description: "Popout window width in CSS px (with popout:true; re-moves an already-popped-out leaf at the new size). Default 420 (popout:true) / 780 (popout:string)." },
+			height: { type: "number", description: "Popout window height in CSS px (with popout:true). Default 800 (popout:true) / 720 (popout:string)." },
+			dock: { type: "boolean", description: "Dock a popped-out instance back into the sidebar first (clicks the view's own dock-back button)." },
+			repro: { type: "boolean", description: "Reproduce the guide-to-popout coffee-cup loss: open embed guide in sidebar, click the real popout button, probe the canvas over time." },
+			nav: { description: "\"settings\" | number 0-5: open the settings screen / switch detail page before measuring.", type: ["string", "number"] },
+			scrollPanel: { description: "Scroll the settings panel to this scrollTop before measuring (-1 = scroll to bottom). The license card occupies the first screen; toggles/buttons below the fold need this.", type: "number" },
+		},
+		required: [],
+	},
+};
+
+const SHOT_TOOL = {
+	name: "shot",
+	description:
+		"Capture PNG screenshot(s) of the Obsidian window(s) via Electron " +
+		"capturePage (whole window, all leaves). Returns absolute file paths " +
+		"plus each window's title/bounds. Pair with measure {nav} to visually " +
+		"inspect specific screens. Files are overwritten per call (same names).",
+	inputSchema: {
+		type: "object",
+		properties: {
+			target: { description: "\"all\" (default) captures every window; a number captures that window index only.", type: ["string", "number"] },
+			resize: {
+				description: "Optional: resize a window before capturing (Electron setBounds — bypasses moveLeafToPopout's 600px min, for narrow-layout walkthroughs). index defaults to 0.",
+				type: "object",
+				properties: {
+					index: { type: "number" },
+					width: { type: "number" },
+					height: { type: "number" },
+				},
+				required: ["width", "height"],
+			},
+		},
 		required: [],
 	},
 };
@@ -101,7 +145,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -194,7 +238,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, RELOAD_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -209,8 +253,10 @@ export class DebugMcpServer {
 						if (!jp || !(jl > 0)) throw new Error("jump needs path and a positive line");
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runJump?.(jp, jl)) ?? { error: "no jump runner" }, null, 2) }] };
 					} else if (params.name === "measure") {
-						result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
-					} else {
+							result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
+						} else if (params.name === "shot") {
+							result = { content: [{ type: "text", text: JSON.stringify((await this.runShot?.(params.arguments as { target?: string | number; resize?: { index?: number; width: number; height: number } } | undefined)) ?? { error: "no shot runner" }, null, 2) }] };
+						} else {
 						result = await this.handleAsk(params);
 					}
 					break;

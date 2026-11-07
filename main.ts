@@ -5,8 +5,7 @@
 import { Notice, Plugin, FileSystemAdapter, WorkspaceLeaf, WorkspaceSidedock, addIcon, MarkdownView, TFile } from "obsidian";
 import { debugLog, setDebugLogging } from "./src/log";
 import { join } from "path";
-import { DEFAULT_SETTINGS, DEFAULT_GIT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
-import { GitService } from "./src/git-service";
+import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
 import { WebSearchService } from "./src/web-search";
 import { UsageStore } from "./src/usage-store";
 import { migrateLegacyCatalogBases, sanitizeProviderOrder, syncCatalogModels } from "./src/settings-models";
@@ -48,6 +47,10 @@ export default class SmartVaultPlugin extends Plugin {
 	progress!: ProgressTracker;
 	mcpServer: McpServer | null = null;
 	debugMcpServer: DebugMcpServer | null = null;
+	/** 内置 MCP 服务最后一次启动失败的原因（瞬态，不进 data.json）：
+	 *  startMcpServer 成功置 null、失败写 err.message，MCP 设置页据此
+	 *  把内置服务行渲染成「连接失败」态并展示原因。 */
+	mcpLastError: string | null = null;
 	/** LAN share server for conversation snapshots. Token↔session pairs
 	 *  persist in data/share-registry.json and the port in settings, so a
 	 *  share URL keeps working across restarts (unchanged IP); page HTML is
@@ -56,8 +59,6 @@ export default class SmartVaultPlugin extends Plugin {
 	/** Note-level LAN sharing: reuses the ShareServer registry with
 	 *  `note:<path>` keys and drives the editor-header two-state icon. */
 	noteShare!: NoteShare;
-	/** Git 集成：本地自动快照免费，远程推送（GitHub/Gitee）Pro 门控。 */
-	gitService!: GitService;
 	/** DeepSeek 网页搜索：复用带 Key 的 DeepSeek 聊天供应商，无则 web_search 不注册。 */
 	webSearch!: WebSearchService;
 	historyStore!: ChatHistoryStore;
@@ -136,18 +137,7 @@ export default class SmartVaultPlugin extends Plugin {
 		this.client = new EmbeddingClient(this.settings);
 		// DeepSeek 网页搜索：供应商配置现读（换 Key/换供应商即时生效）
 		this.webSearch = new WebSearchService({ getSettings: () => this.settings });
-		// Git 集成（桌面端）：vault 根为仓库目录；任何文件事件都重置自动
-		// 快照的防抖计时（默认 1 分钟内无变化才提交——全自动，不询问）。
-		this.gitService = new GitService(
-			(this.app.vault.adapter as FileSystemAdapter).getBasePath(),
-			() => this.settings.git ?? DEFAULT_GIT_SETTINGS,
-			() => this.licenseManager.isPro(),
-		);
-		this.registerEvent(this.app.vault.on("modify", () => this.gitService.schedule()));
-		this.registerEvent(this.app.vault.on("create", () => this.gitService.schedule()));
-		this.registerEvent(this.app.vault.on("delete", () => this.gitService.schedule()));
-		this.registerEvent(this.app.vault.on("rename", () => this.gitService.schedule()));
-		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault, () => this.app.workspace.getActiveFile()?.path ?? null, () => this.settings.excludePaths, this.gitService, this.webSearch, () => this.mcpInfoText());
+		this.chatTools = new SemlinkTools(this.store, this.client, this.app.vault, () => this.app.workspace.getActiveFile()?.path ?? null, () => this.settings.excludePaths, this.webSearch, () => this.mcpInfoText());
 		this.chatClient = new ChatClient(this.settings, this.chatTools);
 		// Single shared chat-history store: the search view writes to it and
 		// the LAN share server renders from it, so re-opened share URLs see
@@ -453,8 +443,6 @@ export default class SmartVaultPlugin extends Plugin {
 	async loadSettings() {
 		const data = (await this.loadData()) as Partial<SmartVaultSettings> | null;
 		this.settings = { ...DEFAULT_SETTINGS, ...data };
-		// Git 设置嵌套对象：旧配置补默认值（浅合并外层覆盖不到）。
-		this.settings.git = { ...DEFAULT_GIT_SETTINGS, ...(this.settings.git ?? {}) };
 		// Data written before the unified provider list existed carries the
 		// old embeddingProviders/chatProviders split (and earlier still, flat
 		// provider/apiBase/*ApiKey fields) — fold them into `providers` once.
@@ -585,7 +573,6 @@ export default class SmartVaultPlugin extends Plugin {
 			this.settings,
 			this.app.vault,
 			() => this.app.workspace.getActiveFile()?.path ?? null,
-			this.gitService,
 			this.webSearch,
 			() => this.mcpInfoText(),
 		);
@@ -593,9 +580,11 @@ export default class SmartVaultPlugin extends Plugin {
 		try {
 			// 启动成功不打扰——MCP 是常驻后台服务，静默即可；失败仍需提示。
 			await this.mcpServer.start();
+			this.mcpLastError = null;
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
 			new Notice(`Semlink MCP: ${t("noticeMcpFailed")} - ${msg}`);
+			this.mcpLastError = msg;
 			this.mcpServer = null;
 		}
 	}
@@ -606,6 +595,8 @@ export default class SmartVaultPlugin extends Plugin {
 			this.mcpServer = null;
 			new Notice(`Semlink MCP: ${t("noticeMcpStopped")}`);
 		}
+		// 手动停止不是失败：清掉上一次的启动错误，设置页回到「已停止」态。
+		this.mcpLastError = null;
 	}
 
 	async restartMcpServer() {
@@ -623,6 +614,7 @@ export default class SmartVaultPlugin extends Plugin {
 			() => this.runDebugReload(),
 			(path, line) => this.runDebugJump(path, line),
 			(opts) => this.runDebugMeasure(opts),
+			(opts) => this.runDebugShot(opts),
 		);
 		try {
 			await server.start();
@@ -704,17 +696,31 @@ export default class SmartVaultPlugin extends Plugin {
 		return { mode, resolved, scrollTop: Math.round(scroller?.scrollTop ?? -1), scrollHeight: scroller?.scrollHeight ?? -1, expectedLine: line, totalLines, file: v.file?.path };
 	}
 
-	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string }): Promise<unknown> {
+	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number }): Promise<unknown> {
 		// 可选：先把搜索视图移入独立弹窗再量（弹窗实例的布局与主窗不同）。
+		// width/height 自定弹窗尺寸（≤480 可测窄幅断点）；不传用形态默认值。
+		// 对已在弹窗里的 leaf 再次 moveLeafToPopout = 按新尺寸重建弹窗，
+		// 旧窗随之空置自动关闭——调宽度无需先收回。
 		if (opts?.popout) {
 			const leaf = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
 			if (leaf) {
-				await this.app.workspace.moveLeafToPopout(leaf, { size: { width: opts?.popout === true ? 420 : 780, height: opts?.popout === true ? 800 : 720 } });
+				const w = typeof opts.width === "number" ? opts.width : opts.popout === true ? 420 : 780;
+				const h = typeof opts.height === "number" ? opts.height : opts.popout === true ? 800 : 720;
+				await this.app.workspace.moveLeafToPopout(leaf, { size: { width: w, height: h } });
 				await new Promise((r) => window.setTimeout(r, 800));
 			}
 		}
+		// 可选：把弹窗实例收回侧栏（点视图自己的收回按钮——插件的迁移
+		// 逻辑处理实例搬运与会话保持，比 workspace 内部 API 搬运可靠）。
+		if (opts?.dock) {
+			const leaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+			const floatLeaf = leaves.find((l) => (l.view as unknown as { containerEl?: { ownerDocument?: Document } }).containerEl?.ownerDocument !== window.document);
+			const svDock = (floatLeaf ?? leaves[0])?.view as unknown as { popoutBtnEl?: HTMLElement } | null;
+			svDock?.popoutBtnEl?.click();
+			await new Promise((r) => window.setTimeout(r, 1000));
+		}
 		// 导航注入：nav="settings" 打开内嵌设置屏；nav=数字 点击第 N 个
-		// 设置 tab（0=通用 1=模型 2=RAG 3=Git 4=MCP 5=分享）。供截图走查。
+		// 设置 tab（0=模型 1=RAG 2=MCP 3=分享 4=Pro）。供截图走查。
 		let navDbg: Record<string, unknown> | null = null;
 		if (opts?.nav !== undefined) {
 			// 先把 Semlink 视图激活到前台（同一右栏里可能有笔记 tab 挡着），
@@ -735,30 +741,59 @@ export default class SmartVaultPlugin extends Plugin {
 				if (opts.nav === "settings") {
 					sv.openSettingsScreen?.();
 					await new Promise((r) => window.setTimeout(r, 700));
-				} else if (typeof opts.nav === "number") {
+				} else if (/^\d+$/.test(String(opts.nav))) {
+					// MCP 客户端可能把数字参数强转成字符串（实测 nav=0 到达时是
+					// "0"）——typeof number 判定永远落空，这里按数字字符串兼容。
+					const navIdx = parseInt(String(opts.nav), 10);
 					sv.openSettingsScreen?.();
 					await new Promise((r) => window.setTimeout(r, 500));
 					// DOM .click() 在这个嵌入实例上不生效——直接改设置 tab
 					// 实例的 activeTab 并重渲染，确定性切换。
-					const ids = ["general", "model", "embedding", "git", "mcp", "share"] as const;
+					// nav 语义 = 菜单位置（用户拍板顺序：Model 第一、Pro 最后）
+					const ids = ["model", "embedding", "mcp", "share", "general"] as const;
 					const inst = (sv as unknown as {
 						settingsEmbed?: { tab?: { activeTab?: string; display(): void } };
 					}).settingsEmbed?.tab;
-					navDbg = { hadInst: !!inst, instTab: inst?.activeTab ?? null };
-					if (inst && ids[opts.nav]) {
-						inst.activeTab = ids[opts.nav];
+					navDbg = { hadInst: !!inst, instTab: inst?.activeTab ?? null, navRaw: String(opts.nav) };
+					if (inst && ids[navIdx]) {
+						inst.activeTab = ids[navIdx];
 						inst.display();
+						// 横向 tab 栏无层级：切 tab 即所见（窄幅下详情也在栏下方
+						// 常显，导航注入直接可读）。
 						navDbg.switched = inst.activeTab;
 						const doc0 = sv.contentEl?.ownerDocument;
-						navDbg.domRightAfter = doc0?.querySelector(".semlink-settings-tab.is-active")?.textContent ?? null;
+						navDbg.domRightAfter = doc0?.querySelector(".semlink-settings-menu-item.is-active .semlink-settings-menu-label")?.textContent ?? null;
+						// 选中段计算样式：取证白拇指被 blanket 按钮规则压掉与否
+						const activeItem = doc0?.querySelector<HTMLElement>(".semlink-settings-menu-item.is-active");
+						if (activeItem) {
+							const cs = doc0!.defaultView!.getComputedStyle(activeItem);
+							navDbg.activeStyle = {
+								backgroundColor: cs.backgroundColor,
+								boxShadow: cs.boxShadow.slice(0, 60),
+								color: cs.color,
+							};
+						}
+						navDbg.drilled = !!doc0?.querySelector(".semlink-settings-root.is-drilled");
 						navDbg.docIsMain = doc0 === window.document;
 					} else {
 						const doc = sv.contentEl.ownerDocument;
-						const chips = doc.querySelectorAll(".semlink-settings-tabs button");
-						(chips[opts.nav] as HTMLElement | undefined)?.click();
+						const chips = doc.querySelectorAll(".semlink-settings-menu-item");
+						(chips[navIdx] as HTMLElement | undefined)?.click();
 					}
 					await new Promise((r) => window.setTimeout(r, 700));
 				}
+			}
+			// scrollPanel：把设置面板滚到指定 scrollTop（-1 = 滚到底）。
+			// License 卡在面板顶部占一屏，下方折行的开关/按钮行验收全靠它。
+			if (typeof opts?.scrollPanel === "number" && sv?.contentEl) {
+				const doc0 = sv.contentEl.ownerDocument;
+				const panels = doc0.querySelectorAll<HTMLElement>(".semlink-settings-panel");
+				(navDbg ??= {}).panelCount = panels.length;
+				for (const p of Array.from(panels)) {
+					p.scrollTop = opts.scrollPanel < 0 ? p.scrollHeight : opts.scrollPanel;
+					(navDbg as Record<string, unknown>).scrollTopAfter = Math.round(p.scrollTop);
+				}
+				await new Promise((r) => window.setTimeout(r, 250));
 			}
 		}
 		// 复现「点弹窗按钮后咖啡杯丢失」：进入嵌入引导 → 点真实弹窗按钮 →
@@ -938,7 +973,10 @@ export default class SmartVaultPlugin extends Plugin {
 				msgFirstCls: semView?.messagesEl?.firstElementChild?.className ?? null,
 			};
 			// jitter 诊断会切走再切回渲染（破坏设置屏/会话）——nav 注入时跳过。
-			if (opts?.nav === undefined && semView?.messagesEl && semView.renderWelcome && w.document.querySelector(".semlink-search-welcome:not(.semlink-search-welcome-guide)")) {
+			// 设置屏/引导屏占据欢迎区时同样跳过：它们不是可随手重渲的「主页」，
+			// swap 会把嵌入的设置 Tab 实例连带毁掉（用户正在填的表单清空）。
+			const busyScreen = w.document.querySelector(".semlink-settings-screen, .semlink-search-welcome-guide");
+			if (opts?.nav === undefined && !busyScreen && semView?.messagesEl && semView.renderWelcome && w.document.querySelector(".semlink-search-welcome:not(.semlink-search-welcome-guide)")) {
 				const home = {
 					brand: rectOf(".semlink-search-brand-group"),
 					rightIcons: rectOf(".semlink-search-header-right"),
@@ -982,8 +1020,8 @@ export default class SmartVaultPlugin extends Plugin {
 			// sessionIdx：可指定加载第 N 个会话（0=最新）——用于对比
 			// 「有滚动条的长对话 vs 无滚动条的短对话」的卡片右缘。
 			// nav 注入（设置屏截图走查）时跳过——否则会把刚打开的设置屏
-			// 用会话顶掉。
-			if (opts?.nav === undefined && !w.document.querySelector(".semlink-msg-user-turn")) {
+			// 用会话顶掉。设置屏/引导屏同样跳过（同上：诊断不得顶掉业务屏）。
+			if (opts?.nav === undefined && !busyScreen && !w.document.querySelector(".semlink-msg-user-turn")) {
 				const sv = semView as unknown as {
 					history?: { load(): Promise<Array<Record<string, unknown>>> };
 					loadSession?: (s: unknown) => Promise<void>;
@@ -1047,6 +1085,127 @@ export default class SmartVaultPlugin extends Plugin {
 					const t = w.document.querySelector(".semlink-settings-tab.is-active");
 					return (t ? t.textContent : null) + " chips=" + w.document.querySelectorAll(".semlink-settings-tabs button").length + " screen=" + !!w.document.querySelector(".semlink-settings-screen") + " roots=" + w.document.querySelectorAll(".semlink-settings-root").length;
 				})(),
+				// 设置菜单卡宽度诊断：遍历文档内全部设置根实例（侧栏/主区 tab
+				// 可能并存，querySelector 首个会被隐藏实例污染）
+				settingsCard: (() => {
+					const roots = Array.from(w.document.querySelectorAll(".semlink-settings-root")) as HTMLElement[];
+					return roots.map((root) => {
+						const col = root.querySelector(":scope > .semlink-settings-layout > .semlink-settings-menu-col") as HTMLElement | null;
+						const menu = root.querySelector(".semlink-settings-menu") as HTMLElement | null;
+						const panel = root.querySelector(".semlink-settings-panel") as HTMLElement | null;
+						const mt = root.querySelector(".semlink-mt") as HTMLElement | null;
+							const prov = root.querySelector(".semlink-mt-providers") as HTMLElement | null;
+							const models = root.querySelector(".semlink-mt-config") as HTMLElement | null;
+						const rect = (el: HTMLElement | null) => { const r = el?.getBoundingClientRect(); return r ? Math.round(r.width) : -1; };
+						const hint = root.querySelector(".semlink-settings-menu-hint") as HTMLElement | null;
+						const chev = root.querySelector(".semlink-settings-menu-chevron") as HTMLElement | null;
+						return {
+							rootW: root.offsetWidth,
+							colW: col?.offsetWidth ?? -1,
+							menuW: menu?.offsetWidth ?? -1,
+							hintVisible: hint ? hint.offsetWidth > 0 : null,
+							chevronVisible: chev ? chev.offsetWidth > 0 : null,
+							panelClientW: panel?.clientWidth ?? -1,
+							panelScrollW: panel?.scrollWidth ?? -1,
+							// 溢出元素定位：横向 scrollWidth 超出 clientWidth 的前 3 个
+							// 后代（类名 + 宽度）——Model 页/MCP 页窄幅溢出类问题的
+							// 病根探测器，不再靠猜。另附直接子项宽度（面板 scrollWidth
+							// 超标时先看是谁宽）。
+							overflowers: (() => {
+								if (!panel) return null;
+								const panelRect = panel.getBoundingClientRect();
+								const direct = Array.from(panel.children).map((c) => ({
+									cls: (c.className || "").toString().slice(0, 40),
+									w: (c as HTMLElement).offsetWidth,
+								}));
+								const hits: Array<Record<string, unknown>> = [];
+								const widest: Array<Record<string, unknown>> = [];
+								const walk = (el: Element, depth: number): void => {
+									if (depth > 12) return;
+									for (const child of Array.from(el.children)) {
+										const h = child as HTMLElement;
+										if (hits.length < 3 && h.scrollWidth > h.clientWidth + 2 && h.clientWidth > 0) {
+											hits.push({ cls: (h.className || "").toString().slice(0, 60), client: h.clientWidth, scroll: h.scrollWidth });
+										}
+										if (widest.length < 4) {
+											const r = h.getBoundingClientRect();
+											widest.push({
+												cls: (h.className || "").toString().slice(0, 50),
+												w: h.offsetWidth,
+												// 右缘相对面板左缘：超出 clientWidth 的就是
+												// scrollWidth 溢出的真凶（含绝对定位逃逸者）。
+												right: Math.round(r.right - panelRect.left),
+											});
+											widest.sort((a, b) => (b.right as number) - (a.right as number));
+											if (widest.length > 4) widest.pop();
+										}
+										walk(child, depth + 1);
+									}
+								};
+								walk(panel, 0);
+								return { panelW: panel.offsetWidth, direct, widest, hits: hits.length ? hits : "none" };
+							})(),
+							mtW: rect(mt),
+							providersW: rect(prov),
+							modelsW: rect(models),
+							// 总开关实测：容器与 ::after 圆钮的渲染尺寸/位移——
+							// 51×31+27 规格被哪条规则改写一测便知。
+							mtToggle: (() => {
+								const tgl = root.querySelector(
+									".semlink-mt-config-master .checkbox-container",
+								) as HTMLElement | null;
+								if (!tgl) return null;
+								const cs = getComputedStyle(tgl);
+								const after = getComputedStyle(tgl, "::after");
+								return {
+									w: Math.round(tgl.getBoundingClientRect().width),
+									h: Math.round(tgl.getBoundingClientRect().height),
+									width: cs.width,
+									height: cs.height,
+									display: cs.display,
+									flexShrink: cs.flexShrink,
+									afterW: after.width,
+									afterH: after.height,
+									afterTransform: after.transform,
+								};
+							})(),
+							// Model 页纵向链诊断：面板/mt/列/行卡的 clientHeight 与
+							// scrollHeight——短列表下方灰底空洞（fill 链断裂）或
+							// 超高列表（内部滚动失效）都靠这组数定位。
+							mtHeights: (() => {
+								const h = (el: HTMLElement | null) => el
+									? { ch: el.clientHeight, sh: el.scrollHeight }
+									: null;
+								// 面板向上到视图根的祖先链：类名 + 高度 + overflow-y +
+								// display——纵向 fill 链断在哪一环直接看这条链。
+								const chain: Array<Record<string, unknown>> = [];
+								if (panel) {
+									let el: HTMLElement | null = panel;
+									while (el && chain.length < 14) {
+										const cs = getComputedStyle(el);
+										chain.push({
+											cls: (el.className || "").toString().slice(0, 60),
+											ch: el.clientHeight,
+											sh: el.scrollHeight,
+											oy: cs.overflowY,
+											disp: cs.display,
+											fxd: cs.flexDirection,
+										});
+										el = el.parentElement;
+									}
+								}
+								return {
+									panel: h(panel),
+									mt: h(mt),
+									prov: h(prov),
+									models: h(models),
+									rows: h((root.querySelector(".semlink-mt-rows") as HTMLElement | null)),
+									chain,
+								};
+							})(),
+						};
+					});
+				})(),
 				msgsBox,
 				// 横向溢出诊断：scrollWidth 超过 clientWidth 说明卡片真的被裁
 				clipProbe: (() => {
@@ -1086,6 +1245,7 @@ export default class SmartVaultPlugin extends Plugin {
 			};
 		}
 		if (navDbg) out.navDbg = navDbg;
+		out.winState = this.collectDebugWinState();
 		if (reproLog.length > 0) out.reproLog = reproLog;
 		if (Object.keys(out).length === 0) {
 			// 没有任何窗口开着视图——主动唤起主区标签页实例再量一次。
@@ -1095,6 +1255,112 @@ export default class SmartVaultPlugin extends Plugin {
 			if (!view) return { error: "search view did not open" };
 		}
 		return out;
+	}
+
+	/** shot 执行器：Electron capturePage 截取窗口 PNG 到系统临时目录并返回
+	 *  绝对路径。capturePage 走合成器（不依赖窗口是否被遮挡/置顶），弹窗与
+	 *  主窗都能截；DPR 缩放保留在像素里（retina 下文件是 2x）。 */
+	/** winState 探针：枚举全部 Semlink 视图实例，回报窗口形态与尺寸。
+	 *  形态判定：独立文档 = 弹窗；主文档内落在左右分栏 = 侧栏；其余 = 主区。
+	 *  尺寸两级：viewport（布局/容器查询实际生效面）与 OS 窗口外框
+	 *  （outerWidth/Height，Electron 渲染进程原生支持）。断点口径与
+	 *  设置屏容器查询一致（480/720）。 */
+	private collectDebugWinState(): Array<Record<string, unknown>> {
+		const out: Array<Record<string, unknown>> = [];
+		const leaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+		for (const leaf of leaves) {
+			const el = ((leaf as unknown as { containerEl?: HTMLElement }).containerEl
+				?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+			const doc = el?.ownerDocument;
+			const dv = doc?.defaultView;
+			if (!el || !doc || !dv) continue;
+			const isPopout = doc !== window.document;
+			const kind = isPopout
+				? "popout"
+				: el.closest(".mod-left-split")
+					? "sidebar-left"
+					: el.closest(".mod-right-split")
+						? "sidebar-right"
+						: "main-area";
+			const root = doc.querySelector<HTMLElement>(".semlink-settings-root");
+			const rootW = root ? root.getBoundingClientRect().width : -1;
+			const bp = rootW < 0 ? null : rootW <= 480 ? "narrow" : rootW <= 720 ? "mid" : "wide";
+			const r = el.getBoundingClientRect();
+			out.push({
+				kind,
+				viewport: { w: dv.innerWidth, h: dv.innerHeight },
+				outer: { w: dv.outerWidth, h: dv.outerHeight },
+				dpr: dv.devicePixelRatio,
+				docTitle: doc.title,
+				viewRect: { w: Math.round(r.width), h: Math.round(r.height) },
+				settingsRootW: Math.round(rootW),
+				breakpoint: bp,
+				settingsScreenActive: !!doc.querySelector(".semlink-search-view.semlink-settings-active"),
+				// 屏幕切换 breadcrumbs：设置屏幽灵自愈路径的取证（谁把它关了）
+				trace: (leaf.view as unknown as { screenTrace?: string[] }).screenTrace?.slice(-25) ?? null,
+			});
+		}
+		return out;
+	}
+
+	private async runDebugShot(opts?: { target?: string | number; resize?: { index?: number; width: number; height: number } }): Promise<unknown> {
+		interface ElectronWindowLike {
+			isDestroyed(): boolean;
+			getTitle(): string;
+			getBounds(): { x: number; y: number; width: number; height: number };
+			setBounds?(bounds: { x: number; y: number; width: number; height: number }): void;
+			webContents: {
+				capturePage(): Promise<{ toPNG(): Uint8Array; getSize(): { width: number; height: number } }>;
+				getZoomFactor(): number;
+			};
+		}
+		try {
+			const req = (window as unknown as { require?: (m: string) => unknown }).require;
+			if (!req) return { error: "renderer require unavailable" };
+			const electron = req("electron") as
+				| { remote?: { BrowserWindow: { getAllWindows(): ElectronWindowLike[] } } }
+				| undefined;
+			const remote = electron?.remote;
+			if (!remote) return { error: "electron remote unavailable (Obsidian remote not initialized)" };
+			const fsMod = req("fs") as { mkdirSync(d: string, o?: { recursive?: boolean }): void; writeFileSync(f: string, d: Uint8Array): void };
+			const osMod = req("os") as { tmpdir(): string };
+			const pathMod = req("path") as { join(...p: string[]): string };
+			const dir = pathMod.join(osMod.tmpdir(), "semlink-debug-shots");
+			fsMod.mkdirSync(dir, { recursive: true });
+
+			const all = remote.BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && w.getBounds().width > 0);
+			if (all.length === 0) return { error: "no windows found" };
+			// 可选：截图前先改窗口尺寸（moveLeafToPopout 有 600px 最小宽，
+			// 窄幅 (<480 容器) 走查只能靠 Electron setBounds 绕过）。
+			if (opts?.resize) {
+				const idx = typeof opts.resize.index === "number" ? opts.resize.index : 0;
+				const w = all[idx];
+				if (w?.setBounds) {
+					const b = w.getBounds();
+					w.setBounds({ x: b.x, y: b.y, width: opts.resize.width, height: opts.resize.height });
+					await new Promise((r) => window.setTimeout(r, 500));
+				}
+			}
+			let targets = all;
+			if (typeof opts?.target === "number") {
+				targets = [all[opts.target]].filter(Boolean);
+				if (targets.length === 0) return { error: `window index ${opts.target} out of range (${all.length} windows)` };
+			}
+
+			const shots: Array<{ file: string; title: string; bounds: { x: number; y: number; width: number; height: number }; pixels: { width: number; height: number } }> = [];
+			for (let i = 0; i < targets.length; i++) {
+				const w = targets[i];
+				const img = await w.webContents.capturePage();
+				const safe = (w.getTitle() || "window").replace(/[\\/:*?"<>|]/g, "_").slice(0, 24);
+				const file = pathMod.join(dir, `shot${i}_${safe}.png`);
+				fsMod.writeFileSync(file, img.toPNG());
+				const size = img.getSize();
+				shots.push({ file, title: w.getTitle(), bounds: w.getBounds(), pixels: size });
+			}
+			return { dir, count: shots.length, shots };
+		} catch (e) {
+			return { error: e instanceof Error ? e.message : String(e) };
+		}
 	}
 
 	private runDebugReload(): void {

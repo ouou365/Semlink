@@ -84,14 +84,18 @@ export interface ShareQrModalOptions {
 	onRevoke?: () => void;
 }
 
-/** QR-code dialog for one share URL: big scannable code, the address with
- *  copy, open-in-browser, and (when the caller allows) a revoke button. */
+/** 「分享详情」弹窗：条目名 + 200px 二维码 + 折行全显地址 + 复制/打开
+ *  双按钮 + 停止共享（红色通栏，详情语境不二次确认）。进度模式（无 url）
+ *  仍是 spinner + 分块计数，渲染完成后原地填充为详情。 */
 export class ShareQrModal extends Modal {
 	private progressTextEl: HTMLElement | null = null;
 	private filled = false;
 
 	constructor(app: App, private opts: ShareQrModalOptions) {
 		super(app);
+		// 复用基座按钮词汇（semlink-btn-secondary/btn-block 的样式挂在
+		// .smart-vault-settings 作用域下）。
+		this.modalEl.addClass("smart-vault-settings");
 	}
 
 	async onOpen(): Promise<void> {
@@ -129,7 +133,7 @@ export class ShareQrModal extends Modal {
 		this.contentEl.empty();
 		this.contentEl.createEl("h3", { text: t("shareTitle") });
 		this.contentEl.createDiv({ cls: "semlink-share-progress is-error", text: `${t("searchError")} ${message}` });
-		const closeBtn = this.contentEl.createEl("button", { cls: "semlink-share-revoke", text: t("cancel") });
+		const closeBtn = this.contentEl.createEl("button", { cls: "semlink-btn-secondary semlink-btn-block", text: t("cancel") });
 		closeBtn.addEventListener("click", () => this.close());
 	}
 
@@ -147,7 +151,11 @@ export class ShareQrModal extends Modal {
 	private renderContent(url: string): void {
 		this.contentEl.empty();
 		this.progressTextEl = null;
-		this.contentEl.createEl("h3", { text: t("shareTitle") });
+
+		// 头部：条目名（16/650 居中）+ 副题「局域网分享」。
+		const head = this.contentEl.createDiv({ cls: "semlink-shareq-head" });
+		head.createDiv({ cls: "semlink-shareq-name", text: this.opts.name ?? t("shareUntitled") });
+		head.createDiv({ cls: "semlink-shareq-sub", text: t("shareTabTitle") });
 
 		const qrWrap = this.contentEl.createDiv({ cls: "semlink-share-qr" });
 		// Build the QR as an inline SVG from the raw module matrix — no
@@ -170,16 +178,19 @@ export class ShareQrModal extends Modal {
 		svgEl.appendChild(pathEl);
 		qrWrap.createDiv({ cls: "semlink-share-qr-img" }).appendChild(svgEl);
 
-		const row = this.contentEl.createDiv({ cls: "semlink-share-row" });
-		row.createSpan({ cls: "semlink-share-url", text: url });
-		const copyBtn = row.createEl("button", { cls: "semlink-share-copy", attr: { "aria-label": t("shareCopy") } });
-		setIcon(copyBtn, "copy");
+		// 折行全显地址：word-break 换行 + user-select:all 点一下整段选中。
+		this.contentEl.createDiv({ cls: "semlink-shareq-url", text: url });
+
+		// 双按钮：复制地址 / 在浏览器打开（各 flex:1，40px 通栏 secondary）。
+		const actions = this.contentEl.createDiv({ cls: "semlink-shareq-actions" });
+		const copyBtn = actions.createEl("button", { cls: "semlink-btn-secondary semlink-btn-block", text: t("shareCopy") });
 		copyBtn.addEventListener("click", () => {
-			void copyShareText(navigator.clipboard, this.opts.name, url).then(() => new Notice(t("shareCopied")));
+			void copyShareText(navigator.clipboard, this.opts.name, url)
+				.then(() => new Notice(t("shareCopied")))
+				.catch(() => new Notice(t("shareCopyFailed")));
 		});
 		// Local preview opens via the loopback address when available.
-		const openBtn = row.createEl("button", { cls: "semlink-share-copy", attr: { "aria-label": t("shareOpenBrowser") } });
-		setIcon(openBtn, "external-link");
+		const openBtn = actions.createEl("button", { cls: "semlink-btn-secondary semlink-btn-block", text: t("shareOpenBrowser") });
 		openBtn.addEventListener("click", () => {
 			// 总是打开局域网地址（127.0.0.1 只是本机预览出口）
 			window.open(url, "_blank");
@@ -189,10 +200,12 @@ export class ShareQrModal extends Modal {
 
 		if (this.opts.onRevoke) {
 			const revokeBtn = this.contentEl.createEl("button", {
-				cls: "semlink-share-revoke",
+				cls: "semlink-btn-block semlink-shareq-revoke",
 				text: t("shareRevoke"),
 			});
 			revokeBtn.addEventListener("click", () => {
+				// 详情语境的破坏性操作：用户是从「已共享」列表主动进来的，
+				// 立即生效 + Notice，不再二次确认。
 				this.opts.onRevoke?.();
 				new Notice(t("shareRevoked"));
 				this.close();

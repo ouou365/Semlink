@@ -55,6 +55,7 @@ export class WebSearchService {
 	private resolveProvider(): { baseUrl: string; apiKey: string } | null {
 		const providers = this.deps.getSettings().providers ?? [];
 		for (const p of providers) {
+			if (p.disabled) continue;
 			if (!p.apiKey || !p.apiKey.trim()) continue;
 			if (/api\.deepseek\.com/i.test(p.apiBase || "")) {
 				return { baseUrl: p.apiBase.replace(/\/+$/, ""), apiKey: p.apiKey.trim() };

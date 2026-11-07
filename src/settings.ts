@@ -2,28 +2,32 @@
 // Semlink - Settings Tab
 // ========================================
 
-import { App, DropdownComponent, Modal, Notice, PluginSettingTab, Setting, ToggleComponent, setIcon } from "obsidian";
+import { App, DropdownComponent, Modal, Notice, PluginSettingTab, Setting, SliderComponent, ToggleComponent, moment, setIcon } from "obsidian";
 import * as QRCode from "qrcode";
 import type SmartVaultPlugin from "../main";
 import type { IndexProgress, McpClientServer, SmartVaultSettings } from "./types";
-import { DEFAULT_GIT_SETTINGS } from "./types";
 import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
 import { LicenseModal } from "./license-modal";
 import { licenseErrorMessage } from "./license";
-import { LANGUAGES, getLang, t } from "./i18n";
+import { LANGUAGES, t } from "./i18n";
 import { ConfirmModal } from "./confirm-modal";
-import { markDestructive, rerenderSettingsTab, showSliderValue } from "./ui-compat";
+import { rerenderSettingsTab, showSliderValue } from "./ui-compat";
 import { ShareQrModal } from "./share-modal";
 import { debugLog } from "./log";
 
-type SettingsTab = "general" | "model" | "mcp" | "embedding" | "share" | "git" | "bot";
+type SettingsTab = "general" | "model" | "mcp" | "embedding" | "share" | "bot";
 export type { SettingsTab };
+
+/** 索引「进行中」的判定口径：RAG 状态块的 is-running 高亮与重新索引
+ *  按钮的「索引中…」运行态共用（idle/completed 之外的写阶段）。 */
+const RAG_RUNNING_PHASES: ReadonlySet<string> = new Set(["scanning", "chunking", "embedding", "building_index"]);
 
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
-	private activeTab: SettingsTab = "general";
+	// 默认落第一项 Model（菜单顺序用户拍板：Model 第一、Pro 最后一）。
+	private activeTab: SettingsTab = "model";
 	/** 嵌入式设置屏（displayInto 进入）标记：跳过标题/标语/语言下拉块。 */
 	private embeddedHost = false;
 	/** Provider-list state (models management, embedded in the General tab):
@@ -31,21 +35,20 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	private modelsState: ModelsTabState = { ...EMPTY_MODELS_TAB_STATE };
 	private feishuScanHandle: FeishuScanHandle | null = null;
 	private indexCardUnsub: (() => void) | null = null;
-
 	constructor(app: App, plugin: SmartVaultPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
 
 	/** 嵌入视图的设置屏（semlink-settings-screen）：把整套设置渲染进给定
-	 *  容器（替代设置弹窗）。可指定起始标签页；返回的 destroy 断开进度
+	 *  容器（替代设置弹窗）。可指定起始 tab；返回的 destroy 断开进度
 	 *  订阅等长生命周期资源并清空 DOM。 */
-	displayInto(container: HTMLElement, tab?: SettingsTab): void {
+	displayInto(container: HTMLElement, opts?: { tab?: SettingsTab }): void {
 		this.containerEl = container;
 		// 嵌入式设置屏（聊天视图内）省略标题/标语块：品牌在屏幕顶部
-		// corners 已有，语言切换挪到右上角图标——这里只剩 tabs + 面板。
+		// corners 已有，语言切换挪到右上角图标——这里只剩 tab 栏 + 面板。
 		this.embeddedHost = true;
-		if (tab) this.activeTab = tab;
+		if (opts?.tab) this.activeTab = opts.tab;
 		this.display();
 	}
 
@@ -117,46 +120,49 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// "撑满 Tab 容器"的 flex 布局只能作用于设置 Tab 根节点本身——
 		// 用这个专属类做作用域，避免把弹窗撑出一大截空白。
 		containerEl.addClass("semlink-settings-root");
+		// 宿主形态：CSS 据此微调内嵌屏专属的留白/动画（弹窗宿主略不同）。
+		containerEl.toggleClass("semlink-settings-embedded", this.embeddedHost);
 
-		// Title heading row: brand text · version · language dropdown (right).
+		// Title heading row: brand text · version（语言下拉已移入 General 页
+		// 偏好组——顶条右上图标与 General 双入口是评审指出的冗余）。
 		// Everything rides in the NAME element: heading-mode settings may hide
 		// the control area depending on host CSS — the name always renders.
-		// 嵌入式设置屏跳过：标题/标语与顶部品牌重复，语言在右上角图标。
+		// 嵌入式设置屏跳过：标题/标语与顶部品牌重复。
 		if (!this.embeddedHost) {
 			const title = new Setting(containerEl).setName(t("settingsTitle")).setHeading();
 			title.nameEl.addClass("semlink-settings-heading-row");
 			// setName already wrote the text into nameEl — clear it before adding
 			// the structured children, or the title renders twice. Layout: title
-			// with the version stacked under it (left), language far right.
+			// with the version stacked under it (left).
 			title.nameEl.empty();
 			const titleLeft = title.nameEl.createDiv({ cls: "semlink-settings-heading-left" });
 			titleLeft.createSpan({ cls: "semlink-settings-heading-text", text: t("settingsTitle") });
 			titleLeft.createSpan({ cls: "semlink-settings-tagline", text: t("settingsTagline") });
-			// Language switcher: saveSettings re-runs setLang and refreshes the
-			// language-dependent views; display() re-renders this panel so the
-			// settings UI itself follows the new language right away.
-			// Lang switcher lives as a DIRECT child of the setting-item root
-			// (sibling of .setting-item-info) — the root is already a flex row,
-			// so margin-left:auto right-aligns it without fighting name widths.
-			const langWrap = title.settingEl.createDiv({ cls: "semlink-settings-lang" });
-			new DropdownComponent(langWrap)
-				.addOptions({
-					auto: t("langAuto"),
-					...Object.fromEntries(LANGUAGES.map((l) => [l.value, l.label])),
-				})
-				.setValue(this.plugin.settings.language)
-				.onChange(async (value) => {
-					this.plugin.settings.language = value as SmartVaultSettings["language"];
-					await this.plugin.saveSettings();
-					rerenderSettingsTab(this);
-				});
 		}
 
-		// Tab navigation
-		this.renderTabNav(containerEl);
+		// 横向 tab 栏（iOS 分段控件式）在上、内容面板在下：任何宽度都
+		// 同构（不再有窄幅列表↔详情互斥的层级），tab 归属由分段高亮表达。
+		const layout = containerEl.createDiv({ cls: "semlink-settings-layout" });
+		const menuCol = layout.createDiv({ cls: "semlink-settings-menu-col" });
+		this.renderSettingsMenu(menuCol.createDiv({ cls: "semlink-settings-menu" }));
+		const detail = layout.createDiv({ cls: "semlink-settings-detail" });
+		const panelEl = detail.createDiv({ cls: "semlink-settings-panel" });
+		this.renderPanel(panelEl);
+	}
 
-		// Render only the active tab's content
-		const panelEl = containerEl.createDiv({ cls: "semlink-settings-panel" });
+	/** 渲染当前详情页内容（display 与 setTab 共用的分发）。 */
+	private renderPanel(panelEl: HTMLElement): void {
+		panelEl.empty();
+		// 宽幅切 tab 的防生硬淡入（120ms 纯 opacity，见 .is-swapping）。
+		// 窄幅不加：钻入态已有右滑入场动画，叠一层淡入反而糊。先摘 class
+		// 再强制 reflow——连点换 tab 时动画每次都重触发。
+		if ((this.containerEl.offsetWidth ?? 0) > 480) {
+			panelEl.removeClass("is-swapping");
+			void panelEl.offsetWidth;
+			panelEl.addClass("is-swapping");
+		}
+		// 页头大标题已移除（用户拍板）：窄幅顶条品牌位已是页面名、宽幅由
+		// 左侧菜单胶囊高亮表达归属——面板内再放同名大标题纯属重复。
 		switch (this.activeTab) {
 			case "general":
 				this.renderGeneralTab(panelEl);
@@ -169,9 +175,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				break;
 			case "share":
 				this.renderShareTab(panelEl);
-				break;
-			case "git":
-				this.renderGitTab(panelEl);
 				break;
 			case "embedding":
 				this.renderEmbeddingTab(panelEl);
@@ -197,49 +200,93 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		}
 	}
 
-	private renderTabNav(containerEl: HTMLElement): void {
-		const navEl = containerEl.createDiv({ cls: "semlink-settings-tabs" });
-		const tabs: Array<{ id: SettingsTab; label: string }> = [
-			{ id: "general", label: t("tabGeneral") },
-			{ id: "model", label: t("tabModel") },
-			{ id: "embedding", label: t("tabEmbedding") },
-			{ id: "git", label: t("tabGit") },
-			{ id: "mcp", label: t("tabMcp") },
-			{ id: "share", label: t("tabShare") },
+	/** 横向 tab 栏（iOS 分段控件风格）：lucide 单色图标 + 名称。点击仅
+	 *  切换下方面板——任何宽度同构，无钻入层级。 */
+	private renderSettingsMenu(menuEl: HTMLElement): void {
+		const tabs: Array<{ id: SettingsTab; icon: string; label: string }> = [
+			// 用户拍板的菜单顺序：Model（主任务）第一，Pro（原 General：偏好
+			// + 快速开始 + 许可证）收尾——高频在前，商业化压轴。
+			{ id: "model", icon: "bot", label: t("tabModel") },
+			{ id: "embedding", icon: "search", label: t("tabEmbedding") },
+			{ id: "mcp", icon: "plug-zap", label: t("tabMcp") },
+			{ id: "share", icon: "share-2", label: t("tabShare") },
+			{ id: "general", icon: "gem", label: t("tabGeneral") },
 			// Bot tab deliberately not listed: the Feishu bot is unpublished
 			// (freemium-design v3.6). renderBotTab stays available for re-enable.
 		];
 		for (const tab of tabs) {
-			const btn = navEl.createEl("button", {
-				cls: "semlink-settings-tab",
-				text: tab.label,
-			});
-			if (tab.id === this.activeTab) btn.addClass("is-active");
-			btn.addEventListener("click", () => {
-				if (this.activeTab !== tab.id) {
-					this.activeTab = tab.id;
-					rerenderSettingsTab(this);
-				}
+			const item = menuEl.createEl("button", { cls: "semlink-settings-menu-item" });
+			// data-tab：setTab 的选中态原地翻转用（不再整表重建，防 hover 闪烁）
+			item.setAttr("data-tab", tab.id);
+			if (tab.id === this.activeTab) item.addClass("is-active");
+			const iconEl = item.createSpan({ cls: "semlink-settings-menu-icon" });
+			setIcon(iconEl, tab.icon);
+			item.createSpan({ cls: "semlink-settings-menu-label", text: tab.label });
+			item.addEventListener("click", () => {
+				if (this.activeTab !== tab.id) this.setTab(tab.id);
 			});
 		}
 	}
 
-	// ══════════════════════════════════════
-	// Tab: General — license, language, sidebar entry, support
-	// ══════════════════════════════════════
-	private renderGeneralTab(containerEl: HTMLElement): void {
-		// ── Pro license status + entry (top of General) ──
-		this.renderLicenseSection(containerEl);
-
-		// Open the semantic-search sidebar panel.
-		// ── 上手清单：状态自动判定，全部完成后整卡收起为完成态 ──
-		// （原「快速开始」行已被清单的「开始对话」动作覆盖，不再重复展示）
-		this.renderChecklistSection(containerEl);
-
+	/** 切换 tab：只重渲面板与分段选中态，不整屏重建——无闪烁，滚动位置
+	 *  天然保留。模型页窄幅可能残留钻入态（供应商配置直开），切走再切回
+	 *  时统一回到列表层，入口语义一致。 */
+	setTab(tab: SettingsTab): void {
+		if (this.activeTab === tab) return;
+		this.activeTab = tab;
+		this.modelsState.drilled = false;
+		const panelEl = this.containerEl.querySelector<HTMLElement>(
+			":scope > .semlink-settings-layout > .semlink-settings-detail > .semlink-settings-panel",
+		);
+		if (!panelEl) { this.display(); return; }
+		this.renderPanel(panelEl);
+		const menuEl = this.containerEl.querySelector<HTMLElement>(".semlink-settings-menu");
+		if (menuEl) {
+			// 选中态原地翻转：整表重建会让悬停段的 hover 底瞬间消失（连点
+			// 时的可见闪烁），这里一段都不动。
+			menuEl.querySelectorAll<HTMLElement>(".semlink-settings-menu-item").forEach((el) => {
+				el.toggleClass("is-active", el.dataset.tab === tab);
+			});
+		}
 	}
 
 	/** 通用页的上手清单：对话模型 / 嵌入模型 / 首次问答 / 解锁，四项状态
 	 *  均由实时设置与历史推导（无需用户手动打勾）；每项带直达动作。 */
+	/** 通用详情页：许可（营销/激活）+ 上手清单。 */
+	private renderGeneralTab(panelEl: HTMLElement): void {
+		// 偏好组置顶：General 页此前只有 License/清单（评审：名为 General
+		// 却无一行常规设置）——语言等通用偏好先落地这里。
+		this.renderPrefsSection(panelEl);
+		// 任务（Quick start）其次、营销卡（License）最后——首屏回答
+		// "这页能做什么"，而不是"要不要买 Pro"。
+		this.renderChecklistSection(panelEl);
+		this.renderLicenseSection(panelEl);
+	}
+
+	/** General 偏好组：语言切换。saveSettings 重跑 setLang 刷新语言相关
+	 *  视图；display() 整页重渲，设置界面自身即刻跟随新语言。 */
+	private renderPrefsSection(panelEl: HTMLElement): void {
+		panelEl.createDiv({ cls: "semlink-card-title", text: t("generalPrefs") });
+		const card = panelEl.createDiv({ cls: "semlink-card" });
+		const row = card.createDiv({ cls: "semlink-row" });
+		row.createDiv({ cls: "semlink-row-label" }).createSpan({
+			cls: "semlink-row-title",
+			text: t("settingsLanguage"),
+		});
+		const ctl = row.createDiv({ cls: "semlink-row-control" });
+		new DropdownComponent(ctl)
+			.addOptions({
+				auto: t("langAuto"),
+				...Object.fromEntries(LANGUAGES.map((l) => [l.value, l.label])),
+			})
+			.setValue(this.plugin.settings.language)
+			.onChange(async (value) => {
+				this.plugin.settings.language = value as SmartVaultSettings["language"];
+				await this.plugin.saveSettings();
+				rerenderSettingsTab(this);
+			});
+	}
+
 	private renderChecklistSection(containerEl: HTMLElement): void {
 		const providers = this.plugin.settings.providers;
 		const chatReady = providers.some(
@@ -255,12 +302,17 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		);
 		let firstChatDone = false;
 
-		const card = containerEl.createDiv({ cls: "semlink-checklist" });
-		const head = card.createDiv({ cls: "semlink-checklist-head" });
-		head.createSpan({ cls: "semlink-checklist-title", text: t("checklistTitle") });
-		const progressEl = head.createSpan({ cls: "semlink-checklist-progress" });
-		const bar = card.createDiv({ cls: "semlink-checklist-bar" });
-		const barFill = bar.createDiv({ cls: "semlink-checklist-bar-fill" });
+		// 标题 + 分段计量出卡（卡外组标题，契约 3.1）；3 步 = 3 段离散填充。
+		const head = containerEl.createDiv({ cls: "semlink-checklist-head" });
+		head.createSpan({ cls: "semlink-card-title", text: t("checklistTitle") });
+		const meter = head.createDiv({ cls: "semlink-checklist-meter" });
+		const meterSegs: HTMLElement[] = [];
+		for (let i = 0; i < 3; i++) {
+			const seg = meter.createDiv({ cls: "semlink-checklist-meter-seg" });
+			meterSegs.push(seg.createDiv({ cls: "semlink-checklist-meter-fill" }));
+		}
+		const progressEl = meter.createSpan({ cls: "semlink-checklist-meter-count" });
+		const card = containerEl.createDiv({ cls: "semlink-card semlink-checklist" });
 		const rowsEl = card.createDiv({ cls: "semlink-checklist-rows" });
 
 		const rows: Array<{
@@ -277,7 +329,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			const rowEl = rowsEl.createDiv({ cls: "semlink-checklist-row" });
 			const iconEl = rowEl.createSpan({ cls: "semlink-checklist-icon" });
 			rowEl.createSpan({ cls: "semlink-checklist-label", text: emoji ? `${emoji} ${label}` : label });
-			const actionEl = rowEl.createEl("button", { cls: "semlink-checklist-action", text: actionLabel });
+			const actionEl = rowEl.createEl("button", { cls: "semlink-btn-secondary semlink-checklist-action", text: actionLabel });
 			actionEl.addEventListener("click", onAction);
 			rows.push({ label: emoji ? `${emoji} ${label}` : label, action: actionLabel, onAction, check, rowEl, actionEl, iconEl });
 		};
@@ -296,18 +348,54 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			void this.plugin.activateSearchView();
 		}, () => firstChatDone);
 
+		// 完成庆祝仅在「面板存活期间的实时跃迁」触发：首渲后 2s 内（历史
+		// 异步补齐窗口）一律静默——打开页面连弹两个"全部就绪"是噪音。
+		let celebrateArmed = false;
+		window.setTimeout(() => { celebrateArmed = true; }, 2000);
 		const refresh = (): void => {
+			const prevDone = rows.filter((r) => r.rowEl.hasClass("is-done")).length;
 			let done = 0;
 			for (const r of rows) {
 				const d = r.check();
 				if (d) done++;
 				r.rowEl.toggleClass("is-done", d);
+				// 已完成动作降权：secondary → ghost（视觉退出竞争）。
+				r.actionEl.toggleClass("semlink-btn-secondary", !d);
+				r.actionEl.toggleClass("semlink-btn-ghost", d);
 				setIcon(r.iconEl, d ? "check" : "circle");
 			}
-			progressEl.setText(done === rows.length ? `✓ ${t("checklistDone")}` : `${done}/${rows.length}`);
-			barFill.setAttribute("style", `width: ${Math.round((done / rows.length) * 100)}%`);
-			card.toggleClass("is-complete", done === rows.length);
+			for (let i = 0; i < meterSegs.length; i++) {
+				// scaleX 替代 width：只动合成层属性，0.2s 过渡不触发布局
+				meterSegs[i].style.transform = i < done ? "scaleX(1)" : "scaleX(0)";
+			}
+			// 计数恒为 n/n：完成态由 meter 三段全满 + 分段变 accent 表达，
+			// 不再叠"✓ 全部就绪"文字（meter/count/文字三重冗余）。
+			progressEl.setText(`${done}/${rows.length}`);
+			const complete = done === rows.length;
+			const wasComplete = card.hasClass("is-complete");
+			card.toggleClass("is-complete", complete);
+			// 完成跃迁：一次 Notice + 收起为摘要行。
+			if (celebrateArmed && complete && !wasComplete && prevDone === done - 1) {
+				new Notice(t("checklistDone"));
+			}
 		};
+
+		// 完成收起态：整卡折为单行摘要（点按可展开回看步骤）。
+		const summary = card.createEl("button", {
+			cls: "semlink-checklist-summary",
+			attr: { "aria-expanded": "false", "aria-label": t("checklistExpandAria") },
+		});
+		const sumIcon = summary.createSpan({ cls: "semlink-checklist-summary-icon" });
+		setIcon(sumIcon, "check-circle");
+		summary.createSpan({ cls: "semlink-checklist-summary-text", text: t("checklistDone") });
+		// 头部 meter 右侧已有 "3/3"（评审 P1 双写）：摘要行不再重复计数，只留 chevron。
+		const sumChevron = summary.createSpan({ cls: "semlink-checklist-summary-chevron" });
+		setIcon(sumChevron, "chevron-down");
+		summary.addEventListener("click", () => {
+			const expanded = !card.hasClass("is-expanded");
+			card.toggleClass("is-expanded", expanded);
+			summary.setAttr("aria-expanded", String(expanded));
+		});
 		refresh();
 
 		// 首次问答：历史会话里出现真实消息即视为完成（异步补齐该行）
@@ -322,34 +410,26 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			.catch(() => { /* 历史不可用时保持未完成态 */ });
 	}
 
-	/** License card, conversion-first: badge + headline + one-line free
-	 *  reassurance, price anchor card ($3 vs struck $19.9, lifetime), and a
-	 *  quiet key row. No prose — the price does the talking. */
+	/** License section, iOS 分层：营销（白卡，badge/CTA 两处 accent）与
+	 *  功能（中性白卡：密钥激活 / Pro 状态行）同材质同节奏——层次靠
+	 *  信息密度而非配色区分，紫色不再整卡渲染。 */
 	private renderLicenseSection(containerEl: HTMLElement): void {
 		const lm = this.plugin.licenseManager;
 		const pro = lm.isPro();
 
-		const card = containerEl.createDiv({ cls: "semlink-license-card" });
-		const head = card.createDiv({ cls: "semlink-license-card-head" });
-		const logo = head.createSpan({ cls: "semlink-license-card-logo" });
-		setIcon(logo, "semlink-logo");
-		head.createSpan({ cls: "semlink-license-card-title", text: "Semlink Pro" });
 		if (pro) {
-			head.createSpan({ cls: "semlink-license-card-pro-pill", text: `✓ ${t("licenseProActive")}` });
-		} else {
-			head.createSpan({ cls: "semlink-license-card-badge", text: t("licenseBadge") });
-		}
-
-		if (pro) {
-			// Pro state, Eagle-style: big congrats + thanks, one quiet footer
-			// row (lifetime note · deactivate as a subtle action).
-			card.createDiv({ cls: "semlink-license-card-headline", text: t("licenseProHeadline") });
-			card.createDiv({ cls: "semlink-license-card-freeline", text: t("openSidebarDesc") });
-
-			const foot = card.createDiv({ cls: "semlink-license-card-footrow" });
-			foot.createSpan({ cls: "semlink-license-card-lifetime", text: `♾️ ${t("licenseLifetime")}` });
-
-			const de = foot.createEl("button", { cls: "semlink-license-card-deactivate", text: t("licenseDeactivate") });
+			// Pro 态：营销退场，降为一条 iOS 设置行（名称 + 状态 · 永久授权 + 停用）。
+			const card = containerEl.createDiv({ cls: "semlink-card semlink-license-procard" });
+			const row = card.createDiv({ cls: "semlink-license-pro-row" });
+			const logo = row.createSpan({ cls: "semlink-license-pro-logo" });
+			setIcon(logo, "semlink-logo");
+			const info = row.createDiv({ cls: "semlink-license-pro-info" });
+			info.createDiv({ cls: "semlink-license-pro-name", text: "Semlink Pro" });
+			info.createDiv({
+				cls: "semlink-license-pro-desc",
+				text: `${lm.statusLine()} · ${t("licenseLifetime")}`,
+			});
+			const de = row.createEl("button", { cls: "semlink-btn-ghost mod-danger semlink-license-deactivate", text: t("licenseDeactivateShort") });
 			de.addEventListener("click", () => {
 				// Deactivate kicks the device out of Pro immediately — confirm first.
 				new ConfirmModal(this.app, t("licenseDeactivate"), t("licenseDeactivateConfirmBody"), () => void (async () => {
@@ -373,137 +453,201 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			return;
 		}
 
-		card.createDiv({
-			cls: "semlink-license-card-headline",
-			text: t("licenseCardHeadline"),
-		});
-		card.createDiv({ cls: "semlink-license-card-freeline", text: t("licenseCardFreeLine") });
+		// ── 自由态：营销卡（白卡材质，与功能卡同一节奏；紫色只留给 badge 与 CTA） ──
+		const card = containerEl.createDiv({ cls: "semlink-license-card" });
+		const head = card.createDiv({ cls: "semlink-license-card-head" });
+		const logo = head.createSpan({ cls: "semlink-license-card-logo" });
+		setIcon(logo, "semlink-logo");
+		head.createSpan({ cls: "semlink-license-card-title", text: "Semlink Pro" });
+		head.createSpan({ cls: "semlink-license-card-badge", text: t("licenseBadge") });
 
-		{
-			const inner = card.createDiv({ cls: "semlink-license-card-inner" });
-			const priceRow = inner.createDiv({ cls: "semlink-license-card-pricerow" });
-			priceRow.createSpan({ cls: "semlink-license-card-price", text: "$3" });
-			priceRow.createSpan({ cls: "semlink-license-card-was", text: "$19.9" });
-			priceRow.createSpan({ cls: "semlink-license-card-lifetime", text: t("licenseCardLifetime") });
+		card.createDiv({ cls: "semlink-license-headline", text: t("licenseCardHeadline") });
+		card.createDiv({ cls: "semlink-license-sub", text: t("licenseCardFreeLine") });
 
-			const actions = inner.createDiv({ cls: "semlink-license-card-actions" });
-			if (!lm.configured) {
-				actions.createSpan({ cls: "semlink-license-card-note", text: t("licenseNotConfigured") });
-			} else {
-				const buyBtn = actions.createEl("button", { cls: "semlink-license-card-apply mod-cta", text: t("licenseCardCta") });
-				buyBtn.addEventListener("click", () => void (async () => {
-					if (buyBtn.dataset.busy === "1") return;
-					buyBtn.dataset.busy = "1";
-					try {
-						window.open(await lm.openCheckout(), "_blank");
-					} catch {
-						new Notice(t("upgradeCheckoutUnavailable"));
-					} finally {
-						buyBtn.dataset.busy = "";
-					}
-				})());
-			}
-		}
+		// 价格行直接落卡内（不再嵌"卡中卡"），CTA 全宽止于卡底。
+		const priceRow = card.createDiv({ cls: "semlink-license-pricerow" });
+		priceRow.createSpan({ cls: "semlink-license-price", text: "$3" });
+		priceRow.createSpan({ cls: "semlink-license-was", text: "$19.9" });
+		priceRow.createSpan({ cls: "semlink-license-lifetime", text: t("licenseCardLifetime") });
 
-		// Quiet key row (Free): paste key + Activate.
-		const keyRow = card.createDiv({ cls: "semlink-license-card-keyrow" });
-		{
-			const input = keyRow.createEl("input", {
-				cls: "semlink-license-card-input",
-				attr: { type: "text", placeholder: t("licenseKeyPlaceholder"), spellcheck: "false" },
-			});
-			const apply = keyRow.createEl("button", { cls: "semlink-license-card-apply", text: t("licenseActivate") });
-			const activate = () => void (async () => {
-				const key = input.value.trim();
-				if (!key || apply.dataset.busy === "1") return;
-				apply.dataset.busy = "1";
-				apply.setAttr("disabled", "true");
-				apply.addClass("is-busy");
+		if (!lm.configured) {
+			card.createSpan({ cls: "semlink-license-note", text: t("licenseNotConfigured") });
+		} else {
+			const buyBtn = card.createEl("button", { cls: "semlink-btn-primary semlink-btn-block semlink-license-cta", text: t("licenseCardCta") });
+			buyBtn.addEventListener("click", () => void (async () => {
+				if (buyBtn.dataset.busy === "1") return;
+				buyBtn.dataset.busy = "1";
+				buyBtn.addClass("is-busy");
 				try {
-					await lm.activate(key);
-					new Notice(t("licenseActivated"));
-					rerenderSettingsTab(this);
-				} catch (e) {
-					new Notice(licenseErrorMessage(e));
+					window.open(await lm.openCheckout(), "_blank");
+				} catch {
+					new Notice(t("upgradeCheckoutUnavailable"));
 				} finally {
-					apply.dataset.busy = "";
-					apply.removeClass("is-busy");
-					apply.removeAttribute("disabled");
+					buyBtn.dataset.busy = "";
+					buyBtn.removeClass("is-busy");
 				}
-			})();
-			apply.addEventListener("click", activate);
-			input.addEventListener("keydown", (e) => {
-				if (e.key === "Enter") {
-					e.preventDefault();
-					activate();
-				}
-			});
+			})());
 		}
+
+		// ── 密钥激活：中性设置卡（未配置许可时不渲染——激活必失败） ──
+		if (!lm.configured) return;
+		const keycard = containerEl.createDiv({ cls: "semlink-card semlink-license-keycard" });
+		keycard.createDiv({ cls: "semlink-license-keylabel", text: t("licenseKeyLabel") });
+		const keyRow = keycard.createDiv({ cls: "semlink-license-keyrow" });
+		const input = keyRow.createEl("input", {
+			cls: "semlink-license-keyinput",
+			attr: { type: "text", placeholder: t("licenseKeyPlaceholder"), spellcheck: "false", autocomplete: "off" },
+		});
+		const apply = keyRow.createEl("button", { cls: "semlink-btn-secondary semlink-license-apply", text: t("licenseActivate") });
+		const keyError = keycard.createDiv({ cls: "semlink-license-keyerror" });
+		keyError.setAttr("role", "alert");
+		const clearError = (): void => {
+			keycard.removeClass("has-error");
+			input.removeClass("is-error");
+			keyError.setText("");
+		};
+		// 输入即宽恕：非空恢复按钮，清既有错误；空值置灰（不批评）。
+		input.addEventListener("input", () => {
+			const has = input.value.trim().length > 0;
+			if (has) apply.removeAttribute("disabled");
+			else apply.setAttr("disabled", "true");
+			clearError();
+		});
+		apply.setAttr("disabled", "true");
+		const activate = () => void (async () => {
+			const key = input.value.trim();
+			if (!key || apply.dataset.busy === "1") return;
+			apply.dataset.busy = "1";
+			apply.setAttr("disabled", "true");
+			input.setAttr("disabled", "true");
+			apply.addClass("is-busy");
+			try {
+				await lm.activate(key);
+				new Notice(t("licenseActivated"));
+				rerenderSettingsTab(this);
+			} catch (e) {
+				// 行内错误：紧邻输入框（role=alert 即时播报），不再发 Notice。
+				keycard.addClass("has-error");
+				input.addClass("is-error");
+				keyError.setText(licenseErrorMessage(e));
+			} finally {
+				apply.dataset.busy = "";
+				apply.removeClass("is-busy");
+				apply.removeAttribute("disabled");
+				input.removeAttribute("disabled");
+				if (!input.value.trim()) apply.setAttr("disabled", "true");
+			}
+		})();
+		apply.addEventListener("click", activate);
+		input.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				activate();
+			}
+		});
 	}
 
 	// ══════════════════════════════════════
-	// Tab: Embedding (RAG) — status, model, index controls, rebuild
+	// Tab: Embedding (RAG) — 状态 / 配置 / 维护 三组
 	// ══════════════════════════════════════
-	/** RAG 页的两个进度面板：索引进度（阶段/待索引/已索引）与嵌入进度
-	 *  （待嵌入/已嵌入/嵌入率）。数据由进度事件与数据库统计双路刷新。 */
-	private renderIndexCard(containerEl: HTMLElement): void {
-		const row = (host: HTMLElement, label: string): HTMLElement => {
-			const r = host.createDiv({ cls: "semlink-index-card-row" });
-			r.createSpan({ cls: "semlink-index-card-label", text: label });
-			return r.createSpan({ cls: "semlink-index-card-value" });
-		};
-		// ── 双面板容器：左右并列（窄幅自动堆叠） ──
-		const panelsWrap = containerEl.createDiv({ cls: "semlink-index-panels" });
-		// ── 面板 1：索引进度（索引率并入标题，如「索引进度：100%」） ──
-		const indexPanel = panelsWrap.createDiv({ cls: "semlink-index-card" });
-		const iHead = indexPanel.createDiv({ cls: "semlink-index-card-head" });
-		const iTitleEl = iHead.createSpan({ cls: "semlink-index-card-title", text: t("indexProgressTitle") });
-		// 标题右侧开关 = 索引总开关（与下方「自动索引」行同一设置）：
-		// 关 = 停止文件监听并暂停当前索引；开 = 恢复监听并继续/重启索引。
-		const indexToggle = new ToggleComponent(iHead);
-		indexToggle.toggleEl.addClass("semlink-index-card-toggle");
-		indexToggle.toggleEl.setAttr("aria-label", t("autoIndex"));
-		indexToggle
-			.setValue(this.plugin.settings.autoIndex)
-			.onChange(async (value) => {
-				this.plugin.settings.autoIndex = value;
-				this.plugin.watcher.setAutoIndex(value);
-				await this.plugin.saveSettings();
-				if (value) this.plugin.scheduler.resume();
-				else this.plugin.scheduler.pause();
-				this.refreshPreservingScroll();
-			});
-		const totalEl = row(indexPanel, t("guideStatTotalNotes"));
-		const awaitingEl = row(indexPanel, t("awaitingChunking"));
-		const chunkedEl = row(indexPanel, t("chunkedNotes"));
+	/** RAG 页组「状态」：一张卡内索引/嵌入两个块（hero 大数字 + 进度条 +
+	 *  数值行 + 末行自动开关）。数据由进度事件与数据库统计双路刷新。
+	 *  reindexRef 由调用方传入：重新索引按钮在「维护」组创建后回填引用，
+	 *  进度订阅据此在索引进行中把按钮置为「索引中…」禁用态。 */
+	private renderIndexCard(containerEl: HTMLElement, reindexRef?: { btn?: HTMLButtonElement; running?: boolean }): void {
+		const totalNotes = (): number => Math.max(0, this.plugin.progress.current.totalNotes);
 
-		// ── 面板 2：嵌入进度（嵌入率并入标题，如「嵌入进度：100%」） ──
-		const embedPanel = panelsWrap.createDiv({ cls: "semlink-index-card" });
-		const eHead = embedPanel.createDiv({ cls: "semlink-index-card-head" });
-		const eTitleEl = eHead.createSpan({ cls: "semlink-index-card-title", text: t("embedProgressTitle") });
-		// 标题右侧开关 = 自动嵌入总开关。调度器实时读取该设置：关 = 在跑的
-		// 索引继续分块、后续笔记不再调嵌入 API；开 = 后续笔记恢复嵌入。
-		const embedToggle = new ToggleComponent(eHead);
-		embedToggle.toggleEl.addClass("semlink-index-card-toggle");
-		embedToggle.toggleEl.setAttr("aria-label", t("autoEmbed"));
-		embedToggle
-			.setValue(this.plugin.settings.autoEmbed ?? true)
-			.onChange(async (value) => {
-				this.plugin.settings.autoEmbed = value;
-				await this.plugin.saveSettings();
-				this.refreshPreservingScroll();
-			});
-		const modelEl = row(embedPanel, t("ragSemantic"));
-		const providerEl = row(embedPanel, t("guideStep1"));
-		const vectorizedEl = row(embedPanel, t("vectorizedChunks"));
-		// 当前行：正在使用的嵌入模型 + 供应商（未配置显示 —）
-		const embedKey = this.plugin.settings.embeddingModelKey || "";
-		const ePid = embedKey.split("::")[0] ?? "";
-		const eMid = embedKey.split("::").slice(1).join("::");
-		const eProv = this.plugin.settings.providers.find((p) => p.id === ePid);
-		const eModel = eProv?.models.find((m) => (m.kind ?? "chat") === "embedding" && m.id === eMid);
-		modelEl.setText(eProv && eModel ? eModel.id : "—");
-		providerEl.setText(eProv && eModel ? eProv.name : "—");
+		containerEl.createDiv({ cls: "semlink-card-title", text: t("ragGroupStatus") });
+		const card = containerEl.createDiv({ cls: "semlink-card semlink-rag-status" });
+
+		// ── 块骨架：hero（标题 + spinner + 大数字）→ 进度条（数值行/开关由调用处按序追加） ──
+		interface RagBlock {
+			block: HTMLElement;
+			valueEl: HTMLElement;
+			fillEl: HTMLElement;
+			spinEl: HTMLElement;
+		}
+		const makeBlock = (title: string): RagBlock => {
+			const block = card.createDiv({ cls: "semlink-rag-block" });
+			const hero = block.createDiv({ cls: "semlink-rag-hero" });
+			const heroLeft = hero.createDiv({ cls: "semlink-rag-hero-left" });
+			heroLeft.createSpan({ cls: "semlink-rag-hero-title", text: title });
+			const spinEl = heroLeft.createSpan({ cls: "semlink-rag-hero-spin" });
+			setIcon(spinEl, "loader-2");
+			const valueEl = hero.createSpan({ cls: "semlink-rag-hero-value is-empty", text: "—" });
+			const fillEl = block.createDiv({ cls: "semlink-rag-bar" }).createDiv({ cls: "semlink-rag-bar-fill" });
+			return { block, valueEl, fillEl, spinEl };
+		};
+		// 紧凑数值行（36px）
+		const statRow = (host: HTMLElement, label: string): HTMLElement => {
+			const r = host.createDiv({ cls: "semlink-row semlink-rag-stat" });
+			r.createSpan({ cls: "semlink-rag-stat-label", text: label });
+			return r.createSpan({ cls: "semlink-rag-stat-value", text: "—" });
+		};
+		// 末行自动开关行（带 desc）
+		const toggleRow = (host: HTMLElement, label: string, desc: string, initial: boolean, onChange: (v: boolean) => Promise<void>): void => {
+			const row = host.createDiv({ cls: "semlink-row semlink-rag-toggle-row" });
+			const labelEl = row.createDiv({ cls: "semlink-row-label" });
+			labelEl.createDiv({ cls: "semlink-row-title", text: label });
+			labelEl.createDiv({ cls: "semlink-row-desc", text: desc });
+			new ToggleComponent(row.createDiv({ cls: "semlink-row-control" }))
+				.setValue(initial)
+				.onChange((v) => onChange(v));
+		};
+
+		const indexBlock = makeBlock(t("indexProgressTitle"));
+		const totalEl = statRow(indexBlock.block, t("guideStatTotalNotes"));
+		const awaitingEl = statRow(indexBlock.block, t("awaitingChunking"));
+		const chunkedEl = statRow(indexBlock.block, t("chunkedNotes"));
+		// 索引总开关：关 = 停止文件监听并暂停当前索引；开 = 恢复监听并继续索引。
+		toggleRow(indexBlock.block, t("autoIndex"), t("ragAutoIndexDesc"), this.plugin.settings.autoIndex, async (v) => {
+			this.plugin.settings.autoIndex = v;
+			this.plugin.watcher.setAutoIndex(v);
+			await this.plugin.saveSettings();
+			if (v) this.plugin.scheduler.resume();
+			else this.plugin.scheduler.pause();
+			this.refreshPreservingScroll();
+		});
+
+		const embedBlock = makeBlock(t("embedProgressTitle"));
+		const vectorizedEl = statRow(embedBlock.block, t("vectorizedChunks"));
+		// 自动嵌入总开关。调度器实时读取该设置：关 = 在跑的索引继续分块、
+		// 后续笔记不再调嵌入 API；开 = 后续笔记恢复嵌入。
+		toggleRow(embedBlock.block, t("autoEmbed"), t("ragAutoEmbedDesc"), this.plugin.settings.autoEmbed ?? true, async (v) => {
+			this.plugin.settings.autoEmbed = v;
+			await this.plugin.saveSettings();
+			this.refreshPreservingScroll();
+		});
+
+		// hero 大数字 = 百分比（封顶 100%）；总数未知（totalNotes=0）→「—」淡化。
+		const setHero = (b: RagBlock, num: number): void => {
+			const total = totalNotes();
+			if (total === 0) {
+				b.valueEl.setText("—");
+				b.valueEl.addClass("is-empty");
+				b.fillEl.style.transform = "scaleX(0)";
+				return;
+			}
+			const pct = Math.min(100, (num / total) * 100);
+			b.valueEl.setText(`${pct.toFixed(1)}%`);
+			b.valueEl.removeClass("is-empty");
+			b.fillEl.style.transform = `scaleX(${pct / 100})`;
+		};
+		const setRunning = (running: boolean): void => {
+			indexBlock.block.toggleClass("is-running", running);
+			embedBlock.block.toggleClass("is-running", running);
+			if (reindexRef) reindexRef.running = running;
+			const btn = reindexRef?.btn;
+			if (btn) {
+				if (running) {
+					btn.setAttribute("disabled", "true");
+					btn.setText(t("reindexRunning"));
+				} else {
+					btn.removeAttribute("disabled");
+					btn.setText(t("reindexAll"));
+				}
+			}
+		};
 
 		// 待索引 = 总笔记数 - 已索引（与已索引同源，数据库口径）；
 		// apply 用最近一次查到的已索引数做即时倒计时，查库后校正。
@@ -511,19 +655,13 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const apply = (p: IndexProgress): void => {
 			awaitingEl.setText(Math.max(0, p.totalNotes - lastIndexed).toLocaleString());
 		};
-		// 两面板的数值行取数据库真实状态（笔记数），百分比并入标题：
-		// 索引进度 = 已索引 / 总笔记数；嵌入进度 = 已嵌入 / 总笔记数。
+		// 数值行取数据库真实状态（笔记数），hero 百分比 = 已索引（已嵌入） / 总笔记数。
 		// 已嵌入口径 = 至少一个 chunk 带向量的笔记数（getEmbeddedNoteCount），
 		// 不读 note_doc_vectors——该表会被算法迁移/换模型清空重建，迁移期恒
 		// 为 0；chunk 向量与笔记嵌入同事务落库，进度只增不减。
-		// 百分比封顶 100%：重扫进行中 totalNotes 尚未补全时会短暂偏小。
 		// 首查常见于插件刚加载、DB worker 尚在初始化——失败不能静默吞掉
 		// （空闲时没有进度事件来重试），退避重试直到 worker 就绪补上数值。
 		let statsRetryTimer: number | null = null;
-		// CJK 文案用全角冒号，其余语言半角
-		const sep = ["zh", "zh-Hant", "ja"].includes(getLang()) ? "：" : ": ";
-		const rateText = (num: number, denom: number): string =>
-			denom > 0 ? `${Math.min(100, (num / denom) * 100).toFixed(1)}%` : "0%";
 		const refreshStats = async (attempt = 0): Promise<void> => {
 			try {
 				const [s, embeddedNotes] = await Promise.all([
@@ -532,13 +670,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				]);
 				lastIndexed = s.indexedNotes;
 				chunkedEl.setText(s.indexedNotes.toLocaleString());
-				const total = Math.max(0, this.plugin.progress.current.totalNotes);
-				totalEl.setText(total.toLocaleString());
-				const awaiting = Math.max(0, total - s.indexedNotes);
-				awaitingEl.setText(awaiting.toLocaleString());
-				iTitleEl.setText(`${t("indexProgressTitle")}${sep}${rateText(s.indexedNotes, total)}`);
+				totalEl.setText(totalNotes().toLocaleString());
+				awaitingEl.setText(Math.max(0, totalNotes() - s.indexedNotes).toLocaleString());
 				vectorizedEl.setText(embeddedNotes.toLocaleString());
-				eTitleEl.setText(`${t("embedProgressTitle")}${sep}${rateText(embeddedNotes, total)}`);
+				setHero(indexBlock, s.indexedNotes);
+				setHero(embedBlock, embeddedNotes);
 			} catch (e) {
 				if (attempt >= 8) {
 					console.warn("[Semlink] index stats unavailable:", e);
@@ -548,12 +684,14 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			}
 		};
 		apply(this.plugin.progress.current);
+		setRunning(RAG_RUNNING_PHASES.has(this.plugin.progress.current.phase));
 		void refreshStats();
 
-		// 单一合并订阅：索引进度事件实时刷新待索引 + 数值行节流查库（≤1s 一次）
+		// 单一合并订阅：进度事件实时刷新运行态/待索引 + 数值行节流查库（≤1s 一次）
 		let lastEmbedRefresh = 0;
 		const unIndex = this.plugin.progress.onProgress((e) => {
 			if (e.type !== "progress") return;
+			setRunning(RAG_RUNNING_PHASES.has(e.progress.phase));
 			apply(e.progress);
 			const now = Date.now();
 			if (now - lastEmbedRefresh >= 1000) {
@@ -568,16 +706,18 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	}
 
 	private renderEmbeddingTab(containerEl: HTMLElement): void {
-		// ── 索引进度卡片（实时指标） ──
-		this.renderIndexCard(containerEl);
+		// reindex 按钮引用前传给状态组的进度订阅（状态组先渲染，维护组后创建）
+		const reindexRef: { btn?: HTMLButtonElement; running?: boolean } = {};
+		this.renderIndexCard(containerEl, reindexRef);
 
-		// 嵌入供应商:配置了 Key 且带有嵌入模型的供应商
+		// ── 组「配置」：嵌入模型 + 排除路径 ──
+		containerEl.createDiv({ cls: "semlink-card-title", text: t("ragGroupConfig") });
+		const configCard = containerEl.createDiv({ cls: "semlink-card semlink-rag-card" });
+
+		// 配置了 Key 且带有嵌入模型的供应商 → 当前生效的模型/供应商
 		const embeddingProviders = this.plugin.settings.providers.filter(
 			(p) => !!p.apiKey.trim() && p.models.some((m) => (m.kind ?? "chat") === "embedding"),
 		);
-
-		// ── Semantic search 行：按钮打开侧栏的配置引导（供应商/模型/嵌入） ──
-		// 已配置时描述显示当前模型；未配置时显示提示语。
 		const currentKey = this.plugin.settings.embeddingModelKey;
 		const keyPid = currentKey.split("::")[0] ?? "";
 		const keyMid = currentKey.split("::").slice(1).join("::");
@@ -585,59 +725,81 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const configuredModel = configuredProvider?.models.find(
 			(m) => (m.kind ?? "chat") === "embedding" && m.id === keyMid,
 		);
-		new Setting(containerEl)
-			.setName(t("ragSemantic"))
-			.setDesc(configuredProvider && configuredModel
+
+		const modelRow = configCard.createDiv({ cls: "semlink-row" });
+		const modelLabel = modelRow.createDiv({ cls: "semlink-row-label" });
+		modelLabel.createDiv({ cls: "semlink-row-title", text: t("ragSemantic") });
+		modelLabel.createDiv({
+			cls: "semlink-row-desc",
+			text: configuredProvider && configuredModel
 				? `${configuredModel.id} · ${configuredProvider.name}`
-				: t("ragSemanticHint"))
-			.addButton((btn) =>
-				btn.setButtonText(t("ragSetupBtn")).onClick(() => {
-					// 关闭设置页，打开侧边栏的向量检索配置引导
-					// （选嵌入供应商、嵌入模型，然后是咖啡杯嵌入进度）。
-					(this.app as unknown as { setting: { close(): void } }).setting.close();
-					void this.plugin.openSetupGuide("embed");
-				})
-			);
+				: t("ragSemanticHint"),
+		});
+		const modelBtn = modelRow.createDiv({ cls: "semlink-row-control" }).createEl("button", {
+			cls: configuredProvider && configuredModel ? "semlink-btn-secondary" : "semlink-btn-primary",
+			// 已配置后仍叫 "Set Up" 会让人不敢点（评审 P1）：复用现成键
+			// guideReconfig（"Reconfigure"）表达"可再改"。
+			text: configuredProvider && configuredModel ? t("guideReconfig") : t("ragSetupBtn"),
+		});
+		modelBtn.addEventListener("click", () => {
+			// 关闭设置页，打开侧边栏的向量检索配置引导
+			// （选嵌入供应商、嵌入模型，然后是咖啡杯嵌入进度）。
+			(this.app as unknown as { setting: { close(): void } }).setting.close();
+			void this.plugin.openSetupGuide("embed");
+		});
 
+		const excludeRow = configCard.createDiv({ cls: "semlink-row" });
+		const excludeLabel = excludeRow.createDiv({ cls: "semlink-row-label" });
+		excludeLabel.createDiv({ cls: "semlink-row-title", text: t("excludePaths") });
+		excludeLabel.createDiv({ cls: "semlink-row-desc", text: t("excludePathsShort") });
+		const excludeBtn = excludeRow.createDiv({ cls: "semlink-row-control" }).createEl("button", {
+			cls: "semlink-btn-secondary",
+			text: t("configure"),
+		});
+		excludeBtn.addEventListener("click", () => new ExcludePathsModal(this.app, this.plugin).open());
 
-		// ── 索引控制（原 Index 页签并入）：排除路径（自动索引开关
-		//    已上移为索引进度面板标题右侧的开关） ──
-		new Setting(containerEl)
-			.setName(t("excludePaths"))
-			.setDesc(t("excludePathsDesc"))
-			.addButton((btn) =>
-				btn.setButtonText(t("configure")).onClick(() => {
-					new ExcludePathsModal(this.app, this.plugin).open();
-				})
-			);
-
-		// ── 重新索引（原在高级选项末尾，移到排除路径下方常驻可见）：
-		//    清掉所有索引（含分块），从 0 开始重新分块。破坏性操作带确认。 ──
-		new Setting(containerEl)
-			.setName(t("reindexAll"))
-			.setDesc(t("reindexAllDesc"))
-			.addButton((btn) => {
-				btn.setButtonText(t("reindexAll"));
-				markDestructive(btn).onClick(() => {
-					new ConfirmModal(this.app, t("reindexAll"), t("reindexConfirm"), () => {
-						void this.plugin.reindexAll();
-					}).open();
-				});
-			});
+		// ── 组「维护」：重新索引（清空全部索引从 0 重建，破坏性带确认） ──
+		containerEl.createDiv({ cls: "semlink-card-title", text: t("ragGroupMaintain") });
+		const maintainCard = containerEl.createDiv({ cls: "semlink-card semlink-rag-card" });
+		const reindexRow = maintainCard.createDiv({ cls: "semlink-row" });
+		const reindexLabel = reindexRow.createDiv({ cls: "semlink-row-label" });
+		reindexLabel.createDiv({ cls: "semlink-row-title", text: t("reindexAll") });
+		reindexLabel.createDiv({ cls: "semlink-row-desc", text: t("reindexAllDesc") });
+		const reindexBtn = reindexRow.createDiv({ cls: "semlink-row-control" }).createEl("button", {
+			cls: "semlink-btn-ghost mod-danger",
+			text: t("reindexAll"),
+		});
+		reindexBtn.addEventListener("click", () => {
+			new ConfirmModal(this.app, t("reindexAll"), t("reindexConfirm"), () => {
+				void this.plugin.reindexAll();
+			}).open();
+		});
+		reindexRef.btn = reindexBtn;
+		// 打开页面时索引已在进行 → 按钮直接进入「索引中…」运行态
+		// （进度订阅只在事件到来时更新，空闲时没有事件可依赖）。
+		if (reindexRef.running) {
+			reindexBtn.setAttribute("disabled", "true");
+			reindexBtn.setText(t("reindexRunning"));
+		}
 
 		// ── 高级选项（默认收起）：分块 / 批量 / 延迟 / 并发 ──
-		const advHead = containerEl.createDiv({ cls: "semlink-editor-adv-head" });
-		const chev = advHead.createSpan({ cls: "semlink-editor-adv-chevron" });
+		// chevron 只 setIcon 一次，开合用 CSS rotate(90deg)；body 展开瞬间
+		// 播 reveal 动画（animationend 自移除，面板重渲不动画）。
+		const advHead = containerEl.createEl("button", { cls: "semlink-collapse-head", attr: { type: "button", "aria-expanded": "false" } });
+		const chev = advHead.createSpan({ cls: "semlink-collapse-chevron" });
 		setIcon(chev, "chevron-right");
-		const advLabel = advHead.createSpan({ cls: "semlink-editor-adv-label", text: t("editorAdvancedShow") });
-		const advBody = containerEl.createDiv({ cls: "semlink-editor-adv-body semlink-hidden" });
+		advHead.createSpan({ cls: "semlink-collapse-label", text: t("editorAdvancedShow") });
+		const advBody = containerEl.createDiv({ cls: "semlink-collapse-body semlink-hidden" });
 		advHead.addEventListener("click", () => {
 			const open = !advBody.hasClass("semlink-hidden");
 			advBody.toggleClass("semlink-hidden", open);
-			setIcon(chev, open ? "chevron-right" : "chevron-down");
-			advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
+			advHead.toggleClass("is-open", !open);
+			advHead.setAttr("aria-expanded", String(!open));
+			if (!open) {
+				advBody.addClass("semlink-anim");
+				advBody.addEventListener("animationend", () => advBody.removeClass("semlink-anim"), { once: true });
+			}
 		});
-
 
 		// 切块参数（改动后需重建索引）
 		new Setting(advBody)
@@ -701,60 +863,50 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	// ══════════════════════════════════════
 	private renderMcpTab(containerEl: HTMLElement): void {
 		const running = !!this.plugin.mcpServer;
+		const lastError = this.plugin.mcpLastError;
+		// 三态：运行中（绿呼吸）/ 已停止（灰）/ 连接失败（红）。失败 =
+		// 设置里仍启用、服务未在跑、且留有最近一次启动错误。
+		const errored = !running && this.plugin.settings.mcpEnabled === true && !!lastError;
 		const mcpUrl = `http://127.0.0.1:${this.plugin.settings.mcpPort}/mcp`;
-
-		// ── Installed 行：数量统计 + New 按钮 ──
-		const installedHead = containerEl.createDiv({ cls: "semlink-mcp-installed-head" });
-		installedHead.createSpan({
-			cls: "semlink-mcp-installed-title",
-			text: t("mcpInstalled"),
-		});
-		// 免费版最多 2 个外部 MCP Server，授权版无限（clientServers 在下方渲染）
-		const FREE_MCP_LIMIT = 2;
 		const clientServers = this.plugin.settings.mcpClientServers ?? [];
-		const atFreeLimit = !this.plugin.licenseManager.isPro() && clientServers.length >= FREE_MCP_LIMIT;
-		// 新增外部 MCP Server 的入口暂时隐藏（功能保留：置回 true 即恢复）
-		const mcpNewEnabled = false;
-		const newBtn = installedHead.createEl("button", {
-			cls: "semlink-mcp-new-btn",
-			text: "＋ " + t("mcpNew"),
-		});
-		newBtn.toggleClass("semlink-hidden", !mcpNewEnabled);
-		newBtn.addEventListener("click", () => {
-			if (atFreeLimit) {
-				new LicenseModal(this.app, this.plugin).open();
-				return;
-			}
-			new McpServerConfigModal(this.app, this.plugin, null, () => rerenderSettingsTab(this)).open();
-		});
 
-		// ── 内置 semlink 服务器卡片：不可增删改，右侧开关启停服务 ──
-		let list = containerEl.createDiv({ cls: "semlink-mcp-list" });
-		const card = list.createDiv({ cls: "semlink-mcp-server" });
-		const iconWrap = card.createDiv({
-			cls: "semlink-mcp-server-icon",
-			attr: { title: running ? t("mcpRunning") : t("mcpStopped") },
+		// 键盘可达：role=button 的行支持 Enter/Space 触发。
+		const press = (el: HTMLElement, action: () => void): void => {
+			el.addEventListener("keydown", (e) => {
+				if (e.key === "Enter" || e.key === " ") {
+					e.preventDefault();
+					action();
+				}
+			});
+		};
+
+		// 页首导语（一句话讲清这页是干嘛的）。
+		containerEl.createDiv({ cls: "semlink-mcp-lede", text: t("mcpTabLede") });
+
+		// ── 组「内置服务」：semlink 一张卡四行 ──
+		containerEl.createDiv({ cls: "semlink-card-title", text: t("mcpGroupBuiltIn") });
+		const card = containerEl.createDiv({ cls: "semlink-card semlink-mcp-card" });
+
+		// 1) 主行：图标槽（accent 淡染底）+ 右下角状态点 + 名称 + 状态 pill
+		//    + desc（失败时展示 mcpLastError 原因）+ 启停开关。
+		const mainRow = card.createDiv({ cls: "semlink-row semlink-mcp-row-main" });
+		const iconSlot = mainRow.createDiv({
+			cls: `semlink-mcp-icon ${running ? "is-running" : errored ? "is-error" : "is-stopped"}`,
 		});
-		setIcon(iconWrap, "semlink-logo");
-		// 运行中显示绿色状态点（右下角）；图标始终为 Semlink 紫
-		if (running) {
-			iconWrap.createSpan({ cls: "semlink-mcp-server-dot" });
-		}
-		const main = card.createDiv({ cls: "semlink-mcp-server-main" });
-		main.createDiv({ cls: "semlink-mcp-server-name", text: "semlink" });
-		main.createDiv({ cls: "semlink-mcp-server-sub", text: `http · ${mcpUrl}` });
-		// 分享按钮：开关左侧，把 semlink MCP 接入第三方客户端的说明
-		const shareBtn = card.createEl("button", {
-			cls: "semlink-mcp-icon-btn",
-			attr: { "aria-label": t("mcpShareTitle") },
+		setIcon(iconSlot.createSpan({ cls: "semlink-mcp-icon-img" }), "semlink-logo");
+		iconSlot.createSpan({ cls: "semlink-mcp-dot" });
+		const mainLabel = mainRow.createDiv({ cls: "semlink-row-label" });
+		const nameLine = mainLabel.createDiv({ cls: "semlink-mcp-name-line" });
+		nameLine.createSpan({ cls: "semlink-row-title semlink-mcp-name", text: "semlink" });
+		nameLine.createSpan({
+			cls: `semlink-mcp-pill ${running ? "is-running" : errored ? "is-error" : "is-stopped"}`,
+			text: running ? t("mcpRunning") : errored ? t("mcpStatusError") : t("mcpStopped"),
 		});
-		setIcon(shareBtn, "share-2");
-		shareBtn.addEventListener("click", (e) => {
-			e.stopPropagation();
-			new McpShareModal(this.app, this.plugin).open();
+		mainLabel.createDiv({
+			cls: "semlink-row-desc",
+			text: errored && lastError ? lastError : t("mcpSemlinkDesc"),
 		});
-		const toggleWrap = card.createDiv({ cls: "semlink-mcp-server-toggle" });
-		new ToggleComponent(toggleWrap)
+		new ToggleComponent(mainRow.createDiv({ cls: "semlink-row-control" }))
 			.setValue(running)
 			.onChange(async (v) => {
 				// 开关状态持久化：重启 Obsidian 后保持用户选择
@@ -764,46 +916,167 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				else await this.plugin.stopMcpServer();
 				rerenderSettingsTab(this);
 			});
-		// 点击卡片（避开开关与分享按钮）打开配置编辑弹窗
-		card.addEventListener("click", (e) => {
-			if ((e.target as HTMLElement).closest(".semlink-mcp-server-toggle")) return;
-			if ((e.target as HTMLElement).closest(".semlink-mcp-icon-btn")) return;
-			new EditMcpServerModal(this.app, this.plugin, () => rerenderSettingsTab(this)).open();
+
+		// 2) URL 行：整行点击复制（图标变 check + 「已复制」淡入 1.5s 还原，
+		//    不发 Notice；失败才 Notice 红）。
+		const urlRow = card.createDiv({
+			cls: "semlink-row is-clickable semlink-mcp-url-row",
+			attr: { role: "button", tabindex: "0", "aria-label": t("mcpCopyUrl") },
+		});
+		const urlMain = urlRow.createDiv({ cls: "semlink-row-label" });
+		urlMain.createSpan({ cls: "semlink-mcp-url", text: mcpUrl });
+		urlRow.createSpan({ cls: "semlink-mcp-url-feedback", text: t("mcpCopied") });
+		// 右缘图标只作复制反馈（copy→check 一闪）：曾是独立 copy 钮，与整行
+		// 点击构成双入口（评审 P2 收敛）。span 而非 button——无独立命中区，
+		// 复制动作只属于整行。
+		const copyIcon = urlRow.createSpan({ cls: "semlink-mcp-copy-btn semlink-mcp-copy-icon" });
+		setIcon(copyIcon, "copy");
+		let copyTimer: number | null = null;
+		const doCopyUrl = (): void => {
+			void navigator.clipboard.writeText(mcpUrl).then(() => {
+				urlRow.addClass("is-copied");
+				setIcon(copyIcon, "check");
+				if (copyTimer != null) window.clearTimeout(copyTimer);
+				copyTimer = window.setTimeout(() => {
+					copyTimer = null;
+					if (!urlRow.isConnected) return;
+					urlRow.removeClass("is-copied");
+					setIcon(copyIcon, "copy");
+				}, 1500);
+			}, () => new Notice(t("mcpCopyFailed")));
+		};
+		urlRow.addEventListener("click", doCopyUrl);
+		press(urlRow, doCopyUrl);
+
+		// 3) 导航行：接入第三方客户端（复制 Claude / ZCode 等接入配置）。
+		const shareRow = card.createDiv({
+			cls: "semlink-row is-clickable semlink-mcp-nav-row",
+			attr: { role: "button", tabindex: "0" },
+		});
+		const shareLabel = shareRow.createDiv({ cls: "semlink-row-label" });
+		shareLabel.createDiv({ cls: "semlink-row-title", text: t("mcpRowShare") });
+		shareLabel.createDiv({ cls: "semlink-row-desc", text: t("mcpRowShareDesc") });
+		setIcon(shareRow.createSpan({ cls: "semlink-mcp-chevron" }), "chevron-right");
+		const openShare = (): void => new McpShareModal(this.app, this.plugin).open();
+		shareRow.addEventListener("click", openShare);
+		press(shareRow, openShare);
+
+		// 4) 导航行：端口与访问密钥（desc 摘要当前值）。
+		const cfgRow = card.createDiv({
+			cls: "semlink-row is-clickable semlink-mcp-nav-row",
+			attr: { role: "button", tabindex: "0" },
+		});
+		const cfgLabel = cfgRow.createDiv({ cls: "semlink-row-label" });
+		cfgLabel.createDiv({ cls: "semlink-row-title", text: t("mcpRowConfig") });
+		cfgLabel.createDiv({
+			cls: "semlink-row-desc",
+			text: `${t("mcpPortLabel")} ${this.plugin.settings.mcpPort} · ${this.plugin.settings.mcpApiKey ? t("mcpKeySet") : t("mcpKeyNone")}`,
+		});
+		setIcon(cfgRow.createSpan({ cls: "semlink-mcp-chevron" }), "chevron-right");
+		const openCfg = (): void => new EditMcpServerModal(this.app, this.plugin, () => rerenderSettingsTab(this)).open();
+		cfgRow.addEventListener("click", openCfg);
+		press(cfgRow, openCfg);
+
+		// ── 组「外部服务」：可增删改的管理层（点行进配置弹窗） ──
+		// 分组恒渲染：此前空态整组消失，配置弹窗的"新建"分支永不可达
+		// （评审 P0 功能断链）——空态给一行 "Add server" 直达弹窗。
+		containerEl.createDiv({ cls: "semlink-card-title", text: t("mcpGroupExternal") });
+		{
+			const extCard = containerEl.createDiv({ cls: "semlink-card semlink-mcp-card" });
+			if (clientServers.length === 0) {
+				const addRow = extCard.createDiv({
+					cls: "semlink-row is-clickable semlink-mcp-ext-row",
+					attr: { role: "button", tabindex: "0" },
+				});
+				const addIcon = addRow.createDiv({ cls: "semlink-mcp-icon is-neutral" });
+				setIcon(addIcon.createSpan({ cls: "semlink-mcp-icon-img" }), "plus");
+				addRow.createDiv({ cls: "semlink-row-label" }).createSpan({
+					cls: "semlink-row-title",
+					text: t("mcpAddServer"),
+				});
+				const openAdd = (): void => new McpServerConfigModal(this.app, this.plugin, null, () => rerenderSettingsTab(this)).open();
+				addRow.addEventListener("click", openAdd);
+				press(addRow, openAdd);
+			}
+			for (const s of clientServers) {
+				const row = extCard.createDiv({
+					cls: "semlink-row is-clickable semlink-mcp-ext-row",
+					attr: { role: "button", tabindex: "0" },
+				});
+				const extIcon = row.createDiv({ cls: "semlink-mcp-icon is-neutral" });
+				setIcon(extIcon.createSpan({ cls: "semlink-mcp-icon-img" }), "plug-zap");
+				const extLabel = row.createDiv({ cls: "semlink-row-label" });
+				const extNameLine = extLabel.createDiv({ cls: "semlink-mcp-name-line" });
+				extNameLine.createSpan({ cls: "semlink-row-title semlink-mcp-name", text: s.name });
+				const extPill = extNameLine.createSpan({
+					cls: `semlink-mcp-pill ${s.enabled ? "is-on" : "is-off"}`,
+					text: t(s.enabled ? "mcpStatusEnabled" : "mcpStatusDisabled"),
+				});
+				extLabel.createDiv({
+					cls: "semlink-row-desc",
+					text: s.type === "stdio" ? `${t("mcpTypeLocal")} · ${s.command}` : (s.url ?? ""),
+				});
+				new ToggleComponent(row.createDiv({ cls: "semlink-row-control" }))
+					.setValue(s.enabled)
+					.onChange((v) => {
+						s.enabled = v;
+						// pill 就地更新：开关翻转不整页重渲，状态词/配色即时跟随。
+						extPill.setText(t(v ? "mcpStatusEnabled" : "mcpStatusDisabled"));
+						extPill.toggleClass("is-on", v);
+						extPill.toggleClass("is-off", !v);
+						void this.plugin.saveSettings();
+					});
+				const openExt = (): void => new McpServerConfigModal(this.app, this.plugin, s, () => rerenderSettingsTab(this)).open();
+				row.addEventListener("click", (e) => {
+					// 避开开关：点 toggle 只翻转，不进配置弹窗。
+					if ((e.target as HTMLElement).closest(".checkbox-container")) return;
+					openExt();
+				});
+				press(row, openExt);
+			}
+		}
+
+		// ── 调试折叠：semlink-debug 服务器（ask 单工具，问答端到端测试）。
+		//    默认关闭（严格 opt-in）——只面向开发者，不占普通用户视线。
+		//    交互同 RAG 高级折叠：chevron setIcon 一次，开合用 CSS 旋转。 ──
+		const debugHead = containerEl.createEl("button", {
+			cls: "semlink-collapse-head semlink-mcp-debug-head",
+			attr: { type: "button", "aria-expanded": "false" },
+		});
+		setIcon(debugHead.createSpan({ cls: "semlink-collapse-chevron" }), "chevron-right");
+		const debugLabels = debugHead.createDiv({ cls: "semlink-collapse-labels" });
+		debugLabels.createSpan({ cls: "semlink-collapse-label", text: t("mcpDebugGroup") });
+		debugLabels.createSpan({ cls: "semlink-collapse-desc", text: t("mcpDebugShort") });
+		const debugBody = containerEl.createDiv({ cls: "semlink-collapse-body semlink-hidden" });
+		debugHead.addEventListener("click", () => {
+			const open = !debugBody.hasClass("semlink-hidden");
+			debugBody.toggleClass("semlink-hidden", open);
+			debugHead.toggleClass("is-open", !open);
+			debugHead.setAttr("aria-expanded", String(!open));
+			if (!open) {
+				debugBody.addClass("semlink-anim");
+				debugBody.addEventListener("animationend", () => debugBody.removeClass("semlink-anim"), { once: true });
+			}
 		});
 
-		// ── 内置 semlink-debug 服务器卡片：ask 单工具，问答端到端测试。
-		//    默认关闭（严格 opt-in），并收进「高级选项」折叠区——调试工具
-		//    只面向开发者，不该占据普通用户的视线。 ──
-		const debugAdvHead = containerEl.createDiv({ cls: "semlink-editor-adv-head" });
-		const debugChev = debugAdvHead.createSpan({ cls: "semlink-editor-adv-chevron" });
-		setIcon(debugChev, "chevron-right");
-		const debugAdvLabel = debugAdvHead.createSpan({ cls: "semlink-editor-adv-label", text: t("editorAdvancedShow") });
-		const debugAdvBody = containerEl.createDiv({ cls: "semlink-editor-adv-body semlink-hidden" });
-		debugAdvHead.addEventListener("click", () => {
-			const open = !debugAdvBody.hasClass("semlink-hidden");
-			debugAdvBody.toggleClass("semlink-hidden", open);
-			setIcon(debugChev, open ? "chevron-right" : "chevron-down");
-			debugAdvLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
-		});
-		list = debugAdvBody;
 		const debugRunning = !!this.plugin.debugMcpServer;
-		const debugCard = list.createDiv({ cls: "semlink-mcp-server" });
-		const dIconWrap = debugCard.createDiv({
-			cls: "semlink-mcp-server-icon",
-			attr: { title: debugRunning ? t("mcpRunning") : t("mcpStopped") },
+		const debugCard = debugBody.createDiv({ cls: "semlink-card semlink-mcp-card" });
+		const dRow = debugCard.createDiv({ cls: "semlink-row semlink-mcp-row-main" });
+		const dIcon = dRow.createDiv({ cls: `semlink-mcp-icon is-neutral ${debugRunning ? "is-running" : "is-stopped"}` });
+		setIcon(dIcon.createSpan({ cls: "semlink-mcp-icon-img" }), "bug");
+		dIcon.createSpan({ cls: "semlink-mcp-dot" });
+		const dLabel = dRow.createDiv({ cls: "semlink-row-label" });
+		const dNameLine = dLabel.createDiv({ cls: "semlink-mcp-name-line" });
+		dNameLine.createSpan({ cls: "semlink-row-title semlink-mcp-name", text: "semlink-debug" });
+		dNameLine.createSpan({
+			cls: `semlink-mcp-pill ${debugRunning ? "is-running" : "is-stopped"}`,
+			text: debugRunning ? t("mcpRunning") : t("mcpStopped"),
 		});
-		setIcon(dIconWrap, "bug");
-		if (debugRunning) {
-			dIconWrap.createSpan({ cls: "semlink-mcp-server-dot" });
-		}
-		const dMain = debugCard.createDiv({ cls: "semlink-mcp-server-main" });
-		dMain.createDiv({ cls: "semlink-mcp-server-name", text: "semlink-debug" });
-		dMain.createDiv({
-			cls: "semlink-mcp-server-sub",
-			text: `http · http://127.0.0.1:${this.plugin.settings.debugMcpPort ?? 3002}/mcp · ask · reload`,
+		dLabel.createDiv({
+			cls: "semlink-row-desc",
+			text: `http://127.0.0.1:${this.plugin.settings.debugMcpPort ?? 3002}/mcp · ask · reload`,
 		});
-		const dToggleWrap = debugCard.createDiv({ cls: "semlink-mcp-server-toggle" });
-		new ToggleComponent(dToggleWrap)
+		new ToggleComponent(dRow.createDiv({ cls: "semlink-row-control" }))
 			.setValue(this.plugin.settings.debugMcpEnabled === true)
 			.onChange(async (v) => {
 				this.plugin.settings.debugMcpEnabled = v;
@@ -812,62 +1085,36 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				else await this.plugin.stopDebugMcpServer();
 				rerenderSettingsTab(this);
 			});
-
-		// ── 外部 MCP 服务器：可增删改（管理层；运行时接入后续扩展） ──
-		if (clientServers.length > 0) {
-			const clientList = containerEl.createDiv({ cls: "semlink-mcp-list" });
-			for (const s of clientServers) {
-				const c = clientList.createDiv({ cls: "semlink-mcp-server" });
-				const cIcon = c.createDiv({ cls: "semlink-mcp-server-icon" });
-				setIcon(cIcon, "plug-zap");
-				const cMain = c.createDiv({ cls: "semlink-mcp-server-main" });
-				cMain.createDiv({ cls: "semlink-mcp-server-name", text: s.name });
-				cMain.createDiv({
-					cls: "semlink-mcp-server-sub",
-					text: `${s.type} · ${s.type === "stdio" ? s.command : s.url}`,
-				});
-				const cToggle = c.createDiv({ cls: "semlink-mcp-server-toggle" });
-				new ToggleComponent(cToggle).setValue(s.enabled).onChange((v) => {
-					s.enabled = v;
-					void this.plugin.saveSettings();
-				});
-				c.addEventListener("click", (e) => {
-					if ((e.target as HTMLElement).closest(".semlink-mcp-server-toggle")) return;
-					new McpServerConfigModal(this.app, this.plugin, s, () => rerenderSettingsTab(this)).open();
-				});
-			}
-		}
-
-		// 免费版达到 MCP Server 上限：显示 Pro 门禁（同 Bot 页签的解锁卡）
-		if (mcpNewEnabled && atFreeLimit) {
-			const gate = containerEl.createDiv({ cls: "semlink-pro-gate" });
-			gate.createSpan({ cls: "semlink-pro-badge", text: "✨ Pro" });
-			gate.createSpan({ cls: "semlink-pro-gate-text", text: t("mcpFreeLimitDesc") });
-			const unlockBtn = gate.createEl("button", { cls: "mod-cta", text: t("unlockPro") });
-			unlockBtn.addEventListener("click", () => {
-				new LicenseModal(this.app, this.plugin).open();
-			});
-		}
 	}
 
 	// ══════════════════════════════════════
-	// Tab: Bot — Feishu bots bound to Semlink
+	// Tab: Share — 局域网共享管理
 	// ══════════════════════════════════════
-	/** Tab: Share — manage the conversations published to the LAN. Each row:
-	 *  conversation title, share URL, an on/off pause switch and a delete
-	 *  button. Paused links 404 but survive; deleted links are gone for good. */
+	/** Tab: Share — 已共享条目列表：标题 + 相对时间 + URL（悬停全显），
+	 *  行尾复制/删除；点行进「分享详情」（二维码 + 全显地址 + 停止共享）。 */
 	private renderShareTab(containerEl: HTMLElement): void {
-		// Same head style as the MCP tab's "MCP Server" row.
-		const head = containerEl.createDiv({ cls: "semlink-mcp-installed-head" });
-		head.createSpan({ cls: "semlink-mcp-installed-title", text: t("shareTabTitle") });
 		const server = this.plugin.shareServer;
-		const shares = server.listShares();
+		// 按共享时间倒序（最新的在最上面）。
+		const shares = [...server.listShares()].sort((a, b) => b.sharedAt - a.sharedAt);
+
+		// 页标题由 renderPanel 统一提供；这里只补说明句
+		// （「IP 变化地址会变」的信任信息从弹窗上浮到页面）。
+		containerEl.createDiv({ cls: "semlink-share-lede", text: t("shareHint") });
+
 		if (shares.length === 0) {
-			containerEl.createDiv({ cls: "semlink-share-tab-empty", text: t("shareEmpty") });
+			// 空状态（契约 §3.6）：图标 + 一句话，纵向居中于卡内。
+			const empty = containerEl.createDiv({ cls: "semlink-card semlink-share-empty" });
+			const icon = empty.createDiv({ cls: "semlink-share-empty-icon" });
+			setIcon(icon, "share-2");
+			empty.createDiv({ cls: "semlink-share-empty-text", text: t("shareEmpty") });
 			return;
 		}
 
-		const list = containerEl.createDiv({ cls: "semlink-mcp-list" });
+		containerEl.createDiv({
+			cls: "semlink-card-title",
+			text: `${t("shareGroupTitle")} · ${shares.length}`,
+		});
+		const list = containerEl.createDiv({ cls: "semlink-card semlink-share-list" });
 		void (async () => {
 			const sessions = await this.plugin.historyStore.load();
 			const titleOf = (sessionId: string): string => {
@@ -880,259 +1127,92 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				const st = sessions.find((x) => x.id === sessionId);
 				return st?.title || st?.messages.find((m) => m.role === "user")?.content || t("shareUntitled");
 			};
-			// Sorted: live shares first, then paused; newest session first.
-			const rows = shares
-				.map((entry) => ({ ...entry, title: titleOf(entry.sessionId) }))
-				.sort((a, b) => b.sessionId.localeCompare(a.sessionId));
 			list.empty();
-			for (const row of rows) {
-				// Same card anatomy as the MCP tab: icon, title+FULL-URL main,
-				// then copy / QR / open / delete + toggle on the right edge.
-				const item = list.createDiv({ cls: "semlink-mcp-server" });
-				const icon = item.createDiv({ cls: "semlink-mcp-server-icon" });
-				// Note shares get the file-text mark, chats keep share-2.
-				setIcon(icon, row.sessionId.startsWith("note:") ? "file-text" : "share-2");
-				const main = item.createDiv({ cls: "semlink-mcp-server-main" });
-				main.createDiv({ cls: "semlink-mcp-server-name", text: row.title });
-				const url = server.urls(row.token)[0];
-				main.createDiv({ cls: "semlink-mcp-server-sub", text: url });
+			for (const entry of shares) {
+				const title = titleOf(entry.sessionId);
+				const url = server.urls(entry.token)[0];
+				const item = list.createDiv({
+					cls: "semlink-row is-clickable semlink-share-row",
+					attr: { role: "button", tabindex: "0" },
+				});
 
-				const actions = item.createDiv({ cls: "semlink-mcp-server-actions" });
-
-				// Revoke + drop the row; both the trash button and the QR
+				// Revoke + drop the row; both the trash button and the detail
 				// dialog's "Stop sharing" go through here. The list re-renders
-				// to the empty hint once the last row is gone.
+				// to the empty card once the last row is gone.
 				const removeRow = (): void => {
-					server.revokeToken(row.token);
+					server.revokeToken(entry.token);
 					item.remove();
 					if (list.children.length === 0) rerenderSettingsTab(this);
 				};
-
-				const qrBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareQrCode") } });
-				setIcon(qrBtn, "qr-code");
-				qrBtn.addEventListener("click", () => {
-					// Same dialog as the chat share button: QR + copy +
-					// open-in-browser + stop sharing. Stopping sharing there
-					// removes this row too (the modal shows the notice).
+				const openDetail = (): void => {
+					// 与聊天分享按钮同一个详情弹窗：二维码 + 复制 + 浏览器打开
+					// + 停止共享（那里的停止会同步移除本行）。
 					new ShareQrModal(this.app, {
 						url,
-						name: row.title,
+						name: title,
 						onRevoke: removeRow,
 					}).open();
+				};
+				item.addEventListener("click", openDetail);
+				item.addEventListener("keydown", (e) => {
+					if (e.key === "Enter" || e.key === " ") {
+						e.preventDefault();
+						openDetail();
+					}
 				});
 
-				const openBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareOpenBrowser") } });
-				setIcon(openBtn, "external-link");
-				openBtn.addEventListener("click", () => {
-					window.open(url, "_blank");
+				// 图标槽 28px（file-text）
+				const icon = item.createSpan({ cls: "semlink-share-icon" });
+				setIcon(icon, entry.sessionId.startsWith("note:") ? "file-text" : "share-2");
+
+				// main 列：标题 + 时间 / URL（monospace，悬停 title 全显）
+				const main = item.createDiv({ cls: "semlink-share-main" });
+				const line1 = main.createDiv({ cls: "semlink-share-line1" });
+				line1.createSpan({ cls: "semlink-share-title", text: title });
+				const ageMs = Date.now() - entry.sharedAt;
+				line1.createSpan({
+					cls: "semlink-share-time",
+					text: ageMs > 30 * 24 * 60 * 60 * 1000
+						? moment(entry.sharedAt).format("YYYY-MM-DD")
+						: moment(entry.sharedAt).fromNow(),
+				});
+				const urlEl = main.createSpan({ cls: "semlink-share-url", text: url });
+				urlEl.setAttr("title", url);
+
+				// 行尾两个 ghost 图标钮：复制（写「标题\nURL」，check 反馈 1.2s）
+				const actions = item.createDiv({ cls: "semlink-share-actions" });
+				const copyBtn = actions.createEl("button", {
+					cls: "semlink-btn-ghost semlink-share-act",
+					attr: { "aria-label": t("shareCopy"), type: "button" },
+				});
+				// 图标包 span（直接 setIcon 在 button 上会缩成一点，同 MCP copy 修复）
+				const copyIcon = copyBtn.createSpan({ cls: "semlink-share-act-icon" });
+				setIcon(copyIcon, "copy");
+				let copyTimer: number | null = null;
+				const doCopy = (): void => {
+					void navigator.clipboard.writeText(`${title}\n${url}`).then(() => {
+						copyBtn.addClass("is-copied");
+						setIcon(copyIcon, "check");
+						if (copyTimer != null) window.clearTimeout(copyTimer);
+						copyTimer = window.setTimeout(() => {
+							copyTimer = null;
+							if (!copyBtn.isConnected) return;
+							copyBtn.removeClass("is-copied");
+							setIcon(copyIcon, "copy");
+						}, 1200);
+					}, () => new Notice(t("shareCopyFailed")));
+				};
+				copyBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					doCopy();
 				});
 
-				const delBtn = actions.createEl("button", { cls: "semlink-mcp-icon-btn", attr: { "aria-label": t("shareDelete") } });
-				setIcon(delBtn, "trash-2");
-				delBtn.addEventListener("click", () => {
-					removeRow();
-					new Notice(t("shareDeleted"));
-				});
-
+				// 删除入口收敛（评审 P1）：行尾 trash 与详情弹窗 "Stop sharing"
+				// 是同一破坏性操作的两条确认路径——行内只留 copy，停止共享
+				// 统一走详情弹窗（后果说明更完整，误触面更小）。
 			}
 		})();
 	}
-
-	// ══════════════════════════════════════
-	// Tab: Git — 本地自动快照（免费） + 远程推送（Pro）
-	// ══════════════════════════════════════
-	private renderGitTab(containerEl: HTMLElement): void {
-		const pro = this.plugin.licenseManager.isPro();
-		new Setting(containerEl).setName(t("gitSection")).setHeading();
-		const git = () => this.plugin.settings.git ?? DEFAULT_GIT_SETTINGS;
-
-		// ── 未初始化：整个页签只呈现一个动作——初始化并快照 ──
-		// （说明文字 + 大按钮，其余配置项在初始化完成后才出现。）
-		if (!this.plugin.gitService.isRepo()) {
-			const intro = containerEl.createDiv({ cls: "semlink-pro-gate" });
-			intro.createSpan({ cls: "semlink-pro-gate-text", text: t("gitEnableDesc") });
-			const btn = containerEl.createEl("button", {
-				cls: "mod-cta semlink-git-init-btn",
-				text: t("gitInitRepo"),
-			});
-			btn.addEventListener("click", async () => {
-				// 首次快照要给全部附件做 hash（大 vault + 杀毒软件可达分钟级）
-				// ——按钮进入明确的运行态并显示真实分批进度。
-				btn.disabled = true;
-				btn.textContent = t("gitSnapRunning");
-				try {
-					await this.plugin.gitService.ensureRepo();
-					await this.plugin.gitService.commit(`${git().messagePrefix}: initial snapshot`, true, (done, total) => {
-						btn.textContent = `${t("gitSnapRunning")} ${done}/${total}`;
-					});
-					new Notice(t("gitInitDone"));
-				} catch (e) {
-					new Notice(String(e instanceof Error ? e.message : e) || t("gitMissingHint"));
-					btn.disabled = false;
-					btn.textContent = t("gitInitRepo");
-					return;
-				}
-				this.refreshPreservingScroll();
-			});
-			return;
-		}
-
-		// Pro 说明前置：一句话讲清免费/增值边界（本地免费、远程 Pro）。
-		const proHint = containerEl.createDiv({ cls: "semlink-pro-gate" });
-		proHint.createSpan({ cls: "semlink-pro-badge", text: "✨ Pro" });
-		proHint.createSpan({ cls: "semlink-pro-gate-text", text: t("gitProHint") });
-
-		// 总开关（免费）：关 = 完全不动 git。
-		new Setting(containerEl)
-			.setName(t("gitEnable"))
-			.setDesc(t("gitEnableDesc"))
-			.addToggle((tg) =>
-				tg.setValue(git().enabled).onChange(async (v) => {
-					this.plugin.settings.git = { ...git(), enabled: v };
-					await this.plugin.saveSettings();
-					this.refreshPreservingScroll();
-				}),
-			);
-
-		// 仓库状态（免费）：是否已初始化 + 最近提交。
-		const statusSetting = new Setting(containerEl).setName(t("gitRepoStatus"));
-		const statusDesc = statusSetting.descEl;
-		void (async () => {
-			try {
-				const svc = this.plugin.gitService;
-				if (!svc.isRepo()) {
-					statusDesc.setText(t("gitNoRepo"));
-				} else {
-					statusDesc.setText(await svc.status());
-				}
-			} catch (e) {
-				statusDesc.setText(t("gitMissingHint"));
-			}
-		})();
-		// 已初始化 → 查看仓库（未初始化已在方法开头提前返回，只显示初始化按钮）。
-		statusSetting.addButton((btn) =>
-			btn.setButtonText(t("gitViewRepo")).onClick(() => {
-				new GitRepoModal(this.plugin).open();
-			}),
-		);
-
-		// 自动快照间隔（分钟，免费）。
-		new Setting(containerEl)
-			.setName(t("gitSnapMinutes"))
-			.setDesc(t("gitSnapMinutesDesc"))
-			.addText((tx) => {
-				tx.inputEl.type = "number";
-				tx.setValue(String(git().autoCommitMinutes));
-				tx.onChange(async (v) => {
-					const n = Math.max(1, Math.round(Number(v) || 1));
-					this.plugin.settings.git = { ...git(), autoCommitMinutes: n };
-					await this.plugin.saveSettings();
-				});
-			});
-
-		// 提交信息前缀（免费）。
-		new Setting(containerEl)
-			.setName(t("gitPrefix"))
-			.setDesc(t("gitPrefixDesc"))
-			.addText((tx) =>
-				tx.setValue(git().messagePrefix).onChange(async (v) => {
-					this.plugin.settings.git = { ...git(), messagePrefix: v };
-					await this.plugin.saveSettings();
-				}),
-			);
-
-		// ── 危险区：删除本地仓库（只删 .git 版本历史，文件不动） ──
-		new Setting(containerEl)
-			.setName(t("gitRemoveRepo"))
-			.setDesc(t("gitRemoveDesc"))
-			.addButton((btn) =>
-				btn
-					.setButtonText(t("gitRemoveBtn"))
-					.onClick(() => {
-						btn.buttonEl.addClass("mod-warning");
-						new ConfirmModal(this.app, t("gitRemoveRepo"), t("gitRemoveConfirm"), async () => {
-							// 删 .git（大量只读 objects）也可能数秒——运行态反馈。
-							btn.setDisabled(true);
-							btn.setButtonText(t("gitSnapRunning"));
-							try {
-								await this.plugin.gitService.removeRepo();
-								new Notice(t("gitRemoveDone"));
-							} catch (e) {
-								new Notice(String(e instanceof Error ? e.message : e));
-								btn.setDisabled(false);
-								btn.setButtonText(t("gitRemoveBtn"));
-								return;
-							}
-							this.refreshPreservingScroll();
-						}).open();
-					}),
-			);
-
-		// ── 远程推送（Pro 增值） ──
-		new Setting(containerEl).setName(t("gitRemoteTitle")).setHeading();
-		if (!pro) {
-			const gate = containerEl.createDiv({ cls: "semlink-pro-gate" });
-			gate.createSpan({ cls: "semlink-pro-badge", text: "✨ Pro" });
-			gate.createSpan({ cls: "semlink-pro-gate-text", text: t("gitProHint") });
-			const btn = gate.createEl("button", { cls: "mod-cta", text: t("unlockPro") });
-			btn.addEventListener("click", () => new LicenseModal(this.app, this.plugin).open());
-			return;
-		}
-
-		new Setting(containerEl)
-			.setName(t("gitAutoPush"))
-			.setDesc(t("gitAutoPushDesc"))
-			.addToggle((tg) =>
-				tg.setValue(git().autoPush).onChange(async (v) => {
-					this.plugin.settings.git = { ...git(), autoPush: v };
-					await this.plugin.saveSettings();
-				}),
-			);
-		new Setting(containerEl)
-			.setName(t("gitRemoteUrl"))
-			.setDesc(t("gitRemoteUrlDesc"))
-			.addText((tx) => {
-				tx.inputEl.style.width = "100%";
-				tx.setValue(git().remoteUrl);
-				tx.onChange(async (v) => {
-					this.plugin.settings.git = { ...git(), remoteUrl: v.trim() };
-					await this.plugin.saveSettings();
-				});
-			});
-		new Setting(containerEl)
-			.setName(t("gitBranch"))
-			.addText((tx) =>
-				tx.setValue(git().remoteBranch).onChange(async (v) => {
-					this.plugin.settings.git = { ...git(), remoteBranch: v.trim() || "master" };
-					await this.plugin.saveSettings();
-				}),
-			);
-		new Setting(containerEl)
-			.setName(t("gitToken"))
-			.setDesc(t("gitTokenDesc"))
-			.addText((tx) => {
-				tx.inputEl.type = "password";
-				tx.setValue(git().token);
-				tx.onChange(async (v) => {
-					this.plugin.settings.git = { ...git(), token: v.trim() };
-					await this.plugin.saveSettings();
-				});
-			});
-		new Setting(containerEl).addButton((btn) =>
-			btn.setButtonText(t("gitPushNow")).onClick(async () => {
-				btn.setDisabled(true);
-				try {
-					const msg = await this.plugin.gitService.push();
-					new Notice(msg.startsWith("Error") ? msg : t("gitPushOk"));
-				} catch (e) {
-					new Notice(String(e instanceof Error ? e.message : e));
-				} finally {
-					btn.setDisabled(false);
-				}
-			}),
-		);
-	}
-
 	private renderBotTab(containerEl: HTMLElement): void {
 		new Setting(containerEl).setName(t("botSection")).setHeading();
 
@@ -1141,7 +1221,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// no bots are started at runtime (syncFeishuBots checks isPro).
 		if (!this.plugin.licenseManager.isPro()) {
 			const gate = containerEl.createDiv({ cls: "semlink-pro-gate" });
-			gate.createSpan({ cls: "semlink-pro-badge", text: "✨ Pro" });
+			gate.createSpan({ cls: "semlink-pro-badge", text: "Pro" });
 			gate.createSpan({ cls: "semlink-pro-gate-text", text: t("botProDesc") });
 			const btn = gate.createEl("button", { cls: "mod-cta", text: t("unlockPro") });
 			btn.addEventListener("click", () => {
@@ -1289,7 +1369,7 @@ class EditMcpServerModal extends Modal {
 			);
 		};
 
-		// ── Form / JSON 切换（右上角分段控件） ──
+		// ── Form / JSON 切换（分段控件居左，按钮自带按压缩放） ──
 		const segRow = contentEl.createDiv({ cls: "semlink-mcp-edit-segrow" });
 		const seg = segRow.createDiv({ cls: "semlink-mcp-edit-seg" });
 		const formBtn = seg.createEl("button", { cls: "is-active", text: "Form" });
@@ -1301,28 +1381,64 @@ class EditMcpServerModal extends Modal {
 		jsonArea.rows = 12;
 		jsonArea.readOnly = true;
 		jsonArea.value = buildJson();
+		// JSON 视图是生成的接入配置：一键复制，粘进客户端即可。
+		const jsonCopyBtn = jsonView.createEl("button", {
+			cls: "semlink-btn-secondary semlink-mcp-json-copy",
+			text: t("mcpJsonCopy"),
+		});
+		jsonCopyBtn.addEventListener("click", () => {
+			void navigator.clipboard.writeText(jsonArea.value)
+				.then(() => new Notice(t("mcpCopied")))
+				.catch(() => new Notice(t("mcpCopyFailed")));
+		});
 
 		const syncJson = (): void => {
 			jsonArea.value = buildJson();
 		};
 
-		// ── Form 字段：端口 / 访问 Key ──
-		formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpPort") });
-		const portInput = formView.createEl("input", {
+		// ── 行内校验的表单字段包：label + input + 错误行（12.5px 红），
+		//    blur 展示校验、input 即时宽恕/复查；保存时聚焦第一个错误字段。 ──
+		const attachError = (field: HTMLElement): ((msg: string) => void) => {
+			const errorEl = field.createDiv({ cls: "semlink-mcp-field-error" });
+			return (msg: string): void => {
+				field.toggleClass("has-error", !!msg);
+				errorEl.setText(msg);
+			};
+		};
+		const focusField = (input: HTMLElement): void => {
+			input.scrollIntoView({ block: "center", behavior: "smooth" });
+			input.focus();
+		};
+
+		// 端口字段：必填 1-65535（非法不再静默回退，保存被行内错误拦下）。
+		const portField = formView.createDiv({ cls: "semlink-mcp-field" });
+		portField.createDiv({ cls: "semlink-editor-field-label", text: t("mcpPort") });
+		const portInput = portField.createEl("input", {
 			cls: "semlink-editor-input",
-			attr: { type: "text", placeholder: "3001", spellcheck: "false" },
+			attr: { type: "text", placeholder: "3001", spellcheck: "false", inputmode: "numeric" },
 		});
 		portInput.value = String(port);
+		const setPortError = attachError(portField);
+		const portMsg = (): string => {
+			const n = Number(portInput.value.trim());
+			return Number.isInteger(n) && n >= 1 && n <= 65535 ? "" : t("mcpPortInvalid");
+		};
 		portInput.addEventListener("input", () => {
-			const parsed = parseInt(portInput.value, 10);
-			port = isNaN(parsed) || parsed <= 0 || parsed >= 65536 ? this.plugin.settings.mcpPort : parsed;
-			syncJson();
+			const msg = portMsg();
+			setPortError(msg);
+			if (!msg) {
+				port = Number(portInput.value.trim());
+				syncJson();
+			}
 		});
+		portInput.addEventListener("blur", () => setPortError(portMsg()));
 
-		formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpAccessKey") });
-		const keyInput = formView.createEl("input", {
+		// 访问 Key：可空，无校验。
+		const keyField = formView.createDiv({ cls: "semlink-mcp-field" });
+		keyField.createDiv({ cls: "semlink-editor-field-label", text: t("mcpAccessKey") });
+		const keyInput = keyField.createEl("input", {
 			cls: "semlink-editor-input",
-			attr: { type: "text", spellcheck: "false" },
+			attr: { type: "text", spellcheck: "false", autocomplete: "off" },
 		});
 		keyInput.value = apiKey;
 		keyInput.addEventListener("input", () => {
@@ -1345,17 +1461,16 @@ class EditMcpServerModal extends Modal {
 		cancelBtn.addEventListener("click", () => this.close());
 		const saveBtn = footer.createEl("button", { cls: "semlink-editor-save-btn", text: t("editorSave") });
 
-		const error = contentEl.createDiv({ cls: "semlink-guide-error semlink-hidden" });
-
 		saveBtn.addEventListener("click", () => {
-			const parsed = parseInt(portInput.value, 10);
-			if (isNaN(parsed) || parsed <= 0 || parsed >= 65536) {
-				error.setText(t("mcpPortInvalid"));
-				error.removeClass("semlink-hidden");
+			const msg = portMsg();
+			if (msg) {
+				// 有错不提交：行内报错 + 滚动聚焦第一个错误字段。
+				setPortError(msg);
+				focusField(portInput);
 				return;
 			}
 			const persist = async (): Promise<void> => {
-				this.plugin.settings.mcpPort = parsed;
+				this.plugin.settings.mcpPort = port;
 				this.plugin.settings.mcpApiKey = keyInput.value;
 				await this.plugin.saveSettings();
 				// 端口/Key 变更需要重启才生效；没在运行则不主动拉起
@@ -1394,7 +1509,30 @@ class McpServerConfigModal extends Modal {
 		this.titleEl.setText(editing ? t("editMcpServer") : t("mcpNew"));
 		const { contentEl } = this;
 
-		// ── Form / JSON 切换（右上角分段控件，同内置服务配置弹窗） ──
+		// ── 行内校验基建：字段包（label + input + 错误行）；blur 展示校验、
+		//    input 即时宽恕/复查；保存时聚焦第一个错误字段，不提交。 ──
+		const makeField = (host: HTMLElement, label: string): { field: HTMLElement } => {
+			const field = host.createDiv({ cls: "semlink-mcp-field" });
+			field.createDiv({ cls: "semlink-editor-field-label", text: label });
+			return { field };
+		};
+		const attachError = (field: HTMLElement): ((msg: string) => void) => {
+			const errorEl = field.createDiv({ cls: "semlink-mcp-field-error" });
+			return (msg: string): void => {
+				field.toggleClass("has-error", !!msg);
+				errorEl.setText(msg);
+			};
+		};
+		const bindLive = (input: HTMLElement, set: (msg: string) => void, validate: () => string): void => {
+			input.addEventListener("input", () => set(validate()));
+			input.addEventListener("blur", () => set(validate()));
+		};
+		const focusField = (input: HTMLElement): void => {
+			input.scrollIntoView({ block: "center", behavior: "smooth" });
+			input.focus();
+		};
+
+		// ── Form / JSON 切换（分段控件居左，同内置服务配置弹窗） ──
 		const segRow = contentEl.createDiv({ cls: "semlink-mcp-edit-segrow" });
 		const seg = segRow.createDiv({ cls: "semlink-mcp-edit-seg" });
 		const formBtn = seg.createEl("button", { cls: "is-active", text: "Form" });
@@ -1403,29 +1541,40 @@ class McpServerConfigModal extends Modal {
 		const jsonView = contentEl.createDiv({ cls: "semlink-mcp-edit-json semlink-hidden" });
 
 		// ── Form：Name / Type / Timeout / Protocol / URL|Command+Args / Headers ──
-		formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerName") });
-		const nameInput = formView.createEl("input", {
+		const nameFieldInfo = makeField(formView, t("mcpServerName"));
+		const nameInput = nameFieldInfo.field.createEl("input", {
 			cls: "semlink-editor-input",
 			attr: { type: "text", placeholder: "my-mcp-server", spellcheck: "false" },
 		});
 		nameInput.value = this.server?.name ?? "";
+		const setNameError = attachError(nameFieldInfo.field);
+		const nameMsg = (): string => (nameInput.value.trim() ? "" : t("mcpNameRequired"));
+		bindLive(nameInput, setNameError, nameMsg);
 
-		formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerType") });
-		const typeSel = formView.createEl("select", { cls: "semlink-editor-select" });
+		const typeFieldInfo = makeField(formView, t("mcpServerType"));
+		const typeSel = typeFieldInfo.field.createEl("select", { cls: "semlink-editor-select" });
 		for (const [value, label] of [["http", "HTTP"], ["sse", "SSE"], ["stdio", "stdio"]] as const) {
 			typeSel.createEl("option", { value, text: label });
 		}
 		typeSel.value = this.server?.type ?? "http";
 
-		formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpTimeoutMs") });
-		const timeoutInput = formView.createEl("input", {
+		const timeoutFieldInfo = makeField(formView, t("mcpTimeoutMs"));
+		const timeoutInput = timeoutFieldInfo.field.createEl("input", {
 			cls: "semlink-editor-input",
-			attr: { type: "text", placeholder: "30000", spellcheck: "false" },
+			attr: { type: "text", placeholder: "30000", spellcheck: "false", inputmode: "numeric" },
 		});
 		timeoutInput.value = this.server?.timeoutMs ? String(this.server.timeoutMs) : "";
+		const setTimeoutError = attachError(timeoutFieldInfo.field);
+		const timeoutMsg = (): string => {
+			const raw = timeoutInput.value.trim();
+			if (!raw) return "";
+			const n = Number(raw);
+			return Number.isInteger(n) && n > 0 ? "" : t("mcpErrTimeout");
+		};
+		bindLive(timeoutInput, setTimeoutError, timeoutMsg);
 
-		formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpProtocolVersion") });
-		const protoSel = formView.createEl("select", { cls: "semlink-editor-select" });
+		const protoFieldInfo = makeField(formView, t("mcpProtocolVersion"));
+		const protoSel = protoFieldInfo.field.createEl("select", { cls: "semlink-editor-select" });
 		for (const [value, label] of [
 			["", t("mcpProtocolAuto")],
 			["2025-06-18", "2025-06-18"],
@@ -1435,20 +1584,23 @@ class McpServerConfigModal extends Modal {
 			protoSel.createEl("option", { value, text: label });
 		}
 		protoSel.value = this.server?.protocolVersion ?? "";
-		const protoHint = document.createElement("div");
-		protoHint.addClass("semlink-mcp-edit-desc");
-		protoHint.setText(t("mcpProtocolHint"));
-		protoSel.insertAdjacentElement("afterend", protoHint);
+		protoFieldInfo.field.createDiv({ cls: "semlink-mcp-edit-desc", text: t("mcpProtocolHint") });
 
-		const urlLabel = formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerUrl") });
-		const urlInput = formView.createEl("input", {
+		const urlFieldInfo = makeField(formView, t("mcpServerUrl"));
+		const urlInput = urlFieldInfo.field.createEl("input", {
 			cls: "semlink-editor-input",
 			attr: { type: "text", placeholder: "https://mcp.example.com/mcp", spellcheck: "false" },
 		});
 		urlInput.value = this.server?.url ?? "";
+		const setUrlError = attachError(urlFieldInfo.field);
+		const urlMsg = (): string => {
+			if (typeSel.value === "stdio") return "";
+			return /^https?:\/\//.test(urlInput.value.trim()) ? "" : t("mcpErrUrl");
+		};
+		bindLive(urlInput, setUrlError, urlMsg);
 
-		const headersLabel = formView.createDiv({ cls: "semlink-editor-field-label", text: `${t("mcpServerHeaders")} (JSON)` });
-		const headersInput = formView.createEl("textarea", {
+		const headersFieldInfo = makeField(formView, `${t("mcpServerHeaders")} (JSON)`);
+		const headersInput = headersFieldInfo.field.createEl("textarea", {
 			cls: "semlink-editor-input semlink-monospace",
 		});
 		headersInput.rows = 4;
@@ -1456,33 +1608,40 @@ class McpServerConfigModal extends Modal {
 		const serverHeaders = this.server?.headers ?? {};
 		headersInput.value = Object.keys(serverHeaders).length > 0 ? JSON.stringify(serverHeaders, null, 2) : "";
 
-		const cmdLabel = formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerCommand") });
-		const cmdInput = formView.createEl("input", {
+		const cmdFieldInfo = makeField(formView, t("mcpServerCommand"));
+		const cmdInput = cmdFieldInfo.field.createEl("input", {
 			cls: "semlink-editor-input",
 			attr: { type: "text", placeholder: "npx -y @some/mcp", spellcheck: "false" },
 		});
 		cmdInput.value = this.server?.command ?? "";
+		const setCmdError = attachError(cmdFieldInfo.field);
+		const cmdMsg = (): string => {
+			if (typeSel.value !== "stdio") return "";
+			return cmdInput.value.trim() ? "" : t("mcpErrCommand");
+		};
+		bindLive(cmdInput, setCmdError, cmdMsg);
 
-		const argsLabel = formView.createDiv({ cls: "semlink-editor-field-label", text: t("mcpServerArgs") });
-		const argsInput = formView.createEl("input", {
+		const argsFieldInfo = makeField(formView, t("mcpServerArgs"));
+		const argsInput = argsFieldInfo.field.createEl("input", {
 			cls: "semlink-editor-input",
 			attr: { type: "text", placeholder: "--port 8080 --verbose", spellcheck: "false" },
 		});
 		argsInput.value = this.server?.args ?? "";
 
-		// http/sse ↔ stdio 互斥显隐
+		// http/sse ↔ stdio 互斥显隐（整字段包切换）
 		const syncType = (): void => {
 			const isStdio = typeSel.value === "stdio";
-			urlLabel.toggleClass("semlink-hidden", isStdio);
-			urlInput.toggleClass("semlink-hidden", isStdio);
-			headersLabel.toggleClass("semlink-hidden", isStdio);
-			headersInput.toggleClass("semlink-hidden", isStdio);
-			cmdLabel.toggleClass("semlink-hidden", !isStdio);
-			cmdInput.toggleClass("semlink-hidden", !isStdio);
-			argsLabel.toggleClass("semlink-hidden", !isStdio);
-			argsInput.toggleClass("semlink-hidden", !isStdio);
+			urlFieldInfo.field.toggleClass("semlink-hidden", isStdio);
+			headersFieldInfo.field.toggleClass("semlink-hidden", isStdio);
+			cmdFieldInfo.field.toggleClass("semlink-hidden", !isStdio);
+			argsFieldInfo.field.toggleClass("semlink-hidden", !isStdio);
 		};
-		typeSel.addEventListener("change", syncType);
+		typeSel.addEventListener("change", () => {
+			syncType();
+			// 切类型即时复查两端的校验态（隐藏端清错）。
+			setUrlError(urlMsg());
+			setCmdError(cmdMsg());
+		});
 		syncType();
 
 		// ── JSON 视图：完整配置（可粘贴 {"name":{…}} / {"mcpServers":{…}} 回填） ──
@@ -1490,6 +1649,15 @@ class McpServerConfigModal extends Modal {
 		const jsonArea = jsonView.createEl("textarea", { cls: "semlink-editor-input semlink-monospace" });
 		jsonArea.rows = 12;
 		jsonView.createDiv({ cls: "semlink-mcp-edit-desc", text: t("mcpJsonPasteHint") });
+		const jsonCopyBtn = jsonView.createEl("button", {
+			cls: "semlink-btn-secondary semlink-mcp-json-copy",
+			text: t("mcpJsonCopy"),
+		});
+		jsonCopyBtn.addEventListener("click", () => {
+			void navigator.clipboard.writeText(jsonArea.value)
+				.then(() => new Notice(t("mcpCopied")))
+				.catch(() => new Notice(t("mcpCopyFailed")));
+		});
 
 		const headersOfForm = (): Record<string, string> => {
 			const raw = headersInput.value.trim();
@@ -1541,17 +1709,24 @@ class McpServerConfigModal extends Modal {
 
 		const error = contentEl.createDiv({ cls: "semlink-guide-error semlink-hidden" });
 
-		// ── Footer：编辑态带 Delete，右侧 Save / Cancel ──
+		// ── Footer：编辑态带 Delete（确认框说后果），右侧 Save / Cancel ──
 		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
 		if (editing) {
-			const delBtn = footer.createEl("button", { cls: "semlink-editor-delete-link", text: t("chatDeleteModel") });
+			const delBtn = footer.createEl("button", { cls: "semlink-editor-delete-link", text: t("mcpDeleteAction") });
 			delBtn.addEventListener("click", () => {
-				new ConfirmModal(this.app, t("chatDeleteModel"), this.server?.name ?? "", () => {
-					this.plugin.settings.mcpClientServers = (this.plugin.settings.mcpClientServers ?? []).filter((x) => x.id !== this.server!.id);
-					void this.plugin.saveSettings();
-					this.close();
-					this.onDone();
-				}).open();
+				const targetName = this.server?.name ?? "";
+				new ConfirmModal(
+					this.app,
+					t("mcpDeleteTitle").replace("{name}", targetName),
+					t("mcpDeleteBody"),
+					() => {
+						this.plugin.settings.mcpClientServers = (this.plugin.settings.mcpClientServers ?? []).filter((x) => x.id !== this.server!.id);
+						void this.plugin.saveSettings();
+						this.close();
+						this.onDone();
+					},
+					t("mcpDeleteAction"),
+				).open();
 			});
 		}
 		const cancelBtn = footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") });
@@ -1560,14 +1735,7 @@ class McpServerConfigModal extends Modal {
 
 		saveBtn.addEventListener("click", () => {
 			// JSON 视图激活时：解析粘贴的完整配置（{"name":{…}} / {"mcpServers":{…}}）
-			let name = nameInput.value.trim();
-			let typeName = typeSel.value;
-			let url = urlInput.value.trim();
-			let command = cmdInput.value.trim();
-			let args = argsInput.value.trim();
-			let headersRaw = headersInput.value.trim();
-			const timeoutRaw = timeoutInput.value.trim();
-			const protocol = protoSel.value;
+			// 回填表单，然后走同一条行内校验路径。
 			if (!jsonView.hasClass("semlink-hidden")) {
 				try {
 					const parsed = JSON.parse(jsonArea.value) as Record<string, unknown>;
@@ -1577,13 +1745,13 @@ class McpServerConfigModal extends Modal {
 						throw new Error("empty");
 					}
 					const s = servers[firstKey];
-					name = firstKey;
-					typeName = typeof s.type === "string" ? s.type : (s.command ? "stdio" : "http");
-					url = typeof s.url === "string" ? s.url : "";
-					command = typeof s.command === "string" ? s.command : "";
-					args = Array.isArray(s.args) ? (s.args as unknown[]).map(String).join(" ")
+					nameInput.value = firstKey;
+					typeSel.value = typeof s.type === "string" ? s.type : (s.command ? "stdio" : "http");
+					urlInput.value = typeof s.url === "string" ? s.url : "";
+					cmdInput.value = typeof s.command === "string" ? s.command : "";
+					argsInput.value = Array.isArray(s.args) ? (s.args as unknown[]).map(String).join(" ")
 						: typeof s.args === "string" ? s.args : "";
-					headersRaw = s.headers && typeof s.headers === "object"
+					headersInput.value = s.headers && typeof s.headers === "object"
 						? JSON.stringify(s.headers, null, 2)
 						: "";
 				} catch {
@@ -1591,19 +1759,31 @@ class McpServerConfigModal extends Modal {
 					error.removeClass("semlink-hidden");
 					return;
 				}
+				syncType();
 			}
-			if (!name) {
-				error.setText(t("mcpNameRequired"));
-				error.removeClass("semlink-hidden");
-				return;
+			// 行内校验：名称必填 / Timeout 正整数 / URL http 开头 / stdio 命令必填。
+			setNameError(nameMsg());
+			setTimeoutError(timeoutMsg());
+			setUrlError(urlMsg());
+			setCmdError(cmdMsg());
+			for (const [input, msg] of [
+				[nameInput, nameMsg()],
+				[timeoutInput, timeoutMsg()],
+				[urlInput, urlMsg()],
+				[cmdInput, cmdMsg()],
+			] as Array<[HTMLInputElement, string]>) {
+				if (msg) {
+					focusField(input);
+					return;
+				}
 			}
-			const isStdio = typeName === "stdio";
-			const target = isStdio ? command : url;
-			if (!target) {
-				error.setText(isStdio ? t("mcpServerCommand") : t("mcpServerUrl"));
-				error.removeClass("semlink-hidden");
-				return;
-			}
+			const name = nameInput.value.trim();
+			const isStdio = typeSel.value === "stdio";
+			const url = urlInput.value.trim();
+			const command = cmdInput.value.trim();
+			const args = argsInput.value.trim();
+			const headersRaw = headersInput.value.trim();
+			const protocol = protoSel.value;
 			let headers: Record<string, string> | undefined;
 			if (!isStdio && headersRaw) {
 				try {
@@ -1616,10 +1796,10 @@ class McpServerConfigModal extends Modal {
 					return;
 				}
 			}
-			const timeout = parseInt(timeoutRaw, 10);
+			const timeout = parseInt(timeoutInput.value.trim(), 10);
 			const shared = {
 				name,
-				type: typeName as McpClientServer["type"],
+				type: typeSel.value as McpClientServer["type"],
 				...(isStdio
 					? { command, args: args || undefined }
 					: { url, ...(headers && Object.keys(headers).length > 0 ? { headers } : {}) }),
@@ -1715,11 +1895,20 @@ class ExcludePathsModal extends Modal {
 		contentEl.createDiv({ cls: "semlink-mcp-edit-desc", text: t("excludePathsDesc") });
 		const textarea = contentEl.createEl("textarea", { cls: "semlink-editor-input" });
 		textarea.rows = 8;
+		textarea.placeholder = t("excludePathsPlaceholder");
 		textarea.value = this.plugin.settings.excludePaths;
+		// 右对齐实时计数：trim 后非空的行数（空行不计入排除规则）。
+		const countEl = contentEl.createDiv({ cls: "semlink-exclude-count" });
+		const syncCount = (): void => {
+			const n = textarea.value.split("\n").map((l) => l.trim()).filter(Boolean).length;
+			countEl.setText(t("excludePathCount").replace("{n}", String(n)));
+		};
+		textarea.addEventListener("input", syncCount);
+		syncCount();
 		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
-		const cancelBtn = footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") });
+		const cancelBtn = footer.createEl("button", { cls: "semlink-btn-ghost", text: t("cancel") });
 		cancelBtn.addEventListener("click", () => this.close());
-		const saveBtn = footer.createEl("button", { cls: "semlink-editor-save-btn", text: t("editorSave") });
+		const saveBtn = footer.createEl("button", { cls: "semlink-btn-primary", text: t("editorSave") });
 		saveBtn.addEventListener("click", () => {
 			this.plugin.settings.excludePaths = textarea.value;
 			void this.plugin.saveSettings().then(() => this.close());
@@ -1731,158 +1920,6 @@ class ExcludePathsModal extends Modal {
 		this.contentEl.empty();
 	}
 }
-/** 仓库文件浏览弹窗：git ls-files 构建成树，文件夹可折叠、文件点击
- *  在 Obsidian 中打开（仅 vault 内真实存在的路径）。支持标题过滤。 */
-class GitRepoModal extends Modal {
-	private files: string[] = [];
-	private query = "";
-	/** 当前所在目录（"" = 仓库根）。面包屑导航的落点。 */
-	private cwd = "";
-	private page = 0;
-	private static PAGE = 100;
-	private loaded = false;
-	private loadError: string | null = null;
-
-	constructor(private plugin: SmartVaultPlugin) {
-		super(plugin.app);
-		this.modalEl.addClass("semlink-git-repo-modal");
-	}
-
-	async onOpen(): Promise<void> {
-		this.titleEl.setText(t("gitViewRepo"));
-		const search = this.contentEl.createEl("input", {
-			cls: "semlink-git-repo-search",
-			attr: { type: "text", placeholder: t("historySearch") },
-		});
-		const crumbEl = this.contentEl.createDiv({ cls: "semlink-git-repo-crumbs" });
-		const countEl = this.contentEl.createDiv({ cls: "semlink-git-repo-count" });
-		const body = this.contentEl.createDiv({ cls: "semlink-git-repo-body" });
-		try {
-			this.files = await this.plugin.gitService.listFiles();
-			this.loadError = null;
-		} catch (e) {
-			this.loadError = String(e instanceof Error ? e.message : e);
-			this.files = [];
-		}
-		this.loaded = true;
-		search.addEventListener("input", () => {
-			this.query = search.value.trim().toLowerCase();
-			this.page = 0;
-			this.render(crumbEl, countEl, body);
-		});
-		this.render(crumbEl, countEl, body);
-		search.focus();
-	}
-
-	/** 每次只渲染当前目录的直接子项（面包屑 + 分页），不再递归整树——
-	 *  1269 个文件的仓库每层也就几十个条目，DOM 量恒定不卡顿。 */
-	private render(crumbEl: HTMLElement, countEl: HTMLElement, body: HTMLElement): void {
-		// ── 面包屑：根 / A / B（点击回跳；搜索态隐藏） ──
-		crumbEl.empty();
-		if (!this.query) {
-			const mkCrumb = (label: string, path: string, current: boolean): void => {
-				const a = crumbEl.createSpan({
-					cls: "semlink-git-repo-crumb" + (current ? " is-current" : ""),
-					text: label,
-				});
-				if (!current) {
-					a.addEventListener("click", () => {
-						this.cwd = path;
-						this.page = 0;
-						this.render(crumbEl, countEl, body);
-					});
-				}
-			};
-			mkCrumb(t("gitViewRepo"), "", this.cwd === "");
-			let acc = "";
-			for (const part of this.cwd.split("/").filter(Boolean)) {
-				acc = acc ? `${acc}/${part}` : part;
-				crumbEl.createSpan({ cls: "semlink-git-repo-crumb-sep", text: " / " });
-				mkCrumb(part, acc, acc === this.cwd);
-			}
-		} else {
-			crumbEl.createSpan({ cls: "semlink-git-repo-crumb is-current", text: t("historySearch") });
-		}
-
-		body.empty();
-		if (!this.loaded) {
-			body.createDiv({ cls: "semlink-history-empty", text: "…" });
-			return;
-		}
-		if (this.loadError) {
-			body.createDiv({ cls: "semlink-msg-error", text: this.loadError });
-			return;
-		}
-		if (this.files.length === 0) {
-			body.createDiv({ cls: "semlink-history-empty", text: t("gitNoRepo") });
-			return;
-		}
-
-		// ── 当前层条目：搜索态=全库平铺（显示完整路径）；普通态=直接子文件夹 + 直接文件 ──
-		interface Entry { name: string; folderPath?: string; filePath?: string; count?: number; hint?: string }
-		let entries: Entry[] = [];
-		if (this.query) {
-			const hits = this.files.filter((f) => f.toLowerCase().includes(this.query));
-			entries = hits.map((f) => ({ name: f, filePath: f }));
-		} else {
-			const prefix = this.cwd ? `${this.cwd}/` : "";
-			const folders = new Map<string, number>();
-			const direct: string[] = [];
-			for (const f of this.files) {
-				if (!f.startsWith(prefix)) continue;
-				const rel = f.slice(prefix.length);
-				const slash = rel.indexOf("/");
-				if (slash === -1) direct.push(rel);
-				else folders.set(rel.slice(0, slash), (folders.get(rel.slice(0, slash)) ?? 0) + 1);
-			}
-			entries = [
-				...[...folders.entries()]
-					.sort((a, b) => a[0].localeCompare(b[0]))
-					.map(([name, count]) => ({ name, folderPath: prefix + name, count })),
-				...direct.sort((a, b) => a.localeCompare(b)).map((name) => ({ name, filePath: prefix + name })),
-			];
-		}
-		countEl.setText(t("gitRepoFiles").replace("{n}", entries.length.toLocaleString()));
-
-		// ── 分页渲染 ──
-		const slice = entries.slice(0, (this.page + 1) * GitRepoModal.PAGE);
-		for (const e of slice) {
-			const row = body.createDiv({ cls: "semlink-git-repo-row" + (e.folderPath ? " is-folder" : " is-file") });
-			if (!this.query) row.style.paddingLeft = "0.5rem";
-			const ico = row.createSpan({ cls: "semlink-git-repo-chev" });
-			setIcon(ico, e.folderPath ? "folder" : "file-text");
-			row.createSpan({ cls: "semlink-git-repo-name", text: e.name });
-			if (e.count !== undefined) {
-				row.createSpan({ cls: "semlink-git-repo-count", text: String(e.count) });
-			}
-			row.addEventListener("click", () => {
-				if (e.folderPath) {
-					this.cwd = e.folderPath;
-					this.page = 0;
-					this.render(crumbEl, countEl, body);
-					return;
-				}
-				const file = e.filePath !== undefined ? this.plugin.app.vault.getAbstractFileByPath(e.filePath) : null;
-				if (file) {
-					void this.plugin.app.workspace.openLinkText(e.filePath!, "", false);
-					this.close();
-				} else {
-					new Notice(t("gitFileGone"));
-				}
-			});
-		}
-		if (slice.length < entries.length) {
-			const more = body.createDiv({ cls: "semlink-history-more", text: t("historyShowMore") });
-			more.addEventListener("click", () => {
-				this.page++;
-				this.render(crumbEl, countEl, body);
-			});
-		}
-		if (entries.length === 0) {
-			body.createDiv({ cls: "semlink-history-empty", text: t("historyNoMatch") });
-		}
-	}
-}
 
 /** 视图内嵌设置屏入口（search-view 的设置按钮/管理模型入口共用）：
  *  实例化设置 Tab 并渲染进给定容器，返回 destroy 句柄供退出时清理。 */
@@ -1892,7 +1929,7 @@ export function renderSettingsTabInto(
 	tab?: SettingsTab,
 ): { destroy(): void; tab: SmartVaultSettingTab } {
 	const view = new SmartVaultSettingTab(plugin.app, plugin);
-	view.displayInto(container, tab);
+	view.displayInto(container, { tab });
 	return {
 		destroy: () => view.destroy(),
 		tab: view,

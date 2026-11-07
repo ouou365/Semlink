@@ -10,8 +10,7 @@ import type { Vault } from "obsidian";
 import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import { EMPTY_PROGRESS } from "./types";
-import { TOOL_SPECS, GIT_TOOL_NAMES, WEB_TOOL_NAMES, ToolCore, parseExcludePaths } from "./tools-core";
-import type { GitService } from "./git-service";
+import { TOOL_SPECS, WEB_TOOL_NAMES, ToolCore, parseExcludePaths } from "./tools-core";
 import type { WebSearchService } from "./web-search";
 
 /** Tool schema in a neutral form; ChatClient adapts it per API format. */
@@ -31,8 +30,6 @@ export class SemlinkTools {
 	private getActiveNote: () => string | null;
 	/** 设置里的全局排除路径（excludePaths），每次调用现读——设置修改即时生效。 */
 	private getExcludedPaths: () => string[];
-	/** Git 集成（null = 未启用，git_* 工具不注册）。 */
-	private git: GitService | null;
 	/** DeepSeek 网页搜索（null = 无 DeepSeek 供应商，web_search 不注册）。 */
 	private web: WebSearchService | null;
 
@@ -48,13 +45,12 @@ export class SemlinkTools {
 	/** Shared implementation core. */
 	private core: ToolCore;
 
-	constructor(store: VectorStore, client: EmbeddingClient, vault: Vault, getActiveNote: () => string | null = () => null, excludePathsSource: () => string = () => "", git: GitService | null = null, web: WebSearchService | null = null, mcpInfo: (() => Promise<string>) | null = null) {
+	constructor(store: VectorStore, client: EmbeddingClient, vault: Vault, getActiveNote: () => string | null = () => null, excludePathsSource: () => string = () => "", web: WebSearchService | null = null, mcpInfo: (() => Promise<string>) | null = null) {
 		this.store = store;
 		this.client = client;
 		this.vault = vault;
 		this.getActiveNote = getActiveNote;
 		this.getExcludedPaths = () => parseExcludePaths(excludePathsSource());
-		this.git = git;
 		this.web = web;
 		this.core = new ToolCore({
 			store,
@@ -62,7 +58,6 @@ export class SemlinkTools {
 			vault,
 			getActiveNote,
 			excludedPaths: () => this.getExcludedPaths(),
-			git,
 			web,
 			mcpInfo,
 			progress: () => EMPTY_PROGRESS,
@@ -74,10 +69,10 @@ export class SemlinkTools {
 	}
 
 	/** Read-only tools the chat model may call（管理类 reindex 不暴露；
-	 *  git_* 仅在 Git 集成启用时注册；web_search 仅在有 DeepSeek
+	 *  web_search 仅在有 DeepSeek
 	 *  供应商时注册）。 */
 	list(): ChatTool[] {
-		return TOOL_SPECS.filter((t) => t.name !== "reindex" && (this.git || !GIT_TOOL_NAMES.has(t.name)) && (this.web?.available() || !WEB_TOOL_NAMES.has(t.name))).map((t) => ({
+		return TOOL_SPECS.filter((t) => t.name !== "reindex" && (this.web?.available() || !WEB_TOOL_NAMES.has(t.name))).map((t) => ({
 			name: t.name,
 			description: t.description,
 			parameters: t.parameters,

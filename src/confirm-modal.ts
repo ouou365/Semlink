@@ -14,6 +14,9 @@ export class ConfirmModal extends Modal {
 		private titleText: string,
 		private bodyText: string,
 		private onOk: () => void,
+		/** 确认按钮文字；缺省「确定」——破坏性操作应传明确动词（如「删除」），
+		 *  契约 §6：禁「确定/取消」裸确认，按钮说动作、正文说后果。 */
+		private okText?: string,
 	) {
 		super(app);
 	}
@@ -24,7 +27,7 @@ export class ConfirmModal extends Modal {
 		const row = this.contentEl.createDiv({ cls: "semlink-confirm-row" });
 		row.createEl("button", { text: t("confirmCancel") })
 			.addEventListener("click", () => this.close());
-		row.createEl("button", { text: t("confirmOk"), cls: "mod-warning" })
+		row.createEl("button", { text: this.okText ?? t("confirmOk"), cls: "mod-warning" })
 			.addEventListener("click", () => {
 				this.close();
 				this.onOk();

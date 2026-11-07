@@ -22,9 +22,14 @@ export type ModelsTabState = {
 	selected?: string;
 	search?: string;
 	modelSel?: string;
+	/** 中栏供应商搜索词（就地过滤，不整页重建）。 */
+	providerSearch?: string;
 	/** 内层两个滚动列表的位置，整页刷新后恢复。 */
 	providerScroll?: number;
 	rowsScroll?: number;
+	/** 窄幅（容器 ≤720px）钻入态：只显示配置列，供应商列表隐藏；
+	 *  宽幅三栏常驻，此状态在宽幅进入时清除。 */
+	drilled?: boolean;
 };
 
 export const EMPTY_MODELS_TAB_STATE: ModelsTabState = {};
@@ -1574,21 +1579,6 @@ class DeleteProviderModal extends Modal {
 
 // ──── Provider rows ────
 
-interface RowOptions {
-	name: string;
-	/** Optional kind marker — providers themselves are NOT distinguished as
-	 *  embedding/chat; the distinction lives on the models inside each editor. */
-	tag?: string;
-	dot?: "configured" | "missing";
-	badge?: string;
-	/** Index in its provider list (for drag reordering). */
-	index: number;
-	onEdit: () => void;
-	onDelete?: () => void;
-	/** Reorder: move the provider from `from` to `to` (drag & drop). */
-	onDrop: (from: number, to: number) => void;
-}
-
 /** 显示名变体 → 表内键：规范化后仍对不上的别名（"Qwen CN" 规范化成
  *  qweencn，而图标键是 qwen）。 */
 const LOGO_ALIASES: Record<string, string> = {
@@ -1677,95 +1667,19 @@ function appendProviderLogo(target: HTMLElement, name: string, logoCls: string):
 	target.createDiv({ cls: "semlink-provider-fallback", text: initial });
 }
 
-/** Create one provider row. The row is compact: logo + name + status +
- *  buttons (编辑 opens the provider-detail modal, 删除 removes it); the whole
- *  row is draggable to reorder. No inline expansion. */
-function createProviderRow(listEl: HTMLElement, opts: RowOptions): HTMLElement {
-	const row = listEl.createDiv({ cls: "semlink-provider-row" });
-	const head = row.createDiv({ cls: "semlink-provider-row-head" });
-	// Drag handle (leftmost): a plain icon (no button styling) showing the row
-	// can be reordered, and an alternative drag source. The row itself stays
-	// draggable too.
-	const grip = head.createSpan({
-		cls: "semlink-provider-grip",
-		attr: { "aria-label": t("modelDrag"), title: t("modelDrag") },
-	});
-	setIcon(grip, "grip-vertical");
-	const identity = head.createDiv({ cls: "semlink-provider-identity" });
-	appendProviderLogo(identity, opts.name, "semlink-provider-logo");
-	identity.createSpan({ cls: "semlink-provider-name", text: opts.name });
-	if (opts.tag) identity.createSpan({ cls: "semlink-provider-tag", text: opts.tag });
-	if (opts.dot) {
-		identity.createSpan({
-			cls: `semlink-provider-dot ${opts.dot === "configured" ? "is-configured" : "is-missing"}`,
-			attr: {
-				title: opts.dot === "configured" ? t("credentialConfigured") : t("credentialMissing"),
-				"aria-label": opts.dot === "configured" ? t("credentialConfigured") : t("credentialMissing"),
-			},
-		});
-	}
-	if (opts.badge) identity.createSpan({ cls: "semlink-provider-badge", text: opts.badge });
-	const actions = head.createDiv({ cls: "semlink-provider-actions" });
-	actions.createEl("button", { cls: "semlink-btn", text: t("edit") })
-		.addEventListener("click", (e) => {
-			e.stopPropagation();
-			opts.onEdit();
-		});
-	if (opts.onDelete) {
-		const delBtn = actions.createEl("button", { cls: "semlink-btn semlink-btn-danger", text: t("remove") });
-		delBtn.addEventListener("click", (e) => {
-			e.stopPropagation();
-			opts.onDelete!();
-		});
-	}
-
-	// ── Drag to reorder (press and hold, then drag) ──
-	row.setAttr("draggable", "true");
-	// The grip is also a drag source: a `button` child of a draggable row
-	// sometimes fails to start a drag in some browsers, so the handle gets
-	// its own `draggable` like the model rows.
-	grip.setAttr("draggable", "true");
-	const onDragStart = (e: DragEvent) => {
-		(row as HTMLElement).addClass("is-dragging");
-		e.dataTransfer?.setData("text/plain", String(opts.index));
-		if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-	};
-	row.addEventListener("dragstart", onDragStart);
-	grip.addEventListener("dragstart", onDragStart);
-	row.addEventListener("dragend", () => {
-		(row as HTMLElement).removeClass("is-dragging");
-		listEl.querySelectorAll(".is-drag-over").forEach((el) => el.removeClass("is-drag-over"));
-	});
-	row.addEventListener("dragover", (e) => {
-		e.preventDefault();
-		if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-		row.addClass("is-drag-over");
-	});
-	row.addEventListener("dragleave", () => {
-		row.removeClass("is-drag-over");
-	});
-	row.addEventListener("drop", (e) => {
-		e.preventDefault();
-		e.stopPropagation();
-		row.removeClass("is-drag-over");
-		const from = parseInt(e.dataTransfer?.getData("text/plain") ?? "-1", 10);
-		if (!isNaN(from) && from >= 0 && from !== opts.index) {
-			opts.onDrop(from, opts.index);
-		}
-	});
-	return row;
-}
-
 /** Modal hosting the full provider detail (name / base URL / protocol / key /
  *  model list). Reuses the same editor as the old inline expansion. */
 /** 手动添加模型的小弹窗：模型 ID + 上下文长度，保存后追加到供应商清单并自动启用。
- *  设置页模型右栏与引导第三步共用。 */
+ *  设置页模型右栏与引导第三步共用。字段即输即校（ID 必填 + 查重；上下文窗口
+ *  支持 32000 / 32K / 1M，留空视为未知），有错时保存钮禁用。 */
 export class AddModelModal extends Modal {
 	constructor(
 		app: App,
 		private opts: {
 			title: string;
 			initial?: { id: string; contextWindow: number };
+			/** 查重清单：调用方传当前清单已有的模型 ID（编辑场景排除自身）。 */
+			existingIds?: string[];
 			onSubmit: (id: string, contextWindow: number) => void;
 			onDelete?: () => void;
 		},
@@ -1777,6 +1691,7 @@ export class AddModelModal extends Modal {
 
 	onOpen() {
 		this.titleEl.setText(this.opts.title);
+		const existing = this.opts.existingIds ?? [];
 		const { contentEl } = this;
 		contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("chatModelId") });
 		const idInput = contentEl.createEl("input", {
@@ -1784,12 +1699,35 @@ export class AddModelModal extends Modal {
 			attr: { type: "text", placeholder: "e.g. my-model-v1", spellcheck: "false" },
 		});
 		idInput.value = this.opts.initial?.id ?? "";
+		const idError = contentEl.createDiv({ cls: "semlink-field-error semlink-hidden" });
 		contentEl.createDiv({ cls: "semlink-editor-field-label", text: t("chatContextWindow") });
 		const ctxInput = contentEl.createEl("input", {
 			cls: "semlink-editor-input",
 			attr: { type: "text", inputmode: "numeric", placeholder: "e.g. 128000" },
 		});
 		ctxInput.value = this.opts.initial?.contextWindow ? String(this.opts.initial.contextWindow) : "";
+		const ctxError = contentEl.createDiv({ cls: "semlink-field-error semlink-hidden" });
+
+		/** 即输即校：刷新两条错误行并联动保存钮；返回当前是否可提交。 */
+		const validate = (): boolean => {
+			const id = idInput.value.trim();
+			const idErr = !id
+				? t("mtModelIdRequired")
+				: existing.includes(id)
+					? t("mtModelIdDuplicate")
+					: "";
+			idError.setText(idErr);
+			idError.toggleClass("semlink-hidden", !idErr);
+			const raw = ctxInput.value.trim();
+			// 留空 = 上下文未知（0，列表徽标随之隐藏）；填了就必须能解析
+			const parsed = raw ? parseContextWindow(raw) : 0;
+			const ctxErr = raw && parsed === null ? t("mtCtxInvalid") : "";
+			ctxError.setText(ctxErr);
+			ctxError.toggleClass("semlink-hidden", !ctxErr);
+			saveBtn.disabled = !!(idErr || ctxErr);
+			return !idErr && !ctxErr;
+		};
+
 		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
 		if (this.opts.onDelete) {
 			footer.createEl("button", { cls: "semlink-editor-delete-link", text: t("chatDeleteModel") })
@@ -1797,248 +1735,24 @@ export class AddModelModal extends Modal {
 					this.close();
 					this.opts.onDelete?.();
 				});
-		}		footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") })
+		}
+		footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") })
 			.addEventListener("click", () => this.close());
-		footer.createEl("button", { cls: "semlink-editor-save-btn", text: t("confirm") })
-			.addEventListener("click", () => {
-				const id = idInput.value.trim();
-				if (!id) return;
-				const ctx = parseInt(ctxInput.value, 10);
-				this.opts.onSubmit(id, Number.isFinite(ctx) && ctx > 0 ? ctx : 0);
-				this.close();
-			});
+		const saveBtn = footer.createEl("button", { cls: "semlink-editor-save-btn", text: t("confirm") });
+		saveBtn.addEventListener("click", () => {
+			if (!validate()) return;
+			this.opts.onSubmit(idInput.value.trim(), parseContextWindow(ctxInput.value.trim()) ?? 0);
+			this.close();
+		});
+		idInput.addEventListener("input", validate);
+		ctxInput.addEventListener("input", validate);
+		validate();
 		idInput.focus();
 	}
 
 	onClose() {
 		this.contentEl.empty();
 	}
-}
-class ProviderEditorModal extends Modal {
-	constructor(
-		app: App,
-		private plugin: SmartVaultPlugin,
-		private provider: ModelProvider,
-		private refresh: () => void,
-	) {
-		super(app);
-		this.modalEl.addClass("semlink-provider-editor-modal");
-		// Reuse the `.smart-vault-settings .semlink-*` styles inside the modal.
-		this.modalEl.addClass("smart-vault-settings");
-	}
-
-	onOpen() {
-		this.titleEl.setText(t("editorConfigTitle").replace("{provider}", this.provider.name));
-		const { contentEl } = this;
-		contentEl.empty();
-		renderProviderEditor(contentEl, this.plugin, this.provider, this.refresh, () => this.close());
-	}
-
-	onClose() {
-		this.contentEl.empty();
-	}
-}
-
-// ──── Editors ────
-
-/** Editor for one provider (embedding and chat are not distinct provider
- *  kinds) — TypingMind 式三态：
- *  ① 未配置 Key：密码输入框 + Close；
- *  ② 编辑中有输入：Cancel + "✓ Test & Save"（先探活再保存）；
- *  ③ 已保存：掩码展示 + 铅笔（编辑）+ 竖点菜单（测试连接/清除配置/删除）+ Close。
- *  Endpoint 折叠在编辑态的"高级选项"里；API 协议沿用既有值不暴露。 */
-function renderProviderEditor(
-	slot: HTMLElement,
-	plugin: SmartVaultPlugin,
-	p: ModelProvider,
-	refresh: () => void,
-	close: () => void,
-): void {
-	type Mode = "saved" | "editing";
-	let mode: Mode = p.apiKey.trim() ? "saved" : "editing";
-	let pending = p.apiKey;
-	let footer: HTMLElement;
-	const catalogDefault = CHAT_CATALOG.find((e) => e.name === p.name)?.baseUrl;
-	const keysUrl = CHAT_CATALOG.find((e) => e.name === p.name)?.keysUrl;
-	// Endpoint 输入直接改 p（Test & Save 时随保存落盘）；Cancel 需要还原
-	const originalBase = p.apiBase;
-
-	const maskKey = (key: string): string => "*".repeat(14) + key.slice(-3);
-
-	// "获取 Key"：新开控制台 Key 页（像获取验证码一样贴在输入框旁）
-	const appendGetKey = (row: HTMLElement): void => {
-		if (!keysUrl) return;
-		const btn = row.createEl("button", { cls: "semlink-editor-getkey-btn" });
-		setIcon(btn, "external-link");
-		btn.createSpan({ text: t("editorGetKey") });
-		btn.addEventListener("click", () => window.open(keysUrl));
-	};
-
-	const saveNow = (): void => {
-		p.curated = true;
-		void plugin.saveSettings().then(() => refresh());
-	};
-
-	/** 探活 = 拉一次模型列表；列表非空即认为 Key/Endpoint 有效。 */
-	const runTest = async (endpoint: string, key: string): Promise<boolean> => {
-		try {
-			const base = endpoint.trim().replace(/\/+$/, "");
-			const entries = await fetchModelIds(base, key, p.apiFormat ?? "openai");
-			return entries.length > 0;
-		} catch {
-			return false;
-		}
-	};
-
-	const rerender = (): void => {
-		slot.empty();
-		build();
-	};
-
-	const updateFooter = (): void => {
-		footer.empty();
-		// 已保存态 / 编辑中但还没输入：只有 Close
-		if (mode === "saved" || !pending.trim()) {
-			footer.createEl("button", { cls: "semlink-editor-close-btn", text: t("close") })
-				.addEventListener("click", close);
-			return;
-		}
-		// 编辑中有输入：Cancel + Test & Save
-		footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") })
-			.addEventListener("click", () => {
-				p.apiBase = originalBase;
-				close();
-			});
-		const saveBtn = footer.createEl("button", { cls: "semlink-editor-save-btn" });
-		setIcon(saveBtn, "check");
-		const label = saveBtn.createSpan({ text: t("editorTestSave") });
-		saveBtn.addEventListener("click", () => {
-			saveBtn.disabled = true;
-			label.setText(t("editorTesting"));
-			void runTest(p.apiBase, pending).then((ok) => {
-				if (!ok) {
-					new Notice(t("editorTestFailed"));
-					saveBtn.disabled = false;
-					label.setText(t("editorTestSave"));
-					return;
-				}
-				p.apiKey = pending;
-				p.curated = true;
-				void plugin.saveSettings().then(() => {
-					refresh();
-					mode = "saved";
-					rerender();
-				});
-			});
-		});
-	};
-
-	const build = (): void => {
-		// ── API Key 行 ──
-		slot.createDiv({ cls: "semlink-editor-field-label", text: t("apiKey") });
-		const keyRow = slot.createDiv({ cls: "semlink-editor-key-row" });
-		if (mode === "saved") {
-			// 掩码展示 + 铅笔进入编辑 + 竖点菜单
-			const shown = keyRow.createEl("input", {
-				cls: "semlink-editor-input is-masked",
-				attr: { type: "text", readonly: "true", spellcheck: "false" },
-			});
-			shown.value = maskKey(p.apiKey);
-			const pencil = keyRow.createEl("button", { cls: "semlink-editor-icon-btn" });
-			setIcon(pencil, "pencil");
-			pencil.addEventListener("click", () => {
-				mode = "editing";
-				pending = p.apiKey;
-				rerender();
-			});
-			const kebab = keyRow.createEl("button", { cls: "semlink-editor-icon-btn" });
-			setIcon(kebab, "more-vertical");
-			kebab.addEventListener("click", (e) => {
-				const menu = new Menu();
-				menu.addItem((mi) => mi.setTitle(t("editorTestConnection")).setIcon("zap").onClick(() => {
-					void runTest(p.apiBase, p.apiKey).then((ok) => {
-						new Notice(ok ? t("editorTestOk") : t("editorTestFailed"));
-					});
-				}));
-				menu.addItem((mi) => mi.setTitle(t("editorClearSettings")).setIcon("trash-2").setWarning(true).onClick(() => {
-					p.apiKey = "";
-					if (catalogDefault) p.apiBase = catalogDefault;
-					saveNow();
-					mode = "editing";
-					pending = "";
-					rerender();
-				}));
-				menu.addSeparator();
-				menu.addItem((mi) => mi.setTitle(t("deleteProvider")).setIcon("trash-2").setWarning(true).onClick(() => {
-					const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
-					new DeleteProviderModal(plugin.app, p.name, () => {
-						plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== p.id);
-						if (activePid === p.id) {
-							plugin.settings.embeddingModelKey = "";
-						}
-						void plugin.saveSettings().then(() => {
-							refresh();
-							close();
-						});
-					}).open();
-				}));
-				menu.showAtMouseEvent(e);
-			});
-		} else {
-			const input = keyRow.createEl("input", {
-				cls: "semlink-editor-input",
-				attr: { type: "password", placeholder: "sk-...", spellcheck: "false" },
-			});
-			input.value = pending;
-			input.addEventListener("input", () => {
-				pending = input.value;
-				updateFooter();
-			});
-			appendGetKey(keyRow);
-
-			// ── 高级选项（仅编辑态；默认收起）：仅 Endpoint 一项 ──
-			const advHead = slot.createDiv({ cls: "semlink-editor-adv-head" });
-			const chev = advHead.createSpan({ cls: "semlink-editor-adv-chevron" });
-			setIcon(chev, "chevron-right");
-			const advLabel = advHead.createSpan({ cls: "semlink-editor-adv-label", text: t("editorAdvancedShow") });
-			const advBody = slot.createDiv({ cls: "semlink-editor-adv-body semlink-hidden" });
-			advHead.addEventListener("click", () => {
-				const open = !advBody.hasClass("semlink-hidden");
-				advBody.toggleClass("semlink-hidden", open);
-				setIcon(chev, open ? "chevron-right" : "chevron-down");
-				advLabel.setText(t(open ? "editorAdvancedShow" : "editorAdvancedHide"));
-			});
-			// 协议类型：不同协议的 Base URL 不同（如 Z.AI Coding CN 提供三种协议），
-		// 切换后随 Test & Save 一并保存
-		advBody.createDiv({ cls: "semlink-editor-field-label", text: t("chatApiFormat") });
-		const fmtSel = advBody.createEl("select", { cls: "semlink-editor-select" });
-		fmtSel.createEl("option", { value: "openai", text: t("mtApiTypeOpenAI") });
-		fmtSel.createEl("option", { value: "anthropic", text: t("mtApiTypeAnthropic") });
-		fmtSel.value = p.apiFormat ?? "openai";
-		fmtSel.addEventListener("change", () => {
-			p.apiFormat = fmtSel.value as ChatApiFormat;
-		});
-
-		advBody.createDiv({ cls: "semlink-editor-field-label", text: t("editorEndpoint") });
-			advBody.createDiv({
-				cls: "semlink-editor-adv-desc",
-				text: t("editorEndpointDesc").replace("{provider}", p.name),
-			});
-			const epInput = advBody.createEl("input", {
-				cls: "semlink-editor-input",
-				attr: { type: "text", spellcheck: "false" },
-			});
-			epInput.value = p.apiBase;
-			epInput.addEventListener("input", () => {
-				p.apiBase = epInput.value;
-			});
-		}
-
-		// ── Footer（随状态变化）──
-		footer = slot.createDiv({ cls: "semlink-editor-footer is-simple" });
-		updateFooter();
-	};
-	build();
 }
 
 // ──── Create cards (add provider / add custom provider) ────
@@ -2553,9 +2267,11 @@ export function renderModelsTab(
 		selected?: string;
 		search?: string;
 		modelSel?: string;
+		providerSearch?: string;
 		collapsed?: Record<string, boolean>;
 		providerScroll?: number;
 		rowsScroll?: number;
+		drilled?: boolean;
 		paneObservers?: ResizeObserver[];
 	};
 	st.collapsed = st.collapsed ?? {};
@@ -2700,21 +2416,34 @@ export function renderModelsTab(
 
 	const enabledCount = (models: ChatModel[]): number =>
 		models.filter((m) => m.enabled === true).length;
-	const isConfigured = (r: Row): boolean => !!r.live?.apiKey?.trim();
-	const dotState = (r: Row): string => {
-		const hasKey = !!r.live?.apiKey?.trim();
-		const hasEnabled = !!r.live && r.models.some((m) => m.enabled === true);
-		return hasEnabled ? (hasKey ? " is-green" : " is-orange") : "";
-	};
-	// 文件夹状态点 = 成员状态聚合：有一个绿就是绿，否则有一个橙就是橙，全灰才灰
-	const folderDotState = (node: FolderNode): string => {
-		const states = node.members.map((m) => dotState(m).trim());
-		if (states.includes("is-green")) return " is-green";
-		if (states.includes("is-orange")) return " is-orange";
+	// 状态胶囊：已落实例且有 Key 且未关总开关 = "on"；关了总开关 = "off"；
+	// 没配 Key 的目录项 = 无徽标（noAuth 视同已配置）。
+	const pillState = (r: Row): "on" | "off" | "" => {
+		if (!r.live) return "";
+		if (r.live.disabled) return "off";
+		if (r.live.apiKey?.trim() || r.live.noAuth) return "on";
 		return "";
 	};
 
 	const wrap = containerEl.createDiv({ cls: "semlink-mt" });
+	// Cherry 式三栏（容器 >720）：供应商列表与配置表单同屏常驻，点谁配谁，
+	// 无钻入无返回。≤720 放不下三栏：单列 + 钻入（is-drilled），‹ 供应商
+	// 返回行回列表。drilled 残留状态在宽幅进入时清除。
+	const isNarrow = (): boolean => {
+		const root = containerEl.closest(".semlink-settings-root") as HTMLElement | null;
+		return (root?.offsetWidth ?? 0) <= 720;
+	};
+	if (!isNarrow() && st.drilled) st.drilled = false;
+	if (st.drilled) wrap.addClass("is-drilled");
+	// 键盘可达：role=button 的行支持 Enter/Space 触发（同 settings.ts press）。
+	const press = (el: HTMLElement, action: () => void): void => {
+		el.addEventListener("keydown", (e) => {
+			if (e.key === "Enter" || e.key === " ") {
+				e.preventDefault();
+				action();
+			}
+		});
+	};
 
 	// 高度自适应：CSS 侧已用 min-height:100% + flex 让面板撑满容器，但个别
 	// Obsidian 版本的百分比高度链不完整（容器高度不定），flex 撑不开——
@@ -2724,6 +2453,9 @@ export function renderModelsTab(
 	// 修正为正好填满，链路不通时它就是实际高度；min-height:500px 兜底不变。
 	const fitPaneHeight = (): void => {
 		if (!wrap.isConnected) return;
+		// 只管原生设置弹窗宿主（vertical-tab/modal）。内嵌设置屏不在此处
+		// 钉高度：屏形态的面板高度由视图 flex 链提供（welcome→layout→detail
+		// 全确定），这里再写行内 height 会与 CSS 链打架（量到滚动中间态）。
 		const scroller = wrap.closest(
 			".vertical-tab-content, .vertical-tab-content-container, .modal-content",
 		);
@@ -2752,34 +2484,20 @@ export function renderModelsTab(
 		st.paneObservers.push(ro);
 	}
 
-	/** 打开编辑器；目录里还没添加的条目先落一个实例（模型清单已带）。 */
-	const openEditor = (r: Row): void => {
-		if (!r.live) {
-			const created = ensureCatalogProvider(r.name);
-			if (!created) return;
-			r.live = created;
-		}
-		new ProviderEditorModal(plugin.app, plugin, r.live, refresh).open();
-	};
-
-	// ── 左栏：文件夹树 + 顶层厂商 ──
+	// ── 中栏：搜索 + 文件夹树/顶层厂商 + 底部添加 ──
 	const left = wrap.createDiv({ cls: "semlink-mt-providers" });
-	const leftHead = left.createDiv({ cls: "semlink-mt-providers-head" });
-	leftHead.createSpan({ cls: "semlink-mt-providers-title", text: t("mtProvidersTitle") });
-	const headBtns = leftHead.createDiv({ cls: "semlink-mt-head-actions" });
-	const addBtn = headBtns.createEl("button", {
-		cls: "semlink-mt-add",
-		text: "＋",
-		attr: { "aria-label": t("addProvider") },
+	// 中栏顶搜索（Cherry 式）：就地过滤供应商/文件夹名，不整页重建（保焦点）
+	const provSearch = left.createDiv({ cls: "semlink-mt-prov-search" });
+	const provSearchIcon = provSearch.createDiv({ cls: "semlink-mt-prov-search-icon" });
+	setIcon(provSearchIcon, "search");
+	const provSearchInput = provSearch.createEl("input", {
+		cls: "semlink-mt-prov-search-input",
+		attr: { type: "text", placeholder: t("mtSearchProviders"), spellcheck: "false" },
 	});
-	addBtn.addEventListener("click", () => {
-		new AddProviderModal(plugin.app, plugin, "custom", () => refreshKeepInner()).open();
-	});
-
+	provSearchInput.value = st.providerSearch ?? "";
 	const list = left.createDiv({ cls: "semlink-mt-provider-list" });
 
 	const renderProviderRow = (parent: HTMLElement, r: Row, nested: boolean): void => {
-		const configured = isConfigured(r);
 		const isSelected = st.selected === r.key;
 		const row = parent.createDiv({
 			cls:
@@ -2795,12 +2513,13 @@ export function renderModelsTab(
 		grip.addEventListener("click", (e) => e.stopPropagation());
 		row.draggable = true;
 		const onDragStart = (e: DragEvent): void => {
+			row.addClass("is-dragging");
 			e.dataTransfer?.setData("text/semlink-provider", r.name);
 			if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
 		};
 		row.addEventListener("dragstart", onDragStart);
 		grip.addEventListener("dragstart", onDragStart);
-		// 行间重排：拖中的行高亮，松手按当前展示顺序插入目标行之前
+		// 行间重排：拖中的行顶缘出现插入线，松手按当前展示顺序插入目标行之前
 		row.addEventListener("dragover", (e) => {
 			const types = e.dataTransfer?.types;
 			if (!types?.includes("text/semlink-provider") && !types?.includes("text/semlink-folder")) return;
@@ -2826,17 +2545,26 @@ export function renderModelsTab(
 			void plugin.saveSettings().then(() => refreshKeepInner());
 		});
 		row.addEventListener("dragend", () => {
+			row.removeClass("is-dragging");
 			list.querySelectorAll(".is-droptarget-row").forEach((el) => el.removeClass("is-droptarget-row"));
 		});
 		row.addEventListener("click", () => {
-			if (st.selected === r.key) return;
+			if (st.selected === r.key && (st.drilled || !isNarrow())) {
+				// 宽幅：配置已在右栏，重复点击不重建；窄幅已钻入该供应商同理
+				return;
+			}
 			st.selected = r.key;
 			st.search = "";
 			st.modelSel = "";
-			// 左栏就地切选中态，只重建右栏（整页重建大目录会卡）
+			// 窄幅单列：点供应商钻入其配置页；宽幅三栏只切右栏
+			if (isNarrow()) {
+				st.drilled = true;
+				wrap.addClass("is-drilled");
+			}
+			// 列表就地切选中态，只重建配置栏（整页重建大目录会卡）
 			list.querySelectorAll(".semlink-mt-provider.is-active").forEach((el) => el.removeClass("is-active"));
 			row.addClass("is-active");
-			renderRight(false);
+			renderConfig(false);
 		});
 		// 文件夹内的供应商不重复显示图标（文件夹行已带最热门成员的 logo）
 		if (!nested) {
@@ -2845,16 +2573,12 @@ export function renderModelsTab(
 		}
 		const info = row.createDiv({ cls: "semlink-mt-provider-info" });
 		info.createDiv({ cls: "semlink-mt-provider-name", text: r.name });
-		info.createDiv({
-			cls: "semlink-mt-provider-count",
-			text: `${enabledCount(r.models)} / ${r.models.length} ${t("mtEnabled")}`,
-		});
-		row.createDiv({ cls: `semlink-mt-dot${dotState(r)}` });
-		const gear = row.createDiv({ cls: "semlink-mt-provider-gear", attr: { "aria-label": t("editProvider") } });
-		setIcon(gear, "settings");
-		gear.addEventListener("click", (e) => {
-			e.stopPropagation();
-			openEditor(r);
+		// 状态胶囊（Cherry 式 ON/OFF）：有 Key 且未关总开关=ON，关了=OFF，
+		// 没配 Key=无徽标。计数细节挪进右栏配置页的模型节。
+		const pill = pillState(r);
+		row.createDiv({
+			cls: `semlink-mt-provider-pill${pill ? ` is-${pill}` : ""}`,
+			text: pill === "on" ? "ON" : pill === "off" ? "OFF" : "",
 		});
 	};
 
@@ -2913,27 +2637,22 @@ export function renderModelsTab(
 		grip.addEventListener("click", (e) => e.stopPropagation());
 		headRow.draggable = true;
 		const onFolderDragStart = (e: DragEvent): void => {
+			headRow.addClass("is-dragging");
 			e.dataTransfer?.setData("text/semlink-folder", node.key);
 			if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
 		};
 		headRow.addEventListener("dragstart", onFolderDragStart);
 		grip.addEventListener("dragstart", onFolderDragStart);
+		headRow.addEventListener("dragend", () => {
+			headRow.removeClass("is-dragging");
+			list.querySelectorAll(".is-droptarget-row").forEach((el) => el.removeClass("is-droptarget-row"));
+		});
 		if (hottest) {
 			const logo = headRow.createDiv({ cls: "semlink-mt-provider-logo" });
 			appendProviderLogo(logo, hottest.name, "semlink-mt-logo-svg");
 		}
 		const info = headRow.createDiv({ cls: "semlink-mt-provider-info" });
 		info.createDiv({ cls: "semlink-mt-provider-name", text: node.name });
-		// 成员数下的汇总行：文件夹内所有供应商的模型启用情况合计，
-		// 格式与普通供应商行的"已启用"计数一致
-		const sumEnabled = node.members.reduce((s, m) => s + enabledCount(m.models), 0);
-		const sumTotal = node.members.reduce((s, m) => s + m.models.length, 0);
-		info.createDiv({
-			cls: "semlink-mt-folder-count",
-			text: `${sumEnabled} / ${sumTotal} ${t("mtEnabled")}`,
-		});
-		// 状态点与普通供应商行同位置（名称行右侧）
-		headRow.createDiv({ cls: `semlink-mt-dot${folderDotState(node)}` });
 		// 下拉图标放行最右侧
 		const chevron = headRow.createDiv({ cls: "semlink-mt-folder-chevron" });
 		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
@@ -2984,20 +2703,51 @@ export function renderModelsTab(
 		}
 		return seq;
 	};
-	for (const item of items) {
-		if (item.node) {
-			renderFolderHeader(item.node);
-			if (st.collapsed?.[item.node.key] !== false) continue;
-			for (const r of item.node.members) renderProviderRow(list, r, true);
-		} else if (item.row) {
-			renderProviderRow(list, item.row, false);
+	// 列表渲染（可重入）：供应商搜索就地过滤——文件夹名命中=整组保留，
+	// 成员命中=组头+命中的成员；无关键词=全量。重建的是 list 内容，
+	// 搜索框不动（焦点保留）。
+	const renderProviderList = (): void => {
+		list.empty();
+		const q = (st.providerSearch ?? "").trim().toLowerCase();
+		for (const item of items) {
+			if (item.node) {
+				const nodeHit = !q || item.node.name.toLowerCase().includes(q);
+				const memberHits = item.node.members.filter(
+					(m) => !q || m.name.toLowerCase().includes(q),
+				);
+				if (q && !nodeHit && memberHits.length === 0) continue;
+				renderFolderHeader(item.node);
+				if (st.collapsed?.[item.node.key] !== false) continue;
+				for (const r of nodeHit ? item.node.members : memberHits) {
+					renderProviderRow(list, r, true);
+				}
+			} else if (item.row) {
+				if (q && !item.row.name.toLowerCase().includes(q)) continue;
+				renderProviderRow(list, item.row, false);
+			}
 		}
-	}
+	};
+	renderProviderList();
+	provSearchInput.addEventListener("input", () => {
+		st.providerSearch = provSearchInput.value;
+		renderProviderList();
+	});
+	// 底部添加（Cherry 式通栏描边钮）
+	const addRow = left.createDiv({ cls: "semlink-mt-add-row" });
+	const addBtn = addRow.createEl("button", {
+		cls: "semlink-mt-add semlink-btn-ghost",
+		text: "＋ " + t("addProvider"),
+	});
+	addBtn.addEventListener("click", () => {
+		new AddProviderModal(plugin.app, plugin, "custom", () => refreshKeepInner()).open();
+	});
 
-	// ── 右栏：所选厂商的模型（搜索 · 计数 · 开关行）──
-	// 点供应商只重建右栏：大目录动辄上千个模型行，整页刷新（连左栏一起重建）
-	// 会明显卡顿；左栏仅就地切换 is-active。整页 refresh 仍走 refreshKeepInner。
-	const rightHost = wrap.createDiv({ cls: "semlink-mt-models" });
+	// ── 右栏：所选供应商的内联配置（Cherry 式）──
+	// 头部（名称+获取密钥外链+竖点菜单+总开关）→ API 密钥（眼睛+检测）→
+	// API 地址（协议+Base+端点预览）→ 模型（计数+行内搜索+添加+开关行）。
+	// 点供应商只重建此栏：大目录动辄上千个模型行，整页刷新会明显卡顿；
+	// 中栏仅就地切换 is-active。整页 refresh 仍走 refreshKeepInner。
+	const configCol = wrap.createDiv({ cls: "semlink-mt-config" });
 	let rowsHost: HTMLElement | null = null;
 
 	const refreshKeepInner = (): void => {
@@ -3013,91 +2763,265 @@ export function renderModelsTab(
 		return String(n);
 	};
 
-	const renderRight = (restoreScroll: boolean): void => {
+	// 左栏状态胶囊就地同步（Key 保存/总开关翻转后不整页刷新）
+	const syncProviderPill = (row: Row): void => {
+		const pillEl = list.querySelector(`[data-key="${row.key}"] .semlink-mt-provider-pill`);
+		if (!pillEl) return;
+		const s = pillState(row);
+		pillEl.className = `semlink-mt-provider-pill${s ? ` is-${s}` : ""}`;
+		pillEl.textContent = s === "on" ? "ON" : s === "off" ? "OFF" : "";
+	};
+
+	/** 落实目录条目实例（首次配置 Key/开关/加模型时）；模型清单已带。 */
+	const ensureLive = (row: Row): ModelProvider | null => {
+		if (!row.live) {
+			const created = ensureCatalogProvider(row.name);
+			if (!created) return null;
+			row.live = created;
+			row.models = created.models;
+		}
+		return row.live;
+	};
+
+	const renderConfig = (restoreScroll: boolean): void => {
 		const sel = rows.find((r) => r.key === st.selected) ?? null;
-		rightHost.empty();
+		configCol.empty();
 		rowsHost = null;
+		// 窄幅钻入态：返回行回供应商列表（宽幅三栏常驻，无返回行）
+		if (st.drilled && isNarrow()) {
+			const back = configCol.createDiv({
+				cls: "semlink-mt-back is-clickable",
+				attr: { role: "button", tabindex: "0" },
+			});
+			setIcon(back.createSpan({ cls: "semlink-mt-back-icon" }), "chevron-left");
+			back.createSpan({ cls: "semlink-mt-back-text", text: t("mtProvidersTitle") });
+			const goBack = (): void => {
+				st.drilled = false;
+				wrap.removeClass("is-drilled");
+			};
+			back.addEventListener("click", goBack);
+			press(back, goBack);
+		}
 		if (!sel) {
-			rightHost.createDiv({ cls: "semlink-mt-empty", text: t("addProvider") });
+			// 无供应商空态：虚线卡 + 下一步动作（图标 / 一句话 / 一个按钮）
+			const empty = configCol.createDiv({ cls: "semlink-mt-empty" });
+			const emptyIcon = empty.createDiv({ cls: "semlink-mt-empty-icon" });
+			setIcon(emptyIcon, "blocks");
+			empty.createDiv({ cls: "semlink-mt-empty-text", text: t("mtEmptyHint") });
+			empty.createEl("button", { cls: "semlink-btn-secondary", text: t("addProvider") })
+				.addEventListener("click", () => {
+					new AddProviderModal(plugin.app, plugin, "custom", () => refreshKeepInner()).open();
+				});
 			return;
 		}
 
-		const searchRow = rightHost.createDiv({ cls: "semlink-mt-search" });
+		const keysUrl = CHAT_CATALOG.find((e) => e.name === sel.name)?.keysUrl;
+		const catalogDefault = CHAT_CATALOG.find((e) => e.name === sel.name)?.baseUrl;
+
+		// ── 头部：名称 + 获取密钥外链 + 竖点菜单（清除/删除）+ 总开关 ──
+		const head = configCol.createDiv({ cls: "semlink-mt-config-head" });
+		head.createSpan({ cls: "semlink-mt-config-name", text: sel.name });
+		if (keysUrl) {
+			const linkBtn = head.createDiv({
+				cls: "semlink-mt-config-link is-clickable",
+				attr: { "aria-label": t("editorGetKey"), title: t("editorGetKey") },
+			});
+			setIcon(linkBtn, "external-link");
+			linkBtn.addEventListener("click", () => window.open(keysUrl));
+		}
+		const kebab = head.createDiv({
+			cls: "semlink-mt-config-kebab is-clickable",
+			attr: { "aria-label": t("editorClearSettings"), title: t("editorClearSettings") },
+		});
+		setIcon(kebab, "more-vertical");
+		kebab.addEventListener("click", (e) => {
+			const menu = new Menu();
+			menu.addItem((mi) => mi.setTitle(t("editorClearSettings")).setIcon("eraser").onClick(() => {
+				const live = ensureLive(sel);
+				if (!live) return;
+				live.apiKey = "";
+				if (catalogDefault) live.apiBase = catalogDefault;
+				void plugin.saveSettings().then(() => refreshKeepInner());
+			}));
+			menu.addSeparator();
+			menu.addItem((mi) => mi.setTitle(t("deleteProvider")).setIcon("trash-2").setWarning(true).onClick(() => {
+				const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
+				const pid = sel.live?.id;
+				if (!pid) return;
+				new DeleteProviderModal(plugin.app, sel.name, () => {
+					plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== pid);
+					if (activePid === pid) {
+						plugin.settings.embeddingModelKey = "";
+					}
+					void plugin.saveSettings().then(() => refreshKeepInner());
+				}).open();
+			}));
+			menu.showAtMouseEvent(e);
+		});
+		const masterWrap = head.createDiv({ cls: "semlink-mt-config-master" });
+		const master = new ToggleComponent(masterWrap).setValue(!(sel.live?.disabled));
+		master.toggleEl.setAttribute("aria-label", t("mtProviderEnable"));
+		master.onChange((v) => {
+			const live = ensureLive(sel);
+			if (!live) return;
+			live.disabled = !v;
+			void plugin.saveSettings();
+			syncProviderPill(sel);
+		});
+
+		// ── API 密钥 节（noAuth 供应商整节隐藏——本地端点无需鉴权）──
+		if (!sel.live?.noAuth) {
+			const keySection = configCol.createDiv({ cls: "semlink-mt-config-section" });
+			keySection.createDiv({ cls: "semlink-mt-config-label", text: t("apiKey") });
+			const keyRow = keySection.createDiv({ cls: "semlink-mt-config-keyrow" });
+			const keyInput = keyRow.createEl("input", {
+				cls: "semlink-mt-config-input",
+				attr: { type: "password", placeholder: "sk-...", spellcheck: "false" },
+			});
+			keyInput.value = sel.live?.apiKey ?? "";
+			const eye = keyRow.createEl("button", {
+				cls: "semlink-mt-config-icon-btn",
+				attr: { "aria-label": t("mtSearchClear") },
+			});
+			setIcon(eye, "eye-off");
+			eye.addEventListener("click", () => {
+				const show = keyInput.type === "password";
+				keyInput.type = show ? "text" : "password";
+				setIcon(eye, show ? "eye" : "eye-off");
+			});
+			const detectBtn = keyRow.createEl("button", { cls: "semlink-mt-config-detect", text: t("mtDetect") });
+			// 检测状态行：绿=连通（附在线模型数），红=失败（附原因）；不弹 Notice
+			const status = keySection.createDiv({ cls: "semlink-mt-config-status" });
+			const hintRow = keySection.createDiv({ cls: "semlink-mt-config-hintrow" });
+			if (keysUrl) {
+				hintRow.createEl("button", { cls: "semlink-mt-config-getkey", text: t("editorGetKey") })
+					.addEventListener("click", () => window.open(keysUrl));
+			}
+			// Key 失焦/回车即保存（curated：清单视为已整理，引导不再覆盖）
+			keyInput.addEventListener("change", () => {
+				const live = ensureLive(sel);
+				if (!live) return;
+				live.apiKey = keyInput.value;
+				live.curated = true;
+				void plugin.saveSettings();
+				syncProviderPill(sel);
+			});
+			detectBtn.addEventListener("click", () => {
+				const live = ensureLive(sel);
+				const key = keyInput.value.trim();
+				const base = (live?.apiBase ?? "").trim().replace(/\/+$/, "");
+				if (!key) {
+					status.className = "semlink-mt-config-status is-err";
+					status.setText(t("mtDetectNeedKey"));
+					return;
+				}
+				detectBtn.disabled = true;
+				detectBtn.setText(t("mtDetecting"));
+				status.className = "semlink-mt-config-status";
+				status.setText("");
+				void raceTimeout(fetchModelIds(base, key, live?.apiFormat ?? "openai"))
+					.then((entries) => {
+						const ok = !!entries && entries.length > 0;
+						status.className = `semlink-mt-config-status ${ok ? "is-ok" : "is-err"}`;
+						status.setText(
+							ok
+								? t("mtDetectOk").replace("{n}", String(entries!.length))
+								: `${t("mtDetectFail")} · 0`,
+						);
+					})
+					.catch((err) => {
+						status.className = "semlink-mt-config-status is-err";
+						status.setText(`${t("mtDetectFail")} · ${err?.message ?? ""}`.trim());
+					})
+					.finally(() => {
+						detectBtn.disabled = false;
+						detectBtn.setText(t("mtDetect"));
+					});
+			});
+		}
+
+		// ── API 地址 节：协议下拉（行内右缘）+ Base 输入 + 模型端点预览 ──
+		const addrSection = configCol.createDiv({ cls: "semlink-mt-config-section" });
+		const addrLabelRow = addrSection.createDiv({ cls: "semlink-mt-config-labelrow" });
+		addrLabelRow.createDiv({ cls: "semlink-mt-config-label", text: t("editorEndpoint") });
+		const fmtSel = addrLabelRow.createEl("select", { cls: "semlink-mt-config-fmt" });
+		fmtSel.createEl("option", { value: "openai", text: "OpenAI" });
+		fmtSel.createEl("option", { value: "anthropic", text: "Anthropic" });
+		fmtSel.value = sel.live?.apiFormat ?? "openai";
+		const addrInput = addrSection.createEl("input", {
+			cls: "semlink-mt-config-input",
+			attr: { type: "text", spellcheck: "false" },
+		});
+		addrInput.value = sel.live?.apiBase ?? "";
+		const preview = addrSection.createDiv({ cls: "semlink-mt-config-preview" });
+		const syncPreview = (): void => {
+			const base = (sel.live?.apiBase ?? "").trim().replace(/\/+$/, "");
+			preview.setText(`${t("mtPreviewLabel")}: ${v1Base(base)}/models`);
+		};
+		syncPreview();
+		addrInput.addEventListener("input", syncPreview);
+		addrInput.addEventListener("change", () => {
+			const live = ensureLive(sel);
+			if (!live) return;
+			live.apiBase = addrInput.value.trim();
+			live.curated = true;
+			void plugin.saveSettings();
+			syncProviderPill(sel);
+		});
+		fmtSel.addEventListener("change", () => {
+			const live = ensureLive(sel);
+			if (!live) return;
+			live.apiFormat = fmtSel.value as ChatApiFormat;
+			void plugin.saveSettings();
+			syncPreview();
+		});
+
+		// ── 模型 节：计数徽标 + 行内搜索 + ＋添加；下方开关行列表 ──
+		const modelSection = configCol.createDiv({ cls: "semlink-mt-config-section" });
+		const modelLabelRow = modelSection.createDiv({ cls: "semlink-mt-config-labelrow" });
+		modelLabelRow.createDiv({ cls: "semlink-mt-config-label", text: t("mtModelsTitle") });
+		const chip = modelLabelRow.createSpan({ cls: "semlink-mt-config-chip", text: String(sel.models.length) });
+		const searchRow = modelLabelRow.createDiv({ cls: "semlink-mt-search is-compact" });
+		const searchIcon = searchRow.createDiv({ cls: "semlink-mt-search-icon" });
+		setIcon(searchIcon, "search");
 		const searchInput = searchRow.createEl("input", {
 			cls: "semlink-mt-search-input",
 			attr: { type: "text", placeholder: t("guideSearchModel"), spellcheck: "false" },
 		});
 		searchInput.value = st.search ?? "";
-
-		const showingEl = rightHost.createDiv({ cls: "semlink-mt-showing" });
-		// showing 行随状态整体重建：还没配置 Key（且非"无鉴权"的自定义
-		// 供应商）→ 引导语 + 紫色"配置"按钮；已配置 → 模型数 + "＋ 添加模型"
-		// （数量跟随搜索过滤：无关键词时即总数）
-		const renderShowing = (shown: number): void => {
-			showingEl.empty();
-			const unconfigured = !sel.live?.apiKey?.trim() && !sel.live?.noAuth;
-			if (unconfigured) {
-				showingEl.createSpan({ cls: "semlink-mt-showing-count", text: t("mtNeedsKey") });
-				showingEl.createEl("button", {
-					cls: "semlink-editor-save-btn semlink-mt-configure",
-					text: t("mtConfigure"),
-				}).addEventListener("click", () => {
-					if (!sel.live) {
-						const created = ensureCatalogProvider(sel.name);
-						if (!created) return;
-						sel.live = created;
-						sel.models = created.models;
-					}
-					void plugin.saveSettings();
-					new ProviderEditorModal(plugin.app, plugin, sel.live, refreshKeepInner).open();
-				});
-				return;
-			}
-			// 数量 = 当前过滤后的模型数（无关键词时等于总数）
-			showingEl.createSpan({
-				cls: "semlink-mt-showing-count",
-				text: t("mtShowing").replace("{total}", String(shown)),
-			});
-			// 右侧添加模型按钮：手动录入目录里没有的模型
-			showingEl.createEl("button", {
-				cls: "semlink-editor-cancel-btn semlink-mt-add-model",
-				text: "＋ " + t("mtAddModel"),
-			}).addEventListener("click", () => {
-				new AddModelModal(plugin.app, {
-					title: t("mtAddModel"),
-					onSubmit: (id, contextWindow) => {
-						if (!sel.live) {
-							const created = ensureCatalogProvider(sel.name);
-							if (!created) return;
-							sel.live = created;
-							sel.models = created.models;
-						}
-						sel.models.push({ id, contextWindow, enabled: true });
-						void plugin.saveSettings();
-						renderRows();
-						updateCount();
-					},
-					}).open();
-			});
+		// 圆形清除钮：有词时出现，一键清词并回焦（不发 Notice，走行内反馈）
+		const searchClear = searchRow.createEl("button", {
+			cls: "semlink-mt-search-clear",
+			attr: { "aria-label": t("mtSearchClear") },
+		});
+		setIcon(searchClear, "x");
+		const syncSearchUI = (): void => {
+			searchRow.toggleClass("has-value", !!searchInput.value);
 		};
-		const rh = rightHost.createDiv({ cls: "semlink-mt-rows" });
+		modelLabelRow.createEl("button", {
+			cls: "semlink-btn-primary semlink-mt-add-model",
+			text: "＋ " + t("mtAddModel"),
+		}).addEventListener("click", () => {
+			new AddModelModal(plugin.app, {
+				title: t("mtAddModel"),
+				existingIds: sel.models.map((x) => x.id),
+				onSubmit: (id, contextWindow) => {
+					if (!ensureLive(sel)) return;
+					sel.models.push({ id, contextWindow, enabled: true });
+					void plugin.saveSettings();
+					renderRows();
+					updateCount();
+				},
+			}).open();
+		});
+		// 模型行列表：卡即滚动容器，行贴卡边，行间 hairline 由 .semlink-card 生成
+		const rh = modelSection.createDiv({ cls: "semlink-mt-rows semlink-card semlink-mt-rows-card" });
 		rowsHost = rh;
 
 		const updateCount = (): void => {
-			const rowEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-provider-count`);
-			if (rowEl) rowEl.textContent = `${enabledCount(sel.models)} / ${sel.models.length} ${t("mtEnabled")}`;
-			const dotEl = list.querySelector(`[data-key="${sel.key}"] .semlink-mt-dot`);
-			if (dotEl) dotEl.className = `semlink-mt-dot${dotState(sel)}`;
-			// 所在文件夹的模型汇总行 + 状态点同步更新（避免整页刷新）
-			const folderNode = nodes.find((n) => n.key === sel.folder);
-			if (folderNode) {
-				const sumEnabled = folderNode.members.reduce((s, m) => s + enabledCount(m.models), 0);
-				const sumTotal = folderNode.members.reduce((s, m) => s + m.models.length, 0);
-				const folderEl = list.querySelector(`[data-folder="${folderNode.key}"] .semlink-mt-folder-count`);
-				if (folderEl) folderEl.textContent = `${sumEnabled} / ${sumTotal} ${t("mtEnabled")}`;
-				const folderDotEl = list.querySelector(`[data-folder="${folderNode.key}"] .semlink-mt-dot`);
-				if (folderDotEl) folderDotEl.className = `semlink-mt-dot${folderDotState(folderNode)}`;
-			}
+			// 计数徽标 + 左栏状态胶囊就地同步（不整页刷新）
+			chip.setText(String(sel.models.length));
+			syncProviderPill(sel);
 		};
 
 		const renderRows = (): void => {
@@ -3108,16 +3032,36 @@ export function renderModelsTab(
 			const shown = sel.models
 				.map((m, i) => ({ m, i }))
 				.filter(({ m }) => !q || m.id.toLowerCase().includes(q));
-			renderShowing(shown.length);
 			// 保留滚动位置：empty() 的瞬间内容高度清零，浏览器会把 scrollTop
 			// 钳制到 0，重建后就会“自动滚回顶部”。
 			const keepScroll = rh.scrollTop;
 			rh.empty();
+			// 搜索零命中：卡内空态，不进分帧
+			if (!shown.length) {
+				const none = rh.createDiv({ cls: "semlink-mt-noresults" });
+				const noneIcon = none.createDiv({ cls: "semlink-mt-empty-icon" });
+				setIcon(noneIcon, "search-x");
+				none.createDiv({
+					cls: "semlink-mt-empty-text",
+					text: t("mtSearchNone").replace("{q}", st.search ?? ""),
+				});
+				none.createEl("button", { cls: "semlink-btn-ghost", text: t("mtSearchClear") })
+					.addEventListener("click", () => {
+						searchInput.value = "";
+						st.search = "";
+						syncSearchUI();
+						renderRows();
+						searchInput.focus();
+					});
+				rh.scrollTop = keepScroll;
+				return;
+			}
 			// 分帧渲染：每帧 ~60 行。超大目录（OpenRouter 470+）一次性同步构建
 			// 会把渲染卡死/刷白；分帧让首屏立即可见。单行构建异常只跳过该行
 			// 并打印错误，不会把整个列表刷成空白。
 			const buildRow = (m: ChatModel, i: number): HTMLElement => {
-				const row = createDiv({ cls: "semlink-mt-model" });
+				// 关态行挂 is-off：内容淡化（开关钮保持可读），就地翻类不重渲染
+				const row = createDiv({ cls: `semlink-mt-model ${m.enabled === true ? "is-on" : "is-off"}` });
 				// 点击行打开编辑弹窗（修改模型 ID/上下文，弹窗内可删除）；开关
 				// 区域的点击不参与
 				row.addEventListener("click", (e) => {
@@ -3125,6 +3069,7 @@ export function renderModelsTab(
 					new AddModelModal(plugin.app, {
 						title: t("mtModelEdit"),
 						initial: { id: m.id, contextWindow: m.contextWindow },
+						existingIds: sel.models.filter((x) => x !== m).map((x) => x.id),
 						onSubmit: (id, contextWindow) => {
 							m.id = id;
 							m.contextWindow = contextWindow;
@@ -3152,6 +3097,7 @@ export function renderModelsTab(
 					grip.addEventListener("click", (e) => e.stopPropagation());
 					row.draggable = true;
 					const onDragStart = (e: DragEvent): void => {
+						row.addClass("is-dragging");
 						e.dataTransfer?.setData("text/semlink-model", String(i));
 						if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
 					};
@@ -3182,6 +3128,7 @@ export function renderModelsTab(
 						renderRows();
 					});
 					row.addEventListener("dragend", () => {
+						row.removeClass("is-dragging");
 						rh.querySelectorAll(".is-droptarget-row").forEach((el) => el.removeClass("is-droptarget-row"));
 					});
 				}
@@ -3195,11 +3142,13 @@ export function renderModelsTab(
 				const toggleWrap = row.createDiv({ cls: "semlink-mt-model-toggle" });
 				const toggle = new ToggleComponent(toggleWrap).setValue(m.enabled === true);
 				// 未配置 Key 也允许开启：先把清单勾好，填 Key 后立即可用。
-				// 开关后重渲染：启用的模型随即置顶
+				// 开关就地翻行状态类（关态淡化/开态恢复），不整列重渲染——
+				// 列表顺序稳定（不做启用置顶），左栏计数经 updateCount 同步。
 				toggle.onChange((v) => {
 					m.enabled = v;
 					void plugin.saveSettings();
-					renderRows();
+					row.toggleClass("is-on", v);
+					row.toggleClass("is-off", !v);
 					updateCount();
 				});
 				return row;
@@ -3256,11 +3205,20 @@ export function renderModelsTab(
 			buildChunk();
 		};		renderRows();
 		rh.scrollTop = restoreScroll ? (st.rowsScroll ?? 0) : 0;
+		syncSearchUI();
 		searchInput.addEventListener("input", () => {
 			st.search = searchInput.value;
+			syncSearchUI();
 			renderRows();
 		});
+		searchClear.addEventListener("click", () => {
+			searchInput.value = "";
+			st.search = "";
+			syncSearchUI();
+			renderRows();
+			searchInput.focus();
+		});
 	};
-	renderRight(true);
+	renderConfig(true);
 	list.scrollTop = st.providerScroll ?? 0;
 }

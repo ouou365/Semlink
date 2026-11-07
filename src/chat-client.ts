@@ -430,6 +430,7 @@ export class ChatClient {
 	 */
 	private allChatProviders(): ChatProvider[] {
 		return (this.settings.providers || [])
+			.filter((p) => !p.disabled)
 			.map((p) => ({
 				id: p.id,
 				name: p.name || p.id,
