@@ -1198,6 +1198,9 @@ export default class SmartVaultPlugin extends Plugin {
 									panel: h(panel),
 									mt: h(mt),
 									prov: h(prov),
+									// 展开文件夹后中栏列表 scrollTop 归零（向上跳）的取证
+									provSt: prov ? prov.scrollTop : -1,
+									mtTrace: ((root.querySelector(".semlink-settings-panel") as unknown as { __mtTrace?: string[] } | null)?.__mtTrace ?? []).slice(-10),
 									models: h(models),
 									rows: h((root.querySelector(".semlink-mt-rows") as HTMLElement | null)),
 									chain,

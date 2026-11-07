@@ -2276,6 +2276,16 @@ export function renderModelsTab(
 	};
 	st.collapsed = st.collapsed ?? {};
 
+	// 展开文件夹后中栏列表「向上跳」取证：点击与恢复各记一条 scrollTop，
+	// 挂在面板元素上供 measure 探针（mtTrace）回读。纯内存。
+	const mtTrace: string[] = [];
+	const pushMtTrace = (tag: string): void => {
+		const t = new Date();
+		mtTrace.push(`${String(t.getMinutes()).padStart(2, "0")}:${String(t.getSeconds()).padStart(2, "0")}.${String(t.getMilliseconds()).padStart(3, "0")} ${tag}`);
+		if (mtTrace.length > 40) mtTrace.splice(0, mtTrace.length - 40);
+	};
+	(containerEl as HTMLElement & { __mtTrace?: string[] }).__mtTrace = mtTrace;
+
 	/** 目录条目 → settings.providers 实例（按 name 幂等）。 */
 	const ensureCatalogProvider = (name: string): ModelProvider | undefined => {
 		const existing = providers.find((p) => p.name === name);
@@ -2671,8 +2681,15 @@ export function renderModelsTab(
 			});
 		}
 		headRow.addEventListener("click", () => {
+			pushMtTrace(`folder-click ${node.key} listScroll=${list.scrollTop}`);
 			st.collapsed = { ...(st.collapsed ?? {}), [node.key]: !collapsed };
-			refreshKeepInner();
+			// 只重建列表本身（不整屏 refresh）：整屏重渲会把滚动恢复拆成
+			// 「3223 同步恢复 + refreshPreservingScroll rAF/timeout 三连」两套
+			// 机制，展开时中栏曾因此向上跳。列表容器原地复用，scrollTop
+			// 收放都在同一元素上，一行恢复即可靠。
+			const keep = list.scrollTop;
+			renderProviderList();
+			list.scrollTop = keep;
 		});
 	};
 
@@ -2753,6 +2770,7 @@ export function renderModelsTab(
 	const refreshKeepInner = (): void => {
 		st.providerScroll = list.scrollTop;
 		if (rowsHost) st.rowsScroll = rowsHost.scrollTop;
+		pushMtTrace(`keepInner capture listScroll=${list.scrollTop}`);
 		refresh();
 	};
 
@@ -3221,4 +3239,5 @@ export function renderModelsTab(
 	};
 	renderConfig(true);
 	list.scrollTop = st.providerScroll ?? 0;
+	pushMtTrace(`restore saved=${st.providerScroll ?? 0} applied=${list.scrollTop} sh=${list.scrollHeight}`);
 }

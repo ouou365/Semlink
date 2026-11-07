@@ -732,11 +732,12 @@
        ——双层描边叠加是用户反馈的怪样来源 */
 }
 
+.smart-vault-settings .semlink-mt-prov-search-input:hover,
 .smart-vault-settings .semlink-mt-prov-search-input:focus,
 .smart-vault-settings .semlink-mt-prov-search-input:focus-visible {
     outline: none;
     box-shadow: none;
-    /* 聚焦时主题会给 input 刷白底（灰胶囊里浮出白色圆角块）——一并压住 */
+    /* 悬停/聚焦时主题会给 input 刷白底（灰胶囊里浮出白色圆角块）——一并压住 */
     background: transparent;
     border: none;
 }
@@ -746,6 +747,7 @@
 }
 
 /* 模型节行内搜索同款：input 描边/底色隐藏，聚焦圈画在胶囊上 */
+.smart-vault-settings .semlink-mt-search .semlink-mt-search-input:hover,
 .smart-vault-settings .semlink-mt-search .semlink-mt-search-input:focus,
 .smart-vault-settings .semlink-mt-search .semlink-mt-search-input:focus-visible {
     outline: none;
@@ -1096,6 +1098,10 @@
     cursor: pointer;
     min-width: 0;
     height: 44px;
+    /* flex 列内禁止收缩：默认 shrink 会把 44px 行压到 min-content（=26px
+       logo 高），溢出被吞、内部滚动失效、展开文件夹时行高挤压跳动
+       （devtools 实测 is-active 行 200×26 的病根） */
+    flex-shrink: 0;
     transition: background 0.1s ease-out;
 }
 
@@ -1339,6 +1345,8 @@
     padding: 8px 16px;
     min-width: 0;
     min-height: 44px;
+    /* 同供应商行：滚动容器是 flex 列，禁收缩防 min-content 压扁 */
+    flex-shrink: 0;
     cursor: pointer;
     transition: background 0.1s ease-out;
 }
