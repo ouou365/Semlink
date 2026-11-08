@@ -27,8 +27,8 @@ export type ModelsTabState = {
 	/** 内层两个滚动列表的位置，整页刷新后恢复。 */
 	providerScroll?: number;
 	rowsScroll?: number;
-	/** 窄幅（容器 ≤720px）钻入态：只显示配置列，供应商列表隐藏；
-	 *  宽幅三栏常驻，此状态在宽幅进入时清除。 */
+	/** 窄幅（容器 ≤480px）钻入态：只显示配置列，供应商列表隐藏；
+	 *  两栏（>480）常驻，此状态在两栏进入时清除。 */
 	drilled?: boolean;
 };
 
@@ -1154,6 +1154,7 @@ export const EMBEDDING_CATALOG: CatalogEntry[] = [
 		//（没有 /v1 段），用 embedPath 覆盖默认路径。
 		name: "Google",
 		baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+		wirePath: "/chat/completions",
 		embedPath: "/embeddings",
 		keysUrl: "https://aistudio.google.com/apikey",
 		apiFormat: "openai",
@@ -1579,6 +1580,181 @@ class DeleteProviderModal extends Modal {
 
 // ──── Provider rows ────
 
+/** API Key 配置弹窗（用户拍板参考 Cherry Configuration 流程）：空态时
+ *  Key 行显示「添加 API 密钥」ghost 钮，点击进本弹窗；已配置时铅笔也
+ *  进本弹窗改 Key。输入后出现 Cancel + Test & Save（空输入只有 Close，
+ *  Cherry 同款）；Test & Save = 落盘 + 连通性测试（反馈在 Key 节状态行）。 */
+class KeyModal extends Modal {
+	constructor(
+		app: App,
+		private opts: {
+			title: string;
+			keysUrl?: string;
+			initial: string;
+			/** 连通性测试（弹窗内反馈；失败不落盘） */
+			onTest: (key: string) => Promise<{ ok: boolean; message: string }>;
+			/** 落盘回调：仅在测试通过后调用，写 live.apiKey 并触发行重渲染 */
+			onSubmit: (key: string, okMessage: string) => void;
+			/** 高级选项初始值（API Type + 完整 Endpoint）——随弹窗渲染 */
+			adv?: { apiFormat: ChatApiFormat; endpoint: string };
+			/** API Type 变更：落盘并返回重算后的完整 Endpoint（弹窗内回显） */
+			onFormatChange?: (fmt: ChatApiFormat) => string;
+			/** Endpoint 编辑提交（change）：拆解为 base/wirePath 落盘 */
+			onEndpointChange?: (raw: string) => void;
+		},
+	) {
+		super(app);
+		this.modalEl.addClass("semlink-provider-editor-modal");
+		this.modalEl.addClass("smart-vault-settings");
+	}
+
+	onOpen() {
+		this.titleEl.setText(this.opts.title);
+		const { contentEl } = this;
+		// 标签行：API Key + 取钥外链
+		const labelRow = contentEl.createDiv({ cls: "semlink-mt-modal-keylabel" });
+		labelRow.createDiv({ cls: "semlink-editor-field-label", text: t("apiKey") });
+		if (this.opts.keysUrl) {
+			const linkBtn = labelRow.createDiv({
+				cls: "semlink-mt-config-link is-clickable",
+				attr: { "aria-label": t("editorGetKey"), title: t("editorGetKey") },
+			});
+			setIcon(linkBtn, "external-link");
+			linkBtn.addEventListener("click", () => window.open(this.opts.keysUrl));
+		}
+		const keyInput = contentEl.createEl("input", {
+			cls: "semlink-editor-input",
+			attr: { type: "password", placeholder: "sk-...", spellcheck: "false" },
+		});
+		keyInput.value = this.opts.initial;
+		// 测试反馈行（用户拍板"提示应该放在窗口里面"）：绿=连通/红=失败，
+		// :empty 时隐藏
+		const status = contentEl.createDiv({ cls: "semlink-mt-config-status" });
+
+		// 高级选项（用户拍板"Show advanced options 移动到这个弹窗里面"）：
+		// 默认收起，展开为 API Type + Endpoint URL 两个字段
+		if (this.opts.adv && this.opts.onFormatChange && this.opts.onEndpointChange) {
+			const advHead = contentEl.createDiv({
+				cls: "semlink-mt-config-advhead is-clickable",
+				attr: { role: "button", tabindex: "0" },
+			});
+			const advChevron = advHead.createDiv({ cls: "semlink-mt-config-advchevron" });
+			setIcon(advChevron, "chevron-right");
+			const advLabel = advHead.createDiv({ cls: "semlink-mt-config-advlabel", text: t("editorAdvancedShow") });
+			const advBody = contentEl.createDiv({ cls: "semlink-mt-config-advbody semlink-hidden" });
+			advHead.addEventListener("click", () => {
+				const show = advBody.hasClass("semlink-hidden");
+				advBody.toggleClass("semlink-hidden", !show);
+				setIcon(advChevron, show ? "chevron-down" : "chevron-right");
+				advLabel.setText(t(show ? "editorAdvancedHide" : "editorAdvancedShow"));
+			});
+			advBody.createDiv({ cls: "semlink-mt-config-fieldlabel", text: t("chatApiFormat") });
+			const fmtOptions: Array<{ value: ChatApiFormat; label: string }> = [
+				{ value: "openai", label: "OpenAI" },
+				{ value: "anthropic", label: "Anthropic" },
+			];
+			let curFmt = this.opts.adv.apiFormat;
+			const fmtBtn = advBody.createDiv({ cls: "semlink-mt-config-selectbtn is-clickable", attr: { role: "button", tabindex: "0" } });
+			const fmtLabel = fmtBtn.createSpan({ cls: "semlink-mt-config-selectbtn-label" });
+			const fmtChevron = fmtBtn.createDiv({ cls: "semlink-mt-config-selectbtn-chevron" });
+			setIcon(fmtChevron, "chevron-down");
+			const renderFmt = (): void => {
+				fmtLabel.setText(fmtOptions.find((o) => o.value === curFmt)?.label ?? "OpenAI");
+			};
+			renderFmt();
+			fmtBtn.addEventListener("click", () => {
+				const menu = new Menu();
+				for (const o of fmtOptions) {
+					menu.addItem((mi) => {
+						mi.setTitle(o.label);
+						if (o.value === curFmt) mi.setIcon("check");
+						mi.onClick(() => {
+							if (o.value === curFmt) return;
+							curFmt = o.value;
+							addrInput.value = this.opts.onFormatChange!(o.value);
+							renderFmt();
+						});
+					});
+				}
+				// 锚定触发钮左缘、贴下缘 4px（配置页同款，不用光标定位）；
+				// 菜单宽度随触发钮（用户拍板"下拉的宽度增加"）
+				const r = fmtBtn.getBoundingClientRect();
+				menu.showAtPosition({ x: r.left, y: r.bottom + 4 });
+				const menuEl = (menu as unknown as { containerEl?: HTMLElement }).containerEl;
+				if (menuEl) menuEl.style.minWidth = `${Math.round(r.width)}px`;
+			});
+			advBody.createDiv({ cls: "semlink-mt-config-fieldlabel", text: t("editorEndpoint") });
+			const addrInput = advBody.createEl("input", {
+				cls: "semlink-editor-input",
+				attr: {
+					type: "text",
+					placeholder: "https://api.openai.com/v1/chat/completions",
+					spellcheck: "false",
+				},
+			});
+			addrInput.value = this.opts.adv.endpoint;
+			addrInput.addEventListener("change", () => {
+				this.opts.onEndpointChange!(addrInput.value);
+			});
+		}
+
+		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
+		const cancelBtn = footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") });
+		cancelBtn.addEventListener("click", () => this.close());
+		// setIcon 会清空按钮内容（图标吞掉文字的病根）——图标与文字分 span
+		const saveBtn = footer.createEl("button", { cls: "semlink-editor-save-btn" });
+		const saveIcon = saveBtn.createSpan({ cls: "semlink-mt-key-save-icon" });
+		setIcon(saveIcon, "check");
+		saveBtn.createSpan({ text: t("mtKeyTestSave") });
+		let busy = false;
+		saveBtn.addEventListener("click", async () => {
+			const key = keyInput.value.trim();
+			if (!key || busy) return;
+			// 先测后存（用户拍板"如果提示不过不应该保存"）：失败时状态行
+			// 显示原因、弹窗留在原地可改；通过才落盘并关闭
+			busy = true;
+			saveBtn.disabled = true;
+			cancelBtn.disabled = true;
+			closeBtn.disabled = true;
+			// loading 图标（用户拍板）：测试期间勾换旋转 loader，结束恢复
+			setIcon(saveIcon, "loader-2");
+			saveIcon.addClass("is-loading");
+			status.className = "semlink-mt-config-status";
+			status.setText(t("mtKeyTesting"));
+			const res = await this.opts.onTest(key);
+			setIcon(saveIcon, "check");
+			saveIcon.removeClass("is-loading");
+			if (res.ok) {
+				this.opts.onSubmit(key, res.message);
+				this.close();
+				return;
+			}
+			busy = false;
+			saveBtn.disabled = false;
+			cancelBtn.disabled = false;
+			closeBtn.disabled = false;
+			status.className = "semlink-mt-config-status is-err";
+			status.setText(res.message);
+		});
+		const closeBtn = footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("close") });
+		closeBtn.addEventListener("click", () => this.close());
+		// 空输入：只有 Close（Cherry 同款）；有内容：Cancel + Test & Save
+		const syncButtons = (): void => {
+			const has = keyInput.value.trim().length > 0;
+			cancelBtn.toggleClass("semlink-hidden", !has);
+			saveBtn.toggleClass("semlink-hidden", !has);
+			closeBtn.toggleClass("semlink-hidden", has);
+		};
+		keyInput.addEventListener("input", syncButtons);
+		syncButtons();
+		keyInput.focus();
+	}
+
+	onClose() {
+		this.contentEl.empty();
+	}
+}
+
 /** 显示名变体 → 表内键：规范化后仍对不上的别名（"Qwen CN" 规范化成
  *  qweencn，而图标键是 qwen）。 */
 const LOGO_ALIASES: Record<string, string> = {
@@ -1976,6 +2152,8 @@ function renderDraftEditor(
 				btn.setButtonText(opts.submitBusyLabel).setDisabled(true);
 				const provider: ModelProvider = {
 					id: `provider-${Date.now()}`,
+					// 缺省关（用户拍板）：新添加的供应商默认停用
+					disabled: true,
 					name: draft.name.trim() || draft.baseUrl.trim(),
 					...(draft.icon ? { icon: draft.icon } : {}),
 					apiBase: draft.baseUrl.trim(),
@@ -2055,6 +2233,8 @@ function renderProviderCatalogGrid(
 				apiBase: entry.baseUrl,
 				apiKey: "",
 				apiFormat: entry.apiFormat,
+				// 缺省关（用户拍板）：新实例默认停用，拨开总开关才启用
+				disabled: true,
 				...(entry.wirePath ? { wirePath: entry.wirePath } : {}),
 				models: entry.models.map((m) => ({ ...m })),
 			};
@@ -2426,22 +2606,23 @@ export function renderModelsTab(
 
 	const enabledCount = (models: ChatModel[]): number =>
 		models.filter((m) => m.enabled === true).length;
-	// 状态胶囊：已落实例且有 Key 且未关总开关 = "on"；关了总开关 = "off"；
-	// 没配 Key 的目录项 = 无徽标（noAuth 视同已配置）。
-	const pillState = (r: Row): "on" | "off" | "" => {
+	// 状态胶囊：只显示 ON（已落实例 + 有 Key/noAuth + 未关总开关）；
+	// 关闭态与未配置一律无徽标（用户拍板"不要显示OFF"）。
+	const pillState = (r: Row): "on" | "" => {
 		if (!r.live) return "";
-		if (r.live.disabled) return "off";
+		if (r.live.disabled) return "";
 		if (r.live.apiKey?.trim() || r.live.noAuth) return "on";
 		return "";
 	};
 
 	const wrap = containerEl.createDiv({ cls: "semlink-mt" });
-	// Cherry 式三栏（容器 >720）：供应商列表与配置表单同屏常驻，点谁配谁，
-	// 无钻入无返回。≤720 放不下三栏：单列 + 钻入（is-drilled），‹ 供应商
-	// 返回行回列表。drilled 残留状态在宽幅进入时清除。
+	// Cherry 式两栏（容器 >480）：供应商列表与配置表单同屏常驻，点谁配谁，
+	// 无钻入无返回（中栏 clamp 172-240 自适应，原生设置弹窗 ~610px 也两栏）。
+	// ≤480 放不下两栏：单列 + 钻入（is-drilled），‹ 供应商 返回行回列表。
+	// drilled 残留状态在两栏进入时清除。
 	const isNarrow = (): boolean => {
 		const root = containerEl.closest(".semlink-settings-root") as HTMLElement | null;
-		return (root?.offsetWidth ?? 0) <= 720;
+		return (root?.offsetWidth ?? 0) <= 480;
 	};
 	if (!isNarrow() && st.drilled) st.drilled = false;
 	if (st.drilled) wrap.addClass("is-drilled");
@@ -2516,11 +2697,10 @@ export function renderModelsTab(
 				(isSelected ? " is-active" : ""),
 			attr: { "data-key": r.key },
 		});
-		// 左侧移动滑块：拖动可上下调整顺序（落到别的供应商行上=插到它前面，
-		// 落到文件夹上=归档；目录预览行也可参与排序，归档仍仅限已添加实例）
-		const grip = row.createDiv({ cls: "semlink-mt-provider-grip", attr: { "aria-label": t("modelDrag"), title: t("modelDrag") } });
-		setIcon(grip, "grip-vertical");
-		grip.addEventListener("click", (e) => e.stopPropagation());
+		// 行内拖动重排（落到别的供应商行上=插到它前面，落到文件夹上=归档；
+		// 目录预览行也可参与排序，归档仍仅限已添加实例）。把手槽位已移除
+		// （用户拍板"供应商的图标和文字整体往左移动"）：整行即把手，
+		// 图标+文字贴左对齐，重排功能不变。
 		row.draggable = true;
 		const onDragStart = (e: DragEvent): void => {
 			row.addClass("is-dragging");
@@ -2528,7 +2708,6 @@ export function renderModelsTab(
 			if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
 		};
 		row.addEventListener("dragstart", onDragStart);
-		grip.addEventListener("dragstart", onDragStart);
 		// 行间重排：拖中的行顶缘出现插入线，松手按当前展示顺序插入目标行之前
 		row.addEventListener("dragover", (e) => {
 			const types = e.dataTransfer?.types;
@@ -2583,13 +2762,16 @@ export function renderModelsTab(
 		}
 		const info = row.createDiv({ cls: "semlink-mt-provider-info" });
 		info.createDiv({ cls: "semlink-mt-provider-name", text: r.name });
-		// 状态胶囊（Cherry 式 ON/OFF）：有 Key 且未关总开关=ON，关了=OFF，
-		// 没配 Key=无徽标。计数细节挪进右栏配置页的模型节。
+		// 状态胶囊：只显示 ON（已落实例 + 有 Key/noAuth + 未关总开关）；
+		// 关闭态与未配置一律无徽标（用户拍板"不要显示OFF"）。无徽标时
+		// 不创建 div——空胶囊常驻会吃掉名称宽度（嵌套长名截断的病根）。
 		const pill = pillState(r);
-		row.createDiv({
-			cls: `semlink-mt-provider-pill${pill ? ` is-${pill}` : ""}`,
-			text: pill === "on" ? "ON" : pill === "off" ? "OFF" : "",
-		});
+		if (pill) {
+			row.createDiv({
+				cls: `semlink-mt-provider-pill is-${pill}`,
+				text: "ON",
+			});
+		}
 	};
 
 	const renderFolderHeader = (node: FolderNode): void => {
@@ -2638,13 +2820,8 @@ export function renderModelsTab(
 			p.folder = node.key;
 			void plugin.saveSettings().then(() => refreshKeepInner());
 		});
-		// 移动滑块：整个文件夹作为整体参与排序
-		const grip = headRow.createDiv({
-			cls: "semlink-mt-provider-grip",
-			attr: { "aria-label": t("modelDrag"), title: t("modelDrag") },
-		});
-		setIcon(grip, "grip-vertical");
-		grip.addEventListener("click", (e) => e.stopPropagation());
+		// 整个文件夹作为整体参与排序（把手槽位移除，与供应商行对齐——
+		// 整行即把手）
 		headRow.draggable = true;
 		const onFolderDragStart = (e: DragEvent): void => {
 			headRow.addClass("is-dragging");
@@ -2652,7 +2829,6 @@ export function renderModelsTab(
 			if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
 		};
 		headRow.addEventListener("dragstart", onFolderDragStart);
-		grip.addEventListener("dragstart", onFolderDragStart);
 		headRow.addEventListener("dragend", () => {
 			headRow.removeClass("is-dragging");
 			list.querySelectorAll(".is-droptarget-row").forEach((el) => el.removeClass("is-droptarget-row"));
@@ -2783,11 +2959,18 @@ export function renderModelsTab(
 
 	// 左栏状态胶囊就地同步（Key 保存/总开关翻转后不整页刷新）
 	const syncProviderPill = (row: Row): void => {
-		const pillEl = list.querySelector(`[data-key="${row.key}"] .semlink-mt-provider-pill`);
-		if (!pillEl) return;
+		const rowEl = list.querySelector(`[data-key="${row.key}"]`);
+		if (!rowEl) return;
 		const s = pillState(row);
-		pillEl.className = `semlink-mt-provider-pill${s ? ` is-${s}` : ""}`;
-		pillEl.textContent = s === "on" ? "ON" : s === "off" ? "OFF" : "";
+		let pillEl = rowEl.querySelector<HTMLElement>(".semlink-mt-provider-pill");
+		if (!s) {
+			// 徽标消失（停用/清 Key）：连 div 一起移除，还名称完整宽度
+			pillEl?.remove();
+			return;
+		}
+		if (!pillEl) pillEl = rowEl.createDiv({ cls: "semlink-mt-provider-pill" });
+		pillEl.className = `semlink-mt-provider-pill is-${s}`;
+		pillEl.textContent = "ON";
 	};
 
 	/** 落实目录条目实例（首次配置 Key/开关/加模型时）；模型清单已带。 */
@@ -2805,8 +2988,10 @@ export function renderModelsTab(
 		const sel = rows.find((r) => r.key === st.selected) ?? null;
 		configCol.empty();
 		rowsHost = null;
-		// 窄幅钻入态：返回行回供应商列表（宽幅三栏常驻，无返回行）
-		if (st.drilled && isNarrow()) {
+		// 钻入态：返回行回供应商列表。渲染条件只看 drilled（用户拍板
+		// "单列的情况下要显示箭头"）——宽窄由 CSS 管（两栏容器块藏返回
+		// 行），跨尺寸拖动不再产生"无箭头的死态"；两栏下点行不置 drilled。
+		if (st.drilled) {
 			const back = configCol.createDiv({
 				cls: "semlink-mt-back is-clickable",
 				attr: { role: "button", tabindex: "0" },
@@ -2834,50 +3019,39 @@ export function renderModelsTab(
 		}
 
 		const keysUrl = CHAT_CATALOG.find((e) => e.name === sel.name)?.keysUrl;
-		const catalogDefault = CHAT_CATALOG.find((e) => e.name === sel.name)?.baseUrl;
+		// 目录兜底（用户拍板"endpoint 必须显示对"）：未添加实例的目录供应商
+		// （live=null）不能落到 "openai"+裸路径 的默认值——按目录条目显示
+		// 正确的协议与完整 Endpoint（Anthropic = https://api.anthropic.com
+		// + /v1/messages，已经官方文档检索核实）。
+		const catalogEntry = CHAT_CATALOG.find((e) => e.name === sel.name);
+		const curApiFormat = (): ChatApiFormat =>
+			((sel.live?.apiFormat ?? catalogEntry?.apiFormat ?? "openai") as ChatApiFormat);
+		const curApiBase = (): string =>
+			(sel.live?.apiBase ?? catalogEntry?.baseUrl ?? "").trim().replace(/\/+$/, "");
+		// 完整 Endpoint = base + 协议默认路径（或 wirePath 覆盖）；显示与
+		// 请求侧（v1Base + 操作路径）同构：base 已以 /v1 结尾则不重复补
+		// （portal.qwen.ai/v1 曾显示成 /v1/v1/… 的病根）
+		const chatDefaultPath = (f: ChatApiFormat): string =>
+			f === "anthropic" ? "/v1/messages" : "/v1/chat/completions";
+		const fullEndpoint = (): string => {
+			const base = curApiBase();
+			const f = curApiFormat();
+			const wire = sel.live?.wirePath?.trim();
+			if (wire === "/") return base;
+			if (wire) return `${base}${wire.startsWith("/") ? "" : "/"}${wire}`;
+			const op = f === "anthropic" ? "/messages" : "/chat/completions";
+			const vb = base.endsWith("/v1") ? base : `${base}/v1`;
+			return `${vb}${op}`;
+		};
 
-		// ── 头部：名称 + 获取密钥外链 + 竖点菜单（清除/删除）+ 总开关 ──
+		// ── 头部：名称 + 总开关。原竖点菜单（清除/删除）移除（用户拍板
+		// "不要显示这个更多图标"），功能迁到列表行的 hover 竖点上 ──
 		const head = configCol.createDiv({ cls: "semlink-mt-config-head" });
 		head.createSpan({ cls: "semlink-mt-config-name", text: sel.name });
-		if (keysUrl) {
-			const linkBtn = head.createDiv({
-				cls: "semlink-mt-config-link is-clickable",
-				attr: { "aria-label": t("editorGetKey"), title: t("editorGetKey") },
-			});
-			setIcon(linkBtn, "external-link");
-			linkBtn.addEventListener("click", () => window.open(keysUrl));
-		}
-		const kebab = head.createDiv({
-			cls: "semlink-mt-config-kebab is-clickable",
-			attr: { "aria-label": t("editorClearSettings"), title: t("editorClearSettings") },
-		});
-		setIcon(kebab, "more-vertical");
-		kebab.addEventListener("click", (e) => {
-			const menu = new Menu();
-			menu.addItem((mi) => mi.setTitle(t("editorClearSettings")).setIcon("eraser").onClick(() => {
-				const live = ensureLive(sel);
-				if (!live) return;
-				live.apiKey = "";
-				if (catalogDefault) live.apiBase = catalogDefault;
-				void plugin.saveSettings().then(() => refreshKeepInner());
-			}));
-			menu.addSeparator();
-			menu.addItem((mi) => mi.setTitle(t("deleteProvider")).setIcon("trash-2").setWarning(true).onClick(() => {
-				const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
-				const pid = sel.live?.id;
-				if (!pid) return;
-				new DeleteProviderModal(plugin.app, sel.name, () => {
-					plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== pid);
-					if (activePid === pid) {
-						plugin.settings.embeddingModelKey = "";
-					}
-					void plugin.saveSettings().then(() => refreshKeepInner());
-				}).open();
-			}));
-			menu.showAtMouseEvent(e);
-		});
 		const masterWrap = head.createDiv({ cls: "semlink-mt-config-master" });
-		const master = new ToggleComponent(masterWrap).setValue(!(sel.live?.disabled));
+		// 缺省关（用户拍板）：未落实例的目录供应商开关显示为关，
+		// 拨开后 ensureLive 落实例并启用
+		const master = new ToggleComponent(masterWrap).setValue(!!sel.live && !(sel.live.disabled));
 		master.toggleEl.setAttribute("aria-label", t("mtProviderEnable"));
 		master.onChange((v) => {
 			const live = ensureLive(sel);
@@ -2887,115 +3061,174 @@ export function renderModelsTab(
 			syncProviderPill(sel);
 		});
 
-		// ── API 密钥 节（noAuth 供应商整节隐藏——本地端点无需鉴权）──
-		if (!sel.live?.noAuth) {
+		// ── API 密钥 节（始终渲染——noAuth 只是不参与请求，隐藏整节会让
+		// 用户误以为配置丢失，切鉴权也不再清空 Key）。Cherry 式双态（用户
+		// 拍板）：已存 Key 时只读胶囊（掩码 + 尾号）+ 铅笔/竖点；铅笔切回
+		// 输入框，竖点菜单测试连接/清除配置；Save 落盘后回到只读态。 ──
+		{
 			const keySection = configCol.createDiv({ cls: "semlink-mt-config-section" });
-			keySection.createDiv({ cls: "semlink-mt-config-label", text: t("apiKey") });
 			const keyRow = keySection.createDiv({ cls: "semlink-mt-config-keyrow" });
-			const keyInput = keyRow.createEl("input", {
-				cls: "semlink-mt-config-input",
-				attr: { type: "password", placeholder: "sk-...", spellcheck: "false" },
-			});
-			keyInput.value = sel.live?.apiKey ?? "";
-			const eye = keyRow.createEl("button", {
-				cls: "semlink-mt-config-icon-btn",
-				attr: { "aria-label": t("mtSearchClear") },
-			});
-			setIcon(eye, "eye-off");
-			eye.addEventListener("click", () => {
-				const show = keyInput.type === "password";
-				keyInput.type = show ? "text" : "password";
-				setIcon(eye, show ? "eye" : "eye-off");
-			});
-			const detectBtn = keyRow.createEl("button", { cls: "semlink-mt-config-detect", text: t("mtDetect") });
-			// 检测状态行：绿=连通（附在线模型数），红=失败（附原因）；不弹 Notice
+			// 检测状态行：绿=连通（附在线模型数），红=失败（附原因）；不弹
+			// Notice。建在行外——行内容按态重建时状态行保持不动。
 			const status = keySection.createDiv({ cls: "semlink-mt-config-status" });
-			const hintRow = keySection.createDiv({ cls: "semlink-mt-config-hintrow" });
-			if (keysUrl) {
-				hintRow.createEl("button", { cls: "semlink-mt-config-getkey", text: t("editorGetKey") })
-					.addEventListener("click", () => window.open(keysUrl));
-			}
-			// Key 失焦/回车即保存（curated：清单视为已整理，引导不再覆盖）
-			keyInput.addEventListener("change", () => {
+			// 只读态掩码：尾号 4 位明文，其余 *（8-24 个，够辨识不泄长度）
+			const maskKey = (k: string): string => {
+				const tail = k.length > 4 ? k.slice(-4) : "";
+				const n = Math.max(8, Math.min(24, k.length - tail.length));
+				return `${"*".repeat(n)}${tail}`;
+			};
+			// 连通性测试：结果返回给调用方（弹窗内反馈；不直接写配置页状态行）
+			const testKey = async (
+				live: NonNullable<ReturnType<typeof ensureLive>>,
+				key: string,
+			): Promise<{ ok: boolean; message: string }> => {
+				const base = live.apiBase.trim().replace(/\/+$/, "");
+				try {
+					const entries = await raceTimeout(fetchModelIds(base, key, live.apiFormat ?? "openai"));
+					const ok = !!entries && entries.length > 0;
+					return {
+						ok,
+						message: ok
+							? t("mtDetectOk").replace("{n}", String(entries!.length))
+							: `${t("mtDetectFail")} · 0`,
+					};
+				} catch (err) {
+					return { ok: false, message: `${t("mtDetectFail")} · ${err?.message ?? ""}`.trim() };
+				}
+			};
+			// 配置弹窗（用户拍板参考 Cherry Configuration 流程）：空态 ghost
+			// 钮与已配置态铅笔都进本弹窗；Test & Save = 落盘 + 检测反馈
+			// Endpoint 编辑提交：拆解落盘（base/wirePath，curated）
+			const onEndpointChange = (raw: string): void => {
 				const live = ensureLive(sel);
 				if (!live) return;
-				live.apiKey = keyInput.value;
+				const trimmed = raw.trim().replace(/\/+$/, "");
+				const d = chatDefaultPath((live.apiFormat ?? "openai") as ChatApiFormat);
+				if (!trimmed) {
+					live.apiBase = "";
+					delete live.wirePath;
+				} else if (trimmed.endsWith(d)) {
+					live.apiBase = trimmed.slice(0, trimmed.length - d.length).replace(/\/+$/, "");
+					delete live.wirePath;
+				} else if (trimmed.endsWith("/v1")) {
+					live.apiBase = trimmed;
+					delete live.wirePath;
+				} else {
+					try {
+						const u = new URL(trimmed);
+						live.apiBase = u.origin;
+						const p = u.pathname.replace(/\/+$/, "");
+						live.wirePath = p && p !== "/" ? p : "/";
+					} catch {
+						return;
+					}
+				}
 				live.curated = true;
 				void plugin.saveSettings();
-				syncProviderPill(sel);
-			});
-			detectBtn.addEventListener("click", () => {
-				const live = ensureLive(sel);
-				const key = keyInput.value.trim();
-				const base = (live?.apiBase ?? "").trim().replace(/\/+$/, "");
-				if (!key) {
-					status.className = "semlink-mt-config-status is-err";
-					status.setText(t("mtDetectNeedKey"));
+			};
+			const openKeyModal = (): void => {
+				new KeyModal(plugin.app, {
+					title: t("mtKeyModalTitle").replace("{name}", sel.name),
+					keysUrl,
+					initial: sel.live?.apiKey ?? "",
+					adv: {
+						apiFormat: curApiFormat(),
+						endpoint: fullEndpoint(),
+					},
+					onTest: (key) => {
+						const live = ensureLive(sel);
+						return live ? testKey(live, key) : Promise.resolve({ ok: false, message: t("mtDetectFail") });
+					},
+					onFormatChange: (fmt) => {
+						const live = ensureLive(sel);
+						if (!live) return fullEndpoint();
+						live.apiFormat = fmt;
+						live.curated = true;
+						void plugin.saveSettings();
+						return fullEndpoint();
+					},
+					onEndpointChange,
+					onSubmit: (key) => {
+						const live = ensureLive(sel);
+						if (!live) return;
+						live.apiKey = key;
+						live.curated = true;
+						void plugin.saveSettings();
+						syncProviderPill(sel);
+						renderKeyRow();
+						// 成功提示只在弹窗内反馈（用户拍板"不要显示这个"）——
+						// 配置页状态行保持空（:empty 隐藏）
+					},
+				}).open();
+			};
+			// 行内容按态重建。标签恒在；取钥外链只在未配置时显示（用户拍板
+			// "配置完成不显示 get key"——有 Key 就不需要再取钥）。
+			const renderKeyRow = (): void => {
+				keyRow.empty();
+				const savedKey = sel.live?.apiKey ?? "";
+				const keyLabel = keyRow.createDiv({ cls: "semlink-mt-config-label semlink-mt-config-keylabel" });
+				keyLabel.createSpan({ text: t("apiKey") });
+				if (keysUrl && !savedKey) {
+					// Get Key 图标（用户拍板"这个改成图标"）：外链图标钮，
+					// 点击打开供应商的取钥网址
+					const linkBtn = keyLabel.createDiv({
+						cls: "semlink-mt-config-link is-clickable",
+						attr: { "aria-label": t("editorGetKey"), title: t("editorGetKey") },
+					});
+					setIcon(linkBtn, "external-link");
+					linkBtn.addEventListener("click", () => window.open(keysUrl));
+				}
+				if (savedKey) {
+					// 只读态：掩码胶囊（尾号单独 span，星号段可截断不伤尾号）。
+					// 铅笔 + 删除内嵌在胶囊右缘（用户拍板"编辑和更多按钮嵌入
+					// 到密码框里面去"；"更多只保留删除，用删除图标"）
+					const pill = keyRow.createDiv({ cls: "semlink-mt-config-keypill" });
+					const tail = savedKey.length > 4 ? savedKey.slice(-4) : "";
+					pill.createSpan({ cls: "semlink-mt-config-keypill-mask", text: maskKey(savedKey).slice(0, -tail.length) });
+					if (tail) pill.createSpan({ cls: "semlink-mt-config-keypill-tail", text: tail });
+					const pillActions = pill.createDiv({ cls: "semlink-mt-config-keypill-actions" });
+					const editBtn = pillActions.createDiv({
+						cls: "semlink-mt-config-icon-btn is-clickable",
+						attr: { "aria-label": t("mtKeyEdit"), title: t("mtKeyEdit") },
+					});
+					setIcon(editBtn, "pencil");
+					editBtn.addEventListener("click", () => openKeyModal());
+					// 删除钮：点击直接弹删除确认（DeleteProviderModal 内含
+					// 二次确认防误触）
+					const delBtn = pillActions.createDiv({
+						cls: "semlink-mt-config-icon-btn is-clickable",
+						attr: { "aria-label": t("deleteProvider"), title: t("deleteProvider") },
+					});
+					setIcon(delBtn, "trash-2");
+					delBtn.addEventListener("click", () => {
+						const activePid = (plugin.settings.embeddingModelKey || "").split("::")[0];
+						const pid = sel.live?.id;
+						if (!pid) return;
+						new DeleteProviderModal(plugin.app, sel.name, () => {
+							plugin.settings.providers = plugin.settings.providers.filter((x) => x.id !== pid);
+							if (activePid === pid) {
+								plugin.settings.embeddingModelKey = "";
+							}
+							void plugin.saveSettings().then(() => refreshKeepInner());
+						}).open();
+					});
 					return;
 				}
-				detectBtn.disabled = true;
-				detectBtn.setText(t("mtDetecting"));
-				status.className = "semlink-mt-config-status";
-				status.setText("");
-				void raceTimeout(fetchModelIds(base, key, live?.apiFormat ?? "openai"))
-					.then((entries) => {
-						const ok = !!entries && entries.length > 0;
-						status.className = `semlink-mt-config-status ${ok ? "is-ok" : "is-err"}`;
-						status.setText(
-							ok
-								? t("mtDetectOk").replace("{n}", String(entries!.length))
-								: `${t("mtDetectFail")} · 0`,
-						);
-					})
-					.catch((err) => {
-						status.className = "semlink-mt-config-status is-err";
-						status.setText(`${t("mtDetectFail")} · ${err?.message ?? ""}`.trim());
-					})
-					.finally(() => {
-						detectBtn.disabled = false;
-						detectBtn.setText(t("mtDetect"));
-					});
-			});
+				// 空态 ghost（用户拍板参考 Cherry BurnCloud）：输入框同规格的
+				// 整行钮，居中 key 图标 + 「添加 API 密钥」，点击进配置弹窗
+				const ghost = keyRow.createDiv({
+					cls: "semlink-mt-config-keyghost is-clickable",
+					attr: { "aria-label": t("mtKeyGhost"), title: t("mtKeyGhost") },
+				});
+				setIcon(ghost.createDiv({ cls: "semlink-mt-config-keyghost-icon" }), "key");
+				ghost.createSpan({ cls: "semlink-mt-config-keyghost-text", text: t("mtKeyGhost") });
+				ghost.addEventListener("click", () => openKeyModal());
+			};
+			renderKeyRow();
 		}
 
-		// ── API 地址 节：协议下拉（行内右缘）+ Base 输入 + 模型端点预览 ──
-		const addrSection = configCol.createDiv({ cls: "semlink-mt-config-section" });
-		const addrLabelRow = addrSection.createDiv({ cls: "semlink-mt-config-labelrow" });
-		addrLabelRow.createDiv({ cls: "semlink-mt-config-label", text: t("editorEndpoint") });
-		const fmtSel = addrLabelRow.createEl("select", { cls: "semlink-mt-config-fmt" });
-		fmtSel.createEl("option", { value: "openai", text: "OpenAI" });
-		fmtSel.createEl("option", { value: "anthropic", text: "Anthropic" });
-		fmtSel.value = sel.live?.apiFormat ?? "openai";
-		const addrInput = addrSection.createEl("input", {
-			cls: "semlink-mt-config-input",
-			attr: { type: "text", spellcheck: "false" },
-		});
-		addrInput.value = sel.live?.apiBase ?? "";
-		const preview = addrSection.createDiv({ cls: "semlink-mt-config-preview" });
-		const syncPreview = (): void => {
-			const base = (sel.live?.apiBase ?? "").trim().replace(/\/+$/, "");
-			preview.setText(`${t("mtPreviewLabel")}: ${v1Base(base)}/models`);
-		};
-		syncPreview();
-		addrInput.addEventListener("input", syncPreview);
-		addrInput.addEventListener("change", () => {
-			const live = ensureLive(sel);
-			if (!live) return;
-			live.apiBase = addrInput.value.trim();
-			live.curated = true;
-			void plugin.saveSettings();
-			syncProviderPill(sel);
-		});
-		fmtSel.addEventListener("change", () => {
-			const live = ensureLive(sel);
-			if (!live) return;
-			live.apiFormat = fmtSel.value as ChatApiFormat;
-			void plugin.saveSettings();
-			syncPreview();
-		});
-
 		// ── 模型 节：计数徽标 + 行内搜索 + ＋添加；下方开关行列表 ──
-		const modelSection = configCol.createDiv({ cls: "semlink-mt-config-section" });
+		const modelSection = configCol.createDiv({ cls: "semlink-mt-config-section semlink-mt-config-models" });
 		const modelLabelRow = modelSection.createDiv({ cls: "semlink-mt-config-labelrow" });
 		modelLabelRow.createDiv({ cls: "semlink-mt-config-label", text: t("mtModelsTitle") });
 		const chip = modelLabelRow.createSpan({ cls: "semlink-mt-config-chip", text: String(sel.models.length) });
@@ -3016,10 +3249,14 @@ export function renderModelsTab(
 		const syncSearchUI = (): void => {
 			searchRow.toggleClass("has-value", !!searchInput.value);
 		};
-		modelLabelRow.createEl("button", {
-			cls: "semlink-btn-primary semlink-mt-add-model",
-			text: "＋ " + t("mtAddModel"),
-		}).addEventListener("click", () => {
+		// 添加模型钮（用户拍板"参考 Cherry 的 +"）：方形描边图标钮，
+		// 只有 + 号——语义靠 aria-label/tooltip 补
+		const addModelBtn = modelLabelRow.createEl("button", {
+			cls: "semlink-mt-add-model",
+			attr: { "aria-label": t("mtAddModel"), title: t("mtAddModel") },
+		});
+		setIcon(addModelBtn, "plus");
+		addModelBtn.addEventListener("click", () => {
 			new AddModelModal(plugin.app, {
 				title: t("mtAddModel"),
 				existingIds: sel.models.map((x) => x.id),
@@ -3103,16 +3340,11 @@ export function renderModelsTab(
 							updateCount();
 						},
 					}).open();
-				});				// 左侧移动滑块：拖动调整模型顺序。目录预览（还没添加实例的）
-				// 供应商也能拖——首次拖动时自动落一个实例（与齿轮行为一致），
-				// 顺序才有地方持久化。
+				});				// 行内拖动重排（把手槽位已移除——用户拍板"移动到左边"，
+				// 整行即把手）。目录预览（还没添加实例的）供应商也能拖——
+				// 首次拖动时自动落一个实例（与齿轮行为一致），顺序才有
+				// 地方持久化。
 				{
-					const grip = row.createDiv({
-						cls: "semlink-mt-provider-grip",
-						attr: { "aria-label": t("modelDrag"), title: t("modelDrag") },
-					});
-					setIcon(grip, "grip-vertical");
-					grip.addEventListener("click", (e) => e.stopPropagation());
 					row.draggable = true;
 					const onDragStart = (e: DragEvent): void => {
 						row.addClass("is-dragging");
@@ -3120,7 +3352,6 @@ export function renderModelsTab(
 						if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
 					};
 					row.addEventListener("dragstart", onDragStart);
-					grip.addEventListener("dragstart", onDragStart);
 					row.addEventListener("dragover", (e) => {
 						if (!e.dataTransfer?.types.includes("text/semlink-model")) return;
 						e.preventDefault();

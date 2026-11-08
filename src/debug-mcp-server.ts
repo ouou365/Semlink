@@ -95,6 +95,19 @@ const MEASURE_TOOL = {
 			repro: { type: "boolean", description: "Reproduce the guide-to-popout coffee-cup loss: open embed guide in sidebar, click the real popout button, probe the canvas over time." },
 			nav: { description: "\"settings\" | number 0-5: open the settings screen / switch detail page before measuring.", type: ["string", "number"] },
 			scrollPanel: { description: "Scroll the settings panel to this scrollTop before measuring (-1 = scroll to bottom). The license card occupies the first screen; toggles/buttons below the fold need this.", type: "number" },
+			scrollConfig: { description: "Scroll the Model tab config pane (.semlink-mt-config) to this scrollTop before measuring (-1 = scroll to bottom). The collapsed Advanced options section lives below the fold.", type: "number" },
+			advClick: { description: "Click the Advanced options header (expands the collapsed section) after nav, before scrolling.", type: "boolean" },
+			keyEditClick: { description: "Click the pencil button in the read-only API Key pill row (switches to the edit input mode).", type: "boolean" },
+			keyProbeFill: { description: "Fill the API Key input (input event; with keyProbeCommit also a change event which saves).", type: "boolean" },
+			keyProbeValue: { description: "Custom value for keyProbeFill (default sk-test-verification; pass empty string plus keyProbeCommit to clear the saved key).", type: "string" },
+			keyProbeCommit: { description: "Dispatch a change event after fill (commits the value like blur-save does).", type: "boolean" },
+			keyKebabClick: { description: "Click the kebab button in the API Key row (opens the Test connection / Clear settings menu).", type: "boolean" },
+			fmtClick: { description: "Click the API Type dropdown trigger (opens the Obsidian menu; use shot right after to capture it).", type: "boolean" },
+			fmtPick: { description: "Menu item text to pick in the API Type dropdown (e.g. Anthropic) — verifies selection, label update and endpoint recompute.", type: "string" },
+			pickProvider: { description: "Click the visible provider row whose name contains this text (switches the config pane to that provider).", type: "string" },
+			keySaveClick: { description: "Click the Save button in the API Key row (saves the value and collapses back to the read-only pill).", type: "boolean" },
+			drillClick: { description: "Click the first visible provider row (drills into the config pane on narrow containers).", type: "boolean" },
+			backClick: { description: "Click the Providers back link (returns to the provider list from the drilled config pane).", type: "boolean" },
 		},
 		required: [],
 	},
@@ -253,7 +266,7 @@ export class DebugMcpServer {
 						if (!jp || !(jl > 0)) throw new Error("jump needs path and a positive line");
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runJump?.(jp, jl)) ?? { error: "no jump runner" }, null, 2) }] };
 					} else if (params.name === "measure") {
-							result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
+							result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
 						} else if (params.name === "shot") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runShot?.(params.arguments as { target?: string | number; resize?: { index?: number; width: number; height: number } } | undefined)) ?? { error: "no shot runner" }, null, 2) }] };
 						} else {

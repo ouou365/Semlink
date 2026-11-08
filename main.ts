@@ -696,7 +696,7 @@ export default class SmartVaultPlugin extends Plugin {
 		return { mode, resolved, scrollTop: Math.round(scroller?.scrollTop ?? -1), scrollHeight: scroller?.scrollHeight ?? -1, expectedLine: line, totalLines, file: v.file?.path };
 	}
 
-	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number }): Promise<unknown> {
+	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean }): Promise<unknown> {
 		// 可选：先把搜索视图移入独立弹窗再量（弹窗实例的布局与主窗不同）。
 		// width/height 自定弹窗尺寸（≤480 可测窄幅断点）；不传用形态默认值。
 		// 对已在弹窗里的 leaf 再次 moveLeafToPopout = 按新尺寸重建弹窗，
@@ -794,6 +794,341 @@ export default class SmartVaultPlugin extends Plugin {
 					(navDbg as Record<string, unknown>).scrollTopAfter = Math.round(p.scrollTop);
 				}
 				await new Promise((r) => window.setTimeout(r, 250));
+			}
+			// backClick：窄幅钻入态点"‹ Providers"返回链接，回到供应商
+			// 列表（验收列表滚动条位置等列表态布局）。
+			if (opts?.backClick) {
+				const backLeaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+				for (const leaf of backLeaves) {
+					const el = ((leaf as unknown as { containerEl?: HTMLElement }).containerEl
+						?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+					const bDoc = el?.ownerDocument;
+					if (!bDoc) continue;
+					const back = Array.from(bDoc.querySelectorAll<HTMLElement>(".semlink-mt-back"))
+						.find((r) => r.offsetParent !== null);
+					if (back) {
+						back.click();
+						break;
+					}
+				}
+				await new Promise((r) => window.setTimeout(r, 400));
+			}
+			// drillClick：窄幅点第一个可见供应商行，钻入配置栏（验收窄幅
+				// Key 换行等钻入态布局；宽幅点行 = 切右栏，同样无害）。
+				if (opts?.drillClick) {
+					const drillLeaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+					for (const leaf of drillLeaves) {
+						const el = ((leaf as unknown as { containerEl?: HTMLElement }).containerEl
+							?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+						const dDoc = el?.ownerDocument;
+						if (!dDoc) continue;
+						const row = Array.from(dDoc.querySelectorAll<HTMLElement>(".semlink-mt-provider"))
+							.find((r) => r.offsetParent !== null);
+						if (row) {
+							row.click();
+							break;
+						}
+					}
+					await new Promise((r) => window.setTimeout(r, 400));
+				}
+				// pickProvider：按名称点可见供应商行（切右栏到指定供应商——
+				// 验证不同配置状态下的联动显隐）
+				if (opts?.pickProvider) {
+					const pickLeaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+					let picked: string | null = null;
+					for (const leaf of pickLeaves) {
+						const el = ((leaf as unknown as { containerEl?: HTMLElement }).containerEl
+							?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+						const dDoc = el?.ownerDocument;
+						if (!dDoc) continue;
+						const row = Array.from(dDoc.querySelectorAll<HTMLElement>(".semlink-mt-provider"))
+							.find((r) => r.offsetParent !== null && (r.textContent ?? "").includes(opts.pickProvider as string));
+						if (row) {
+							row.click();
+							picked = opts.pickProvider;
+							break;
+						}
+					}
+					(navDbg ??= {}).pickedProvider = picked;
+					await new Promise((r) => window.setTimeout(r, 400));
+				}
+			// scrollConfig：滚 Model 页右栏配置表单的内部滚动容器（-1 = 滚到底）。
+			// "高级选项"节在折叠线以下，收起态/展开态验收靠它。侧栏/弹窗/
+			// 主区可能并存多个实例，遍历全部视图文档逐一滚动（隐藏实例的
+			// scrollTop 赋值是空操作，无害）。advClick = 顺手点开高级选项头
+			// （先点开再滚到底，展开的身体完整入镜）。
+			if (typeof opts?.scrollConfig === "number") {
+				const cfgLeaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+				let cfgCount = 0;
+				const advProbe: Array<Record<string, unknown>> = [];
+				for (const leaf of cfgLeaves) {
+					const el = ((leaf as unknown as { containerEl?: HTMLElement }).containerEl
+						?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+					const cfgDoc = el?.ownerDocument;
+					if (!cfgDoc) continue;
+					const head = cfgDoc.querySelector<HTMLElement>(".semlink-mt-config-advhead");
+					const body = cfgDoc.querySelector<HTMLElement>(".semlink-mt-config-advbody");
+					// 只取可见实例：隐藏配置栏（窄幅未钻入 display:none）的
+					// headTop 恒为 0，click/探针只会污染数据
+					if (head && head.offsetParent !== null) {
+						const r = head.getBoundingClientRect();
+						advProbe.push({
+							__doc: cfgDoc,
+							text: (head.textContent ?? "").slice(0, 24),
+							bodyHidden: body ? body.hasClass("semlink-hidden") : null,
+							headTop: Math.round(r.top),
+							// 点击后回读 + 配置栏子节顺序（验收"Key 下高级选项"位次）
+							afterClickText: (head.textContent ?? "").slice(0, 24),
+							afterClickBodyHidden: body ? body.hasClass("semlink-hidden") : null,
+							sections: body && body.parentElement
+								? Array.from(body.parentElement.children).map((c) =>
+									(c.className || "").toString().replace("semlink-mt-config-", "").slice(0, 30))
+								: null,
+						});
+						if (opts.advClick) head.click();
+						advProbe[advProbe.length - 1].afterClickText = (head.textContent ?? "").slice(0, 24);
+						advProbe[advProbe.length - 1].afterClickBodyHidden = body ? body.hasClass("semlink-hidden") : null;
+						// fmtClick：点自绘 API Type 下拉触发钮（弹 Obsidian Menu，
+						// 留给截图取证）；fmtPick 传菜单项文字则顺手点选（验证
+						// 选中→落盘→触发钮文案/Endpoint 联动，随后可再点选回原值）
+						if (opts.fmtClick || opts.fmtPick) {
+							const sb = cfgDoc.querySelector<HTMLElement>(
+								".semlink-mt-config-selectbtn",
+							);
+							if (sb && sb.offsetParent !== null) {
+								const fp: Record<string, unknown> = {
+									before: (sb.querySelector(".semlink-mt-config-selectbtn-label")?.textContent ?? "").slice(0, 20),
+								};
+								// HTMLElement.click() 的合成事件无坐标无 view——Obsidian
+								// Menu.showAtMouseEvent 靠 clientX/Y 定位、按事件归属定
+								// 弹层窗体。手工派发带真实几何与弹窗 view 的 MouseEvent。
+								// dispatchEvent 里监听器的异常不会回传调用方——挂 error
+								// 钩子取证（弹窗上下文里 Menu 真炸了也能看见）。
+								const sbR = sb.getBoundingClientRect();
+								fp.rect = { l: Math.round(sbR.left), t: Math.round(sbR.top), w: Math.round(sbR.width), h: Math.round(sbR.height) };
+								const w2 = cfgDoc.defaultView as Window | null;
+								const onErr = (ev: Event): void => {
+									fp.handlerError = (ev as ErrorEvent).message?.slice(0, 160) ?? "error-event";
+								};
+								w2?.addEventListener("error", onErr);
+								sb.dispatchEvent(new MouseEvent("click", {
+									bubbles: true,
+									cancelable: true,
+									clientX: sbR.left + sbR.width / 2,
+									clientY: sbR.top + sbR.height / 2,
+									view: w2 ?? undefined,
+								}) as MouseEvent);
+								w2?.removeEventListener("error", onErr);
+								// 菜单容器可能挂在本窗 body 也可能挂到主窗（程序化
+								// click 的 activeWindow 归属），两处都找
+								const readMenus = (): Array<{ where: string; items: string[] }> => {
+									const out: Array<{ where: string; items: string[] }> = [];
+									for (const [where, doc] of [["cfg", cfgDoc], ["main", window.document]] as Array<[string, Document]>) {
+										const items = Array.from(doc.querySelectorAll<HTMLElement>(".menu .menu-item"))
+											.map((mi) => (mi.textContent ?? "").trim().slice(0, 20));
+										if (items.length > 0) out.push({ where, items });
+									}
+									return out;
+								};
+								fp.menus = readMenus();
+								// 对照组：头部 kebab（先于本次改动就存在的 Menu 调用）
+								// 同样的合成事件——若同样打不开，即证明是自动化局限
+								const kebab = cfgDoc.querySelector<HTMLElement>(".semlink-mt-config-kebab");
+								if (kebab) {
+									const kbR = kebab.getBoundingClientRect();
+									kebab.dispatchEvent(new MouseEvent("click", {
+										bubbles: true,
+										cancelable: true,
+										clientX: kbR.left + kbR.width / 2,
+										clientY: kbR.top + kbR.height / 2,
+										view: w2 ?? undefined,
+									}) as MouseEvent);
+									fp.kebabMenus = readMenus();
+								}
+								const pickFrom = (want: string): HTMLElement | null => {
+									for (const doc of [cfgDoc, window.document]) {
+										const hit = Array.from(doc.querySelectorAll<HTMLElement>(".menu .menu-item"))
+											.find((mi) => (mi.textContent ?? "").includes(want));
+										if (hit) return hit;
+									}
+									return null;
+								};
+								const item = opts.fmtPick ? pickFrom(opts.fmtPick) : null;
+								if (item) {
+									item.click();
+									fp.picked = opts.fmtPick;
+									fp.after = (sb.querySelector(".semlink-mt-config-selectbtn-label")?.textContent ?? "").slice(0, 20);
+									const ep = cfgDoc.querySelector<HTMLInputElement>(".semlink-mt-config-advbody .semlink-mt-config-input");
+									fp.endpoint = ep ? ep.value.slice(0, 60) : null;
+								}
+								void window.setTimeout(() => {
+									fp.delayedMenus = readMenus();
+								}, 300);
+								(navDbg ??= {}).fmtProbe = fp;
+							}
+						}
+					}
+					for (const c of Array.from(cfgDoc.querySelectorAll<HTMLElement>(".semlink-mt-config"))) {
+						// 隐藏实例（display:none）跳过：scrollTop 赋值是空操作
+						if (c.offsetParent === null && c.clientHeight === 0) continue;
+						c.scrollTop = opts.scrollConfig < 0 ? c.scrollHeight : opts.scrollConfig;
+						cfgCount++;
+						// sticky 取证：滚动后回读头部坐标——吸附时 headTop 恒定
+						// （≈窗格顶），未吸附则随滚动上移出屏。本叶 push 过条目
+						// 才能写（高级选项整节隐藏时 head 被 offsetParent 过滤，
+						// 无条目——写 len-1 会炸到上一叶或 undefined）
+						if (head && advProbe.length > 0) {
+							const r2 = head.getBoundingClientRect();
+							advProbe[advProbe.length - 1].scrollTopAfter = Math.round(c.scrollTop);
+							advProbe[advProbe.length - 1].headTopAfterScroll = Math.round(r2.top);
+						}
+					}
+				}
+				(navDbg ??= {}).configCount = cfgCount;
+				(navDbg ??= {}).advProbe = advProbe;
+				// 粘性头几何：钉住位置 vs 滚动容器/面板顶（"顶部透出内容"取证）
+				(navDbg ??= {}).headGeo = (() => {
+					const heads: Array<Record<string, unknown>> = [];
+					for (const leaf of cfgLeaves) {
+						const el = ((leaf as unknown as { containerEl?: HTMLElement }).containerEl
+							?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+						const cfgDoc = el?.ownerDocument;
+						if (!cfgDoc) continue;
+						const head = cfgDoc.querySelector<HTMLElement>(".semlink-mt-config-head");
+						const cfg = head?.parentElement as HTMLElement | null;
+						if (!head || !cfg) continue;
+						// 返回行取证：单列钻入态应显示 ‹ 箭头行
+						const back = cfg.querySelector<HTMLElement>(".semlink-mt-back");
+						const backR = back?.getBoundingClientRect();
+						// 模型行溢出取证：逃逸行是 rows 卡子元素还是卡外兄弟
+						const rowsCard = cfg.querySelector<HTMLElement>(".semlink-mt-rows");
+						const rowsSec = rowsCard?.parentElement as HTMLElement | null;
+						const rowsGeo = rowsCard && rowsSec ? {
+							cardRect: (() => { const r = rowsCard.getBoundingClientRect(); return { t: Math.round(r.top), b: Math.round(r.bottom), h: Math.round(r.height) }; })(),
+							secRect: (() => { const r = rowsSec.getBoundingClientRect(); return { t: Math.round(r.top), b: Math.round(r.bottom), h: Math.round(r.height) }; })(),
+							cardChildren: rowsCard.children.length,
+							secChildren: Array.from(rowsSec.children).map((c) =>
+								(c.className || c.tagName).toString().replace("semlink-mt-config-", "").slice(0, 22)),
+							rowsOverflowY: rowsCard.ownerDocument.defaultView?.getComputedStyle(rowsCard).overflowY ?? null,
+							secAfterCard: Array.from(rowsSec.children).slice(Array.from(rowsSec.children).indexOf(rowsCard) + 1).length,
+						} : null;
+						const hcs = cfgDoc.defaultView?.getComputedStyle(head);
+						const hr = head.getBoundingClientRect();
+						const cr = cfg.getBoundingClientRect();
+						const panel = head.closest(".semlink-settings-panel");
+						const pr = panel?.getBoundingClientRect();
+						heads.push({
+							rowsGeo,
+							backRow: back
+								? {
+									text: (back.textContent ?? "").slice(0, 20),
+									hidden: back.offsetParent === null,
+									w: backR ? Math.round(backR.width) : null,
+									h: backR ? Math.round(backR.height) : null,
+									top: backR ? Math.round(backR.top) : null,
+								}
+								: null,
+							visible: head.offsetParent !== null,
+							position: hcs?.position ?? null,
+							top: hcs?.top ?? null,
+							zIndex: hcs?.zIndex ?? null,
+							bg: hcs?.background.slice(0, 60) ?? null,
+							headTop: Math.round(hr.top),
+							headBottom: Math.round(hr.bottom),
+							cfgTop: Math.round(cr.top),
+							cfgScrollTop: Math.round(cfg.scrollTop),
+							cfgOverflowY: cfg.ownerDocument.defaultView?.getComputedStyle(cfg).overflowY ?? null,
+							panelTop: pr ? Math.round(pr.top) : null,
+							panelScrollTop: panel ? Math.round(panel.scrollTop) : null,
+						});
+					}
+					return heads;
+				})();
+				// 异步复检：500ms 后再读一次（捉同步块之后才发生的重渲染）
+				await new Promise((r) => window.setTimeout(r, 500));
+				for (const p of Array.from((navDbg as Record<string, unknown>).advProbe as Array<Record<string, unknown>>)) {
+					const wDoc = (p as { __doc?: Document }).__doc ?? window.document;
+					const h2 = wDoc.querySelector<HTMLElement>(".semlink-mt-config-advhead");
+					const b2 = wDoc.querySelector<HTMLElement>(".semlink-mt-config-advbody");
+					const c2 = wDoc.querySelector<HTMLElement>(".semlink-mt-config");
+					p.delayedText = h2 ? (h2.textContent ?? "").slice(0, 24) : null;
+					p.delayedBodyHidden = b2 ? b2.hasClass("semlink-hidden") : null;
+					p.delayedScrollTop = c2 ? Math.round(c2.scrollTop) : null;
+					p.delayedHeadTop = h2 ? Math.round(h2.getBoundingClientRect().top) : null;
+				}
+				// keyProbe：Key 行双态取证（Cherry 式只读胶囊 ↔ 编辑输入框）。
+					// keyEditClick 点只读态铅笔切编辑态；keyProbeFill 往输入框塞
+					// 假值派发 input（不走 change——不落盘）；keySaveClick 点 Save
+					// 落盘并收回只读态。每步读一次行子元素清单。
+					const keyProbe: Array<Record<string, unknown>> = [];
+					for (const leaf of cfgLeaves) {
+						const el = ((leaf as unknown as { containerEl?: HTMLElement }).containerEl
+							?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+						const cfgDoc = el?.ownerDocument;
+						if (!cfgDoc) continue;
+						const kr = cfgDoc.querySelector<HTMLElement>(".semlink-mt-config-keyrow");
+						if (!kr) continue;
+						const inputOf = () => kr.querySelector<HTMLInputElement>("input.semlink-mt-config-input");
+						const read = (note: string) => {
+							const ki = inputOf();
+							keyProbe.push({
+								note,
+								keyLen: ki ? ki.value.length : null,
+								mode: kr.querySelector(".semlink-mt-config-keypill") ? "readonly-pill" : (ki ? "edit-input" : "?"),
+								// 取钥外链图标在行内是否存在（配置完成后应隐藏）
+								linkIcon: !!kr.querySelector(".semlink-mt-config-link"),
+								// 密钥行的子元素清单（验收眼睛按钮确已移除）
+								rowChildren: Array.from(kr.children).map((c) =>
+									(c.className || c.tagName).toString().replace("semlink-mt-config-", "").slice(0, 24)),
+								// 胶囊几何取证：内嵌动作钮是否真在胶囊盒内
+								pillGeo: (() => {
+									const pill = kr.querySelector<HTMLElement>(".semlink-mt-config-keypill");
+									if (!pill) return null;
+									const pcs = pill.ownerDocument.defaultView?.getComputedStyle(pill);
+									const acts = pill.querySelector<HTMLElement>(".semlink-mt-config-keypill-actions");
+									const pr = pill.getBoundingClientRect();
+									return {
+										display: pcs?.display ?? null,
+										flexWrap: pcs?.flexWrap ?? null,
+										pillW: Math.round(pr.width),
+										pillRight: Math.round(pr.right),
+										hasActions: !!acts,
+										actsW: acts ? Math.round(acts.getBoundingClientRect().width) : null,
+										actsRight: acts ? Math.round(acts.getBoundingClientRect().right) : null,
+									};
+								})(),
+								statusText: kr.parentElement?.querySelector<HTMLElement>(".semlink-mt-config-status")?.textContent ?? null,
+							});
+						};
+						read("initial");
+						if (opts.keyEditClick) {
+							kr.querySelector<HTMLElement>(".semlink-mt-config-icon-btn")?.click();
+							read("after-edit-click");
+						}
+						if (opts.keyProbeFill) {
+							const ki = inputOf();
+							if (ki) {
+								ki.value = opts.keyProbeValue ?? "sk-test-verification";
+								ki.dispatchEvent(new Event("input"));
+								// keyProbeCommit：走 change 提交（编辑态的失焦保存同
+								// 路径）——探针收尾用它把假 Key 清回真实状态
+								if (opts.keyProbeCommit) ki.dispatchEvent(new Event("change"));
+							}
+							read("after-fill");
+						}
+						if (opts.keyKebabClick) {
+							// 竖点（行内第二个 icon-btn）：开菜单不点项，留给截图取证
+							const btns = kr.querySelectorAll<HTMLElement>(".semlink-mt-config-icon-btn");
+							btns[btns.length - 1]?.click();
+							read("after-kebab-click");
+						}
+						if (opts.keySaveClick) {
+							kr.querySelector<HTMLButtonElement>(".semlink-mt-config-detect")?.click();
+							read("after-save-click");
+						}
+					}
+					(navDbg ??= {}).keyProbe = keyProbe;
+					await new Promise((r) => window.setTimeout(r, 250));
 			}
 		}
 		// 复现「点弹窗按钮后咖啡杯丢失」：进入嵌入引导 → 点真实弹窗按钮 →
@@ -1157,15 +1492,41 @@ export default class SmartVaultPlugin extends Plugin {
 								if (!tgl) return null;
 								const cs = getComputedStyle(tgl);
 								const after = getComputedStyle(tgl, "::after");
+								const tr = tgl.getBoundingClientRect();
+								// 圆钮实际渲染框：Range 包住 ::after 量不到——改用
+								// knob 中心列扫描太重，这里报 computed top/left +
+								// transform，配合容器 rect 可推实际几何。
 								return {
-									w: Math.round(tgl.getBoundingClientRect().width),
-									h: Math.round(tgl.getBoundingClientRect().height),
+									w: Math.round(tr.width),
+									h: Math.round(tr.height),
+									top: Math.round(tr.top),
 									width: cs.width,
 									height: cs.height,
 									display: cs.display,
 									flexShrink: cs.flexShrink,
 									afterW: after.width,
 									afterH: after.height,
+									afterTop: after.top,
+									afterLeft: after.left,
+									afterMargin: after.margin,
+									afterPosition: after.position,
+									afterTransform: after.transform,
+								};
+							})(),
+							// 模型行开关同规格取证（51×31 Cupertino 基线）
+							rowToggle: (() => {
+								const tgl = root.querySelector(
+									".semlink-mt-rows .checkbox-container, .semlink-mt-config .checkbox-container:not(.semlink-mt-config-master *)",
+								) as HTMLElement | null;
+								if (!tgl) return null;
+								const after = getComputedStyle(tgl, "::after");
+								const tr = tgl.getBoundingClientRect();
+								return {
+									w: Math.round(tr.width),
+									h: Math.round(tr.height),
+									afterW: after.width,
+									afterH: after.height,
+									afterTop: after.top,
 									afterTransform: after.transform,
 								};
 							})(),
@@ -1203,7 +1564,92 @@ export default class SmartVaultPlugin extends Plugin {
 									mtTrace: ((root.querySelector(".semlink-settings-panel") as unknown as { __mtTrace?: string[] } | null)?.__mtTrace ?? []).slice(-10),
 									models: h(models),
 									rows: h((root.querySelector(".semlink-mt-rows") as HTMLElement | null)),
-									chain,
+								chain,
+								};
+							})(),
+							// 供应商列表宽度探针：搜索胶囊 vs 行盒的四缘坐标与滚动条
+							// 占位取证（margin/padding/gutter/滚动条宽度）——"行比
+							// 搜索框窄"类问题一测便知差在哪个缘。
+							provBox: (() => {
+								const card = root.querySelector(".semlink-mt-providers") as HTMLElement | null;
+								const search = root.querySelector(".semlink-mt-prov-search") as HTMLElement | null;
+								const list = root.querySelector(".semlink-mt-provider-list") as HTMLElement | null;
+								const row = root.querySelector(".semlink-mt-provider") as HTMLElement | null;
+								if (!card || !search || !list || !row) return null;
+								const box = (el: HTMLElement) => {
+									const r = el.getBoundingClientRect();
+									return { left: Math.round(r.left), right: Math.round(r.right), w: Math.round(r.width) };
+								};
+								const cs = w.getComputedStyle(list);
+								// 全样式表扫 ::-webkit-scrollbar* 规则：谁在场上、各声明什么
+								const sbRules: Array<Record<string, unknown>> = [];
+								for (const sheet of Array.from(w.document.styleSheets)) {
+									let rules: CSSRuleList | undefined;
+									try { rules = (sheet as CSSStyleSheet).cssRules as CSSRuleList; } catch { continue; }
+									if (!rules) continue;
+									const walkRules = (rs: CSSRuleList): void => {
+										for (let i = 0; i < rs.length; i++) {
+											const r = rs[i] as CSSRule;
+											const grp = r as CSSGroupingRule;
+											if (grp.cssRules && grp.cssRules.length > 0) {
+												walkRules(grp.cssRules);
+											}
+											const sel = (r as CSSStyleRule).selectorText ?? "";
+											if (sel.includes("::-webkit-scrollbar") && sel.includes("mt-provider-list")) {
+												sbRules.push({
+													sel: sel.slice(0, 120),
+													css: (r as CSSStyleRule).style?.cssText.slice(0, 160),
+													href: sheet.href?.split("/").pop() ?? "(inline)",
+												});
+											}
+										}
+									};
+									walkRules(rules);
+								}
+								return {
+									card: box(card),
+									search: box(search),
+									list: box(list),
+									row: box(row),
+									listClientW: list.clientWidth,
+									listOffsetW: list.offsetWidth,
+									// offsetWidth - clientWidth = 滚动条占位（>0 即经典滚动条在场）
+									scrollbarW: list.offsetWidth - list.clientWidth,
+									marginRight: cs.marginRight,
+									paddingRight: cs.paddingRight,
+									scrollbarGutter: cs.scrollbarGutter,
+									stdScrollbarWidth: cs.scrollbarWidth,
+									stdScrollbarColor: cs.scrollbarColor,
+									matchesSel: list.matches(".smart-vault-settings .semlink-mt-provider-list"),
+									sbRules,
+									// 选中行 computed 背景：淡紫→灰改动的落点取证
+									activeRowBg: (() => {
+										const act = root.querySelector(".semlink-mt-provider.is-active") as HTMLElement | null;
+										if (!act) return null;
+										const acs = w.getComputedStyle(act);
+										return {
+											backgroundColor: acs.backgroundColor,
+											bgVarActive: acs.getPropertyValue("--sl-active").trim(),
+											bgVarFill: acs.getPropertyValue("--sl-fill").trim(),
+											bgVarHover: acs.getPropertyValue("--background-modifier-hover").trim(),
+											reducedTransparency: (w as WinLike & { matchMedia?: (q: string) => { matches: boolean } }).matchMedia?.("(prefers-reduced-transparency: reduce)")?.matches ?? false,
+										};
+										})(),
+										// 选中行子元素宽度表：行内竖点加入后名称是否被挤截断
+										rowKids: (() => {
+											const act = root.querySelector(".semlink-mt-provider.is-active") as HTMLElement | null;
+											if (!act) return null;
+											return {
+												rowW: Math.round(act.getBoundingClientRect().width),
+												nameTruncated: (act.querySelector(".semlink-mt-provider-name") as HTMLElement | null)
+													? (act.querySelector(".semlink-mt-provider-name") as HTMLElement).scrollWidth > (act.querySelector(".semlink-mt-provider-name") as HTMLElement).clientWidth
+													: null,
+												kids: Array.from(act.children).map((c) => ({
+													cls: (c.className || c.tagName).toString().replace("semlink-mt-provider-", "").slice(0, 16),
+													w: Math.round(c.getBoundingClientRect().width),
+												})),
+											};
+										})(),
 								};
 							})(),
 						};
@@ -1299,6 +1745,7 @@ export default class SmartVaultPlugin extends Plugin {
 				settingsRootW: Math.round(rootW),
 				breakpoint: bp,
 				settingsScreenActive: !!doc.querySelector(".semlink-search-view.semlink-settings-active"),
+				viewClasses: (el.className || "").toString().slice(0, 120),
 				// 屏幕切换 breadcrumbs：设置屏幽灵自愈路径的取证（谁把它关了）
 				trace: (leaf.view as unknown as { screenTrace?: string[] }).screenTrace?.slice(-25) ?? null,
 			});

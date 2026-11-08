@@ -24,6 +24,26 @@ export type { SettingsTab };
  *  按钮的「索引中…」运行态共用（idle/completed 之外的写阶段）。 */
 const RAG_RUNNING_PHASES: ReadonlySet<string> = new Set(["scanning", "chunking", "embedding", "building_index"]);
 
+/** 折叠体展开后把新增内容滚进可视区：头行刚被点击必然可见，用户看到
+ *  「没反应」往往是因为内容全在折叠线以下——只补滚溢出滚动容器底缘的
+ *  部分（内容不足一屏时贴合底缘，远超一屏时钉住头行露出首屏）。
+ *  滚动层从头行向上找最近的 overflow auto/scroll（设置屏是
+ *  .semlink-settings-panel，原生设置弹窗是 Obsidian 的内容列）。 */
+function revealCollapsedBody(head: HTMLElement, body: HTMLElement): void {
+	for (let p = head.parentElement; p; p = p.parentElement) {
+		const oy = getComputedStyle(p).overflowY;
+		if (oy !== "auto" && oy !== "scroll") continue;
+		// 第一处滚动层即裁剪边界：它没溢出说明内容本来就全可见，直接收工
+		const overflow = body.getBoundingClientRect().bottom - p.getBoundingClientRect().bottom;
+		if (overflow <= 0) return;
+		const headTop = head.getBoundingClientRect().top - p.getBoundingClientRect().top + p.scrollTop;
+		const target = Math.min(p.scrollTop + overflow, headTop);
+		const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		p.scrollTo({ top: target, behavior: smooth ? "smooth" : "auto" });
+		return;
+	}
+}
+
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
 	// 默认落第一项 Model（菜单顺序用户拍板：Model 第一、Pro 最后一）。
@@ -558,7 +578,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const totalNotes = (): number => Math.max(0, this.plugin.progress.current.totalNotes);
 
 		containerEl.createDiv({ cls: "semlink-card-title", text: t("ragGroupStatus") });
-		const card = containerEl.createDiv({ cls: "semlink-card semlink-rag-status" });
+		// 状态拆为左右两张等高卡：索引卡（含 Auto Index）/ 嵌入卡（含 Auto-embed）；
+		// 窄容器（≤560px）退化为单列堆叠。
+		const statusGrid = containerEl.createDiv({ cls: "semlink-rag-status-grid" });
 
 		// ── 块骨架：hero（标题 + spinner + 大数字）→ 进度条（数值行/开关由调用处按序追加） ──
 		interface RagBlock {
@@ -568,7 +590,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			spinEl: HTMLElement;
 		}
 		const makeBlock = (title: string): RagBlock => {
-			const block = card.createDiv({ cls: "semlink-rag-block" });
+			const block = statusGrid.createDiv({ cls: "semlink-card semlink-rag-status" }).createDiv({ cls: "semlink-rag-block" });
 			const hero = block.createDiv({ cls: "semlink-rag-hero" });
 			const heroLeft = hero.createDiv({ cls: "semlink-rag-hero-left" });
 			heroLeft.createSpan({ cls: "semlink-rag-hero-title", text: title });
@@ -584,12 +606,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			r.createSpan({ cls: "semlink-rag-stat-label", text: label });
 			return r.createSpan({ cls: "semlink-rag-stat-value", text: "—" });
 		};
-		// 末行自动开关行（带 desc）
-		const toggleRow = (host: HTMLElement, label: string, desc: string, initial: boolean, onChange: (v: boolean) => Promise<void>): void => {
+		// 末行自动开关行（单行：仅标题 + 开关）
+		const toggleRow = (host: HTMLElement, label: string, initial: boolean, onChange: (v: boolean) => Promise<void>): void => {
 			const row = host.createDiv({ cls: "semlink-row semlink-rag-toggle-row" });
-			const labelEl = row.createDiv({ cls: "semlink-row-label" });
-			labelEl.createDiv({ cls: "semlink-row-title", text: label });
-			labelEl.createDiv({ cls: "semlink-row-desc", text: desc });
+			row.createDiv({ cls: "semlink-row-label semlink-rag-toggle-label" }).createDiv({ cls: "semlink-row-title", text: label });
 			new ToggleComponent(row.createDiv({ cls: "semlink-row-control" }))
 				.setValue(initial)
 				.onChange((v) => onChange(v));
@@ -600,7 +620,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const awaitingEl = statRow(indexBlock.block, t("awaitingChunking"));
 		const chunkedEl = statRow(indexBlock.block, t("chunkedNotes"));
 		// 索引总开关：关 = 停止文件监听并暂停当前索引；开 = 恢复监听并继续索引。
-		toggleRow(indexBlock.block, t("autoIndex"), t("ragAutoIndexDesc"), this.plugin.settings.autoIndex, async (v) => {
+		toggleRow(indexBlock.block, t("autoIndex"), this.plugin.settings.autoIndex, async (v) => {
 			this.plugin.settings.autoIndex = v;
 			this.plugin.watcher.setAutoIndex(v);
 			await this.plugin.saveSettings();
@@ -613,7 +633,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const vectorizedEl = statRow(embedBlock.block, t("vectorizedChunks"));
 		// 自动嵌入总开关。调度器实时读取该设置：关 = 在跑的索引继续分块、
 		// 后续笔记不再调嵌入 API；开 = 后续笔记恢复嵌入。
-		toggleRow(embedBlock.block, t("autoEmbed"), t("ragAutoEmbedDesc"), this.plugin.settings.autoEmbed ?? true, async (v) => {
+		toggleRow(embedBlock.block, t("autoEmbed"), this.plugin.settings.autoEmbed ?? true, async (v) => {
 			this.plugin.settings.autoEmbed = v;
 			await this.plugin.saveSettings();
 			this.refreshPreservingScroll();
@@ -798,6 +818,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			if (!open) {
 				advBody.addClass("semlink-anim");
 				advBody.addEventListener("animationend", () => advBody.removeClass("semlink-anim"), { once: true });
+				revealCollapsedBody(advHead, advBody);
 			}
 		});
 
@@ -880,8 +901,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			});
 		};
 
-		// 页首导语（一句话讲清这页是干嘛的）。
-		containerEl.createDiv({ cls: "semlink-mcp-lede", text: t("mcpTabLede") });
 
 		// ── 组「内置服务」：semlink 一张卡四行 ──
 		containerEl.createDiv({ cls: "semlink-card-title", text: t("mcpGroupBuiltIn") });
@@ -1056,6 +1075,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			if (!open) {
 				debugBody.addClass("semlink-anim");
 				debugBody.addEventListener("animationend", () => debugBody.removeClass("semlink-anim"), { once: true });
+				revealCollapsedBody(debugHead, debugBody);
 			}
 		});
 
@@ -1096,10 +1116,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const server = this.plugin.shareServer;
 		// 按共享时间倒序（最新的在最上面）。
 		const shares = [...server.listShares()].sort((a, b) => b.sharedAt - a.sharedAt);
-
-		// 页标题由 renderPanel 统一提供；这里只补说明句
-		// （「IP 变化地址会变」的信任信息从弹窗上浮到页面）。
-		containerEl.createDiv({ cls: "semlink-share-lede", text: t("shareHint") });
 
 		if (shares.length === 0) {
 			// 空状态（契约 §3.6）：图标 + 一句话，纵向居中于卡内。
