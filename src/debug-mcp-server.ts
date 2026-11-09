@@ -106,6 +106,11 @@ const MEASURE_TOOL = {
 			fmtPick: { description: "Menu item text to pick in the API Type dropdown (e.g. Anthropic) — verifies selection, label update and endpoint recompute.", type: "string" },
 			pickProvider: { description: "Click the visible provider row whose name contains this text (switches the config pane to that provider).", type: "string" },
 			keySaveClick: { description: "Click the Save button in the API Key row (saves the value and collapses back to the read-only pill).", type: "boolean" },
+			keyModalProbe: { description: "Inside the open Key modal: fill an invalid key, click Test & Save, wait for the failure, and report input/status gap geometry (modal stays open).", type: "boolean" },
+			keyModalClose: { description: "Click the visible Cancel/Close button of any open Key modal.", type: "boolean" },
+			epClick: { description: "Click the visible Endpoint row in the config pane (opens the variant picker for series providers).", type: "boolean" },
+			variantPick: { description: "Click the variant row whose name contains this text in the open variant picker modal.", type: "string" },
+			epPick: { description: "Click the variant row whose name contains this text in the modal opened by epClick.", type: "string" },
 			drillClick: { description: "Click the first visible provider row (drills into the config pane on narrow containers).", type: "boolean" },
 			backClick: { description: "Click the Providers back link (returns to the provider list from the drilled config pane).", type: "boolean" },
 		},
@@ -266,7 +271,7 @@ export class DebugMcpServer {
 						if (!jp || !(jl > 0)) throw new Error("jump needs path and a positive line");
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runJump?.(jp, jl)) ?? { error: "no jump runner" }, null, 2) }] };
 					} else if (params.name === "measure") {
-							result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
+							result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
 						} else if (params.name === "shot") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runShot?.(params.arguments as { target?: string | number; resize?: { index?: number; width: number; height: number } } | undefined)) ?? { error: "no shot runner" }, null, 2) }] };
 						} else {

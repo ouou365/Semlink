@@ -696,7 +696,7 @@ export default class SmartVaultPlugin extends Plugin {
 		return { mode, resolved, scrollTop: Math.round(scroller?.scrollTop ?? -1), scrollHeight: scroller?.scrollHeight ?? -1, expectedLine: line, totalLines, file: v.file?.path };
 	}
 
-	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean }): Promise<unknown> {
+	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string }): Promise<unknown> {
 		// 可选：先把搜索视图移入独立弹窗再量（弹窗实例的布局与主窗不同）。
 		// width/height 自定弹窗尺寸（≤480 可测窄幅断点）；不传用形态默认值。
 		// 对已在弹窗里的 leaf 再次 moveLeafToPopout = 按新尺寸重建弹窗，
@@ -795,8 +795,8 @@ export default class SmartVaultPlugin extends Plugin {
 				}
 				await new Promise((r) => window.setTimeout(r, 250));
 			}
-			// backClick：窄幅钻入态点"‹ Providers"返回链接，回到供应商
-			// 列表（验收列表滚动条位置等列表态布局）。
+			// backClick：窄幅钻入态点返回箭头（头部内嵌 ‹ Google，兜底旧独立
+			// 返回行），回到供应商列表（验收列表滚动条位置等列表态布局）。
 			if (opts?.backClick) {
 				const backLeaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
 				for (const leaf of backLeaves) {
@@ -804,8 +804,9 @@ export default class SmartVaultPlugin extends Plugin {
 						?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl);
 					const bDoc = el?.ownerDocument;
 					if (!bDoc) continue;
-					const back = Array.from(bDoc.querySelectorAll<HTMLElement>(".semlink-mt-back"))
-						.find((r) => r.offsetParent !== null);
+					const back = Array.from(
+						bDoc.querySelectorAll<HTMLElement>(".semlink-mt-config-back, .semlink-mt-back"),
+					).find((r) => r.offsetParent !== null);
 					if (back) {
 						back.click();
 						break;
@@ -997,8 +998,10 @@ export default class SmartVaultPlugin extends Plugin {
 						const head = cfgDoc.querySelector<HTMLElement>(".semlink-mt-config-head");
 						const cfg = head?.parentElement as HTMLElement | null;
 						if (!head || !cfg) continue;
-						// 返回行取证：单列钻入态应显示 ‹ 箭头行
-						const back = cfg.querySelector<HTMLElement>(".semlink-mt-back");
+						// 返回箭头取证：单列钻入态头部应内嵌 ‹ 箭头（空态兜底为
+						// 独立返回行）
+						const back = cfg.querySelector<HTMLElement>(".semlink-mt-config-back")
+							?? cfg.querySelector<HTMLElement>(".semlink-mt-back");
 						const backR = back?.getBoundingClientRect();
 						// 模型行溢出取证：逃逸行是 rows 卡子元素还是卡外兄弟
 						const rowsCard = cfg.querySelector<HTMLElement>(".semlink-mt-rows");
@@ -1021,6 +1024,7 @@ export default class SmartVaultPlugin extends Plugin {
 							rowsGeo,
 							backRow: back
 								? {
+									kind: back.hasClass("semlink-mt-config-back") ? "inline" : "standalone",
 									text: (back.textContent ?? "").slice(0, 20),
 									hidden: back.offsetParent === null,
 									w: backR ? Math.round(backR.width) : null,
@@ -1028,6 +1032,17 @@ export default class SmartVaultPlugin extends Plugin {
 									top: backR ? Math.round(backR.top) : null,
 								}
 								: null,
+							// 头部名称 + Endpoint 行（系列选型链路验收：切成员后
+							// 头名与端点行文本应随之变化）
+							headName: cfgDoc.querySelector<HTMLElement>(".semlink-mt-config-name")?.textContent ?? null,
+							epRow: (() => {
+								const ep = cfg.querySelector<HTMLElement>(".semlink-mt-config-eprow");
+								if (!ep) return null;
+								return {
+									label: ep.querySelector<HTMLElement>(".semlink-mt-config-label")?.textContent ?? null,
+									value: (ep.querySelector<HTMLElement>(".semlink-mt-config-epval")?.textContent ?? "").slice(0, 80),
+								};
+							})(),
 							visible: head.offsetParent !== null,
 							position: hcs?.position ?? null,
 							top: hcs?.top ?? null,
@@ -1130,6 +1145,171 @@ export default class SmartVaultPlugin extends Plugin {
 					(navDbg ??= {}).keyProbe = keyProbe;
 					await new Promise((r) => window.setTimeout(r, 250));
 			}
+		}
+		// variantPick：在打开的选型弹窗里点指定成员行（验收选型 → 切配置）。
+		if (opts?.variantPick) {
+			const vLeaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+			let vPicked: string | null = null;
+			for (const leaf of vLeaves) {
+				const el = ((leaf as unknown as { containerEl?: HTMLElement }).containerEl
+					?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+				const vDoc = el?.ownerDocument;
+				if (!vDoc) continue;
+				const rows = Array.from(vDoc.querySelectorAll<HTMLElement>(".semlink-variant-row"))
+					.filter((x) => x.offsetParent !== null);
+				const target = rows.find((x) =>
+					(x.querySelector<HTMLElement>(".semlink-variant-name")?.textContent ?? "").includes(opts.variantPick as string));
+				if (target) {
+					vPicked = target.querySelector<HTMLElement>(".semlink-variant-name")?.textContent ?? null;
+					target.click();
+					break;
+				}
+			}
+			(navDbg ??= {}).variantPicked = vPicked;
+			await new Promise((r) => window.setTimeout(r, 400));
+			// 选后回读：弹窗是否已关 + 实时 DOM 的配置头名/钻入态
+			(navDbg ??= {}).variantAfter = (() => {
+				const live = Array.from(this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE))
+					.map((lf) => {
+						const le = ((lf as unknown as { containerEl?: HTMLElement }).containerEl
+							?? (lf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+						const ld = le?.ownerDocument;
+						if (!ld) return null;
+						return {
+							modalOpen: !!ld.querySelector(".semlink-variant-modal"),
+							headName: ld.querySelector<HTMLElement>(".semlink-mt-config-name")?.textContent ?? null,
+							drilled: !!ld.querySelector(".semlink-settings-root.is-drilled"),
+						};
+					})
+					.filter(Boolean);
+				return live;
+			})();
+		}
+		// epClick：点配置栏 Endpoint 行（系列供应商专属）→ 弹选型窗。
+		if (opts?.epClick) {
+			const eLeaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+			for (const leaf of eLeaves) {
+				const el = ((leaf as unknown as { containerEl?: HTMLElement }).containerEl
+					?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+				const eDoc = el?.ownerDocument;
+				if (!eDoc) continue;
+				const ep = Array.from(eDoc.querySelectorAll<HTMLElement>(".semlink-mt-config-eprow"))
+					.find((x) => x.offsetParent !== null);
+				if (ep) {
+					ep.click();
+					break;
+				}
+			}
+			await new Promise((r) => window.setTimeout(r, 400));
+			// 点后回读：弹窗行清单（验收 current 高亮与成员/端点渲染）
+			(navDbg ??= {}).epModalAfter = (() => {
+				for (const lf of this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)) {
+					const le = ((lf as unknown as { containerEl?: HTMLElement }).containerEl
+						?? (lf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+					const ld = le?.ownerDocument;
+					const modal = ld?.querySelector<HTMLElement>(".semlink-variant-modal");
+					if (!modal || !ld) continue;
+					return Array.from(modal.querySelectorAll<HTMLElement>(".semlink-variant-row")).map((rw) => ({
+						name: rw.querySelector<HTMLElement>(".semlink-variant-name")?.textContent ?? null,
+						isCurrent: rw.hasClass("is-current"),
+						endpoint: (rw.querySelector<HTMLElement>(".semlink-variant-endpoint")?.textContent ?? "").slice(0, 60),
+					}));
+				}
+				return null;
+			})();
+		}
+
+		// epPick：在 Endpoint 行弹出的选型窗里点成员（验收端点弹窗切换
+		// 成员的完整闭环——与组行弹窗同一 VariantPickerModal 路径）。
+		if (opts?.epPick) {
+			let picked2: string | null = null;
+			for (const lf of this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)) {
+				const le = ((lf as unknown as { containerEl?: HTMLElement }).containerEl
+					?? (lf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+				const ld = le?.ownerDocument;
+				if (!ld) continue;
+				const rows2 = Array.from(ld.querySelectorAll<HTMLElement>(".semlink-variant-row"))
+					.filter((x) => x.offsetParent !== null);
+				const tgt = rows2.find((x) =>
+					(x.querySelector<HTMLElement>(".semlink-variant-name")?.textContent ?? "").includes(opts.epPick as string));
+				if (tgt) {
+					picked2 = tgt.querySelector<HTMLElement>(".semlink-variant-name")?.textContent ?? null;
+					tgt.click();
+					break;
+				}
+			}
+			(navDbg ??= {}).epPicked = picked2;
+			await new Promise((r) => window.setTimeout(r, 400));
+			(navDbg ??= {}).epPickAfter = (() => {
+				for (const lf of this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)) {
+					const le = ((lf as unknown as { containerEl?: HTMLElement }).containerEl
+						?? (lf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+					const ld = le?.ownerDocument;
+					if (!ld) continue;
+					return {
+						modalOpen: !!ld.querySelector(".semlink-variant-modal"),
+						headName: ld.querySelector<HTMLElement>(".semlink-mt-config-name")?.textContent ?? null,
+					};
+				}
+				return null;
+			})();
+		}
+		// keyModalProbe：Key 弹窗内取证（用户拍板"去掉输入框和异常提示
+		// 之间的空行"）：塞假 Key → 点 Test & Save → 等检测失败 → 读输入
+		// 框/状态行矩形与计算 margin。失败不落盘（先测后存），无副作用；
+		// 弹窗留在原地供截图，收尾用 keyModalClose 点 Cancel。
+		if (opts?.keyModalProbe) {
+			const keyModalDbg: Array<Record<string, unknown>> = [];
+			const mLeaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+			for (const leaf of mLeaves) {
+				const el = ((leaf as unknown as { containerEl?: HTMLElement }).containerEl
+					?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+				const mDoc = el?.ownerDocument;
+				if (!mDoc) continue;
+				const modal = mDoc.querySelector<HTMLElement>(".semlink-key-modal");
+				if (!modal) continue;
+				const input = modal.querySelector<HTMLInputElement>(".semlink-editor-input");
+				const status = modal.querySelector<HTMLElement>(".semlink-mt-config-status");
+				const saveBtn = modal.querySelector<HTMLButtonElement>(".semlink-editor-save-btn");
+				if (!input || !status || !saveBtn) {
+					keyModalDbg.push({ error: "missing-parts" });
+					continue;
+				}
+				input.value = opts.keyProbeValue ?? "sk-probe-invalid";
+				input.dispatchEvent(new Event("input"));
+				saveBtn.click();
+				await new Promise((r) => window.setTimeout(r, 3000));
+				const win = modal.ownerDocument.defaultView;
+				const ir = input.getBoundingClientRect();
+				const sr = status.getBoundingClientRect();
+				keyModalDbg.push({
+					statusText: (status.textContent ?? "").slice(0, 60),
+					statusIsErr: status.hasClass("is-err"),
+					inputMarginBottom: win?.getComputedStyle(input).marginBottom ?? null,
+					statusMarginTop: win?.getComputedStyle(status).marginTop ?? null,
+					inputBottom: Math.round(ir.bottom),
+					statusTop: Math.round(sr.top),
+					gap: Math.round(sr.top - ir.bottom),
+				});
+				break;
+			}
+			(navDbg ??= {}).keyModalProbe = keyModalDbg;
+		}
+		// keyModalClose：收尾——点开着的 Key 弹窗里第一个可见 Cancel/Close
+		if (opts?.keyModalClose) {
+			const mLeaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+			for (const leaf of mLeaves) {
+				const el = ((leaf as unknown as { containerEl?: HTMLElement }).containerEl
+					?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+				const mDoc = el?.ownerDocument;
+				if (!mDoc) continue;
+				const modal = mDoc.querySelector<HTMLElement>(".semlink-key-modal");
+				if (!modal) continue;
+				const btn = Array.from(modal.querySelectorAll<HTMLButtonElement>(".semlink-editor-cancel-btn"))
+					.find((b) => b.offsetParent !== null);
+				btn?.click();
+			}
+			await new Promise((r) => window.setTimeout(r, 300));
 		}
 		// 复现「点弹窗按钮后咖啡杯丢失」：进入嵌入引导 → 点真实弹窗按钮 →
 		// 按时间点扫描所有窗口里的 cup canvas（存在性 + 像素）。

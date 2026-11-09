@@ -179,11 +179,15 @@ export interface CatalogEntry {
  *  "/v1/chat/completions"，anthropic → "/v1/messages"）；wirePath "/" 表示
  *  Base URL 本身就是端点。与 chat-client 的 chatEndpoint 拼接规则一致。 */
 export function catalogEndpoint(entry: CatalogEntry): string {
+	const base = entry.baseUrl.replace(/\/+$/, "");
 	const path = entry.wirePath?.trim();
-	const suffix = entry.apiFormat === "anthropic" ? "/v1/messages" : "/v1/chat/completions";
-	if (path === "/") return entry.baseUrl.replace(/\/+$/, "");
-	if (path) return `${entry.baseUrl}${path.startsWith("/") ? "" : "/"}${path}`;
-	return `${entry.baseUrl}${suffix}`;
+	if (path === "/") return base;
+	if (path) return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+	// baseUrl 已带 /v1（portal.qwen.ai/v1）不重复补——与请求侧 v1Base
+	// 拼接规则同构（此前显示成 /v1/v1/… 的病根）
+	const op = entry.apiFormat === "anthropic" ? "/messages" : "/chat/completions";
+	const vb = base.endsWith("/v1") ? base : `${base}/v1`;
+	return `${vb}${op}`;
 }
 
 /**
@@ -1606,6 +1610,10 @@ class KeyModal extends Modal {
 		super(app);
 		this.modalEl.addClass("semlink-provider-editor-modal");
 		this.modalEl.addClass("smart-vault-settings");
+		// Key 弹窗专属钩子：与 AddModelModal（共用 provider-editor-modal）
+		// 区分，纵向节奏收紧规则只落在本弹窗（用户拍板"去掉输入框和异常
+		// 提示之间的空行"）
+		this.modalEl.addClass("semlink-key-modal");
 	}
 
 	onOpen() {
@@ -1748,6 +1756,57 @@ class KeyModal extends Modal {
 		keyInput.addEventListener("input", syncButtons);
 		syncButtons();
 		keyInput.focus();
+	}
+
+	onClose() {
+		this.contentEl.empty();
+	}
+}
+
+/** 系列供应商选型弹窗（用户拍板"多供应商的点击触发弹窗，确认后进配置，
+ *  配置栏 Endpoint 点击再弹此窗切换"）：Qwen/MiniMax/Z.AI 等内置系列的
+ *  成员清单——logo + 名称 + 完整 Endpoint，点行即确认。列表不再套文件夹，
+ *  本弹窗是成员的唯一入口。 */
+export class VariantPickerModal extends Modal {
+	constructor(
+		app: App,
+		private opts: {
+			title: string;
+			/** 当前已选成员名（高亮回显；无已选传空）。 */
+			current?: string;
+			variants: Array<{ name: string; endpoint: string }>;
+			onPick: (name: string) => void;
+		},
+	) {
+		super(app);
+		this.modalEl.addClass("semlink-variant-modal");
+		this.modalEl.addClass("smart-vault-settings");
+	}
+
+	onOpen() {
+		this.titleEl.setText(this.opts.title);
+		const list = this.contentEl.createDiv({ cls: "semlink-variant-list" });
+		for (const v of this.opts.variants) {
+			const row = list.createDiv({
+				cls: `semlink-variant-row is-clickable${v.name === this.opts.current ? " is-current" : ""}`,
+				attr: { role: "button", tabindex: "0" },
+			});
+			const logo = row.createDiv({ cls: "semlink-variant-logo" });
+			appendProviderLogo(logo, v.name, "semlink-mt-logo-svg");
+			row.createDiv({ cls: "semlink-variant-name", text: v.name });
+			row.createDiv({ cls: "semlink-variant-endpoint", text: v.endpoint });
+			row.addEventListener("click", () => {
+				this.opts.onPick(v.name);
+				this.close();
+			});
+			row.addEventListener("keydown", (e) => {
+				if (e.key === "Enter" || e.key === " ") {
+					e.preventDefault();
+					this.opts.onPick(v.name);
+					this.close();
+				}
+			});
+		}
 	}
 
 	onClose() {
@@ -2442,19 +2501,16 @@ export function renderModelsTab(
 	// rAF/滚动绑定宿主文档的窗口：嵌入屏在弹窗里时主窗 rAF 会被遮挡节流。
 	const viewWin = containerEl.ownerDocument?.defaultView ?? window;
 	const providers = plugin.settings.providers;
-	const userFolders = plugin.settings.providerFolders ?? (plugin.settings.providerFolders = []);
 	const st = state as {
 		selected?: string;
 		search?: string;
 		modelSel?: string;
 		providerSearch?: string;
-		collapsed?: Record<string, boolean>;
 		providerScroll?: number;
 		rowsScroll?: number;
 		drilled?: boolean;
 		paneObservers?: ResizeObserver[];
 	};
-	st.collapsed = st.collapsed ?? {};
 
 	// 展开文件夹后中栏列表「向上跳」取证：点击与恢复各记一条 scrollTop，
 	// 挂在面板元素上供 measure 探针（mtTrace）回读。纯内存。
@@ -2528,23 +2584,37 @@ export function renderModelsTab(
 		});
 	}
 
-	// 分组归属：用户文件夹 > 内置系列 > 相同 logo。
-	// logo 组以渲染用的 SVG 字符串为键——同图标即同组，天然覆盖改名的家族。
-	const folderOf = (r: Row): string => {
-		if (r.live?.folder) return r.live.folder;
-		if (SERIES_FOLDER[r.name]) return `series:${SERIES_FOLDER[r.name]}`;
-		const svg = brandLogoOf(r.name).svg;
-		return svg ? `logo:${svg}` : "";
-	};
+	// 分组归属（用户拍板"列表不要文件夹"）：只剩内置系列——系列在列表
+	// 里渲染为单行，点击弹选型窗（VariantPickerModal）选成员。用户自建
+	// 文件夹与同 logo 组不再参与分组（live.folder 数据保留但忽略）。
+	const folderOf = (r: Row): string =>
+		SERIES_FOLDER[r.name] ? `series:${SERIES_FOLDER[r.name]}` : "";
 	for (const r of rows) r.folder = folderOf(r);
+
+	// 行的完整 Endpoint（选型弹窗展示用）：优先 live 实例（用户改过
+	// base/wirePath），未落实回目录条目。与 renderConfig 的 fullEndpoint
+	// 同构（base 以 /v1 结尾不重复补）。
+	const rowEndpoint = (r: Row): string => {
+		if (r.live) {
+			const base = (r.live.apiBase ?? "").trim().replace(/\/+$/, "");
+			const f = (r.live.apiFormat ?? "openai") as ChatApiFormat;
+			const wire = r.live.wirePath?.trim();
+			if (wire === "/") return base;
+			if (wire) return `${base}${wire.startsWith("/") ? "" : "/"}${wire}`;
+			const op = f === "anthropic" ? "/messages" : "/chat/completions";
+			const vb = base.endsWith("/v1") ? base : `${base}/v1`;
+			return `${vb}${op}`;
+		}
+		const entry = CHAT_CATALOG.find((e) => e.name === r.name);
+		return entry ? catalogEndpoint(entry) : "";
+	};
 
 	rows.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
 
-	// ── 文件夹节点 ──
+	// ── 系列组节点（列表单行渲染 + 选型弹窗的数据源；不再有文件夹）──
 	type FolderNode = {
 		key: string;
 		name: string;
-		isUser: boolean;
 		members: Row[];
 		rank: number;
 	};
@@ -2553,43 +2623,32 @@ export function renderModelsTab(
 	const nodeOf = (key: string): FolderNode => {
 		let node = nodeMap.get(key);
 		if (!node) {
-			node = { key, name: "", isUser: key.startsWith("user:"), members: [], rank: 9999 };
+			node = { key, name: "", members: [], rank: 9999 };
 			nodeMap.set(key, node);
 			nodeOrder.push(key);
 		}
 		return node;
 	};
-	// 用户自建文件夹（可能暂时为空）
-	for (const f of userFolders) nodeOf(`user:${f}`);
 	// 按归属填充成员
 	for (const r of rows) {
 		if (!r.folder) continue;
 		nodeOf(r.folder).members.push(r);
 	}
-	// 自动分组（内置系列/相同 logo）凑不满两个成员时不套文件夹——
-	// 只有一项的"文件夹"只是多一层展开，成员直接回到顶层。
-	// 用户自建文件夹除外（哪怕空着也保留，那是用户明确建的）。
+	// 凑不满两个成员的系列不成组——成员回到顶层单行
 	for (const key of nodeOrder) {
 		const node = nodeMap.get(key)!;
-		if (!node.isUser && node.members.length < 2) {
+		if (node.members.length < 2) {
 			for (const m of node.members) m.folder = "";
 			node.members = [];
 		}
 	}
 	const nodes = nodeOrder
 		.map((k) => nodeMap.get(k)!)
-		.filter((n) => n.isUser || n.members.length > 0);
+		.filter((n) => n.members.length > 0);
 	for (const node of nodes) {
-		// 组名：内置系列/用户文件夹用键内名称；logo 组取成员中最短的名称
-		if (node.key.startsWith("series:")) {
-			node.name = node.key.slice(7);
-		} else if (node.isUser) {
-			node.name = node.key.slice(5);
-		} else if (node.key.startsWith("logo:")) {
-			const named = [...node.members].sort((a, b) => a.name.length - b.name.length)[0];
-			node.name = named ? named.name : node.key.slice(5, 25);
-		}
-		// 文件夹排序：手动拖动登记过（providerOrder 里的文件夹键）优先，
+		// 组名：键内名称（"series:Qwen" → "Qwen"）
+		node.name = node.key.slice(7);
+		// 组排序：手动拖动登记过（providerOrder 里的组键）优先，
 		// 否则取成员中最优排名参与混排
 		const manualIdx = manualOrder.indexOf(node.key);
 		node.rank = manualIdx !== -1
@@ -2606,13 +2665,13 @@ export function renderModelsTab(
 
 	const enabledCount = (models: ChatModel[]): number =>
 		models.filter((m) => m.enabled === true).length;
-	// 状态胶囊：只显示 ON（已落实例 + 有 Key/noAuth + 未关总开关）；
-	// 关闭态与未配置一律无徽标（用户拍板"不要显示OFF"）。
+	// 状态胶囊：只显示 ON（用户拍板新语义"配置了 Key + 至少开启一个模型"
+	// 才算 On——头部总开关已撤，模型全关即供应商关）。未配置一律无徽标
+	// （用户拍板"不要显示OFF"）。
 	const pillState = (r: Row): "on" | "" => {
 		if (!r.live) return "";
-		if (r.live.disabled) return "";
-		if (r.live.apiKey?.trim() || r.live.noAuth) return "on";
-		return "";
+		if (!(r.live.apiKey?.trim() || r.live.noAuth)) return "";
+		return r.live.models.some((m) => m.enabled === true) ? "on" : "";
 	};
 
 	const wrap = containerEl.createDiv({ cls: "semlink-mt" });
@@ -2688,13 +2747,26 @@ export function renderModelsTab(
 	provSearchInput.value = st.providerSearch ?? "";
 	const list = left.createDiv({ cls: "semlink-mt-provider-list" });
 
-	const renderProviderRow = (parent: HTMLElement, r: Row, nested: boolean): void => {
+	// 选中某行并重建配置栏（普通行点击与选型弹窗确认共用）。组行高亮
+	// 由调用方补——成员行不在列表里渲染，data-key 查不到。
+	const activateRow = (r: Row): void => {
+		st.selected = r.key;
+		st.search = "";
+		st.modelSel = "";
+		// 窄幅单列：选中即钻入其配置页；宽幅两栏只切右栏
+		if (isNarrow()) {
+			st.drilled = true;
+			wrap.addClass("is-drilled");
+		}
+		// 列表就地切选中态，只重建配置栏（整页重建大目录会卡）
+		list.querySelectorAll(".semlink-mt-provider.is-active").forEach((el) => el.removeClass("is-active"));
+		renderConfig(false);
+	};
+
+	const renderProviderRow = (parent: HTMLElement, r: Row): void => {
 		const isSelected = st.selected === r.key;
 		const row = parent.createDiv({
-			cls:
-				"semlink-mt-provider" +
-				(nested ? " is-nested" : "") +
-				(isSelected ? " is-active" : ""),
+			cls: "semlink-mt-provider" + (isSelected ? " is-active" : ""),
 			attr: { "data-key": r.key },
 		});
 		// 行内拖动重排（落到别的供应商行上=插到它前面，落到文件夹上=归档；
@@ -2742,24 +2814,11 @@ export function renderModelsTab(
 				// 宽幅：配置已在右栏，重复点击不重建；窄幅已钻入该供应商同理
 				return;
 			}
-			st.selected = r.key;
-			st.search = "";
-			st.modelSel = "";
-			// 窄幅单列：点供应商钻入其配置页；宽幅三栏只切右栏
-			if (isNarrow()) {
-				st.drilled = true;
-				wrap.addClass("is-drilled");
-			}
-			// 列表就地切选中态，只重建配置栏（整页重建大目录会卡）
-			list.querySelectorAll(".semlink-mt-provider.is-active").forEach((el) => el.removeClass("is-active"));
+			activateRow(r);
 			row.addClass("is-active");
-			renderConfig(false);
 		});
-		// 文件夹内的供应商不重复显示图标（文件夹行已带最热门成员的 logo）
-		if (!nested) {
-			const logo = row.createDiv({ cls: "semlink-mt-provider-logo" });
-			appendProviderLogo(logo, r.live?.icon || r.name, "semlink-mt-logo-svg");
-		}
+		const logo = row.createDiv({ cls: "semlink-mt-provider-logo" });
+		appendProviderLogo(logo, r.live?.icon || r.name, "semlink-mt-logo-svg");
 		const info = row.createDiv({ cls: "semlink-mt-provider-info" });
 		info.createDiv({ cls: "semlink-mt-provider-name", text: r.name });
 		// 状态胶囊：只显示 ON（已落实例 + 有 Key/noAuth + 未关总开关）；
@@ -2774,103 +2833,88 @@ export function renderModelsTab(
 		}
 	};
 
-	const renderFolderHeader = (node: FolderNode): void => {
-		// 默认收起；只有显式存过 false（用户展开过）才算展开。
-		// 旧数据语义兼容：true 始终是收起，false 始终是展开。
-		const collapsed = st.collapsed?.[node.key] !== false;
-		// 与普通供应商行同款布局；图标取成员中最热门（排名最优）的供应商
+	// 系列组行（用户拍板"不要文件夹"）：整组渲染为单行，点击弹选型窗
+	// （VariantPickerModal）选成员。布局与普通供应商行同款：图标取成员中
+	// 最热门（排名最优）者，ON 徽标任一成员点亮即显示。
+	const renderGroupRow = (node: FolderNode): void => {
 		const hottest = [...node.members].sort(
 			(a, b) => a.rank - b.rank || a.name.localeCompare(b.name),
 		)[0];
-		const headRow = list.createDiv({
-			cls: "semlink-mt-provider is-folder",
-			attr: { "data-folder": node.key },
+		const row = list.createDiv({
+			cls:
+				"semlink-mt-provider is-group" +
+				(node.members.some((m) => m.key === st.selected) ? " is-active" : ""),
+			attr: { "data-key": node.key },
 		});
-		// 拖中文件夹时显示"插到前面"落点；拖的是供应商时仍是归档落点
-		headRow.addEventListener("dragover", (e) => {
-			e.preventDefault();
-			headRow.addClass(
-				e.dataTransfer?.types.includes("text/semlink-folder") ? "is-droptarget-row" : "is-droptarget",
-			);
-		});
-		headRow.addEventListener("dragleave", () => {
-			headRow.removeClass("is-droptarget");
-			headRow.removeClass("is-droptarget-row");
-		});
-		headRow.addEventListener("drop", (e) => {
-			e.preventDefault();
-			headRow.removeClass("is-droptarget");
-			headRow.removeClass("is-droptarget-row");
-			// 文件夹拖到文件夹上：按展示顺序插到目标文件夹前面
-			const draggedFolder = e.dataTransfer?.getData("text/semlink-folder");
-			if (draggedFolder) {
-				if (draggedFolder === node.key) return;
-				const seq = displaySequence();
-				if (seq.indexOf(draggedFolder) === -1 || seq.indexOf(node.key) === -1) return;
-				seq.splice(seq.indexOf(draggedFolder), 1);
-				seq.splice(seq.indexOf(node.key), 0, draggedFolder);
-				plugin.settings.providerOrder = seq;
-				void plugin.saveSettings().then(() => refreshKeepInner());
-				return;
-			}
-			const name = e.dataTransfer?.getData("text/semlink-provider");
-			if (!name) return;
-			const p = providers.find((x) => x.name === name);
-			if (!p) return;
-			p.folder = node.key;
-			void plugin.saveSettings().then(() => refreshKeepInner());
-		});
-		// 整个文件夹作为整体参与排序（把手槽位移除，与供应商行对齐——
-		// 整行即把手）
-		headRow.draggable = true;
-		const onFolderDragStart = (e: DragEvent): void => {
-			headRow.addClass("is-dragging");
+		// 整组作为整体参与排序（与普通行同款把手：整行即把手）
+		row.draggable = true;
+		const onDragStart = (e: DragEvent): void => {
+			row.addClass("is-dragging");
 			e.dataTransfer?.setData("text/semlink-folder", node.key);
 			if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
 		};
-		headRow.addEventListener("dragstart", onFolderDragStart);
-		headRow.addEventListener("dragend", () => {
-			headRow.removeClass("is-dragging");
+		row.addEventListener("dragstart", onDragStart);
+		// 组行也是重排落点：按展示顺序插到该组前面（复用行间重排语义，
+		// 不再"拖入归档"——文件夹已移除）
+		row.addEventListener("dragover", (e) => {
+			const types = e.dataTransfer?.types;
+			if (!types?.includes("text/semlink-provider") && !types?.includes("text/semlink-folder")) return;
+			e.preventDefault();
+			e.stopPropagation();
+			row.addClass("is-droptarget-row");
+		});
+		row.addEventListener("dragleave", () => row.removeClass("is-droptarget-row"));
+		row.addEventListener("drop", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			row.removeClass("is-droptarget-row");
+			const dragged =
+				e.dataTransfer?.getData("text/semlink-provider") ||
+				e.dataTransfer?.getData("text/semlink-folder");
+			if (!dragged || dragged === node.key) return;
+			const seq = displaySequence();
+			const target = seq.indexOf(node.key);
+			if (seq.indexOf(dragged) === -1 || target === -1) return;
+			seq.splice(seq.indexOf(dragged), 1);
+			seq.splice(seq.indexOf(node.key), 0, dragged);
+			plugin.settings.providerOrder = seq;
+			void plugin.saveSettings().then(() => refreshKeepInner());
+		});
+		row.addEventListener("dragend", () => {
+			row.removeClass("is-dragging");
 			list.querySelectorAll(".is-droptarget-row").forEach((el) => el.removeClass("is-droptarget-row"));
 		});
 		if (hottest) {
-			const logo = headRow.createDiv({ cls: "semlink-mt-provider-logo" });
+			const logo = row.createDiv({ cls: "semlink-mt-provider-logo" });
 			appendProviderLogo(logo, hottest.name, "semlink-mt-logo-svg");
 		}
-		const info = headRow.createDiv({ cls: "semlink-mt-provider-info" });
+		const info = row.createDiv({ cls: "semlink-mt-provider-info" });
 		info.createDiv({ cls: "semlink-mt-provider-name", text: node.name });
-		// 下拉图标放行最右侧
-		const chevron = headRow.createDiv({ cls: "semlink-mt-folder-chevron" });
-		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
-		if (node.isUser) {
-			const del = headRow.createDiv({ cls: "semlink-mt-provider-del" });
-			setIcon(del, "x");
-			del.addEventListener("click", (e) => {
-				e.stopPropagation();
-				// 删除文件夹：成员回到顶层（供应商本体不受影响）
-				plugin.settings.providerFolders = userFolders.filter((f) => `user:${f}` !== node.key);
-				for (const p of providers) {
-					if (p.folder === node.key) p.folder = undefined;
-				}
-				if (st.collapsed) delete st.collapsed[node.key];
-				void plugin.saveSettings().then(() => refreshKeepInner());
-			});
+		// ON 徽标：任一成员点亮即显示（组行不是供应商实体，逐成员判定）
+		if (node.members.some((m) => pillState(m))) {
+			row.createDiv({ cls: "semlink-mt-provider-pill is-on", text: "ON" });
 		}
-		headRow.addEventListener("click", () => {
-			pushMtTrace(`folder-click ${node.key} listScroll=${list.scrollTop}`);
-			st.collapsed = { ...(st.collapsed ?? {}), [node.key]: !collapsed };
-			// 只重建列表本身（不整屏 refresh）：整屏重渲会把滚动恢复拆成
-			// 「3223 同步恢复 + refreshPreservingScroll rAF/timeout 三连」两套
-			// 机制，展开时中栏曾因此向上跳。列表容器原地复用，scrollTop
-			// 收放都在同一元素上，一行恢复即可靠。
-			const keep = list.scrollTop;
-			renderProviderList();
-			list.scrollTop = keep;
-		});
+		const openPicker = (): void => {
+			new VariantPickerModal(plugin.app, {
+				title: node.name,
+				current: node.members.find((m) => m.key === st.selected)?.name ?? "",
+				variants: node.members.map((m) => ({ name: m.name, endpoint: rowEndpoint(m) })),
+				onPick: (name) => {
+					const member = node.members.find((m) => m.name === name);
+					if (!member) return;
+					if (member.key === st.selected && (st.drilled || !isNarrow())) return;
+					activateRow(member);
+					// 成员行不在列表渲染——把组行点亮
+					list.querySelector<HTMLElement>(`[data-key="${node.key}"]`)?.addClass("is-active");
+				},
+			}).open();
+		};
+		row.addEventListener("click", openPicker);
+		press(row, openPicker);
 	};
 
-	// 文件夹与顶层厂商混排：文件夹以成员中排名最优（调用量最大）的
-	// 供应商作为排序依据，热门在上；未排名的按名称殿后。
+	// 系列组与顶层厂商混排：组以成员中排名最优（调用量最大）的供应商
+	// 作为排序依据，热门在上；未排名的按名称殿后。
 	const items: { rank: number; name: string; node?: FolderNode; row?: Row }[] = [];
 	for (const node of nodes) {
 		items.push({ rank: node.rank, name: node.name, node });
@@ -2882,8 +2926,8 @@ export function renderModelsTab(
 	// 选中或配置某个 Provider 后列表顺序稳定，不会跳到最上面。
 	items.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
 
-	// 当前展示顺序：顶层供应商记名称，文件夹记其键 + 展开的成员名序列
-	//（收起时也按成员计入）——拖动重排以此为基准生成新的持久化顺序
+	// 当前展示顺序：顶层供应商记名称，系列组记其键 + 成员名序列——
+	// 拖动重排以此为基准生成新的持久化顺序
 	const displaySequence = (): string[] => {
 		const seq: string[] = [];
 		for (const item of items) {
@@ -2896,27 +2940,23 @@ export function renderModelsTab(
 		}
 		return seq;
 	};
-	// 列表渲染（可重入）：供应商搜索就地过滤——文件夹名命中=整组保留，
-	// 成员命中=组头+命中的成员；无关键词=全量。重建的是 list 内容，
+	// 列表渲染（可重入）：供应商搜索就地过滤——组名或任一成员命中=整组
+	// 保留（成员在选型弹窗里）；无关键词=全量。重建的是 list 内容，
 	// 搜索框不动（焦点保留）。
 	const renderProviderList = (): void => {
 		list.empty();
 		const q = (st.providerSearch ?? "").trim().toLowerCase();
 		for (const item of items) {
 			if (item.node) {
-				const nodeHit = !q || item.node.name.toLowerCase().includes(q);
-				const memberHits = item.node.members.filter(
-					(m) => !q || m.name.toLowerCase().includes(q),
-				);
-				if (q && !nodeHit && memberHits.length === 0) continue;
-				renderFolderHeader(item.node);
-				if (st.collapsed?.[item.node.key] !== false) continue;
-				for (const r of nodeHit ? item.node.members : memberHits) {
-					renderProviderRow(list, r, true);
-				}
+				const hit =
+					!q ||
+					item.node.name.toLowerCase().includes(q) ||
+					item.node.members.some((m) => m.name.toLowerCase().includes(q));
+				if (!hit) continue;
+				renderGroupRow(item.node);
 			} else if (item.row) {
 				if (q && !item.row.name.toLowerCase().includes(q)) continue;
-				renderProviderRow(list, item.row, false);
+				renderProviderRow(list, item.row);
 			}
 		}
 	};
@@ -2988,20 +3028,24 @@ export function renderModelsTab(
 		const sel = rows.find((r) => r.key === st.selected) ?? null;
 		configCol.empty();
 		rowsHost = null;
-		// 钻入态：返回行回供应商列表。渲染条件只看 drilled（用户拍板
-		// "单列的情况下要显示箭头"）——宽窄由 CSS 管（两栏容器块藏返回
-		// 行），跨尺寸拖动不再产生"无箭头的死态"；两栏下点行不置 drilled。
-		if (st.drilled) {
+		// 钻入态返回（用户拍板"Google 左边增加返回箭头"+"上面那行空行去掉"）：
+		// 箭头内嵌头部名称左侧（‹ Google 同排）。原独立返回行整行都被吸顶
+		// 头的不透光防透层（::before 上延 60px 实底）盖住——文字看不见，只剩
+		// 一条空行，故整行撤掉。渲染条件只看 drilled，宽窄由 CSS 管（两栏
+		// 容器块藏箭头），跨尺寸拖动不产生"无箭头的死态"。
+		const goBack = (): void => {
+			st.drilled = false;
+			wrap.removeClass("is-drilled");
+		};
+		if (st.drilled && !sel) {
+			// 空态兜底：无头部可挂内嵌箭头，退回独立返回行（此态无吸顶头，
+			// 防透层不存在，不会重演盖字问题）
 			const back = configCol.createDiv({
 				cls: "semlink-mt-back is-clickable",
 				attr: { role: "button", tabindex: "0" },
 			});
 			setIcon(back.createSpan({ cls: "semlink-mt-back-icon" }), "chevron-left");
 			back.createSpan({ cls: "semlink-mt-back-text", text: t("mtProvidersTitle") });
-			const goBack = (): void => {
-				st.drilled = false;
-				wrap.removeClass("is-drilled");
-			};
 			back.addEventListener("click", goBack);
 			press(back, goBack);
 		}
@@ -3047,19 +3091,55 @@ export function renderModelsTab(
 		// ── 头部：名称 + 总开关。原竖点菜单（清除/删除）移除（用户拍板
 		// "不要显示这个更多图标"），功能迁到列表行的 hover 竖点上 ──
 		const head = configCol.createDiv({ cls: "semlink-mt-config-head" });
+		if (st.drilled) {
+			// 钻入态：返回箭头与标题同排（‹ Google），点击回供应商列表
+			const back = head.createDiv({
+				cls: "semlink-mt-config-back is-clickable",
+				attr: { role: "button", tabindex: "0", "aria-label": t("mtProvidersTitle") },
+			});
+			setIcon(back.createSpan({ cls: "semlink-mt-config-back-icon" }), "chevron-left");
+			back.addEventListener("click", goBack);
+			press(back, goBack);
+		}
 		head.createSpan({ cls: "semlink-mt-config-name", text: sel.name });
-		const masterWrap = head.createDiv({ cls: "semlink-mt-config-master" });
-		// 缺省关（用户拍板）：未落实例的目录供应商开关显示为关，
-		// 拨开后 ensureLive 落实例并启用
-		const master = new ToggleComponent(masterWrap).setValue(!!sel.live && !(sel.live.disabled));
-		master.toggleEl.setAttribute("aria-label", t("mtProviderEnable"));
-		master.onChange((v) => {
-			const live = ensureLive(sel);
-			if (!live) return;
-			live.disabled = !v;
-			void plugin.saveSettings();
-			syncProviderPill(sel);
-		});
+		// 头部总开关已撤（用户拍板"去掉右上角的开关按钮"）：供应商启停
+		// 改为派生态——配置 Key + 至少开一个模型即 On（列表徽标同步此
+		// 语义），把模型全关即关。请求侧（chat-client/web-search）不再读
+		// disabled 标志，落库的旧标志自然失效。
+
+		// ── Endpoint 节（系列供应商专属，用户拍板"在 API Key 上面增加一个
+		// Endpoint，点击出现弹窗选择"）：显示当前成员的完整端点，点击弹
+		// 选型窗切换成员（切换 = 选中同组另一行并重建配置栏）。 ──
+		if (sel.folder) {
+			const groupNode = nodes.find((n) => n.key === sel.folder);
+			if (groupNode && groupNode.members.length > 1) {
+				const epSection = configCol.createDiv({ cls: "semlink-mt-config-section" });
+				const epRow = epSection.createDiv({
+					cls: "semlink-mt-config-eprow is-clickable",
+					attr: { role: "button", tabindex: "0" },
+				});
+				epRow.createDiv({ cls: "semlink-mt-config-label", text: t("mtEndpointLabel") });
+				epRow.createDiv({ cls: "semlink-mt-config-epval", text: fullEndpoint() });
+				const epChev = epRow.createDiv({ cls: "semlink-mt-config-epchev" });
+				setIcon(epChev, "chevron-right");
+				const openPicker = (): void => {
+					new VariantPickerModal(plugin.app, {
+						title: groupNode.name,
+						current: sel.name,
+						variants: groupNode.members.map((m) => ({ name: m.name, endpoint: rowEndpoint(m) })),
+						onPick: (name) => {
+							if (name === sel.name) return;
+							const member = groupNode.members.find((m) => m.name === name);
+							if (!member) return;
+							activateRow(member);
+							list.querySelector<HTMLElement>(`[data-key="${groupNode.key}"]`)?.addClass("is-active");
+						},
+					}).open();
+				};
+				epRow.addEventListener("click", openPicker);
+				press(epRow, openPicker);
+			}
+		}
 
 		// ── API 密钥 节（始终渲染——noAuth 只是不参与请求，隐藏整节会让
 		// 用户误以为配置丢失，切鉴权也不再清空 Key）。Cherry 式双态（用户

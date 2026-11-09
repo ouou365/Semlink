@@ -512,6 +512,7 @@ const zh: Record<keyof typeof en, string> = {
 	mtKeyTest: "测试连接",
 	mtKeyTesting: "测试中…",
 	mtKeyMore: "更多操作",
+	mtEndpointLabel: "Endpoint",
 	mtKeyGhost: "添加 API 密钥",
 	mtKeyModalTitle: "配置 {name}",
 	mtKeyTestSave: "测试并保存",

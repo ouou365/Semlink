@@ -429,8 +429,11 @@ export class ChatClient {
 	 * Bridged to the ChatProvider shape (no writes back to the settings).
 	 */
 	private allChatProviders(): ChatProvider[] {
+		// 供应商启停为派生态（用户拍板撤头部总开关）：有 Key + 至少一个
+		// 启用的 chat 模型即可用——下方两个 filter 已实现该语义，不再读
+		// disabled 标志（旧数据里的残留标志自然失效，新实例缺省 disabled
+		// 也不会被卡死）。
 		return (this.settings.providers || [])
-			.filter((p) => !p.disabled)
 			.map((p) => ({
 				id: p.id,
 				name: p.name || p.id,

@@ -55,7 +55,8 @@ export class WebSearchService {
 	private resolveProvider(): { baseUrl: string; apiKey: string } | null {
 		const providers = this.deps.getSettings().providers ?? [];
 		for (const p of providers) {
-			if (p.disabled) continue;
+			// 不再读 disabled 标志（用户拍板撤头部总开关，启停改派生：
+			// Key + 启用模型）——旧数据的残留标志不得卡死搜索
 			if (!p.apiKey || !p.apiKey.trim()) continue;
 			if (/api\.deepseek\.com/i.test(p.apiBase || "")) {
 				return { baseUrl: p.apiBase.replace(/\/+$/, ""), apiKey: p.apiKey.trim() };

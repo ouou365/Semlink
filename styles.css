@@ -731,9 +731,11 @@
         /* 滚动呼吸位：表单滚到底不贴缘 */
         padding-bottom: 10px;
     }
-    /* 窄幅钻入残留的返回行：跨过 480 边界后 DOM 不重渲染，两栏下藏掉
-       （状态自愈：两栏点任意供应商即按 master-detail 语义重建配置栏） */
-    .smart-vault-settings .semlink-mt-config .semlink-mt-back {
+    /* 窄幅钻入残留的返回行/内嵌箭头：跨过 480 边界后 DOM 不重渲染，
+       两栏下藏掉（状态自愈：两栏点任意供应商即按 master-detail 语义
+       重建配置栏） */
+    .smart-vault-settings .semlink-mt-config .semlink-mt-back,
+    .smart-vault-settings .semlink-mt-config .semlink-mt-config-back {
         display: none;
     }
     /* 设置根改 flex 弹性填充（基线的 height:100% 量的是 messages 内容盒，
@@ -1031,6 +1033,33 @@
     pointer-events: none;
 }
 
+/* 钻入态头部内嵌返回箭头（用户拍板"Google 左边增加返回箭头"）：
+   ‹ 与标题同排，替代被防透层盖成空行的独立返回行。负左缘抵消头部
+   4px 内衬，图标左缘对齐卡内 14px 内容线（与 API Key 标签同列） */
+.smart-vault-settings .semlink-mt-config-back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    margin-left: -6px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-mt-config-back:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.smart-vault-settings .semlink-mt-config-back .svg-icon,
+.smart-vault-settings .semlink-mt-config-back svg {
+    width: 18px;
+    height: 18px;
+}
+
 .smart-vault-settings .semlink-mt-config-name {
     font-size: 17px;
     font-weight: 700;
@@ -1064,14 +1093,8 @@
     height: 15px;
 }
 
-/* 总开关推到最右 */
-.smart-vault-settings .semlink-mt-config-master {
-    margin-left: auto;
-    flex-shrink: 0;
-}
-
-/* 总开关规格已并入全局基线（40×24 / 18 钮，见 .checkbox-container
-   基线块）——用户拍板"所有开关都按这个样式"，master 专属覆盖删除。 */
+/* 总开关已撤（用户拍板"去掉右上角的开关按钮"）：供应商启停改派生
+   （Key + 启用模型），头部只剩返回箭头 + 名称。 */
 
 /* 节标题：Cherry 的"粗体大标题 + 行内控件"韵律 */
 .smart-vault-settings .semlink-mt-config-label {
@@ -1079,6 +1102,41 @@
     font-weight: 650;
     color: var(--text-normal);
     flex-shrink: 0;
+}
+
+/* Endpoint 行（系列供应商专属，API Key 节上方）：标签 + 当前完整端点
+   （右对齐灰字截断）+ 右箭头，整行可点弹选型窗换成员（用户拍板
+   "在 API Key 上面增加一个 Endpoint，点击出现弹窗选择"） */
+.smart-vault-settings .semlink-mt-config-eprow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px 0;
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-mt-config-epval {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: right;
+    font-size: 12.5px;
+    color: var(--sl-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.smart-vault-settings .semlink-mt-config-epchev {
+    display: flex;
+    flex-shrink: 0;
+    color: var(--sl-tertiary);
+}
+
+.smart-vault-settings .semlink-mt-config-epchev .svg-icon,
+.smart-vault-settings .semlink-mt-config-epchev svg {
+    width: 14px;
+    height: 14px;
 }
 
 .smart-vault-settings .semlink-mt-config-labelrow {
@@ -1110,8 +1168,9 @@
     flex-shrink: 0;
 }
 
-/* 空态 ghost 钮（用户拍板参考 Cherry BurnCloud）：输入框同规格的
-   整行钮（basis 100% 换到标签下一行），内容居中 key 图标 + 文案 */
+/* 空态 CTA 钮（用户拍板"紫底白字，更加吸引用户去点击"）：整行主题色
+   实底钮（basis 100% 换到标签下一行），内容居中 key 图标 + 文案，
+   同 btn-primary 的白字规格 */
 .smart-vault-settings .semlink-mt-config-keyghost {
     display: flex;
     align-items: center;
@@ -1120,19 +1179,18 @@
     flex: 1 1 100%;
     min-width: 0;
     height: 34px;
-    border: 1px solid var(--background-modifier-border);
+    border: none;
     border-radius: var(--sl-radius-inner);
-    background: var(--background-primary);
-    /* 图标+文案主题色（用户拍板"字色改成主题色"，此前"要更深一点"
-       的深色字被覆盖） */
-    color: var(--interactive-accent);
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
     font-size: 13px;
+    font-weight: 550;
     cursor: pointer;
 }
 
 .smart-vault-settings .semlink-mt-config-keyghost:hover {
-    border-color: var(--background-modifier-border-hover);
-    background: var(--sl-hover);
+    background: var(--interactive-accent-hover);
+    color: var(--text-on-accent);
 }
 
 .smart-vault-settings .semlink-mt-config-keyghost-icon {
@@ -1145,13 +1203,18 @@
     height: 14px;
 }
 
-/* Key 配置弹窗：纵向节奏收紧（用户拍板"这个空行太多了"）——输入框
-   下距与状态行上距减半，错误/成功提示紧贴输入框 */
-.semlink-provider-editor-modal .semlink-editor-input {
-    margin-bottom: 8px;
+/* Key 配置弹窗：纵向节奏收紧（用户拍板"这个空行太多了"+"去掉输入框
+   和异常提示之间的空行"）——提示紧贴输入框。复合选择器（semlink-key-
+   modal 与 smart-vault-settings 同在 modalEl，0-3-0）：基线
+   .semlink-editor-input 的 margin-bottom:16px 与 .semlink-mt-config-
+   status 的 margin-top:8px 均为 0-2-0，仅靠源序两次压过旧覆写。
+   只圈 Key 弹窗——共用 provider-editor-modal 的 AddModelModal 表单
+   行距不受影响。 */
+.smart-vault-settings.semlink-key-modal .semlink-editor-input {
+    margin-bottom: 4px;
 }
 
-.semlink-provider-editor-modal .semlink-mt-config-status {
+.smart-vault-settings.semlink-key-modal .semlink-mt-config-status {
     margin-top: 0;
 }
 
@@ -1169,6 +1232,61 @@
 
 .semlink-provider-editor-modal .semlink-editor-footer {
     margin-top: 16px;
+}
+
+/* ── 系列选型弹窗（用户拍板"多供应商的点击触发弹窗"）：成员行 =
+   浅灰圆角条（logo + 名称 + 灰色 Endpoint 尾随），点行即确认 ── */
+.smart-vault-settings .semlink-variant-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.smart-vault-settings .semlink-variant-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--sl-fill, rgba(118, 118, 128, 0.08));
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-variant-row:hover {
+    background: var(--sl-hover, rgba(118, 118, 128, 0.16));
+}
+
+.smart-vault-settings .semlink-variant-row.is-current .semlink-variant-name {
+    color: var(--interactive-accent);
+}
+
+.smart-vault-settings .semlink-variant-logo {
+    display: flex;
+    flex-shrink: 0;
+}
+
+.smart-vault-settings .semlink-variant-logo .semlink-mt-logo-svg {
+    width: 20px;
+    height: 20px;
+}
+
+.smart-vault-settings .semlink-variant-name {
+    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: 550;
+    color: var(--text-normal);
+}
+
+.smart-vault-settings .semlink-variant-endpoint {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: right;
+    font-size: 12px;
+    color: var(--sl-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Test & Save 主钮：勾图标与文字的间距（footer 的 gap: 8px 统一管） */
@@ -1382,40 +1500,8 @@
     font-size: 12.5px;
 }
 
-/* 文件夹行复用 .semlink-mt-provider 的布局（图标 = 成员中最热门供应商），
-   这里只补文件夹特有的部分：名称右侧的下拉箭头、名称下的成员数、
-   拖拽落点虚线。 */
-.smart-vault-settings .semlink-mt-provider.is-nested {
-    margin-left: 20px;
-}
-
-/* 文件夹内嵌套供应商行：名称字号 13px（用户拍板"这个供应商的字调小"，
-   比顶级行轻一档，弱化层级里的成员存在感）；左缩进移除（用户拍板
-   "子供应商的字也要左对齐"）——成员行与顶级行同一起点 */
-.smart-vault-settings .semlink-mt-provider.is-nested {
-    margin-left: 0;
-}
-
-.smart-vault-settings .semlink-mt-provider.is-nested .semlink-mt-provider-name {
-    font-size: 13px;
-}
-
-.smart-vault-settings .semlink-mt-provider.is-folder.is-droptarget {
-    outline: 1.5px dashed var(--interactive-accent);
-}
-
-.smart-vault-settings .semlink-mt-folder-chevron {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-    margin-left: 2px;
-    color: var(--text-muted);
-}
-
-.smart-vault-settings .semlink-mt-folder-chevron .svg-icon {
-    width: 14px;
-    height: 14px;
-}
+/* 文件夹 UI 已移除（用户拍板"列表不要文件夹"）：内置系列渲染为单行，
+   点击弹选型窗——is-nested/is-folder/folder-chevron 样式一并清掉 */
 
 /* 供应商列表（中栏）：Cherry 式扁平——无卡片容器，行即胶囊（hover/选中
    圆角底），卡内滚动链保留在列内 */

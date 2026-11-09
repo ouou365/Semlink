@@ -510,6 +510,7 @@ const en = {
 	mtKeyTest: "Test connection",
 	mtKeyTesting: "Testing…",
 	mtKeyMore: "More options",
+	mtEndpointLabel: "Endpoint",
 	mtKeyGhost: "Add API Key",
 	mtKeyModalTitle: "Configure {name}",
 	mtKeyTestSave: "Test & Save",
