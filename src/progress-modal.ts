@@ -11,6 +11,14 @@ export class ProgressModal extends Modal {
 	private progress: ProgressTracker;
 	private unsubscribe: (() => void) | null = null;
 
+	/** 覆盖率口径提供方（DB 已索引 / vault 应索引总数），由宿主注入。
+	 *  弹窗曾显示追踪器的「本轮队列」口径——增量扫描 801 个未变更文件
+	 *  就 801/801(100%)，与 RAG 卡的库覆盖率 81.7% 对不上（用户反馈）。 */
+	private coverage?: () => Promise<{ indexed: number; total: number }>;
+	private lastCoverageAt = 0;
+	private coverageIndexed = 0;
+	private coverageTotal = 0;
+
 	// Buttons
 	private btnContainer!: HTMLElement;
 	private currentBtnState: "resume" | "pause" | "none" = "none";
@@ -28,9 +36,10 @@ export class ProgressModal extends Modal {
 	private networkEl!: HTMLElement;
 	private errorEl!: HTMLElement;
 
-	constructor(app: App, progress: ProgressTracker) {
+	constructor(app: App, progress: ProgressTracker, coverage?: () => Promise<{ indexed: number; total: number }>) {
 		super(app);
 		this.progress = progress;
+		this.coverage = coverage;
 		this.modalEl.addClass("smart-vault-progress-modal");
 	}
 
@@ -81,6 +90,23 @@ export class ProgressModal extends Modal {
 				this.renderButtons(event.progress);
 			}
 		});
+		// 覆盖率首查（进度事件到来前就显示真实库覆盖进度）
+		void this.refreshCoverage();
+	}
+
+	/** 节流拉取覆盖率（≥1s 一次），成功后立即重绘统计行。失败静默——
+	 *  下个进度事件会再试。 */
+	private async refreshCoverage(): Promise<void> {
+		if (!this.coverage) return;
+		const now = Date.now();
+		if (now - this.lastCoverageAt < 1000) return;
+		this.lastCoverageAt = now;
+		try {
+			const cov = await this.coverage();
+			this.coverageIndexed = cov.indexed;
+			this.coverageTotal = cov.total;
+			this.renderInfo(this.progress.current);
+		} catch { /* worker 忙碌时下个事件再试 */ }
 	}
 
 	onClose() {
@@ -100,9 +126,21 @@ export class ProgressModal extends Modal {
 		};
 		this.phaseEl.textContent = `${t("phaseCurrent")}: ${phaseNames[p.phase] || p.phase}`;
 
-		// Stats
-		const pct = p.totalNotes > 0 ? (p.processedNotes / p.totalNotes) * 100 : 0;
-		this.statsEl.textContent = `${p.processedNotes.toLocaleString()} / ${p.totalNotes.toLocaleString()} (${pct.toFixed(1)}%)`;
+		// Stats：覆盖率口径（与 RAG 卡一致）——DB 已索引 / vault 应索引
+		// 总数。注入了 coverage 提供方时每个进度事件节流重查（≥1s）；
+		// 分子百分比仍钳制不越界。未注入时退回本轮队列口径（同样钳制）。
+		if (this.coverage) {
+			void this.refreshCoverage();
+			const denom = Math.max(0, this.coverageTotal);
+			const numer = denom > 0 ? Math.min(this.coverageIndexed, denom) : this.coverageIndexed;
+			const pct = denom > 0 ? (numer / denom) * 100 : 0;
+			this.statsEl.textContent = `${numer.toLocaleString()} / ${denom.toLocaleString()} (${pct.toFixed(1)}%)`;
+		} else {
+			const denom = Math.max(0, p.totalNotes);
+			const numer = denom > 0 ? Math.min(p.processedNotes, denom) : p.processedNotes;
+			const pct = denom > 0 ? (numer / denom) * 100 : 0;
+			this.statsEl.textContent = `${numer.toLocaleString()} / ${denom.toLocaleString()} (${pct.toFixed(1)}%)`;
+		}
 
 		// Detail values
 		this.embeddedChunksValue.textContent = p.embeddedChunks.toLocaleString();

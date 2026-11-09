@@ -705,7 +705,7 @@ export default class SmartVaultPlugin extends Plugin {
 		return { mode, resolved, scrollTop: Math.round(scroller?.scrollTop ?? -1), scrollHeight: scroller?.scrollHeight ?? -1, expectedLine: line, totalLines, file: v.file?.path };
 	}
 
-	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; addProviderProbe?: boolean; scrollPerf?: boolean }): Promise<unknown> {
+	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean }): Promise<unknown> {
 		// 可选：先把搜索视图移入独立弹窗再量（弹窗实例的布局与主窗不同）。
 		// width/height 自定弹窗尺寸（≤480 可测窄幅断点）；不传用形态默认值。
 		// 对已在弹窗里的 leaf 再次 moveLeafToPopout = 按新尺寸重建弹窗，
@@ -1474,6 +1474,43 @@ export default class SmartVaultPlugin extends Plugin {
 			// 无命中时也带出全部叶子诊断（dbg.docs 只在成功路径写入）
 			if (!dbg.docs) dbg.docs = diag;
 			(navDbg ??= {}).scrollPerf = dbg;
+		}
+		// countProbe：vault 可索引数取证——调度器口径（countIndexableNotes）
+		// 与 vault 原始清单、磁盘 walk 对不上时（用户报"共 980 篇不更新"），
+		// 分桶看差在哪：vault md 总数 / 非空 / 命中排除各多少。
+		if (opts?.countProbe) {
+			const dbg: Record<string, unknown> = {};
+			try {
+				const all = this.app.vault.getMarkdownFiles();
+				const patterns = this.settings.excludePaths
+					.split("\n")
+					.map((x) => x.trim())
+					.filter((x) => x.length > 0);
+				const isEx = (path: string): boolean =>
+					patterns.some((x) => path.startsWith(x) || path.includes(x)) ||
+					path.startsWith(this.app.vault.configDir + "/");
+				const nonEmpty = all.filter((f) => f.stat.size > 0);
+				const excluded = nonEmpty.filter((f) => isEx(f.path));
+				dbg.vaultMd = all.length;
+				dbg.vaultMdNonEmpty = nonEmpty.length;
+				dbg.excludedByRule = excluded.length;
+				dbg.countIndexable = this.scheduler.countIndexableNotes();
+				dbg.emptyMd = all.length - nonEmpty.length;
+				dbg.trackerTotalNotes = this.progress.current.totalNotes;
+				dbg.trackerProcessed = this.progress.current.processedNotes;
+				dbg.trackerPhase = this.progress.current.phase;
+				const [stats, embedded] = await Promise.all([
+					this.store.getStats(),
+					this.store.getEmbeddedNoteCount(),
+				]);
+				dbg.db = stats;
+				dbg.dbEmbeddedNotes = embedded;
+				dbg.timeOrigin = Math.round(performance.timeOrigin);
+				dbg.modals = Array.from(document.querySelectorAll('.smart-vault-progress-modal')).length;
+			} catch (e) {
+				dbg.error = String(e);
+			}
+			(navDbg ??= {}).countProbe = dbg;
 		}
 		// 复现「点弹窗按钮后咖啡杯丢失」：进入嵌入引导 → 点真实弹窗按钮 →
 		// 按时间点扫描所有窗口里的 cup canvas（存在性 + 像素）。
@@ -2316,7 +2353,17 @@ export default class SmartVaultPlugin extends Plugin {
 			const stats = await this.store.getStats();
 			this.progress.initFromStats(stats.indexedNotes, stats.activeChunks, stats.indexedNotes);
 		}
-		const modal = new ProgressModal(this.app, this.progress);
+		const modal = new ProgressModal(this.app, this.progress, async () => {
+			// 覆盖率口径（与 RAG 卡一致）：**已完成嵌入笔记数** / vault 应
+			// 索引总数。曾用「已建索引笔记数」——重嵌入重建期间它恒定不动
+			// （重建不产生新笔记，只刷新向量），弹窗分子冻在 801 很费解
+			// （用户反馈）。完成嵌入 = 真正可被检索，完成一篇涨一篇。
+			const [stats, embedded] = await Promise.all([
+				this.store.getStats(),
+				this.store.getEmbeddedNoteCount(),
+			]);
+			return { indexed: embedded, total: this.scheduler.countIndexableNotes() };
+		});
 		modal.open();
 	}
 
@@ -2388,7 +2435,10 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 
 		if (count) {
-			count.textContent = `${p.processedNotes} ${t("statusFilesCount")}`;
+			// 状态栏显示应索引总数（与 RAG 卡 hero 副行同口径同源）。曾显示
+			// processedNotes——那是跨轮累计的已处理计数器，会超过库总数
+			// （真机 1049 files > vault 实际数），看着像总数在乱涨。
+			count.textContent = `${this.scheduler.countIndexableNotes()} ${t("statusFilesCount")}`;
 		}
 	}
 
@@ -2399,7 +2449,7 @@ export default class SmartVaultPlugin extends Plugin {
 			const count = this.statusBarEl.querySelector(".status-count");
 			if (count) {
 				const stats = await this.store.getStats();
-				count.textContent = `${stats.indexedNotes} ${t("statusFilesCount")}`;
+				count.textContent = `${this.scheduler.countIndexableNotes()} ${t("statusFilesCount")}`;
 				// 用 DB 权威值播种进度追踪器：否则启动后任何一次进度事件
 				// （扫描枚举阶段 processedNotes=0）都会把状态栏覆盖成
 				// 「0 个文件」，直到打开面板/设置触发重播种才恢复。

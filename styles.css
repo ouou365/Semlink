@@ -7793,18 +7793,33 @@ body .semlink-msg-user::selection {
 }
 
 /* ╕═ RAG 页：状态组（单卡——索引/嵌入已合并，用户拍板）+ 配置/维护分组卡 ╕ */
-/* 数值行容器：基线单列；宽容器（≥560px，与旧双卡分栏同档）2×2 分栏
-   （用户拍板"当宽屏的时候分成两列"） */
+/* 横排统计条（用户拍板"横排统计条（推荐）"）：三个结果量三列等分横排，
+   数字在上（17px tabular）、标签在下（11.5px 灰）；总数进 hero 副行。
+   曾是 2×2 分栏/单列行，均被此结构取代。 */
 .semlink-rag-stats {
 	display: flex;
-	flex-direction: column;
+	flex-direction: row;
+	gap: 4px;
+	padding: 8px 8px 4px;
 }
-@container settings (min-width: 560px) {
-	.semlink-rag-stats {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-		column-gap: 20px;
-	}
+.semlink-rag-stat {
+	flex: 1 1 0;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding: 4px 8px;
+}
+.semlink-rag-stat-num {
+	font-size: 17px;
+	font-weight: 600;
+	line-height: 1.25;
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+}
+.semlink-rag-stat-label {
+	font-size: 11.5px;
+	color: var(--text-muted);
 }
 /* 状态卡与下方配置/维护卡之间的间距（曾由 status-grid 的 gap/margin 承担，
    合并后卡片直接挂在容器上，补回底距） */
@@ -7829,10 +7844,24 @@ body .semlink-msg-user::selection {
 	padding: 12px 16px 8px;
 }
 .semlink-rag-hero-left {
+	/* 列结构：第一行 = 标题 + spinner，第二行 = 总数副行（ragTotalSub，
+	   用户拍板"横排统计条"——分母交代在 hero，不与结果量平铺） */
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	min-width: 0;
+}
+.semlink-rag-hero-top {
 	display: flex;
 	align-items: center;
 	gap: 6px;
 	min-width: 0;
+}
+.semlink-rag-hero-sub {
+	font-size: 12px;
+	color: var(--text-muted);
+	line-height: 1.3;
 }
 .semlink-rag-hero-title {
 	font-size: 14px;
@@ -7883,25 +7912,6 @@ body .semlink-msg-user::selection {
 	transform-origin: 0 50%;
 	background: var(--interactive-accent);
 	transition: transform 0.2s ease-out;
-}
-/* 数值行：紧凑 36px，标签左、数值右（tabular） */
-.semlink-rag-stat {
-	min-height: 36px;
-}
-.semlink-rag-stat-label {
-	font-size: 12.5px;
-	color: var(--text-muted);
-	flex-shrink: 0;
-}
-.semlink-rag-stat-value {
-	margin-left: auto;
-	font-size: 12.5px;
-	color: var(--text-normal);
-	font-variant-numeric: tabular-nums;
-	text-align: right;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 /* ╕═ 高级选项折叠（RAG 高级项 / MCP 调试共用）：
@@ -8544,6 +8554,11 @@ body .semlink-msg-user::selection {
 .modal .semlink-settings-root .semlink-card {
     border: 1px solid var(--sl-sep);
 }
+/* 模型列表卡在原生设置弹窗宿主不带描边（用户拍板"去掉这个边框"）：
+   白底在灰页上已足够区分，全包边框显得重 */
+.modal .semlink-settings-root .semlink-mt-rows-card {
+    border: none;
+}
 
 /* 组标题：iOS 分组头（13px 灰，与卡内容左对齐） */
 .semlink-settings-root .semlink-card-title {
@@ -8574,12 +8589,6 @@ body .semlink-msg-user::selection {
 .semlink-settings-root .semlink-row-value {
     font-size: 13px;
     color: var(--sl-secondary-text);
-}
-/* RAG 状态卡数值行：紧凑 30px（常规行 44px 太疏，评审要求收紧行距）。
-   0-2-0 靠后源序，同时压掉基线 min-height:36px 与 ≤720 桶的行 padding。 */
-.semlink-settings-root .semlink-rag-stat {
-    min-height: 0;
-    padding: 6px 16px;
 }
 
 /* 说明句统一二级灰 */

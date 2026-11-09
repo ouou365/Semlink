@@ -159,11 +159,13 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			const titleLeft = title.nameEl.createDiv({ cls: "semlink-settings-heading-left" });
 			titleLeft.createSpan({ cls: "semlink-settings-heading-text", text: t("settingsTitle") });
 			titleLeft.createSpan({ cls: "semlink-settings-tagline", text: t("settingsTagline") });
-			// 顶条右上语言切换（仅原生设置弹窗）：换语言 = 落盘 + setLang +
-			// 整页重渲（renderPrefsSection 同款逻辑）。历史评审撤销过这个
-			// 入口，用户要求恢复——旧 .semlink-settings-lang CSS（160px 上限、
-			// 不收缩）仍在，类名直接复用。
-			const langWrap = title.controlEl.createDiv({ cls: "semlink-settings-lang" });
+			// 顶条右上语言切换（仅原生设置弹窗）：挂在 nameEl（标题行 flex
+			// 容器）尾部——controlEl 会被 Obsidian 的 setting-item 换行挤到
+			// 标题下一行（真机截图），标题行内 margin-left:auto 才是右上角。
+			// 换语言 = 落盘 + setLang + 整页重渲（renderPrefsSection 同款
+			// 逻辑）。旧 .semlink-settings-lang CSS（160px 上限、不收缩、
+			// margin-left:auto）正是为这个位置写的，类名直接复用。
+			const langWrap = title.nameEl.createDiv({ cls: "semlink-settings-lang" });
 			new DropdownComponent(langWrap)
 				.addOptions({
 					auto: t("langAuto"),
@@ -587,42 +589,44 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	// ══════════════════════════════════════
 	// Tab: Embedding (RAG) — 状态 / 配置 / 维护 三组
 	// ══════════════════════════════════════
-	/** RAG 页组「状态」：单张卡（hero 大数字 + 进度条 + 数值行
-	 *  Total/Indexed/Embedded/Skipped + Auto Index / Auto-embed 开关）。
+	/** RAG 页组「状态」：单张卡（hero 大数字 + 总数副行 + 进度条 +
+	 *  横排统计条 Indexed/Embedded/Skipped + Auto Index 开关）。
 	 *  数据由进度事件与数据库统计双路刷新。reindexRef 由调用方传入：
 	 *  重新索引按钮在「维护」组创建后回填引用，进度订阅据此在索引
 	 *  进行中把按钮置为「索引中…」禁用态。 */
 	private renderIndexCard(containerEl: HTMLElement, reindexRef?: { btn?: HTMLButtonElement; running?: boolean }): void {
 		const totalNotes = (): number => Math.max(0, this.plugin.progress.current.totalNotes);
+		// 活总数：refreshStats 时同步一次 vault 实际可索引数（countIndexable
+		// Notes 与调度器扫描同口径：md + 非空 + 排除规则）——拷文件期间
+		// hero 副行与百分比即时跟上，不等下一轮扫描（用户反馈"共 980 篇
+		// 也应该更新呀"）。同步失败保持旧值（快照兜底）。
+		let liveTotal = totalNotes();
 
 		containerEl.createDiv({ cls: "semlink-card-title", text: t("ragGroupStatus") });
 		// 状态 = 单张卡（用户拍板"两个卡片可以合并"：索引/嵌入同源同节奏，
-		// 双卡双 hero 是冗余）：hero + 进度条 + 数值行（Total/Indexed/
-		// Embedded/Skipped）+ 两个自动开关。
+		// 双卡双 hero 是冗余）：hero（含总数副行）+ 进度条 + 横排统计条
+		// + 自动索引开关。
 
-		// ── 块骨架：hero（标题 + spinner + 大数字）→ 进度条（数值行/开关由调用处按序追加） ──
+		// ── 块骨架：hero（标题 + spinner + 总数副行 + 大数字）→ 进度条（统计条/开关由调用处按序追加） ──
 		interface RagBlock {
 			block: HTMLElement;
 			valueEl: HTMLElement;
 			fillEl: HTMLElement;
 			spinEl: HTMLElement;
+			heroSub: HTMLElement;
 		}
 		const makeBlock = (title: string): RagBlock => {
 			const block = containerEl.createDiv({ cls: "semlink-card semlink-rag-status" }).createDiv({ cls: "semlink-rag-block" });
 			const hero = block.createDiv({ cls: "semlink-rag-hero" });
 			const heroLeft = hero.createDiv({ cls: "semlink-rag-hero-left" });
-			heroLeft.createSpan({ cls: "semlink-rag-hero-title", text: title });
-			const spinEl = heroLeft.createSpan({ cls: "semlink-rag-hero-spin" });
+			const heroTop = heroLeft.createDiv({ cls: "semlink-rag-hero-top" });
+			heroTop.createSpan({ cls: "semlink-rag-hero-title", text: title });
+			const spinEl = heroTop.createSpan({ cls: "semlink-rag-hero-spin" });
 			setIcon(spinEl, "loader-2");
+			const heroSub = heroLeft.createDiv({ cls: "semlink-rag-hero-sub" });
 			const valueEl = hero.createSpan({ cls: "semlink-rag-hero-value is-empty", text: "—" });
 			const fillEl = block.createDiv({ cls: "semlink-rag-bar" }).createDiv({ cls: "semlink-rag-bar-fill" });
-			return { block, valueEl, fillEl, spinEl };
-		};
-		// 紧凑数值行（36px）
-		const statRow = (host: HTMLElement, label: string): HTMLElement => {
-			const r = host.createDiv({ cls: "semlink-row semlink-rag-stat" });
-			r.createSpan({ cls: "semlink-rag-stat-label", text: label });
-			return r.createSpan({ cls: "semlink-rag-stat-value", text: "—" });
+			return { block, valueEl, fillEl, spinEl, heroSub };
 		};
 		// 末行自动开关行（单行：仅标题 + 开关）
 		const toggleRow = (host: HTMLElement, label: string, initial: boolean, onChange: (v: boolean) => Promise<void>): void => {
@@ -634,17 +638,22 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		};
 
 		const indexBlock = makeBlock(t("indexProgressTitle"));
-		// 数值行顺序 = 用户指定的合并口径：Total notes / Indexed /
-		// Embedded / Skipped；其后跟自动开关。行包进 stats 容器：宽容器
-		// 2×2 分栏（用户拍板"当宽屏的时候分成两列"），窄容器单列。
+		// 横排统计条（用户拍板"横排统计条（推荐）"）：笔记总数进 hero 副行
+		// （分母/基准），三个结果量——已索引/已嵌入/已跳过——横排一行，
+		// 数字在上、标签在下。扫读层次：进度 → 结果 → 开关。
 		const statsGrid = indexBlock.block.createDiv({ cls: "semlink-rag-stats" });
-		const totalEl = statRow(statsGrid, t("guideStatTotalNotes"));
-		const chunkedEl = statRow(statsGrid, t("chunkedNotes"));
-		// 已嵌入行：至少一个 chunk 带向量的笔记数
-		const vectorizedEl = statRow(statsGrid, t("vectorizedChunks"));
-		// 已跳过行（用户拍板"嵌入进度要包含已跳过"）：空文件/全稀疏笔记，
-		// 永远不会产生向量——单独展示
-		const embedSkippedEl = statRow(statsGrid, t("embedSkipped"));
+		const statCell = (label: string): HTMLElement => {
+			const cell = statsGrid.createDiv({ cls: "semlink-rag-stat" });
+			const num = cell.createSpan({ cls: "semlink-rag-stat-num", text: "—" });
+			cell.createSpan({ cls: "semlink-rag-stat-label", text: label });
+			return num;
+		};
+		const chunkedEl = statCell(t("chunkedNotes"));
+		// 已嵌入：至少一个 chunk 带向量的笔记数
+		const vectorizedEl = statCell(t("vectorizedChunks"));
+		// 已跳过（用户拍板"嵌入进度要包含已跳过"）：空文件/全稀疏笔记，
+		// 永远不会产生向量
+		const embedSkippedEl = statCell(t("embedSkipped"));
 		// 索引总开关：关 = 停止文件监听并暂停当前索引；开 = 恢复监听并继续索引。
 		toggleRow(indexBlock.block, t("autoIndex"), this.plugin.settings.autoIndex, async (v) => {
 			this.plugin.settings.autoIndex = v;
@@ -659,7 +668,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 		// hero 大数字 = 百分比（封顶 100%）；总数未知（totalNotes=0）→「—」淡化。
 		const setHero = (b: RagBlock, num: number): void => {
-			const total = totalNotes();
+			const total = liveTotal;
 			if (total === 0) {
 				b.valueEl.setText("—");
 				b.valueEl.addClass("is-empty");
@@ -693,6 +702,16 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 首查常见于插件刚加载、DB worker 尚在初始化——失败不能静默吞掉
 		// （空闲时没有进度事件来重试），退避重试直到 worker 就绪补上数值。
 		let statsRetryTimer: number | null = null;
+		// 总数副行独立刷新：不依赖 DB 往返——重索引期间 worker 繁忙，
+		// getStats 可能连续失败走退避重试，总数若挂在它后面会冻结在旧值
+		// （真机复现：状态栏 1016 而副行恒 980）。vault 文件遍历轻量
+		// （~千文件 <1ms），失败静默保持旧值。
+		const updateHeroSub = (): void => {
+			try {
+				liveTotal = Math.max(0, this.plugin.scheduler.countIndexableNotes());
+			} catch { /* vault 不可用时保持快照 */ }
+			indexBlock.heroSub.setText(t("ragTotalSub").replace("{n}", liveTotal.toLocaleString()));
+		};
 		const refreshStats = async (attempt = 0): Promise<void> => {
 			try {
 				const [s, embeddedNotes, skippedNotes] = await Promise.all([
@@ -701,12 +720,15 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					this.plugin.store.getEmbedSkippedNoteCount(),
 				]);
 				chunkedEl.setText(s.indexedNotes.toLocaleString());
-				totalEl.setText(totalNotes().toLocaleString());
 				vectorizedEl.setText(embeddedNotes.toLocaleString());
 				embedSkippedEl.setText(skippedNotes.toLocaleString());
-				// 单 hero：索引口径（已索引/总数）——嵌入与索引同源同节奏，
-				// 双百分比是冗余（用户拍板合并卡片）
-				setHero(indexBlock, s.indexedNotes);
+				// 总数副行：hero 的分母口径（用户拍板"横排统计条"——总数不再
+				// 与三个结果量平铺），用活总数（拷文件期间即时增长）
+				indexBlock.heroSub.setText(t("ragTotalSub").replace("{n}", liveTotal.toLocaleString()));
+				// 单 hero：**嵌入口径**（已完成嵌入/总数）——重建期间「已索引」
+				// 不动而「已嵌入」爬升，嵌入口径才能随完成一篇涨一篇（用户
+				// 反馈重嵌入时数值冻结"很费解"）；嵌入 = 真正可被检索
+				setHero(indexBlock, embeddedNotes);
 			} catch (e) {
 				if (attempt >= 8) {
 					console.warn("[Semlink] index stats unavailable:", e);
@@ -716,9 +738,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			}
 		};
 		setRunning(RAG_RUNNING_PHASES.has(this.plugin.progress.current.phase));
+		updateHeroSub();
 		void refreshStats();
 
-		// 单一合并订阅：进度事件实时刷新运行态 + 数值行节流查库（≤1s 一次）
+		// 单一合并订阅：进度事件实时刷新运行态 + 总数（不依赖 DB）+ 数值行节流查库（≤1s 一次）
 		let lastEmbedRefresh = 0;
 		const unIndex = this.plugin.progress.onProgress((e) => {
 			if (e.type !== "progress") return;
@@ -726,6 +749,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			const now = Date.now();
 			if (now - lastEmbedRefresh >= 1000) {
 				lastEmbedRefresh = now;
+				updateHeroSub();
 				void refreshStats();
 			}
 		});
