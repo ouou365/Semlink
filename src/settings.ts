@@ -322,8 +322,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	/** General 偏好组：语言切换。saveSettings 重跑 setLang 刷新语言相关
 	 *  视图；display() 整页重渲，设置界面自身即刻跟随新语言。 */
 	private renderPrefsSection(panelEl: HTMLElement): void {
-		// 组标题已去掉（用户拍板）——卡自明
-		const card = panelEl.createDiv({ cls: "semlink-card" });
+		// 组标题已去掉（用户拍板）——卡自明；与下方 Guide 卡留组间距
+		// （原组标题撑开的空隙随之消失，由本类补回）
+		const card = panelEl.createDiv({ cls: "semlink-card semlink-prefs-card" });
 		const row = card.createDiv({ cls: "semlink-row" });
 		row.createDiv({ cls: "semlink-row-label" }).createSpan({
 			cls: "semlink-row-title",

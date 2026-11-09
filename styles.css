@@ -8122,6 +8122,11 @@ body .semlink-msg-user::selection {
     margin-bottom: var(--sl-space-4);
 }
 
+/* Pro 页语言卡：组标题 Preferences 去掉后与 Guide 卡之间补组间距 */
+.semlink-prefs-card {
+    margin-bottom: var(--sl-space-4);
+}
+
 /* 引导行「打开」钮：白色普通钮（用户拍板"白色普通按钮，显示打开"）
    ——白底 + 浅描边 + 深字，不用 accent 淡染 */
 .semlink-guide-open-btn {
