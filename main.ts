@@ -5,7 +5,7 @@
 import { Notice, Plugin, FileSystemAdapter, WorkspaceLeaf, WorkspaceSidedock, addIcon, MarkdownView, TFile } from "obsidian";
 import { debugLog, setDebugLogging } from "./src/log";
 import { join } from "path";
-import { DEFAULT_SETTINGS, activeEmbeddingProvider, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
+import { DEFAULT_SETTINGS, activeEmbeddingProvider, mergeDuplicateProviders, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
 import { WebSearchService } from "./src/web-search";
 import { UsageStore } from "./src/usage-store";
 import { migrateLegacyCatalogBases, sanitizeProviderOrder, syncCatalogModels } from "./src/settings-models";
@@ -462,6 +462,9 @@ export default class SmartVaultPlugin extends Plugin {
 		// whose wire path was wrong from day one — patch those exact dead
 		// values (idempotent: a fixed base no longer matches).
 		migrateLegacyCatalogBases(this.settings);
+		// 同一公司的对话/嵌入实例合并（用户："一个配的是对话，一个配的是
+		// 嵌入，其实应该合在一起"）——同 apiBase 双实例曾是两个列表行
+		mergeDuplicateProviders(this.settings);
 		// 手动排序（providerOrder）只保留仍然存在的条目：目录里已删除/已
 		// 改名的供应商、以及指向旧 logo 分组的大段 SVG 键都会残留在里面，
 		// 不清洗的话会一直以旧顺序压住默认排名。
@@ -705,7 +708,7 @@ export default class SmartVaultPlugin extends Plugin {
 		return { mode, resolved, scrollTop: Math.round(scroller?.scrollTop ?? -1), scrollHeight: scroller?.scrollHeight ?? -1, expectedLine: line, totalLines, file: v.file?.path };
 	}
 
-	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean }): Promise<unknown> {
+	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; ragDomProbe?: boolean; guideBackProbe?: boolean; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean }): Promise<unknown> {
 		// 可选：先把搜索视图移入独立弹窗再量（弹窗实例的布局与主窗不同）。
 		// width/height 自定弹窗尺寸（≤480 可测窄幅断点）；不传用形态默认值。
 		// 对已在弹窗里的 leaf 再次 moveLeafToPopout = 按新尺寸重建弹窗，
@@ -759,7 +762,7 @@ export default class SmartVaultPlugin extends Plugin {
 					// DOM .click() 在这个嵌入实例上不生效——直接改设置 tab
 					// 实例的 activeTab 并重渲染，确定性切换。
 					// nav 语义 = 菜单位置（用户拍板顺序：Model 第一、Pro 最后）
-					const ids = ["model", "embedding", "mcp", "share", "general"] as const;
+					const ids = ["general", "model", "embedding", "mcp", "share"] as const;
 					const inst = (sv as unknown as {
 						settingsEmbed?: { tab?: { activeTab?: string; display(): void } };
 					}).settingsEmbed?.tab;
@@ -1265,6 +1268,56 @@ export default class SmartVaultPlugin extends Plugin {
 				}
 				return null;
 			})();
+		}
+		// guideBackProbe：引导返回直达来源屏全链路（用户拍板"从哪里跳进去
+		// 就从返回到哪里"）：点 RAG 嵌入行 Configure（openSetupGuide embed，
+		// guideDirect=true）→ 引导页 → 点 ← → 回读落点（应为设置屏而非 hub）。
+		if (opts?.guideBackProbe) {
+			const g: Record<string, unknown> = {};
+			for (const lf of this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)) {
+				const le = ((lf as unknown as { containerEl?: HTMLElement }).containerEl
+					?? (lf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+				const ld = le?.ownerDocument;
+				if (!ld) continue;
+				const cfgBtn = ld.querySelector<HTMLElement>(
+					".semlink-rag-card .semlink-row .semlink-row-control button");
+				if (!cfgBtn) { g.error = "no-configure-btn"; break; }
+				cfgBtn.click();
+				await new Promise((r) => window.setTimeout(r, 900));
+				g.guideShown = !!ld.querySelector(".semlink-search-welcome-guide");
+				g.hubShown = !!ld.querySelector(".semlink-guide-hub");
+				const back = ld.querySelector<HTMLElement>(".semlink-guide-corners .semlink-search-icon-btn");
+				if (!back) { g.error = "no-back-btn"; break; }
+				back.click();
+				await new Promise((r) => window.setTimeout(r, 700));
+				g.afterBackSettings = !!ld.querySelector(".semlink-settings-screen");
+				g.afterBackHub = !!ld.querySelector(".semlink-guide-hub");
+				g.afterBackGuide = !!ld.querySelector(".semlink-search-welcome-guide");
+				break;
+			}
+			(navDbg ??= {}).guideBack = g;
+		}
+		// ragDomProbe：RAG 高级选项第一条 Setting 的 DOM 结构（tag.class 树，
+		// 无文本）——为"数值挪到标题右侧 + 行高缩窄"定位确切挂类点。
+		if (opts?.ragDomProbe) {
+			for (const lf of this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)) {
+				const le = ((lf as unknown as { containerEl?: HTMLElement }).containerEl
+					?? (lf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+				const ld = le?.ownerDocument;
+				if (!ld) continue;
+				const body = ld.querySelector<HTMLElement>(".semlink-collapse-body");
+				if (!body) continue;
+				// 截图取证前置：把折叠头点开（body 在 DOM 里但 semlink-hidden）
+				ld.querySelector<HTMLElement>(".semlink-collapse-head")?.click();
+				const dump = (el: Element, depth: number): string => {
+					const cls = (el.className || "").toString().slice(0, 70);
+					const line = `${"  ".repeat(depth)}<${el.tagName.toLowerCase()}${cls ? "." + cls.replace(/\s+/g, ".") : ""}>`;
+					if (depth > 5) return line;
+					return line + "\n" + Array.from(el.children).map((c) => dump(c, depth + 1)).join("\n");
+				};
+				(navDbg ??= {}).ragDom = dump(body.children[0] as Element, 0);
+				break;
+			}
 		}
 		// keyModalProbe：Key 弹窗内取证（用户拍板"去掉输入框和异常提示
 		// 之间的空行"）：塞假 Key → 点 Test & Save → 等检测失败 → 读输入
@@ -2402,6 +2455,15 @@ export default class SmartVaultPlugin extends Plugin {
 
 	/** 打开侧栏并进入对应的配置引导：chat = 对话目录（首次引导同款），
 	 *  embed = 嵌入专用目录（RAG 页「开始配置」），选完模型即触发索引。 */
+	/** 打开引导界面（hub）：Pro 页「打开引导」按钮用——泛入口（可选对话
+	 *  /嵌入两条配置流），不跳过 hub。 */
+	async openGuideHub(): Promise<void> {
+		const leaf = await this.activateSearchView();
+		(leaf?.view as unknown as {
+			openGuide?: (mode?: "hub" | "chat" | "embed", from?: "home" | "settings") => void;
+		} | undefined)?.openGuide?.("hub", "settings");
+	}
+
 	async openSetupGuide(kind: "chat" | "embed" = "chat"): Promise<void> {
 		const leaf = await this.activateSearchView();
 		(leaf?.view as SemanticSearchView | undefined)?.openSetupGuide(kind);

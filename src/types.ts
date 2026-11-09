@@ -179,6 +179,73 @@ export function migrateEmbeddingSettings(s: SmartVaultSettings): void {
 	s.embeddingModelKey = mid ? `${legacyPid}::${mid}` : "";
 }
 
+/** Merge providers that point at the same apiBase origin into one entry
+ *  (user: "一个配的是对话，一个配的是嵌入，其实应该合在一起"). A company
+ *  serving both chat and embedding used to exist twice — the chat instance
+ *  from the catalog and an embedding-seeded default (e.g. Siliconflow /
+ *  SiliconFlow both on api.siliconflow.cn) — rendering as two rows in the
+ *  model list. The merged entry keeps kind-tagged models (chat models
+ *  untagged = chat), so one provider serves both sides:
+ *  - apiKey/noAuth/family: first non-empty wins (prefer the keyed instance);
+ *  - models: concat deduped by id, preferring the entry that carries a kind
+ *    tag and the enabled=true flag;
+ *  - embeddingModelKey (`pid::mid`) and activeChatModel (`pid/mid`) that
+ *    pointed at a merged-away id are rewritten to the surviving id.
+ *  Idempotent: after one pass each origin hosts exactly one provider. */
+export function mergeDuplicateProviders(s: SmartVaultSettings): void {
+	const originOf = (apiBase: string): string => {
+		try {
+			const u = new URL(apiBase);
+			return `${u.protocol}//${u.host}`;
+		} catch {
+			return apiBase;
+		}
+	};
+	const groups = new Map<string, ModelProvider[]>();
+	for (const p of s.providers) {
+		const key = originOf(p.apiBase || "");
+		const arr = groups.get(key);
+		if (arr) arr.push(p);
+		else groups.set(key, [p]);
+	}
+	const byId = new Map(s.providers.map((p) => [p.id, p] as const));
+	for (const members of groups.values()) {
+		if (members.length < 2) continue;
+		// 主实例：有 Key 的优先（对话实例通常已配 Key），否则取首个
+		const primary = members.find((p) => !!p.apiKey.trim()) ?? members[0];
+		const rest = members.filter((p) => p !== primary);
+		for (const dup of rest) {
+			if (!primary.apiKey.trim()) primary.apiKey = dup.apiKey;
+			primary.noAuth = primary.noAuth || dup.noAuth;
+			if (!primary.family) primary.family = dup.family;
+			if (!primary.icon && dup.icon) primary.icon = dup.icon;
+			// 模型合并：同 id 去重——带 kind 标签者优先（分块清单比对话
+			// 清单更具体），其次 enabled=true 者（用户已勾选的保留勾选）
+			for (const m of dup.models) {
+				const existing = primary.models.find((x) => x.id === m.id);
+				if (!existing) {
+					primary.models.push({ ...m });
+				} else if ((existing.kind ?? "") === "" && (m.kind ?? "") !== "") {
+					const enabled = existing.enabled === true || m.enabled === true;
+					const idx = primary.models.indexOf(existing);
+					primary.models[idx] = { ...m, enabled: enabled || m.enabled };
+				} else if (m.enabled === true) {
+					existing.enabled = true;
+				}
+			}
+			// 引用改写：嵌入选择键指向被合并 id → 改指存活实例
+			if (s.embeddingModelKey.startsWith(`${dup.id}::`)) {
+				s.embeddingModelKey = `${primary.id}::${s.embeddingModelKey.slice(dup.id.length + 2)}`;
+			}
+			if (s.activeChatModel.startsWith(`${dup.id}/`)) {
+				s.activeChatModel = `${primary.id}/${s.activeChatModel.slice(dup.id.length + 1)}`;
+			}
+			byId.delete(dup.id);
+		}
+		s.providers = s.providers.filter((p) => byId.has(p.id));
+	}
+}
+
 /** Chat completion API wire format */
 export type ChatApiFormat = "openai" | "anthropic";
 

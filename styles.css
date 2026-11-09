@@ -673,11 +673,19 @@
     .smart-vault-settings .semlink-mt:not(.is-drilled) .semlink-mt-config {
         display: none;
     }
-    /* 钻入态配置栏内部滚动（用户截图：模型行从卡片下缘溢出到页面
-       灰底上——mt-config 高度被约束却没有 overflow，内容可见溢出；
-       两栏块的同款规则在 min-width:481 桶里，≤480 必须自带） */
+    /* 钻入态单滚动条（用户拍板"不要两个滚动条"）：滚动所有者是行卡
+       （窗口化渲染绑在 rh.scrollTop 上，卡必须是滚动容器）——配置列
+       自身不再滚动，否则卡内外各出现一条竖条。行高约束链（卡 flex
+       min-height:0 + max-height 钳制）保证行不会溢出卡外，列不会溢出。
+       （overflow-y:auto 是历史修复——行逃生；现约束已就位，auto 反而
+       制造双滚动条。） */
     .smart-vault-settings .semlink-mt-config {
-        overflow-y: auto;
+        overflow-y: hidden;
+    }
+    /* 极矮视口兜底：卡的最小高从 240 收到 180，让"固定节 + 卡"在
+       ~500px 高的侧栏也能装下，配置列不会被撑出溢出 */
+    .smart-vault-settings .semlink-mt-config-models .semlink-mt-rows {
+        min-height: 180px;
     }
     /* Key 单行在窄幅挤不下（用户截图）：标签独占一行，输入 + Test +
        Get Key 同排第二行。输入框 basis 归零吃剩余空间——auto 的固有
@@ -7576,9 +7584,18 @@ body .semlink-msg-user::selection {
     margin-bottom: 20px;
     padding: 12px 16px 14px;
 }
+/* 卡内嵌态（用户拍板"把这两个放在一个卡片"）：营销卡下半段，顶部
+   hairline 分隔、负 margin 抵消卡内衬让色块贴满卡宽，无独立卡壳 */
+.semlink-license-keycard-inset {
+    margin: 14px -16px -14px;
+    padding: 12px 16px 14px;
+    border-top: 1px solid var(--sl-sep);
+}
+/* Activate key 标签加粗（用户拍板"这个样式加粗"）：升为行标题规格 */
 .semlink-license-keylabel {
-    font-size: 12.5px;
-    color: var(--text-muted);
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-normal);
     margin: 0 2px 8px;
 }
 .semlink-license-keyrow {
@@ -7963,6 +7980,52 @@ body .semlink-msg-user::selection {
 	}
 }
 
+/* 折叠体（RAG 高级选项滑块）白卡化（用户拍板"背景改成上面的白色，
+   高度高一些，左右有一点边距"）：与上方 Status/Setup/Maintenance 卡同
+   底色圆角，纵向内衬加高，左右微收与卡列错开一点。只圈 -card 修饰类
+   ——通用 collapse-body（MCP Debug 折叠体）不带，否则卡里套卡多一圈
+   内衬（用户截图红框标出的间距问题） */
+.smart-vault-settings .semlink-collapse-body-card {
+    background: var(--sl-card);
+    border-radius: 10px;
+    padding: 8px 14px;
+    margin: 0 6px;
+}
+
+/* 滑块行紧凑排布（用户拍板"数值调到标题的右边，行高缩窄"——RAG 高级
+   选项五条）：两行网格——第一行 标题 | 数值（.slider-value 经 control
+   的 display:contents 提升为网格项），第二行滑杆铺满。窄栏下 Obsidian
+   默认把 setting-item 竖排（数值独占一行）且内衬大，这里一并收掉。 */
+.smart-vault-settings .semlink-collapse-body .setting-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    row-gap: 2px;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.smart-vault-settings .semlink-collapse-body .setting-item-info {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+.smart-vault-settings .semlink-collapse-body .setting-item-control {
+    display: contents;
+}
+
+.smart-vault-settings .semlink-collapse-body .slider-value {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+}
+
+.smart-vault-settings .semlink-collapse-body .setting-item-control .slider,
+.smart-vault-settings .semlink-collapse-body input.slider {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+}
+
 /* 排除路径弹窗：右对齐实时计数（「将排除 {n} 条路径」） */
 .semlink-exclude-count {
 	margin-top: 6px;
@@ -8023,6 +8086,70 @@ body .semlink-msg-user::selection {
 	0%, 100% { opacity: 1; }
 	50% { opacity: 0.5; }
 }
+/* 主行控制区：分享钮 + 开关同行（分享钮在开关左侧） */
+.semlink-mcp-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* 分享钮：32px 透明底图标钮（clickable-icon 悬停灰由主题给），无独立
+   描边——与开关同视觉重量级 */
+.semlink-mcp-share-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+    background: transparent;
+    color: var(--sl-secondary-text, var(--text-muted));
+    cursor: pointer;
+}
+
+.semlink-mcp-share-btn .svg-icon,
+.semlink-mcp-share-btn svg {
+    width: 17px;
+    height: 17px;
+}
+
+/* Pro 页引导行卡：与下方营销卡之间留组间距（原清单卡自带 margin，
+   单行化后由本类补回） */
+.semlink-guide-row-card {
+    margin-bottom: var(--sl-space-4);
+}
+
+/* 引导行「打开」钮：白色普通钮（用户拍板"白色普通按钮，显示打开"）
+   ——白底 + 浅描边 + 深字，不用 accent 淡染 */
+.semlink-guide-open-btn {
+    background: var(--sl-card, var(--background-primary));
+    border: 1px solid var(--background-modifier-border);
+    color: var(--text-normal);
+}
+
+.semlink-guide-open-btn:hover {
+    background: var(--sl-card, var(--background-primary));
+    border-color: var(--background-modifier-border-hover);
+}
+
+/* 白色普通钮通用类（RAG Configure 等行内钮复用）：0-3-0 + 后置源序
+   ——同权重压过 btn-ghost 的 transparent/muted（.smart-vault-settings
+   .semlink-btn-ghost 在前） */
+.smart-vault-settings .semlink-btn-white {
+    background: var(--sl-card, var(--background-primary));
+    border: 1px solid var(--background-modifier-border);
+    color: var(--text-normal);
+}
+
+.smart-vault-settings .semlink-btn-white:hover {
+    background: var(--sl-card, var(--background-primary));
+    border-color: var(--background-modifier-border-hover);
+    color: var(--text-normal);
+}
+
 /* 名称 + 状态 pill 一行 */
 .semlink-mcp-name-line {
 	display: flex;
@@ -8534,6 +8661,12 @@ body .semlink-msg-user::selection {
 .smart-vault-settings .semlink-mt-rows-card > * + *::before {
     display: none;
 }
+/* MCP 卡同款豁免（用户拍板"上面的 MCP 参考下面 MCP 的样子"）：外部
+   服务卡是无分割线的整块白卡，内置服务卡的行间 hairline 去掉后两者
+   观感一致 */
+.smart-vault-settings .semlink-mcp-card > * + *::before {
+    display: none;
+}
 /* 窗口化渲染的占位块：只占高不 paints，代表视口外未渲染的行区间 */
 .smart-vault-settings .semlink-mt-rows-spacer {
     flex: 0 0 auto;
@@ -8657,10 +8790,10 @@ body .semlink-msg-user::selection {
     background: var(--sl-fill);
 }
 
-/* chevron / 时间 / URL 等三级灰（share-time/url 已升二级，移出本组） */
+/* chevron / 时间 / 状态等三级灰（URL 已改纯 desc 行，用户拍板
+   "不要加背景色"——只留灰字，不再垫 --sl-fill 底） */
 .semlink-mcp-row-chevron,
 .semlink-checklist-summary-chevron,
-.semlink-mcp-url,
 .semlink-mcp-status.is-stopped,
 .semlink-mcp-status-dot.is-stopped,
 .semlink-checklist-summary-count,
@@ -8669,6 +8802,9 @@ body .semlink-msg-user::selection {
 .semlink-mcp-status-dot.is-stopped {
     color: var(--sl-tertiary);
     background: var(--sl-fill);
+}
+.semlink-mcp-url {
+    color: var(--sl-tertiary);
 }
 .semlink-mcp-status-dot.is-stopped {
     background: var(--sl-tertiary);

@@ -180,6 +180,10 @@ export class SemanticSearchView extends ItemView {
 	/** 引导的来源界面（返回按钮的去向）：设置页「配置/开始配置」进来是
 	 *  settings；主页帮助图标/首次运行没有明确来源，返回即回主页。 */
 	private guideReturn: "home" | "settings" = "home";
+	/** 显式配置意图进入（openGuide 带 chat/embed mode）：返回直达来源屏
+	 *  （用户拍板"从哪里跳进去，就从返回到哪里"，不再落回 hub）；泛入口
+	 *  （帮助图标/hub 卡片选择）保持 setup → hub → 来源的层级。 */
+	private guideDirect = false;
 	// ── 视图内嵌设置屏（替代设置弹窗，形态同 Get Started hub）──
 	/** 设置屏打开中：占据欢迎区， chrome 同引导（隐藏输入区/真实头部）。 */
 	private settingsMode = false;
@@ -2395,6 +2399,7 @@ export class SemanticSearchView extends ItemView {
 		this.pushTrace(`openGuide mode=${mode} from=${from}`);
 		this.guideMode = mode;
 		this.guideReturn = from;
+		this.guideDirect = mode !== "hub";
 		// 从设置屏进入引导（清单「开始配置」等入口）：先退出设置屏
 		this.settingsMode = false;
 		this.settingsInitialTab = undefined;
@@ -2466,7 +2471,9 @@ export class SemanticSearchView extends ItemView {
 			});
 			setIcon(backBtn, "arrow-left");
 			backBtn.addEventListener("click", () => {
-				if (this.guideMode !== "hub") {
+				// 显式配置意图（设置页进入）直达来源屏——"从哪里跳进去，
+				// 就从返回到哪里"；泛入口的 setup 页仍先落回 hub。
+				if (this.guideMode !== "hub" && !this.guideDirect) {
 					this.guideMode = "hub";
 					this.guideStartOverride = false;
 					this.messagesEl.empty();
@@ -2514,6 +2521,8 @@ export class SemanticSearchView extends ItemView {
 				// Generic entry: site / Discord / the two setup guides.
 				renderGuideHub(guide, this.plugin, (kind) => {
 					this.guideMode = kind;
+					// 从 hub 卡片进入的流程，返回的父级是 hub（非直达来源屏）
+					this.guideDirect = false;
 					this.messagesEl.empty();
 					this.renderWelcome();
 				});

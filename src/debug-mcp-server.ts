@@ -111,6 +111,8 @@ const MEASURE_TOOL = {
 			epClick: { description: "Click the visible Endpoint row in the config pane (opens the variant picker for series providers).", type: "boolean" },
 			variantPick: { description: "Click the variant row whose name contains this text in the open variant picker modal.", type: "string" },
 			epPick: { description: "Click the variant row whose name contains this text in the modal opened by epClick.", type: "string" },
+			ragDomProbe: { description: "Dump the DOM class tree of the first Setting in the RAG advanced-options body.", type: "boolean" },
+			guideBackProbe: { description: "Click the RAG Embedding Configure button, then the guide back arrow, and report the landing screen.", type: "boolean" },
 			drillClick: { description: "Click the first visible provider row (drills into the config pane on narrow containers).", type: "boolean" },
 			backClick: { description: "Click the Providers back link (returns to the provider list from the drilled config pane).", type: "boolean" },
 		},
