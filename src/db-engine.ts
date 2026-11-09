@@ -13,6 +13,7 @@
 
 import initSqlJs, { Database } from "sql.js";
 import { debugLog } from "./log";
+import { isSparseContent } from "./chunker";
 import wasmBase64 from "sql.js/dist/sql-wasm.wasm";
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
@@ -144,6 +145,9 @@ export class DbEngine {
 				mtime INTEGER NOT NULL,
 				heading_text TEXT DEFAULT ''
 			);
+			CREATE TABLE IF NOT EXISTS embed_skips (
+				note_path TEXT PRIMARY KEY
+			);
 		`);
 
 		// Create indexes
@@ -266,6 +270,7 @@ export class DbEngine {
 		this.db.run("DELETE FROM queue");
 		this.db.run("DELETE FROM meta");
 		this.db.run("DELETE FROM note_doc_vectors");
+		this.db.run("DELETE FROM embed_skips");
 		this.allVectors = null;
 		this.allVectorIds = [];
 		this.allVectorPaths = [];
@@ -413,6 +418,7 @@ export class DbEngine {
 			[notePath]
 		);
 		this.db!.run("DELETE FROM note_doc_vectors WHERE note_path = ?", [notePath]);
+		this.db!.run("DELETE FROM embed_skips WHERE note_path = ?", [notePath]);
 		this.cacheLoaded = false;
 		this.docCacheLoaded = false;
 		return result.changes;
@@ -552,12 +558,63 @@ export class DbEngine {
 
 	/** 已嵌入（至少一个 chunk 带向量）的笔记数 — 进度面板/引导页的「已嵌入」
 	 *  口径。与文档向量表不同，chunk 向量不会被算法迁移或补算重置清空，
-	 *  且与笔记嵌入同一事务落库——进度只增不减，不出现迁移期归零。 */
+	 *  且与笔记嵌入同事务落库——进度只增不减，不出现迁移期归零。 */
 	getEmbeddedNoteCount(): number {
 		const r = this.db!.exec(
 			"SELECT COUNT(DISTINCT note_path) FROM chunks WHERE status = 'active' AND vector IS NOT NULL",
 		);
 		return r.length > 0 ? (r[0].values[0][0] as number) : 0;
+	}
+
+	/** 「已跳过」标记（用户拍板"嵌入进度要包含已跳过"）：索引时判定该笔记
+	 *  没有可嵌入内容（空文件 / 全稀疏分块——表格壳、纯分隔线、空白），
+	 *  永远不会产生向量。这类笔记不算待嵌入也不拖累进度：嵌入进度 =
+	 *  (已嵌入 + 已跳过) / 笔记总数。重索引同笔记时按新内容覆写/清除。 */
+	markEmbedSkip(notePath: string, skipped: boolean): void {
+		if (!this.db) return;
+		if (skipped) {
+			this.db.run("INSERT OR REPLACE INTO embed_skips (note_path) VALUES (?)", [notePath]);
+		} else {
+			this.db.run("DELETE FROM embed_skips WHERE note_path = ?", [notePath]);
+		}
+	}
+
+	getEmbedSkippedNoteCount(): number {
+		const r = this.db!.exec("SELECT COUNT(*) FROM embed_skips");
+		return r.length > 0 ? (r[0].values[0][0] as number) : 0;
+	}
+
+	/** 一次性回填 embed_skips：embed_skips 功能上线前就已索引完成的全稀疏
+	 *  笔记（表格壳/纯分隔线/空白）——调度器只重跑有变动的笔记，这些旧笔记
+	 *  既产生不了向量也等不到 skip 标记，嵌入进度永远停在
+	 *  (已嵌入)/(总数)（真机实例：974/980=99.4%，已跳过恒 0）。启动时跑
+	 *  一遍：候选 = 有 active chunk、零向量、未标记的笔记；逐篇核对内容
+	 *  确实全稀疏才标记（有可嵌入内容的漏嵌笔记不碰，交给嵌入队列）。
+	 *  幂等且开销极小——候选集在正常运行后趋近空集。返回新标记篇数。 */
+	backfillEmbedSkips(): number {
+		if (!this.db) return 0;
+		const rows = this.db.exec(
+			`SELECT note_path, content FROM chunks
+			 WHERE status = 'active'
+			   AND note_path NOT IN (SELECT note_path FROM embed_skips)
+			   AND note_path NOT IN (
+			     SELECT DISTINCT note_path FROM chunks
+			     WHERE status = 'active' AND vector IS NOT NULL)`,
+		);
+		if (rows.length === 0 || rows[0].values.length === 0) return 0;
+		const byPath = new Map<string, string[]>();
+		for (const [path, content] of rows[0].values as Array<[string, string]>) {
+			const list = byPath.get(path);
+			if (list) list.push(content);
+			else byPath.set(path, [content]);
+		}
+		let marked = 0;
+		for (const [path, contents] of byPath) {
+			if (!contents.every((c) => isSparseContent(c))) continue;
+			this.db.run("INSERT OR REPLACE INTO embed_skips (note_path) VALUES (?)", [path]);
+			marked++;
+		}
+		return marked;
 	}
 
 	getStats(): { totalChunks: number; activeChunks: number; embeddedChunks: number; indexedNotes: number; dbSizeMb: number } {

@@ -333,7 +333,12 @@ export class Scheduler {
 		this.progress.setPhase("chunking");
 		const chunks = await this.store.chunk(content, notePath, this.settings.chunkSize, this.settings.chunkOverlap);
 
-		if (chunks.length === 0) return false;
+		if (chunks.length === 0) {
+			// 空文件（用户拍板"嵌入进度要包含已跳过"）：无分块、永远不会产生
+			// 向量——记入已跳过，嵌入进度按 (已嵌入+已跳过)/总数 计算
+			await this.store.markEmbedSkip(notePath, true);
+			return false;
+		}
 
 		// Embed the chunks (async network call — yields naturally)。嵌入与索引解耦：
 		// 未配置嵌入模型或关闭自动嵌入时，仅插入文本 chunk（无向量；可被关键词
@@ -347,6 +352,10 @@ export class Scheduler {
 		// below as active/NULL, which loadVectorCache excludes via
 		// `vector IS NOT NULL`, so they never pollute the vector space.
 		const embeddableChunks = chunks.filter((c) => !isSparseContent(c.content));
+		// 全稀疏笔记（用户拍板"嵌入进度要包含已跳过"）：没有任何可嵌入分块、
+		// 永远不会产生向量——记入已跳过；此前是稀疏内容的笔记如今可嵌入
+		// （内容已更新），标记随之清除。empty-file 分支同理。
+		await this.store.markEmbedSkip(notePath, embeddableChunks.length === 0);
 
 		const texts = embeddableChunks.map((c) => c.content);
 		const allEmbeddings: number[][] = [];

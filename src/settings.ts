@@ -143,8 +143,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 宿主形态：CSS 据此微调内嵌屏专属的留白/动画（弹窗宿主略不同）。
 		containerEl.toggleClass("semlink-settings-embedded", this.embeddedHost);
 
-		// Title heading row: brand text · version（语言下拉已移入 General 页
-		// 偏好组——顶条右上图标与 General 双入口是评审指出的冗余）。
+		// Title heading row: brand text · version（语言下拉曾因"双入口冗余"
+		// 评审移入 General 偏好组；用户拍板收回顶条——仅原生 Obsidian 设置
+		// 界面显示，嵌入式设置屏不加）。
 		// Everything rides in the NAME element: heading-mode settings may hide
 		// the control area depending on host CSS — the name always renders.
 		// 嵌入式设置屏跳过：标题/标语与顶部品牌重复。
@@ -158,6 +159,22 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			const titleLeft = title.nameEl.createDiv({ cls: "semlink-settings-heading-left" });
 			titleLeft.createSpan({ cls: "semlink-settings-heading-text", text: t("settingsTitle") });
 			titleLeft.createSpan({ cls: "semlink-settings-tagline", text: t("settingsTagline") });
+			// 顶条右上语言切换（仅原生设置弹窗）：换语言 = 落盘 + setLang +
+			// 整页重渲（renderPrefsSection 同款逻辑）。历史评审撤销过这个
+			// 入口，用户要求恢复——旧 .semlink-settings-lang CSS（160px 上限、
+			// 不收缩）仍在，类名直接复用。
+			const langWrap = title.controlEl.createDiv({ cls: "semlink-settings-lang" });
+			new DropdownComponent(langWrap)
+				.addOptions({
+					auto: t("langAuto"),
+					...Object.fromEntries(LANGUAGES.map((l) => [l.value, l.label])),
+				})
+				.setValue(this.plugin.settings.language)
+				.onChange(async (value) => {
+					this.plugin.settings.language = value as SmartVaultSettings["language"];
+					await this.plugin.saveSettings();
+					rerenderSettingsTab(this);
+				});
 		}
 
 		// 横向 tab 栏（iOS 分段控件式）在上、内容面板在下：任何宽度都
@@ -570,17 +587,18 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	// ══════════════════════════════════════
 	// Tab: Embedding (RAG) — 状态 / 配置 / 维护 三组
 	// ══════════════════════════════════════
-	/** RAG 页组「状态」：一张卡内索引/嵌入两个块（hero 大数字 + 进度条 +
-	 *  数值行 + 末行自动开关）。数据由进度事件与数据库统计双路刷新。
-	 *  reindexRef 由调用方传入：重新索引按钮在「维护」组创建后回填引用，
-	 *  进度订阅据此在索引进行中把按钮置为「索引中…」禁用态。 */
+	/** RAG 页组「状态」：单张卡（hero 大数字 + 进度条 + 数值行
+	 *  Total/Indexed/Embedded/Skipped + Auto Index / Auto-embed 开关）。
+	 *  数据由进度事件与数据库统计双路刷新。reindexRef 由调用方传入：
+	 *  重新索引按钮在「维护」组创建后回填引用，进度订阅据此在索引
+	 *  进行中把按钮置为「索引中…」禁用态。 */
 	private renderIndexCard(containerEl: HTMLElement, reindexRef?: { btn?: HTMLButtonElement; running?: boolean }): void {
 		const totalNotes = (): number => Math.max(0, this.plugin.progress.current.totalNotes);
 
 		containerEl.createDiv({ cls: "semlink-card-title", text: t("ragGroupStatus") });
-		// 状态拆为左右两张等高卡：索引卡（含 Auto Index）/ 嵌入卡（含 Auto-embed）；
-		// 窄容器（≤560px）退化为单列堆叠。
-		const statusGrid = containerEl.createDiv({ cls: "semlink-rag-status-grid" });
+		// 状态 = 单张卡（用户拍板"两个卡片可以合并"：索引/嵌入同源同节奏，
+		// 双卡双 hero 是冗余）：hero + 进度条 + 数值行（Total/Indexed/
+		// Embedded/Skipped）+ 两个自动开关。
 
 		// ── 块骨架：hero（标题 + spinner + 大数字）→ 进度条（数值行/开关由调用处按序追加） ──
 		interface RagBlock {
@@ -590,7 +608,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			spinEl: HTMLElement;
 		}
 		const makeBlock = (title: string): RagBlock => {
-			const block = statusGrid.createDiv({ cls: "semlink-card semlink-rag-status" }).createDiv({ cls: "semlink-rag-block" });
+			const block = containerEl.createDiv({ cls: "semlink-card semlink-rag-status" }).createDiv({ cls: "semlink-rag-block" });
 			const hero = block.createDiv({ cls: "semlink-rag-hero" });
 			const heroLeft = hero.createDiv({ cls: "semlink-rag-hero-left" });
 			heroLeft.createSpan({ cls: "semlink-rag-hero-title", text: title });
@@ -616,9 +634,17 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		};
 
 		const indexBlock = makeBlock(t("indexProgressTitle"));
-		const totalEl = statRow(indexBlock.block, t("guideStatTotalNotes"));
-		const awaitingEl = statRow(indexBlock.block, t("awaitingChunking"));
-		const chunkedEl = statRow(indexBlock.block, t("chunkedNotes"));
+		// 数值行顺序 = 用户指定的合并口径：Total notes / Indexed /
+		// Embedded / Skipped；其后跟自动开关。行包进 stats 容器：宽容器
+		// 2×2 分栏（用户拍板"当宽屏的时候分成两列"），窄容器单列。
+		const statsGrid = indexBlock.block.createDiv({ cls: "semlink-rag-stats" });
+		const totalEl = statRow(statsGrid, t("guideStatTotalNotes"));
+		const chunkedEl = statRow(statsGrid, t("chunkedNotes"));
+		// 已嵌入行：至少一个 chunk 带向量的笔记数
+		const vectorizedEl = statRow(statsGrid, t("vectorizedChunks"));
+		// 已跳过行（用户拍板"嵌入进度要包含已跳过"）：空文件/全稀疏笔记，
+		// 永远不会产生向量——单独展示
+		const embedSkippedEl = statRow(statsGrid, t("embedSkipped"));
 		// 索引总开关：关 = 停止文件监听并暂停当前索引；开 = 恢复监听并继续索引。
 		toggleRow(indexBlock.block, t("autoIndex"), this.plugin.settings.autoIndex, async (v) => {
 			this.plugin.settings.autoIndex = v;
@@ -628,16 +654,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			else this.plugin.scheduler.pause();
 			this.refreshPreservingScroll();
 		});
-
-		const embedBlock = makeBlock(t("embedProgressTitle"));
-		const vectorizedEl = statRow(embedBlock.block, t("vectorizedChunks"));
-		// 自动嵌入总开关。调度器实时读取该设置：关 = 在跑的索引继续分块、
-		// 后续笔记不再调嵌入 API；开 = 后续笔记恢复嵌入。
-		toggleRow(embedBlock.block, t("autoEmbed"), this.plugin.settings.autoEmbed ?? true, async (v) => {
-			this.plugin.settings.autoEmbed = v;
-			await this.plugin.saveSettings();
-			this.refreshPreservingScroll();
-		});
+		// Auto-embed 开关已撤（用户拍板"去掉"）：嵌入始终跟随索引进行，
+		// settings.autoEmbed 保留默认 true 的底层语义（调度器仍读它）。
 
 		// hero 大数字 = 百分比（封顶 100%）；总数未知（totalNotes=0）→「—」淡化。
 		const setHero = (b: RagBlock, num: number): void => {
@@ -655,7 +673,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		};
 		const setRunning = (running: boolean): void => {
 			indexBlock.block.toggleClass("is-running", running);
-			embedBlock.block.toggleClass("is-running", running);
 			if (reindexRef) reindexRef.running = running;
 			const btn = reindexRef?.btn;
 			if (btn) {
@@ -669,12 +686,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			}
 		};
 
-		// 待索引 = 总笔记数 - 已索引（与已索引同源，数据库口径）；
-		// apply 用最近一次查到的已索引数做即时倒计时，查库后校正。
-		let lastIndexed = 0;
-		const apply = (p: IndexProgress): void => {
-			awaitingEl.setText(Math.max(0, p.totalNotes - lastIndexed).toLocaleString());
-		};
 		// 数值行取数据库真实状态（笔记数），hero 百分比 = 已索引（已嵌入） / 总笔记数。
 		// 已嵌入口径 = 至少一个 chunk 带向量的笔记数（getEmbeddedNoteCount），
 		// 不读 note_doc_vectors——该表会被算法迁移/换模型清空重建，迁移期恒
@@ -684,17 +695,18 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		let statsRetryTimer: number | null = null;
 		const refreshStats = async (attempt = 0): Promise<void> => {
 			try {
-				const [s, embeddedNotes] = await Promise.all([
+				const [s, embeddedNotes, skippedNotes] = await Promise.all([
 					this.plugin.store.getStats(),
 					this.plugin.store.getEmbeddedNoteCount(),
+					this.plugin.store.getEmbedSkippedNoteCount(),
 				]);
-				lastIndexed = s.indexedNotes;
 				chunkedEl.setText(s.indexedNotes.toLocaleString());
 				totalEl.setText(totalNotes().toLocaleString());
-				awaitingEl.setText(Math.max(0, totalNotes() - s.indexedNotes).toLocaleString());
 				vectorizedEl.setText(embeddedNotes.toLocaleString());
+				embedSkippedEl.setText(skippedNotes.toLocaleString());
+				// 单 hero：索引口径（已索引/总数）——嵌入与索引同源同节奏，
+				// 双百分比是冗余（用户拍板合并卡片）
 				setHero(indexBlock, s.indexedNotes);
-				setHero(embedBlock, embeddedNotes);
 			} catch (e) {
 				if (attempt >= 8) {
 					console.warn("[Semlink] index stats unavailable:", e);
@@ -703,16 +715,14 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				statsRetryTimer = window.setTimeout(() => void refreshStats(attempt + 1), 1000 * (attempt + 1));
 			}
 		};
-		apply(this.plugin.progress.current);
 		setRunning(RAG_RUNNING_PHASES.has(this.plugin.progress.current.phase));
 		void refreshStats();
 
-		// 单一合并订阅：进度事件实时刷新运行态/待索引 + 数值行节流查库（≤1s 一次）
+		// 单一合并订阅：进度事件实时刷新运行态 + 数值行节流查库（≤1s 一次）
 		let lastEmbedRefresh = 0;
 		const unIndex = this.plugin.progress.onProgress((e) => {
 			if (e.type !== "progress") return;
 			setRunning(RAG_RUNNING_PHASES.has(e.progress.phase));
-			apply(e.progress);
 			const now = Date.now();
 			if (now - lastEmbedRefresh >= 1000) {
 				lastEmbedRefresh = now;
@@ -757,9 +767,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		});
 		const modelBtn = modelRow.createDiv({ cls: "semlink-row-control" }).createEl("button", {
 			cls: configuredProvider && configuredModel ? "semlink-btn-secondary" : "semlink-btn-primary",
-			// 已配置后仍叫 "Set Up" 会让人不敢点（评审 P1）：复用现成键
-			// guideReconfig（"Reconfigure"）表达"可再改"。
-			text: configuredProvider && configuredModel ? t("guideReconfig") : t("ragSetupBtn"),
+			// 文案统一用「配置」（用户拍板"改成配置"）——与相邻排除路径行
+			// 的按钮同键（configure），未配置态仍用主色样式引导首次设置。
+			text: t("configure"),
 		});
 		modelBtn.addEventListener("click", () => {
 			// 关闭设置页，打开侧边栏的向量检索配置引导
@@ -1181,21 +1191,22 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				const icon = item.createSpan({ cls: "semlink-share-icon" });
 				setIcon(icon, entry.sessionId.startsWith("note:") ? "file-text" : "share-2");
 
-				// main 列：标题 + 时间 / URL（monospace，悬停 title 全显）
+				// main 列：标题 + 时间（用户拍板"日期移到链接的位置"：次行不再
+				// 显示 URL，改显相对时间/日期；URL 由行尾按钮承担）
 				const main = item.createDiv({ cls: "semlink-share-main" });
 				const line1 = main.createDiv({ cls: "semlink-share-line1" });
 				line1.createSpan({ cls: "semlink-share-title", text: title });
-				const ageMs = Date.now() - entry.sharedAt;
-				line1.createSpan({
-					cls: "semlink-share-time",
-					text: ageMs > 30 * 24 * 60 * 60 * 1000
+				// 日期占原 URL 位置（用户拍板"日期移到链接的位置"）；URL 不再
+				// 展示，由行尾复制/新窗口按钮承担
+				main.createSpan({
+					cls: "semlink-share-url",
+					text: Date.now() - entry.sharedAt > 30 * 24 * 60 * 60 * 1000
 						? moment(entry.sharedAt).format("YYYY-MM-DD")
 						: moment(entry.sharedAt).fromNow(),
 				});
-				const urlEl = main.createSpan({ cls: "semlink-share-url", text: url });
-				urlEl.setAttr("title", url);
 
-				// 行尾两个 ghost 图标钮：复制（写「标题\nURL」，check 反馈 1.2s）
+				// 行尾三个 ghost 图标钮：复制（写「标题\nURL」，check 反馈 1.2s）/
+				// 新窗口打开（用户拍板"在复制按钮右边增加在新窗口打开按钮"）
 				const actions = item.createDiv({ cls: "semlink-share-actions" });
 				const copyBtn = actions.createEl("button", {
 					cls: "semlink-btn-ghost semlink-share-act",
@@ -1221,6 +1232,17 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				copyBtn.addEventListener("click", (e) => {
 					e.stopPropagation();
 					doCopy();
+				});
+				// 日期挪到次行（原行尾时间标签）之后新增：新窗口打开
+				const openBtn = actions.createEl("button", {
+					cls: "semlink-btn-ghost semlink-share-act",
+					attr: { "aria-label": t("shareOpenBrowser"), type: "button" },
+				});
+				const openIcon = openBtn.createSpan({ cls: "semlink-share-act-icon" });
+				setIcon(openIcon, "external-link");
+				openBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					window.open(url, "_blank");
 				});
 
 				// 删除入口收敛（评审 P1）：行尾 trash 与详情弹窗 "Stop sharing"

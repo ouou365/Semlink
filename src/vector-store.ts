@@ -223,6 +223,9 @@ export class VectorStore {
 			case "pruneOrphanedPaths": return e.pruneOrphanedPaths(args[0] as Set<string>);
 			case "getStats": return e.getStats();
 			case "getEmbeddedNoteCount": return e.getEmbeddedNoteCount();
+			case "getEmbedSkippedNoteCount": return e.getEmbedSkippedNoteCount();
+			case "markEmbedSkip": return e.markEmbedSkip(args[0] as string, args[1] as boolean);
+			case "backfillEmbedSkips": return e.backfillEmbedSkips();
 			case "saveEmbeddings": return e.saveEmbeddings(args[0] as string[], args[1] as number[][]);
 			case "saveDocEmbedding": return e.saveDocEmbedding(args[0] as string, args[1] as number[], args[2] as number, args[3] as string);
 			case "getDocVectorNotePaths": return e.getDocVectorNotePaths();
@@ -334,6 +337,21 @@ export class VectorStore {
 	/** 已嵌入（至少一个 chunk 带向量）的笔记数 — 进度面板/引导页「已嵌入」口径。 */
 	async getEmbeddedNoteCount(): Promise<number> {
 		return await this.call<number>("getEmbeddedNoteCount");
+	}
+
+	/** 「已跳过」标记/计数（见 db-engine.markEmbedSkip 注释）。 */
+	async markEmbedSkip(notePath: string, skipped: boolean): Promise<void> {
+		await this.call<void>("markEmbedSkip", [notePath, skipped]);
+	}
+
+	async getEmbedSkippedNoteCount(): Promise<number> {
+		return await this.call<number>("getEmbedSkippedNoteCount");
+	}
+
+	/** 一次性回填历史全稀疏笔记的跳过标记（见 db-engine.backfillEmbedSkips）。
+	 *  返回本次新标记的篇数。 */
+	async backfillEmbedSkips(): Promise<number> {
+		return await this.call<number>("backfillEmbedSkips");
 	}
 
 	async saveEmbeddings(chunkIds: string[], embeddings: number[][]): Promise<void> {

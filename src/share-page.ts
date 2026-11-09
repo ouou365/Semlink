@@ -166,8 +166,11 @@ export async function renderSharePage(
 		cta: allLangs("shareDownloadCta"),
 		meta: allLangs("shareFooter"),
 		slogan: allLangs("shareBrandSub"),
-		home: allLangs("shareHome"),
 		top: allLangs("shareBackTop"),
+		toc: allLangs("shareToc"),
+		fsMinus: allLangs("shareFontMinus"),
+		fsPlus: allLangs("shareFontPlus"),
+		ask: allLangs("shareAsk"),
 	} as Partial<Record<string, Partial<Record<string, string>>>>;
 	const uiJson = JSON.stringify(ui).replace(/</g, "\\u003c");
 	// Inline SVG favicon (brand purple) — no external request, works on the
@@ -178,7 +181,8 @@ export async function renderSharePage(
 	// Sun/moon toggle + download icons, inlined like everything else.
 	const moonIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
 	const sunIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
-	const homeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
+	// 大纲显隐按钮图标（lucide list）
+	const tocIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>';
 	const css = `
 :root{color-scheme:light}
 *{box-sizing:border-box}
@@ -198,6 +202,9 @@ html[data-theme="dark"]{
 body{margin:0;padding:40px 14px 60px;font:15px/1.7 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:var(--page)}
 
 /* ── The postcard: one floating card, generous radius, soft layered shadow ── */
+/* 字号缩放（字号+/− 按钮）：只改字号不改卡片宽度——字号挂在 .thread 上
+   （见 .thread 规则），pre 的 13px 同步换算成 em 跟随缩放；右侧大纲是
+   fixed 定位在卡片外，不受影响 */
 .postcard{position:relative;max-width:840px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 12px 28px -12px rgba(15,23,42,.10),0 32px 72px -32px rgba(15,23,42,.16)}
 
 /* ── Card head: brand left, theme toggle + install right ── */
@@ -219,9 +226,16 @@ html[data-theme="dark"] .pc-head .theme-btn:hover{color:var(--brand);background:
 .pc-head .theme-btn svg{width:17px;height:17px}
 /* Install CTA: the APP ICON itself — brand-purple squircle with the white
    Semlink cube, reading as "the app you can get", not a file download. */
-.pc-head .cta{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:none;cursor:pointer;text-decoration:none;border-radius:50%;background:transparent;color:var(--muted);flex:none}
-.pc-head .cta:hover{background:rgba(139,108,239,.14);color:var(--brand)}
-.pc-head .cta svg{width:19px;height:19px}
+/* 大纲显隐 / 字号± 按钮复用 theme-btn 的圆钮外观；关闭态半透明示弱 */
+.pc-head .theme-btn.is-off{opacity:.4}
+.pc-head .fs-btn{font-weight:650;font-size:12px;letter-spacing:.5px}
+
+/* ── 底部悬浮"向 Semlink 提问"：品牌渐变胶囊，水平居中于页面底部
+   （用户拍板），点击跳插件安装页 ── */
+.ask-fab{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:60;display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:999px;background:linear-gradient(135deg,#8b6cef,#6745d9);color:#fff;text-decoration:none;font-size:13.5px;font-weight:600;box-shadow:0 6px 18px -6px rgba(103,69,217,.55);transition:transform .15s ease,box-shadow .15s ease}
+.ask-fab:hover{transform:translateX(-50%) translateY(-2px);box-shadow:0 10px 24px -8px rgba(103,69,217,.65)}
+.ask-fab svg{width:16px;height:16px;flex:none;color:#fff}
+@media(max-width:620px){.ask-fab{bottom:14px;padding:10px 14px;font-size:13px}}
 
 /* ── Card body: title, stamp, thread ── */
 .pc-body{position:relative;padding:10px 36px 10px}
@@ -233,7 +247,8 @@ html[data-theme="dark"] .pc-head .theme-btn:hover{color:var(--brand);background:
 
 
 /* ── Thread ── */
-.thread{display:flex;flex-direction:column;gap:16px}
+/* 字号+/− 只缩放文字：字号挂 thread 根，气泡内 em 尺寸跟随；宽度不变 */
+.thread{display:flex;flex-direction:column;gap:16px;font-size:calc(15px * var(--fs,1))}
 .msg{display:flex}
 .msg.user{justify-content:flex-end}
 .msg.user .bubble{background:linear-gradient(135deg,#8b6cef,#6745d9);color:#fff;border-radius:16px 16px 5px 16px;padding:11px 15px;max-width:82%;white-space:pre-wrap;word-break:break-word;font-weight:500;box-shadow:0 3px 12px rgba(103,69,217,.22)}
@@ -250,7 +265,7 @@ html[data-theme="dark"] .pc-head .theme-btn:hover{color:var(--brand);background:
 .msg.assistant .bubble.md strong{color:var(--ink)}
 .msg.assistant .bubble.md a{color:var(--brand-dark)}
 html[data-theme="dark"] .msg.assistant .bubble.md a{color:#b3a0f5}
-.msg.assistant .bubble.md pre{background:var(--code-bg);padding:13px 15px;border-radius:10px;overflow:auto;font-size:13px;border:1px solid var(--line-soft)}
+.msg.assistant .bubble.md pre{background:var(--code-bg);padding:13px 15px;border-radius:10px;overflow:auto;font-size:.865em;border:1px solid var(--line-soft)}
 html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 .msg.assistant .bubble.md code{background:var(--code-bg);color:var(--code-ink);padding:1.5px 6px;border-radius:5px;font-size:.92em}
 .msg.assistant .bubble.md pre code{background:none;color:inherit;padding:0}
@@ -284,6 +299,11 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 @media(min-width:1360px){
 	.toc.has-toc{display:block;position:fixed;left:calc(50% + 440px);top:72px;width:240px;max-height:calc(100vh - 140px);overflow:auto;font-size:12.5px;line-height:1.5;padding:2px 0 2px 2px}
 }
+/* 大纲显隐按钮（访问者本地偏好，存 localStorage，不进分享 URL）：
+   宽屏默认显示，toc-off 隐藏；窄屏（<1360px）大纲栏无常规落点，
+   点按钮以右侧覆盖层强制显示（toc-force），不挤占卡片布局 */
+html.toc-off .toc{display:none !important}
+html.toc-force .toc.has-toc{display:block;position:fixed;right:14px;left:auto;top:72px;width:min(240px,calc(100vw - 32px));max-height:calc(100vh - 140px);overflow:auto;font-size:12.5px;line-height:1.5;padding:2px 8px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px -12px rgba(15,23,42,.25);z-index:50}
 .toc-top{display:flex;align-items:center;gap:6px;padding:6px 10px 8px;margin-bottom:6px;border-bottom:1px dashed var(--line);color:var(--muted);text-decoration:none;cursor:pointer;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toc-top svg{width:13px;height:13px;flex:none}
 .toc-top:hover{color:var(--brand-ink)}
@@ -305,8 +325,10 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
 <header class="pc-head">
 <div class="brand-row">${logoSvg.replace("<svg ", '<svg class="brand-logo" ')}<span class="brand-name">Semlink</span></div>
 <nav>
+<button class="theme-btn" id="tocToggle" data-ui-title="toc" aria-label="Outline" title="Outline" style="display:none">${tocIcon}</button>
+<button class="theme-btn" id="fsMinus" data-ui-title="fsMinus" aria-label="Smaller text" title="Smaller text"><span class="fs-btn">A−</span></button>
+<button class="theme-btn" id="fsPlus" data-ui-title="fsPlus" aria-label="Larger text" title="Larger text"><span class="fs-btn">A+</span></button>
 <button class="theme-btn" id="themeToggle" aria-label="Toggle theme"><span id="themeIconMoon" style="display:inline-flex">${moonIcon}</span><span id="themeIconSun" style="display:inline-flex">${sunIcon}</span></button>
-<a class="cta" href="https://community.obsidian.md/plugins/semlink" target="_blank" rel="noreferrer" aria-label="${esc(t("shareHome"))}" title="${esc(t("shareHome"))}">${homeIcon}</a>
 </nav>
 </header>
 <div class="pc-body">
@@ -318,6 +340,7 @@ ${parts.join("\n")}
 <footer class="pc-foot">${logoSvg.replace("<svg ", '<svg class="foot-logo" ')}<span data-ui="slogan">${esc(t("shareBrandSub"))}</span></footer>
 </div>
 <nav class="toc" id="toc" aria-label="Outline"></nav>
+<a class="ask-fab" href="https://community.obsidian.md/plugins/semlink" target="_blank" rel="noreferrer" data-ui="ask">${logoSvg.replace("<svg ", '<svg class="ask-logo" ')}<span>Ask Semlink</span></a>
 <script>
 (function(){
 	var UI = ${uiJson};
@@ -330,8 +353,60 @@ ${parts.join("\n")}
 			var v = d[el.getAttribute("data-ui")];
 			if (v) el.textContent = v;
 		});
+		/* 无文字的图标钮：title/aria 走 data-ui-title */
+		document.querySelectorAll("[data-ui-title]").forEach(function (el) {
+			var v = d[el.getAttribute("data-ui-title")];
+			if (v) { el.title = v; el.setAttribute("aria-label", v); }
+		});
 	}
 	applyLang(lang || "en");
+
+	/* ── 字号 +/−：zoom 整卡等比缩放，localStorage 记住访问者偏好 ── */
+	function applyFs(z) {
+		document.documentElement.style.setProperty("--fs", String(z));
+		var t = Math.round(z * 100) + "%";
+		document.getElementById("fsPlus").title = t;
+		document.getElementById("fsMinus").title = t;
+	}
+	function currentFs() {
+		var v = 1;
+		try { v = parseFloat(localStorage.getItem("semlink-fszoom") || "1") || 1; } catch (e) {}
+		return Math.min(1.5, Math.max(0.7, v));
+	}
+	var fs = currentFs();
+	applyFs(fs);
+	document.getElementById("fsPlus").addEventListener("click", function () {
+		fs = Math.min(1.5, Math.round((fs + 0.1) * 10) / 10);
+		applyFs(fs);
+		try { localStorage.setItem("semlink-fszoom", String(fs)); } catch (e) {}
+	});
+	document.getElementById("fsMinus").addEventListener("click", function () {
+		fs = Math.max(0.7, Math.round((fs - 0.1) * 10) / 10);
+		applyFs(fs);
+		try { localStorage.setItem("semlink-fszoom", String(fs)); } catch (e) {}
+	});
+
+	/* ── 大纲显隐按钮（用户拍板"窄屏点击也要能出大纲"）：
+	   偏好三态 on/off/null(自动)：宽屏自动显示可关；窄屏默认隐藏，
+	   点按钮以右侧覆盖层强制显示（toc-force）。存 localStorage ── */
+	var tocWide = window.matchMedia("(min-width: 1360px)");
+	var tocPref = null;
+	try {
+		var savedToc = localStorage.getItem("semlink-toc");
+		if (savedToc === "on" || savedToc === "off") tocPref = savedToc;
+		else if (localStorage.getItem("semlink-toc-off") === "1") tocPref = "off";
+	} catch (e) {}
+	function tocVisible() {
+		return tocWide.matches ? tocPref !== "off" : tocPref === "on";
+	}
+	function applyToc() {
+		var wide = tocWide.matches;
+		document.documentElement.classList.toggle("toc-off", wide && tocPref === "off");
+		document.documentElement.classList.toggle("toc-force", !wide && tocPref === "on");
+		var b = document.getElementById("tocToggle");
+		if (b) b.classList.toggle("is-off", !tocVisible());
+	}
+	tocWide.addEventListener ? tocWide.addEventListener("change", applyToc) : tocWide.addListener(applyToc);
 
 	/* ── theme from the URL (?theme=dark), toggle flips it in place ── */
 	function setTheme(t) {
@@ -357,7 +432,7 @@ ${parts.join("\n")}
 			var topLink = document.createElement("a");
 			topLink.className = "toc-top";
 			topLink.href = "#";
-			topLink.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg><span data-ui="top"></span>';
+			topLink.innerHTML = '<span data-ui="top"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>';
 			topLink.addEventListener("click", function (e) {
 				e.preventDefault();
 				window.scrollTo({ top: 0, behavior: "smooth" });
@@ -377,6 +452,17 @@ ${parts.join("\n")}
 			});
 			toc.appendChild(list);
 			toc.classList.add("has-toc");
+			/* 大纲显隐按钮：仅有大纲（≥3 个标题）时出现，初始态读偏好 */
+			var tocBtn = document.getElementById("tocToggle");
+			if (tocBtn) {
+				tocBtn.style.display = "";
+				applyToc();
+				tocBtn.addEventListener("click", function () {
+					tocPref = tocVisible() ? "off" : "on";
+					try { localStorage.setItem("semlink-toc", tocPref); } catch (e) {}
+					applyToc();
+				});
+			}
 			/* highlight the section currently in view (last heading above the line) */
 			var items = list.querySelectorAll(".toc-item");
 			var updateActive = function () {

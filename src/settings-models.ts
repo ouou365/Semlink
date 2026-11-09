@@ -1589,6 +1589,9 @@ class DeleteProviderModal extends Modal {
  *  进本弹窗改 Key。输入后出现 Cancel + Test & Save（空输入只有 Close，
  *  Cherry 同款）；Test & Save = 落盘 + 连通性测试（反馈在 Key 节状态行）。 */
 class KeyModal extends Modal {
+	/** 自绘 API 类型下拉的清理钩子（onOpen 注入，onClose 解绑文档监听）。 */
+	private disposeFmtPop: (() => void) | null = null;
+
 	constructor(
 		app: App,
 		private opts: {
@@ -1670,27 +1673,50 @@ class KeyModal extends Modal {
 				fmtLabel.setText(fmtOptions.find((o) => o.value === curFmt)?.label ?? "OpenAI");
 			};
 			renderFmt();
-			fmtBtn.addEventListener("click", () => {
-				const menu = new Menu();
+			// 自绘下拉面板（弃用 Obsidian Menu）：面板以触发钮为定位锚、
+			// 宽度天然与钮一致（Menu.containerEl 拿不到时 minWidth 失效）；
+			// 选中项用 accent 淡染高亮，不再打钩（用户拍板）
+			let fmtPop: HTMLElement | null = null;
+			const closeFmtPop = (): void => {
+				fmtPop?.remove();
+				fmtPop = null;
+				document.removeEventListener("pointerdown", onDocFmt, true);
+			};
+			const onDocFmt = (evt: PointerEvent): void => {
+				if (fmtPop && !fmtPop.contains(evt.target as Node) && !fmtBtn.contains(evt.target as Node)) closeFmtPop();
+			};
+			const toggleFmtPop = (): void => {
+				if (fmtPop) {
+					closeFmtPop();
+					return;
+				}
+				// 面板挂进触发钮内部（fmtBtn 已 relative）：absolute 的
+				// top/left/right 相对钮身——挂在 advBody 下时定位祖先会一路
+				// 上溯到弹窗容器，top:100% 把面板排到弹窗外（不可见的病根）。
+				// 面板内的点击已 stopPropagation，不会误触钮的开关。
+				const pop = fmtBtn.createDiv({ cls: "semlink-mt-select-pop" });
 				for (const o of fmtOptions) {
-					menu.addItem((mi) => {
-						mi.setTitle(o.label);
-						if (o.value === curFmt) mi.setIcon("check");
-						mi.onClick(() => {
-							if (o.value === curFmt) return;
+					const item = pop.createDiv({
+						cls: `semlink-mt-select-pop-item${o.value === curFmt ? " is-active" : ""}`,
+						attr: { role: "option", tabindex: "0" },
+					});
+					item.setText(o.label);
+					item.addEventListener("click", (e) => {
+						e.stopPropagation();
+						if (o.value !== curFmt) {
 							curFmt = o.value;
 							addrInput.value = this.opts.onFormatChange!(o.value);
 							renderFmt();
-						});
+						}
+						closeFmtPop();
 					});
 				}
-				// 锚定触发钮左缘、贴下缘 4px（配置页同款，不用光标定位）；
-				// 菜单宽度随触发钮（用户拍板"下拉的宽度增加"）
-				const r = fmtBtn.getBoundingClientRect();
-				menu.showAtPosition({ x: r.left, y: r.bottom + 4 });
-				const menuEl = (menu as unknown as { containerEl?: HTMLElement }).containerEl;
-				if (menuEl) menuEl.style.minWidth = `${Math.round(r.width)}px`;
-			});
+				fmtPop = pop;
+				document.addEventListener("pointerdown", onDocFmt, true);
+			};
+			// 弹窗关闭时解绑文档级监听（onClose 走这里）
+			this.disposeFmtPop = closeFmtPop;
+			fmtBtn.addEventListener("click", toggleFmtPop);
 			advBody.createDiv({ cls: "semlink-mt-config-fieldlabel", text: t("editorEndpoint") });
 			const addrInput = advBody.createEl("input", {
 				cls: "semlink-editor-input",
@@ -1759,6 +1785,8 @@ class KeyModal extends Modal {
 	}
 
 	onClose() {
+		// 自绘 API 类型下拉的文档级监听解绑 + 清场
+		this.disposeFmtPop?.();
 		this.contentEl.empty();
 	}
 }
@@ -1767,7 +1795,12 @@ class KeyModal extends Modal {
  *  配置栏 Endpoint 点击再弹此窗切换"）：Qwen/MiniMax/Z.AI 等内置系列的
  *  成员清单——logo + 名称 + 完整 Endpoint，点行即确认。列表不再套文件夹，
  *  本弹窗是成员的唯一入口。 */
-export class VariantPickerModal extends Modal {
+/** 系列选成员弹窗——供应商弹窗的唯一实现，对话引导与设置模型页共用
+ *  （用户指定：设置页复用对话引导的供应商弹窗）。视觉走引导侧卡片样式域
+ *  （semlink-guide-series-modal / semlink-guide-provider-card），能力上保留
+ *  设置页所需的选中回显（is-current）与键盘操作（Enter/Space）。端点由
+ *  调用方折算好传入（引导侧查目录、设置侧用 rowEndpoint），空则不显示。 */
+export class SeriesPickModal extends Modal {
 	constructor(
 		app: App,
 		private opts: {
@@ -1779,31 +1812,43 @@ export class VariantPickerModal extends Modal {
 		},
 	) {
 		super(app);
-		this.modalEl.addClass("semlink-variant-modal");
-		this.modalEl.addClass("smart-vault-settings");
+		this.modalEl.addClass("semlink-guide-series-modal");
 	}
 
 	onOpen() {
 		this.titleEl.setText(this.opts.title);
-		const list = this.contentEl.createDiv({ cls: "semlink-variant-list" });
+		const grid = this.contentEl.createDiv({ cls: "semlink-guide-provider-grid semlink-guide-provider-grid-vertical" });
 		for (const v of this.opts.variants) {
-			const row = list.createDiv({
-				cls: `semlink-variant-row is-clickable${v.name === this.opts.current ? " is-current" : ""}`,
+			const card = grid.createDiv({
+				cls: `semlink-guide-provider-card${v.name === this.opts.current ? " is-current" : ""}`,
 				attr: { role: "button", tabindex: "0" },
 			});
-			const logo = row.createDiv({ cls: "semlink-variant-logo" });
-			appendProviderLogo(logo, v.name, "semlink-mt-logo-svg");
-			row.createDiv({ cls: "semlink-variant-name", text: v.name });
-			row.createDiv({ cls: "semlink-variant-endpoint", text: v.endpoint });
-			row.addEventListener("click", () => {
+			// logo 渲染与引导侧逐行一致（brandLogoOf + 直接挂 svg，未命中
+			// 落首字母回退圈）——不走 appendProviderLogo，避免多包一层同名类
+			const logoSvg = brandLogoOf(v.name).svg;
+			if (logoSvg) {
+				const logoEl = card.createDiv({ cls: "semlink-guide-provider-logo" });
+				setSvgIcon(logoEl, logoSvg);
+			} else {
+				card.createDiv({ cls: "semlink-guide-provider-fallback", text: (v.name || "").trim().charAt(0).toUpperCase() || "?" });
+			}
+			card.createDiv({ cls: "semlink-guide-provider-name", text: v.name });
+			if (v.endpoint) {
+				card.createSpan({
+					cls: "semlink-guide-provider-endpoint",
+					text: v.endpoint,
+					attr: { title: v.endpoint },
+				});
+			}
+			const activate = (): void => {
 				this.opts.onPick(v.name);
 				this.close();
-			});
-			row.addEventListener("keydown", (e) => {
+			};
+			card.addEventListener("click", activate);
+			card.addEventListener("keydown", (e) => {
 				if (e.key === "Enter" || e.key === " ") {
 					e.preventDefault();
-					this.opts.onPick(v.name);
-					this.close();
+					activate();
 				}
 			});
 		}
@@ -1885,10 +1930,38 @@ function cachedSvgRoot(svg: string): Element | null {
 	return root;
 }
 
+/** SVG 内部 id 的唯一化计数器（每次挂载递增）。 */
+let svgUid = 0;
+
 export function setSvgIcon(el: HTMLElement, svg: string): void {
 	el.empty();
 	const root = cachedSvgRoot(svg);
-	if (root) el.appendChild(root.cloneNode(true));
+	if (!root) return;
+	const node = root.cloneNode(true) as Element;
+	// SVG 内部 id 唯一化：带 defs 渐变/滤镜的 logo（qwen/gemini 等）把
+	// id 写死在源码里，同一 logo 在页面挂多份时 id 重复，路径的
+	// url(#id) 全部解析到文档里第一份——若那份恰好躲在 display:none
+	// 容器里（如钻入态隐藏的供应商列表），渐变不渲染，所有引用它的
+	// 路径集体隐形（Qwen 详情页模型行 logo 空白的根因）。克隆后给每个
+	// id 加唯一后缀，并同步改写 url(#…) / href="#…" 引用。
+	if (node.querySelector("[id]")) {
+		const suffix = `-i${++svgUid}`;
+		const rewrite = (e: Element): void => {
+			const id = e.getAttribute("id");
+			if (id) e.setAttribute("id", id + suffix);
+			for (const attr of Array.from(e.attributes)) {
+				if (attr.value.includes("url(#")) {
+					attr.value = attr.value.replace(/url\(#([^)]+)\)/g, (_m, ref: string) => `url(#${ref}${suffix})`);
+				}
+				if ((attr.name === "href" || attr.name === "xlink:href") && attr.value.startsWith("#")) {
+					attr.value = attr.value + suffix;
+				}
+			}
+			for (const child of Array.from(e.children)) rewrite(child);
+		};
+		rewrite(node);
+	}
+	el.appendChild(node);
 }
 
 function appendProviderLogo(target: HTMLElement, name: string, logoCls: string): void {
@@ -2585,7 +2658,7 @@ export function renderModelsTab(
 	}
 
 	// 分组归属（用户拍板"列表不要文件夹"）：只剩内置系列——系列在列表
-	// 里渲染为单行，点击弹选型窗（VariantPickerModal）选成员。用户自建
+	// 里渲染为单行，点击弹选型窗（SeriesPickModal）选成员。用户自建
 	// 文件夹与同 logo 组不再参与分组（live.folder 数据保留但忽略）。
 	const folderOf = (r: Row): string =>
 		SERIES_FOLDER[r.name] ? `series:${SERIES_FOLDER[r.name]}` : "";
@@ -2834,7 +2907,7 @@ export function renderModelsTab(
 	};
 
 	// 系列组行（用户拍板"不要文件夹"）：整组渲染为单行，点击弹选型窗
-	// （VariantPickerModal）选成员。布局与普通供应商行同款：图标取成员中
+	// （SeriesPickModal）选成员。布局与普通供应商行同款：图标取成员中
 	// 最热门（排名最优）者，ON 徽标任一成员点亮即显示。
 	const renderGroupRow = (node: FolderNode): void => {
 		const hottest = [...node.members].sort(
@@ -2895,9 +2968,19 @@ export function renderModelsTab(
 			row.createDiv({ cls: "semlink-mt-provider-pill is-on", text: "ON" });
 		}
 		const openPicker = (): void => {
-			new VariantPickerModal(plugin.app, {
+			// 已配置过接入源的系列（用户拍板）：点行直接进详情，不再弹
+			// 选型窗——选中成员存在 live 实例（接入源已落定）即直进；
+			// 从未选过成员或尚无实例时才弹选型窗。窄幅已钻入同理不重建。
+			const current = node.members.find((m) => m.key === st.selected);
+			if (current?.live) {
+				if (st.drilled || !isNarrow()) return;
+				activateRow(current);
+				list.querySelector<HTMLElement>(`[data-key="${node.key}"]`)?.addClass("is-active");
+				return;
+			}
+			new SeriesPickModal(plugin.app, {
 				title: node.name,
-				current: node.members.find((m) => m.key === st.selected)?.name ?? "",
+				current: current?.name ?? "",
 				variants: node.members.map((m) => ({ name: m.name, endpoint: rowEndpoint(m) })),
 				onPick: (name) => {
 					const member = node.members.find((m) => m.name === name);
@@ -3101,7 +3184,13 @@ export function renderModelsTab(
 			back.addEventListener("click", goBack);
 			press(back, goBack);
 		}
-		head.createSpan({ cls: "semlink-mt-config-name", text: sel.name });
+		// 标题（用户拍板）：系列成员固定显示系列名（模型名称，如 Qwen），
+		// 不随成员切换变成 "Qwen CN"；成员（供应商）名称在接入源行右侧显示
+		const seriesGroup = sel.folder ? nodes.find((n) => n.key === sel.folder) : undefined;
+		head.createSpan({
+			cls: "semlink-mt-config-name",
+			text: seriesGroup ? seriesGroup.name : sel.name,
+		});
 		// 头部总开关已撤（用户拍板"去掉右上角的开关按钮"）：供应商启停
 		// 改为派生态——配置 Key + 至少开一个模型即 On（列表徽标同步此
 		// 语义），把模型全关即关。请求侧（chat-client/web-search）不再读
@@ -3113,17 +3202,21 @@ export function renderModelsTab(
 		if (sel.folder) {
 			const groupNode = nodes.find((n) => n.key === sel.folder);
 			if (groupNode && groupNode.members.length > 1) {
-				const epSection = configCol.createDiv({ cls: "semlink-mt-config-section" });
+				const epSection = configCol.createDiv({ cls: "semlink-mt-config-section semlink-mt-config-endpoint" });
 				const epRow = epSection.createDiv({
 					cls: "semlink-mt-config-eprow is-clickable",
 					attr: { role: "button", tabindex: "0" },
 				});
-				epRow.createDiv({ cls: "semlink-mt-config-label", text: t("mtEndpointLabel") });
-				epRow.createDiv({ cls: "semlink-mt-config-epval", text: fullEndpoint() });
-				const epChev = epRow.createDiv({ cls: "semlink-mt-config-epchev" });
+				// 单行编排（用户拍板"这个 URL 可以省略"）：标签 + 成员名 +
+				// chevron，完整 URL 不再展示（点击行弹选型窗即可见各成员端点）。
+				const epHead = epRow.createDiv({ cls: "semlink-mt-config-ephead" });
+				epHead.createDiv({ cls: "semlink-mt-config-label", text: t("mtEndpointLabel") });
+				// 右侧显示当前接入源成员（供应商）名称（用户拍板）
+				epHead.createSpan({ cls: "semlink-mt-config-epmember", text: sel.name });
+				const epChev = epHead.createDiv({ cls: "semlink-mt-config-epchev" });
 				setIcon(epChev, "chevron-right");
 				const openPicker = (): void => {
-					new VariantPickerModal(plugin.app, {
+					new SeriesPickModal(plugin.app, {
 						title: groupNode.name,
 						current: sel.name,
 						variants: groupNode.members.map((m) => ({ name: m.name, endpoint: rowEndpoint(m) })),
@@ -3146,7 +3239,7 @@ export function renderModelsTab(
 		// 拍板）：已存 Key 时只读胶囊（掩码 + 尾号）+ 铅笔/竖点；铅笔切回
 		// 输入框，竖点菜单测试连接/清除配置；Save 落盘后回到只读态。 ──
 		{
-			const keySection = configCol.createDiv({ cls: "semlink-mt-config-section" });
+			const keySection = configCol.createDiv({ cls: "semlink-mt-config-section semlink-mt-config-keysec" });
 			const keyRow = keySection.createDiv({ cls: "semlink-mt-config-keyrow" });
 			// 检测状态行：绿=连通（附在线模型数），红=失败（附原因）；不弹
 			// Notice。建在行外——行内容按态重建时状态行保持不动。
@@ -3352,6 +3445,9 @@ export function renderModelsTab(
 		// 模型行列表：卡即滚动容器，行贴卡边，行间 hairline 由 .semlink-card 生成
 		const rh = modelSection.createDiv({ cls: "semlink-mt-rows semlink-card semlink-mt-rows-card" });
 		rowsHost = rh;
+		// 窗口化渲染的滚动监听卸载钩子（renderRows 重入时先拆旧监听——rh
+		// 本体跨 renderRows 复用，监听器不拆会随闭包泄漏并重复驱动换窗）
+		let detachRowsScroll: (() => void) | null = null;
 
 		const updateCount = (): void => {
 			// 计数徽标 + 左栏状态胶囊就地同步（不整页刷新）
@@ -3360,6 +3456,8 @@ export function renderModelsTab(
 		};
 
 		const renderRows = (): void => {
+			detachRowsScroll?.();
+			detachRowsScroll = null;
 			const q = (st.search ?? "").toLowerCase();
 			// 携带模型在全量清单里的原始下标：搜索过滤后拖拽重排仍按全量
 			// 顺序计算插入位置。列表顺序只按原有（拖拽/目录）顺序，不做
@@ -3504,6 +3602,75 @@ export function renderModelsTab(
 					viewWin.requestAnimationFrame(() => markOverflowNames());
 				}
 			};
+			// ── 窗口化路径（大列表）：只构建视口 ±OVERSCAN 行，滚动换窗。 ──
+			// 全量 470 行的布局/绘制 + 数十个常驻跑马灯动画是滚动卡顿根因
+			// （真机 A/B：OpenRouter 470 行，禁跑马灯后单帧最差 449→69ms，
+			// 但均帧仍 ~27ms；窗口化把两者一起消掉）。小列表走分帧路径。
+			const WINDOW_MIN = 120;
+			const OVERSCAN = 12;
+			const buildWindowed = (): void => {
+				// 行高校准：同步渲染一小批真实行量平均高（行高随 ctx 行显隐
+				// 略有差异，平均后作 spacer/换窗的统一估计，OVERSCAN 吸收误差）
+				let rowH = 46;
+				{
+					const cal = new DocumentFragment();
+					const n = Math.min(24, shown.length);
+					for (let k = 0; k < n; k++) {
+						try {
+							cal.appendChild(buildRow(shown[k].m, shown[k].i));
+						} catch { /* 校准行构建失败不致命，落回估算行高 */ }
+					}
+					rh.appendChild(cal);
+					const els = Array.from(rh.querySelectorAll<HTMLElement>(":scope > .semlink-mt-model"));
+					const sum = els.reduce((acc, el) => acc + el.offsetHeight, 0);
+					if (els.length > 0 && sum > 0) rowH = Math.max(30, sum / els.length);
+					rh.empty();
+				}
+				const total = shown.length;
+				const topSpacer = rh.createDiv({ cls: "semlink-mt-rows-spacer" });
+				const bottomSpacer = rh.createDiv({ cls: "semlink-mt-rows-spacer" });
+				let winStart = -1;
+				let winEnd = -1;
+				let pendingRaf = 0;
+				const renderWindow = (): void => {
+					const vp = rh.clientHeight || 560;
+					const first = Math.max(0, Math.floor(rh.scrollTop / rowH) - OVERSCAN);
+					const end = Math.min(total, first + Math.ceil(vp / rowH) + OVERSCAN * 2);
+					if (first === winStart && end === winEnd) return;
+					winStart = first;
+					winEnd = end;
+					// 只清行元素，保留两端的 spacer
+					rh.querySelectorAll(":scope > .semlink-mt-model").forEach((el) => el.remove());
+					const winFrag = new DocumentFragment();
+					for (let k = first; k < end; k++) {
+						try {
+							winFrag.appendChild(buildRow(shown[k].m, shown[k].i));
+						} catch (e) {
+							console.error("[Semlink] model row failed:", shown[k]?.m?.id, e);
+						}
+					}
+					rh.insertBefore(winFrag, bottomSpacer);
+					topSpacer.style.height = `${Math.round(first * rowH)}px`;
+					bottomSpacer.style.height = `${Math.round((total - end) * rowH)}px`;
+					// 跑马灯只标当前窗口的溢出名（行数少，测量开销可忽略）
+					markOverflowNames();
+				};
+				renderWindow();
+				rh.scrollTop = keepScroll;
+				// 滚动驱动换窗：passive + rAF 合帧（一次滚动风暴只换一次窗）
+				const onScroll = (): void => {
+					if (pendingRaf) return;
+					pendingRaf = viewWin.requestAnimationFrame(() => {
+						pendingRaf = 0;
+						renderWindow();
+					});
+				};
+				rh.addEventListener("scroll", onScroll, { passive: true });
+				detachRowsScroll = (): void => {
+					rh.removeEventListener("scroll", onScroll);
+					if (pendingRaf) viewWin.cancelAnimationFrame(pendingRaf);
+				};
+			};
 			const markOverflowNames = (): void => {
 				const names = Array.from(rh.querySelectorAll<HTMLElement>(".semlink-mt-model-name"));
 				// 精确测量：插入探针 span 量文本真实宽度，与容器宽度比较。
@@ -3531,7 +3698,8 @@ export function renderModelsTab(
 					name.style.setProperty("--marquee-dur", `${((textW + 16) / 60).toFixed(2)}s`);
 				}
 			};
-			buildChunk();
+			if (shown.length > WINDOW_MIN) buildWindowed();
+			else buildChunk();
 		};		renderRows();
 		rh.scrollTop = restoreScroll ? (st.rowsScroll ?? 0) : 0;
 		syncSearchUI();

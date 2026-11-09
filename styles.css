@@ -898,6 +898,21 @@
 .smart-vault-settings .semlink-mt-config-section + .semlink-mt-config-section {
     border-top: 1px solid var(--sl-sep);
 }
+
+/* Key 节：与 Endpoint 节之间的分隔线去掉（用户拍板）——Endpoint 的
+   URL 折行后本节紧贴其下，不再分层留白。 */
+.smart-vault-settings .semlink-mt-config-section.semlink-mt-config-keysec {
+    border-top: none;
+}
+
+/* Endpoint 节：URL 折行后节底/行底的冗余空行去掉（用户拍板）——
+   节底 padding 归零，行底收窄，与 Key 节之间只留 Key 自己的 14px 顶距 */
+.smart-vault-settings .semlink-mt-config-section.semlink-mt-config-endpoint {
+    padding: 12px 4px 0;
+}
+.smart-vault-settings .semlink-mt-config-section.semlink-mt-config-endpoint .semlink-mt-config-eprow {
+    padding: 8px 0;
+}
 /* 模型节（用户拍板"左右对齐"）：水平内缩归零——行 logo/名称与
    DeepSeek/Models 标签同起点（卡内 14px），开关/添加钮与头部开关
    同右缘；行底色通铺到卡缘（Cherry 行样式）。与 Key 节之间的
@@ -969,6 +984,9 @@
     font-size: 13px;
     color: var(--text-normal);
     cursor: pointer;
+    /* 自绘 API 类型下拉面板（semlink-mt-select-pop）的定位锚：
+       absolute 面板以本钮为 containing block，宽度/位置随钮 */
+    position: relative;
 }
 
 .smart-vault-settings .semlink-mt-config-selectbtn:hover {
@@ -1005,10 +1023,12 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    /* 上下对称内边距：align-items:center 在内容盒里居中，上 2/下 12 的
+	/* 上下对称内边距：align-items:center 在内容盒里居中，上 2/下 12 的
        不对称内边距会让开关与名称整体高出头部视觉中心（用户反馈） */
     padding: 8px 4px;
-    border-bottom: 1px solid var(--sl-sep);
+    /* 分隔线颜色改用主题边框变量（用户拍板：1px solid
+       var(--background-modifier-border)），跟随明暗主题 */
+    border-bottom: 1px solid var(--background-modifier-border);
     flex-shrink: 0;
     /* 吸附配置栏滚动口顶部（用户拍板，同引导页 sticky 导航）：不透明白底
        让分节从下方穿过，z-index 压住各节 hairline */
@@ -1104,33 +1124,40 @@
     flex-shrink: 0;
 }
 
-/* Endpoint 行（系列供应商专属，API Key 节上方）：标签 + 当前完整端点
-   （右对齐灰字截断）+ 右箭头，整行可点弹选型窗换成员（用户拍板
-   "在 API Key 上面增加一个 Endpoint，点击出现弹窗选择"） */
+/* Endpoint 行（系列供应商专属，API Key 节上方）：单行标签 + 右侧成员
+   名 + 右箭头，整行可点弹选型窗换成员（用户拍板"在 API Key 上面增加
+   一个 Endpoint，点击出现弹窗选择"；后续拍板"URL 可以省略"——第二行
+   完整端点已撤，选型窗内仍可见各成员端点） */
 .smart-vault-settings .semlink-mt-config-eprow {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
     padding: 10px 0;
     cursor: pointer;
 }
 
-.smart-vault-settings .semlink-mt-config-epval {
-    flex: 1 1 auto;
-    min-width: 0;
-    text-align: right;
-    font-size: 12.5px;
-    color: var(--sl-tertiary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+/* 第一行：标签 + chevron 两端分布 */
+.smart-vault-settings .semlink-mt-config-ephead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
 }
 
 .smart-vault-settings .semlink-mt-config-epchev {
     display: flex;
     flex-shrink: 0;
     color: var(--sl-tertiary);
+}
+
+/* 接入源行右侧的成员（供应商）名称：margin-left:auto 顶到右侧、
+   chevron 之前（用户拍板"右侧显示接入源供应商的名称"）；
+   主文字色（用户反馈 60% 灰太浅，"颜色加深一些"） */
+.smart-vault-settings .semlink-mt-config-epmember {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-normal);
 }
 
 .smart-vault-settings .semlink-mt-config-epchev .svg-icon,
@@ -1234,61 +1261,6 @@
     margin-top: 16px;
 }
 
-/* ── 系列选型弹窗（用户拍板"多供应商的点击触发弹窗"）：成员行 =
-   浅灰圆角条（logo + 名称 + 灰色 Endpoint 尾随），点行即确认 ── */
-.smart-vault-settings .semlink-variant-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.smart-vault-settings .semlink-variant-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    padding: 10px 12px;
-    border-radius: 10px;
-    background: var(--sl-fill, rgba(118, 118, 128, 0.08));
-    cursor: pointer;
-}
-
-.smart-vault-settings .semlink-variant-row:hover {
-    background: var(--sl-hover, rgba(118, 118, 128, 0.16));
-}
-
-.smart-vault-settings .semlink-variant-row.is-current .semlink-variant-name {
-    color: var(--interactive-accent);
-}
-
-.smart-vault-settings .semlink-variant-logo {
-    display: flex;
-    flex-shrink: 0;
-}
-
-.smart-vault-settings .semlink-variant-logo .semlink-mt-logo-svg {
-    width: 20px;
-    height: 20px;
-}
-
-.smart-vault-settings .semlink-variant-name {
-    flex-shrink: 0;
-    font-size: 14px;
-    font-weight: 550;
-    color: var(--text-normal);
-}
-
-.smart-vault-settings .semlink-variant-endpoint {
-    flex: 1 1 auto;
-    min-width: 0;
-    text-align: right;
-    font-size: 12px;
-    color: var(--sl-tertiary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 /* Test & Save 主钮：勾图标与文字的间距（footer 的 gap: 8px 统一管） */
 .semlink-provider-editor-modal .semlink-editor-save-btn .svg-icon,
 .semlink-provider-editor-modal .semlink-editor-save-btn svg {
@@ -1338,10 +1310,48 @@
     height: 34px;
     padding: 0 6px 0 12px;
     border-radius: var(--sl-radius-inner);
+    /* 只读展示态（用户拍板"不可编辑状态应该有个背景色"）：控件灰底
+       与可编辑白底区分；白底描边只属于可输入控件（编辑态另走 KeyModal） */
     background: var(--sl-fill);
     color: var(--sl-secondary-text);
     font-size: 13px;
     user-select: none;
+}
+
+/* API 类型自绘下拉面板：贴触发钮下缘 4px，宽度与钮完全一致；选中项
+   中性灰高亮（用户拍板：先用颜色而非打钩，后反馈"去掉紫色的背景色"
+   → 与引导选型窗同口径的中性化，加粗示选中） */
+.smart-vault-settings .semlink-mt-select-pop {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 40;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px -8px rgba(15, 23, 42, 0.25);
+    overflow: hidden;
+}
+
+.smart-vault-settings .semlink-mt-select-pop-item {
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-normal);
+    cursor: pointer;
+}
+
+.smart-vault-settings .semlink-mt-select-pop-item:hover {
+    background: var(--background-modifier-hover);
+}
+
+.smart-vault-settings .semlink-mt-select-pop-item.is-active {
+    /* 本弹窗不在 .semlink-settings-root 树内，--sl-active 未定义——兜底
+       核心 hover 灰。不能用 --background-modifier-active-hover：核心把它
+       定义成 accent 15%，正是用户要去掉的紫色 */
+    background: var(--sl-active, var(--background-modifier-hover));
+    color: var(--text-normal);
+    font-weight: 600;
 }
 
 .smart-vault-settings .semlink-mt-config-keypill-mask {
@@ -1389,8 +1399,9 @@
 }
 
 .smart-vault-settings .semlink-mt-config-input:focus-visible {
-    outline: 2px solid hsla(var(--interactive-accent-hsl), 0.45);
-    outline-offset: 0;
+    /* 聚焦不使用紫色描边（用户拍板）：只加深边框色 */
+    outline: none;
+    border-color: var(--background-modifier-border-hover);
 }
 
 .smart-vault-settings .semlink-mt-config-icon-btn {
@@ -1816,6 +1827,10 @@
     flex-shrink: 0;
     cursor: pointer;
     transition: background 0.1s ease-out;
+    /* ⚠ 不要给行加 content-visibility：真机两次实测都是反优化（无界卡
+       25.6→64.1ms；有界卡 29.4→81.8ms）——flex 列子项进出可见集反复
+       触发布局失效。长列表性能走窗口化渲染（settings-models renderRows），
+       卡高钳制见 .semlink-mt-config-models .semlink-mt-rows。 */
 }
 
 /* hover 门控触摸设备（首触粘滞）；按压反馈 :active 不门控 */
@@ -2353,16 +2368,31 @@
 
 .smart-vault-settings .semlink-editor-select {
     width: 100%;
-    /* height: 46px; */
     margin-bottom: 16px;
-    padding: 0px 14px;
-    /* border: 1px solid var(--background-modifier-border); */
+    /* 与输入框同语言（用户拍板"点击的时候边框怎么没了"）：白底 + 常态
+       1px 发丝描边，右侧留自绘 chevron 空间；聚焦只加深边框不紫色。
+       垂直 padding 必须为 0：核心 app.css 给 select 定死
+       height: var(--input-height)（30px），再叠上下 padding 会把内容
+       挤到几像素——文字被裁成一条（真机 measure 实测 30px/6px 内容）；
+       单行文字由原生 select 在固定高内自动垂直居中 */
+    padding: 0 34px 0 14px;
+    border: 1px solid var(--background-modifier-border);
     border-radius: 10px;
     font-size: 14px;
-    /* line-height: 44px; */
     appearance: none;
     -webkit-appearance: none;
     background: var(--background-primary) url(data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2716%27 height=%2716%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23999%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E) no-repeat right 14px center;
+}
+
+.smart-vault-settings .semlink-editor-select:hover {
+    border-color: var(--background-modifier-border-hover);
+}
+
+.smart-vault-settings .semlink-editor-select:focus,
+.smart-vault-settings .semlink-editor-select:focus-visible {
+    box-shadow: none;
+    outline: none;
+    border-color: var(--background-modifier-border-hover);
 }
 
 .smart-vault-settings .semlink-editor-input.semlink-hidden,
@@ -2377,10 +2407,12 @@
     margin-bottom: 16px;
     padding: 11px 14px;
     /* 常态 1px 浅描边（用户拍板"鼠标悬停的时候也应该有边框颜色"，
-       与配置页输入框同语言），hover 加深、聚焦 accent */
+       与配置页输入框同语言），hover 加深、聚焦 accent。可输入状态
+       一律白底（用户拍板）——与配置页输入框（background-primary）
+       同一观感，灰底只留给只读/禁用态 */
     border: 1px solid var(--background-modifier-border);
     border-radius: 10px;
-    background: var(--sl-fill, rgba(118, 118, 128, 0.12));
+    background: var(--background-primary);
     font-size: 14px;
     color: var(--text-normal);
     transition: box-shadow 0.15s ease-out, border-color 0.12s ease;
@@ -2391,8 +2423,8 @@
 }
 
 .smart-vault-settings .semlink-editor-input:focus {
-    box-shadow: 0 0 0 2px hsla(var(--interactive-accent-hsl), 0.45);
-    border-color: hsla(var(--interactive-accent-hsl), 0.45);
+    /* 聚焦不使用紫色光环/描边（用户拍板）：只加深边框色示意识 */
+    border-color: var(--background-modifier-border-hover);
     outline: none;
 }
 
@@ -3790,6 +3822,35 @@
 .semlink-guide-provider-card:hover {
     border-color: var(--interactive-accent);
     background: var(--background-modifier-hover);
+}
+
+/* 系列选型弹窗内（用户拍板）：悬停/选中都不变紫——悬停只垫中性底色、
+   边框保持发丝线；选中回显用中性加粗（保留"哪一个是当前"的线索但不
+   上色）。作用域限定弹窗，引导主页的卡片网格不受影响 */
+.semlink-guide-series-modal .semlink-guide-provider-card:hover {
+    border-color: var(--background-modifier-border);
+    background: var(--background-modifier-hover);
+}
+
+.semlink-guide-series-modal .semlink-guide-provider-card.is-current {
+    border-color: var(--background-modifier-border);
+    background: var(--background-modifier-hover);
+}
+
+.semlink-guide-series-modal .semlink-guide-provider-card.is-current .semlink-guide-provider-name {
+    color: var(--text-normal);
+    font-weight: 650;
+}
+
+/* 选中回显（SeriesPickModal 的 current）：accent 边框 + 名称着色——
+   引导侧不带 current 传参时不受影响 */
+.semlink-guide-provider-card.is-current {
+    border-color: var(--interactive-accent);
+}
+
+.semlink-guide-provider-card.is-current .semlink-guide-provider-name {
+    color: var(--interactive-accent);
+    font-weight: 600;
 }
 
 /* 最后一行的自定义供应商入口：虚线边框、弱化文字 */
@@ -6442,7 +6503,7 @@ body .semlink-msg-user::selection {
 /* ── Pro history management: search / chips / pin / folder ── */
 .semlink-history-tools{padding:.4rem .8rem .0rem}
 .semlink-history-search{width:100%;border:1px solid var(--background-modifier-border);border-radius:6px;background:var(--background-primary);color:var(--text-normal);padding:.4rem .6rem;font-size:.85rem;font-family:inherit}
-.semlink-history-search:focus{outline:none;border-color:var(--interactive-accent)}
+.semlink-history-search:focus{outline:none;border-color:var(--background-modifier-border-hover)}
 
 /* Drawer tabs + archive entry */
 .semlink-history-tabs{display:flex;gap:.2rem;padding:.15rem .8rem;border-bottom:1px solid var(--background-modifier-border)}
@@ -7731,20 +7792,26 @@ body .semlink-msg-user::selection {
     display: flex;
 }
 
-/* ╕═ RAG 页：状态组（索引/嵌入两张并排卡）+ 配置/维护分组卡 ╕ */
-.semlink-rag-status-grid {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: var(--sl-space-4);
-	margin-bottom: var(--sl-space-4);
+/* ╕═ RAG 页：状态组（单卡——索引/嵌入已合并，用户拍板）+ 配置/维护分组卡 ╕ */
+/* 数值行容器：基线单列；宽容器（≥560px，与旧双卡分栏同档）2×2 分栏
+   （用户拍板"当宽屏的时候分成两列"） */
+.semlink-rag-stats {
+	display: flex;
+	flex-direction: column;
 }
-.semlink-rag-card {
-	margin-bottom: var(--sl-space-4);
+@container settings (min-width: 560px) {
+	.semlink-rag-stats {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		column-gap: 20px;
+	}
 }
-/* 卡内纵向 flex：内容少的嵌入卡与索引卡等高时，开关行钉底不悬空 */
+/* 状态卡与下方配置/维护卡之间的间距（曾由 status-grid 的 gap/margin 承担，
+   合并后卡片直接挂在容器上，补回底距） */
 .semlink-rag-status {
 	display: flex;
 	flex-direction: column;
+	margin-bottom: var(--sl-space-4);
 }
 .semlink-rag-block {
 	flex: 1 1 auto;
@@ -8217,7 +8284,17 @@ body .semlink-msg-user::selection {
 	border-radius: 10px;
 	shape-rendering: crispEdges;
 }
+/* 地址行（用户拍板）：单行省略号截断 + 行尾复制/浏览器图标钮
+   （原双通栏文字按钮取消） */
+.semlink-shareq-urlrow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
 .semlink-shareq-url {
+	flex: 1 1 auto;
+	min-width: 0;
 	padding: 8px 12px;
 	border-radius: var(--sl-radius-inner);
 	background: var(--background-secondary);
@@ -8225,17 +8302,36 @@ body .semlink-msg-user::selection {
 	font-size: 12.5px;
 	line-height: 1.5;
 	color: var(--text-muted);
-	word-break: break-all;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	user-select: all;
+	cursor: pointer;
 }
-.semlink-shareq-actions {
-	display: flex;
-	gap: 10px;
-	margin-top: 12px;
+
+.semlink-shareq-iconbtn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	flex: none;
+	padding: 0;
+	border: none;
+	border-radius: 50%;
+	background: transparent;
+	color: var(--muted);
+	cursor: pointer;
 }
-.semlink-shareq-actions > button {
-	flex: 1 1 0;
-	min-width: 0;
+
+.semlink-shareq-iconbtn:hover {
+	background: rgba(139, 108, 239, 0.14);
+	color: var(--brand);
+}
+
+.semlink-shareq-iconbtn svg {
+	width: 17px;
+	height: 17px;
 }
 /* 红色通栏「停止共享」：secondary 变体 + 危险色（实底 hover = error 色） */
 .semlink-shareq-revoke {
@@ -8428,6 +8524,22 @@ body .semlink-msg-user::selection {
 .smart-vault-settings .semlink-mt-rows-card > * + *::before {
     display: none;
 }
+/* 窗口化渲染的占位块：只占高不 paints，代表视口外未渲染的行区间 */
+.smart-vault-settings .semlink-mt-rows-spacer {
+    flex: 0 0 auto;
+    width: 100%;
+    pointer-events: none;
+}
+/* 长列表滚动性能（用户报"往下滚动很卡"）：OpenRouter 470+ 行让列表卡
+   自然长高到 21000px+，滚动落在外层配置列容器上——每帧全量布局/绘制，
+   真机 60 帧驱动实测 avg 25.6ms、最差 137ms、11 帧超 32ms。钳住卡高让
+   卡成为真正的内层滚动容器：滚动只在有界合成层内发生，外层列的滚动
+   距离也大幅缩短。（试过 content-visibility 反而更卡——flex 列子项
+   进出可见集反复触发布局失效，avg 恶化到 64ms，已回滚。） */
+.smart-vault-settings .semlink-mt-config-models .semlink-mt-rows {
+    max-height: calc(100vh - 320px);
+    min-height: 240px;
+}
 /* Obsidian 弹窗宿主底色非分组灰时保留极淡描边防隐形 */
 .modal .semlink-settings-root .semlink-card {
     border: 1px solid var(--sl-sep);
@@ -8582,12 +8694,8 @@ body .semlink-msg-user::selection {
     .semlink-share-time {
         display: none;
     }
-    /* 状态双卡在窄容器并排会挤爆开关说明文案，退化为上下堆叠。
-       必须放在基线 .semlink-rag-status-grid 之后：容器查询不加分权重，
-       靠源序赢回（前面 6822 桶在基线之前，会被基线反压）。 */
-    .semlink-rag-status-grid {
-        grid-template-columns: 1fr;
-    }
+    /* （曾有一条把 .semlink-rag-status-grid 双卡在窄容器退化为单列的
+       容器查询——状态组合并为单卡后连同基线一并删除。） */
 }
 
 /* 无障碍：降透明 → 实底；降动效已由基座覆盖 */

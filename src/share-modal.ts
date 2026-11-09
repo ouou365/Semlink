@@ -178,19 +178,22 @@ export class ShareQrModal extends Modal {
 		svgEl.appendChild(pathEl);
 		qrWrap.createDiv({ cls: "semlink-share-qr-img" }).appendChild(svgEl);
 
-		// 折行全显地址：word-break 换行 + user-select:all 点一下整段选中。
-		this.contentEl.createDiv({ cls: "semlink-shareq-url", text: url });
-
-		// 双按钮：复制地址 / 在浏览器打开（各 flex:1，40px 通栏 secondary）。
-		const actions = this.contentEl.createDiv({ cls: "semlink-shareq-actions" });
-		const copyBtn = actions.createEl("button", { cls: "semlink-btn-secondary semlink-btn-block", text: t("shareCopy") });
+		// 地址行（用户拍板）：单行省略号截断（title 悬停看全貌，
+		// user-select:all 点一下整段选中——选中的是 DOM 全文，复制仍完整），
+		// 行尾两个图标钮：复制地址 / 在浏览器打开。
+		const urlRow = this.contentEl.createDiv({ cls: "semlink-shareq-urlrow" });
+		const urlBox = urlRow.createDiv({ cls: "semlink-shareq-url", text: url });
+		urlBox.setAttribute("title", url);
+		const copyBtn = urlRow.createEl("button", { cls: "semlink-shareq-iconbtn", attr: { "aria-label": t("shareCopy") } });
+		setIcon(copyBtn, "copy");
 		copyBtn.addEventListener("click", () => {
 			void copyShareText(navigator.clipboard, this.opts.name, url)
 				.then(() => new Notice(t("shareCopied")))
 				.catch(() => new Notice(t("shareCopyFailed")));
 		});
 		// Local preview opens via the loopback address when available.
-		const openBtn = actions.createEl("button", { cls: "semlink-btn-secondary semlink-btn-block", text: t("shareOpenBrowser") });
+		const openBtn = urlRow.createEl("button", { cls: "semlink-shareq-iconbtn", attr: { "aria-label": t("shareOpenBrowser") } });
+		setIcon(openBtn, "external-link");
 		openBtn.addEventListener("click", () => {
 			// 总是打开局域网地址（127.0.0.1 只是本机预览出口）
 			window.open(url, "_blank");

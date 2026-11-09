@@ -12,7 +12,7 @@
 // (time-slot refresh, language switch) and restarts.
 
 import { Modal, ToggleComponent, setIcon } from "obsidian";
-import { AddModelModal, AddProviderModal, brandLogoOf, buildGuideProviderGroups, catalogEndpoint, CHAT_CATALOG, EMBEDDING_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, mergeEmbeddingCatalogModels, modelBrandOf, setSvgIcon } from "./settings-models";
+import { AddModelModal, AddProviderModal, brandLogoOf, buildGuideProviderGroups, catalogEndpoint, CHAT_CATALOG, EMBEDDING_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, mergeEmbeddingCatalogModels, modelBrandOf, SeriesPickModal, setSvgIcon } from "./settings-models";
 import type { FetchedModel, CatalogEntry } from "./settings-models";
 import { mountCoffeeCanvas } from "./coffee-canvas";
 import { t } from "./i18n";
@@ -230,11 +230,19 @@ export function renderOnboarding(
 		// 已嵌入文档数（chunks 表中至少一个分块带向量的笔记数），节流查库校正。
 		// 不读 note_doc_vectors——该表会被算法迁移/换模型清空重建，迁移期会
 		// 恒为 0；chunk 向量与笔记嵌入同事务落库，进度只增不减。
+		// 已跳过（空文件/全稀疏笔记）一并计入分子（用户拍板"嵌入进度要包含
+		// 已跳过"）：嵌入进度 = (已嵌入+已跳过)/总笔记数。
 		let lastEmbedded = 0;
+		let lastSkipped = 0;
 		let lastStatsAt = 0;
 		const refreshEmbedded = async (): Promise<void> => {
 			try {
-				lastEmbedded = await plugin.store.getEmbeddedNoteCount();
+				const [embedded, skipped] = await Promise.all([
+					plugin.store.getEmbeddedNoteCount(),
+					plugin.store.getEmbedSkippedNoteCount(),
+				]);
+				lastEmbedded = embedded;
+				lastSkipped = skipped;
 				applyProgress(plugin.progress.current);
 			} catch {
 				/* worker 未就绪：下一拍重试 */
@@ -281,16 +289,18 @@ export function renderOnboarding(
 			if (busy) sawBusy = true;
 			const total = Math.max(p.totalNotes, 0);
 			if (sawBusy && total > 0 && p.phase === "completed") state = "done";
-			// 文档口径：已嵌入文档 / 总笔记数（嵌入步只汇报向量化进度）
-			const pct = total > 0 ? Math.min(100, Math.round((lastEmbedded / total) * 100)) : 0;
+			// 文档口径：已嵌入文档 / 总笔记数（嵌入步只汇报向量化进度）；
+			// 分子含已跳过（用户拍板）：嵌入进度 = (已嵌入+已跳过)/总数
+			const done = lastEmbedded + lastSkipped;
+			const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
 			coffee.setLevel(pct, state === "running" && p.phase === "embedding");
 			// 分片在动（fileChunkProgress 在跳动）时保持水柱持续流淌——
 			// 不只是换文件时倒一次；分片停下后水柱自行淡出。
 			coffee.stream(state === "running" && !!p.fileChunkProgress);
 			statnum.setText(`${pct}%`);
 			statlabel.setText(total > 0
-				? `${lastEmbedded.toLocaleString()} / ${total.toLocaleString()}`
-				: `${lastEmbedded.toLocaleString()}`);
+				? `${done.toLocaleString()} / ${total.toLocaleString()}`
+				: `${done.toLocaleString()}`);
 			// 底部：当前文档名 + 该文档的分片进展（长文档分多片嵌入）。
 			// 名字截断时进度仍完整可见；hover 整行可见全名。
 			const base = (p.currentFile || "").split("/").pop() || "";
@@ -770,56 +780,6 @@ class EmbedModelPickModal extends Modal {
 
 /** 系列合并卡的二次确认窗口：标题为系列名，列出该系列的成员供应商
  *  （同网格卡片样式、带配置绿点），点选其中一个才真正创建/进入。 */
-class SeriesPickModal extends Modal {
-	constructor(
-		private plugin: SmartVaultPlugin,
-		private seriesName: string,
-		private members: string[],
-		private onPick: (name: string) => void,
-		/** 成员条目来源：对话目录（系列选择）或嵌入目录（Model-first 的
-		 *  供应商选择），决定卡片右侧展示的端点。 */
-		private catalog: CatalogEntry[] = CHAT_CATALOG,
-	) {
-		super(plugin.app);
-		this.modalEl.addClass("semlink-guide-series-modal");
-	}
-
-	onOpen(): void {
-		this.titleEl.setText(this.seriesName);
-		const { contentEl } = this;
-		const grid = contentEl.createDiv({ cls: "semlink-guide-provider-grid semlink-guide-provider-grid-vertical" });
-		for (const member of this.members) {
-			const card = grid.createDiv({ cls: "semlink-guide-provider-card" });
-			const logo = brandLogoOf(member).svg;
-			if (logo) {
-				const logoEl = card.createDiv({ cls: "semlink-guide-provider-logo" });
-				setSvgIcon(logoEl, logo);
-			} else {
-				card.createDiv({ cls: "semlink-guide-provider-fallback", text: member.charAt(0).toUpperCase() });
-			}
-			card.createDiv({ cls: "semlink-guide-provider-name", text: member });
-			// 右侧显示完整请求端点（Base URL + 协议路径）
-			const entry = this.catalog.find((e) => e.name === member);
-			if (entry) {
-				const endpoint = catalogEndpoint(entry);
-				card.createSpan({
-					cls: "semlink-guide-provider-endpoint",
-					text: endpoint,
-					attr: { title: endpoint },
-				});
-			}
-			card.addEventListener("click", () => {
-				this.close();
-				this.onPick(member);
-			});
-		}
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-	}
-}
-
 // ──── Steps 1 & 2: provider → validate key → pick a model ────
 
 interface ModelStepOptions {
@@ -982,9 +942,14 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 						const p = ensureCatalogProvider(plugin, name, opts.kind);
 						if (p) opts.onPickProvider(p);
 					};
-					// 系列合并卡：二次确认窗口里选择具体变体；单供应商直接选
+					// 系列合并卡：二次确认窗口里选择具体变体（共享 SeriesPickModal，
+					// 端点查对话目录折算）；单供应商直接选
 					if (item.members) {
-						new SeriesPickModal(plugin, item.name, item.members, pick).open();
+						const variants = item.members.map((m) => {
+							const entry = CHAT_CATALOG.find((e) => e.name === m);
+							return { name: m, endpoint: entry ? catalogEndpoint(entry) : "" };
+						});
+						new SeriesPickModal(plugin.app, { title: item.name, variants, onPick: pick }).open();
 					} else {
 						pick(item.name);
 					}
