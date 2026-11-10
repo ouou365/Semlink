@@ -259,6 +259,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoke: "共有を停止",
 	shareRevoked: "共有を停止しました。アドレスは無効になりました。",
 	shareOpenBrowser: "ブラウザで開く",
+	shareManage: "共有を管理",
 	shareTabTitle: "LAN 共有",
 	shareQrCode: "QR コード",
 	shareBackTop: "トップへ戻る",

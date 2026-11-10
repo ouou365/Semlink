@@ -260,6 +260,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoke: "Прекратить доступ",
 	shareRevoked: "Доступ прекращён — адрес больше не работает.",
 	shareOpenBrowser: "Открыть в браузере",
+	shareManage: "Управление доступом",
 	shareTabTitle: "Общий доступ в локальной сети",
 	shareQrCode: "QR-код",
 	shareBackTop: "Наверх",

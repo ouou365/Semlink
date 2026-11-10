@@ -259,6 +259,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoke: "Freigabe beenden",
 	shareRevoked: "Freigabe beendet — die Adresse funktioniert nicht mehr.",
 	shareOpenBrowser: "Im Browser öffnen",
+	shareManage: "Freigabe verwalten",
 	shareTabTitle: "Freigabe im LAN",
 	shareQrCode: "QR-Code",
 	shareBackTop: "Nach oben",

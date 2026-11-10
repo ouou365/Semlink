@@ -2689,12 +2689,8 @@ export class SemanticSearchView extends ItemView {
 				popBtn.setAttr("aria-label", nowPop ? t("dockBackWindow") : t("popOutWindow"));
 			}, 1200);
 		});
-		const langBtn = rightSide.createEl("button", {
-			cls: "semlink-search-icon-btn clickable-icon",
-			attr: { "aria-label": t("language") },
-		});
-		setIcon(langBtn, "languages");
-		langBtn.addEventListener("click", () => this.openLanguageMenu(langBtn));
+		// 语言切换按钮已撤（用户拍板"设置页去掉这个"）：语言入口只留
+		// Base 页偏好组的下拉。
 		const host = this.messagesEl.createDiv({ cls: "semlink-search-welcome semlink-settings-screen" });
 		this.settingsEmbed = renderSettingsTabInto(host, this.plugin, this.settingsInitialTab);
 	}

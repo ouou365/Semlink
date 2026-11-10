@@ -149,9 +149,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 宿主形态：CSS 据此微调内嵌屏专属的留白/动画（弹窗宿主略不同）。
 		containerEl.toggleClass("semlink-settings-embedded", this.embeddedHost);
 
-		// Title heading row: brand text · version（语言下拉曾因"双入口冗余"
-		// 评审移入 General 偏好组；用户拍板收回顶条——仅原生 Obsidian 设置
-		// 界面显示，嵌入式设置屏不加）。
+		// Title heading row: brand text · version（顶条右上的语言下拉曾两度
+		// 反复：先因"双入口冗余"移入偏好组，后收回原生设置顶条，最终用户
+		// 拍板"去掉这个语言选择"——语言切换只留在 Base 页偏好组一处）。
 		// Everything rides in the NAME element: heading-mode settings may hide
 		// the control area depending on host CSS — the name always renders.
 		// 嵌入式设置屏跳过：标题/标语与顶部品牌重复。
@@ -165,24 +165,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			const titleLeft = title.nameEl.createDiv({ cls: "semlink-settings-heading-left" });
 			titleLeft.createSpan({ cls: "semlink-settings-heading-text", text: t("settingsTitle") });
 			titleLeft.createSpan({ cls: "semlink-settings-tagline", text: t("settingsTagline") });
-			// 顶条右上语言切换（仅原生设置弹窗）：挂在 nameEl（标题行 flex
-			// 容器）尾部——controlEl 会被 Obsidian 的 setting-item 换行挤到
-			// 标题下一行（真机截图），标题行内 margin-left:auto 才是右上角。
-			// 换语言 = 落盘 + setLang + 整页重渲（renderPrefsSection 同款
-			// 逻辑）。旧 .semlink-settings-lang CSS（160px 上限、不收缩、
-			// margin-left:auto）正是为这个位置写的，类名直接复用。
-			const langWrap = title.nameEl.createDiv({ cls: "semlink-settings-lang" });
-			new DropdownComponent(langWrap)
-				.addOptions({
-					auto: t("langAuto"),
-					...Object.fromEntries(LANGUAGES.map((l) => [l.value, l.label])),
-				})
-				.setValue(this.plugin.settings.language)
-				.onChange(async (value) => {
-					this.plugin.settings.language = value as SmartVaultSettings["language"];
-					await this.plugin.saveSettings();
-					rerenderSettingsTab(this);
-				});
 		}
 
 		// 横向 tab 栏（iOS 分段控件式）在上、内容面板在下：任何宽度都
@@ -249,9 +231,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	 *  切换下方面板——任何宽度同构，无钻入层级。 */
 	private renderSettingsMenu(menuEl: HTMLElement): void {
 		const tabs: Array<{ id: SettingsTab; icon: string; label: string }> = [
-			// 用户拍板的菜单顺序：Pro（gem：偏好 + 快速开始 + 许可证）第一，
-			// 其余任务 tab 依序跟随。
-			{ id: "general", icon: "gem", label: t("tabGeneral") },
+			// 用户拍板的菜单顺序：Base（偏好 + 快速开始 + 许可证）第一，
+			// 其余任务 tab 依序跟随。图标 settings-2：tab 已从 Pro（gem
+			// 宝石=付费身份）改名 Base，图标随之换基础设置语义（用户反馈
+			// "base 的图标是不是换一个"）。
+			{ id: "general", icon: "settings-2", label: t("tabGeneral") },
 			{ id: "model", icon: "bot", label: t("tabModel") },
 			{ id: "embedding", icon: "search", label: t("tabEmbedding") },
 			{ id: "mcp", icon: "plug-zap", label: t("tabMcp") },
@@ -480,44 +464,32 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const pro = lm.isPro();
 
 		if (pro) {
-			// Pro 态：营销退场，收成一张身份卡——头部（logo + 名称 + Active 徽）
-			// + 信息格（许可密钥点击复制 / 设备占用）+ 操作行（停用）。
+			// Pro 态：白卡身份卡（用户拍板"整体面板白色、紫只做装饰、要与
+			// 激活前的营销卡有传承性"）：复用营销卡 .semlink-license-card 系
+			// 版式——头部（logo + 名称 + Active 徽）→ 宣传语（headline 复用
+			// licenseCardHeadline + body 复用 licenseCardFreeLine）→ 弱化
+			// meta 行（Lifetime · 设备占用小灰字）→ Deactivate。
+			// License key 激活后不再展示（用户拍板）。
 			const proInfo = lm.proInfo();
-			const card = containerEl.createDiv({ cls: "semlink-card semlink-license-procard" });
-			const head = card.createDiv({ cls: "semlink-license-pro-head" });
-			const logo = head.createSpan({ cls: "semlink-license-pro-logo" });
+			const card = containerEl.createDiv({ cls: "semlink-card semlink-license-card semlink-license-procard" });
+			const head = card.createDiv({ cls: "semlink-license-card-head" });
+			const logo = head.createSpan({ cls: "semlink-license-card-logo" });
 			setIcon(logo, "semlink-logo");
-			const title = head.createDiv({ cls: "semlink-license-pro-info" });
-			title.createDiv({ cls: "semlink-license-pro-name", text: "Semlink Pro" });
-			title.createDiv({ cls: "semlink-license-pro-desc", text: t("licenseLifetime") });
-			const pill = head.createSpan({ cls: "semlink-license-pro-pill" });
+			head.createSpan({ cls: "semlink-license-card-title", text: "Semlink Pro" });
+			const pill = head.createSpan({ cls: "semlink-license-card-badge is-active" });
 			pill.createSpan({ cls: "semlink-license-pro-dot" });
-			pill.createSpan({ cls: "semlink-license-pro-pilltext", text: t("licenseStatusActive") });
+			pill.createSpan({ text: t("licenseStatusActive") });
 
-			// 信息格：密钥掩码展示（点击复制全文），设备占用 x/y。
-			const grid = card.createDiv({ cls: "semlink-license-pro-grid" });
-			const keyCell = grid.createDiv({ cls: "semlink-license-pro-cell" });
-			keyCell.createDiv({ cls: "semlink-license-pro-celllabel", text: t("licenseKeyField") });
-			const rawKey = proInfo?.key ?? "";
-			const maskKey = (k: string): string => {
-				const s = k.trim();
-				return s.length <= 8 ? s : `${s.slice(0, 4)}····${s.slice(-4)}`;
-			};
-			const keyVal = keyCell.createDiv({ cls: "semlink-license-pro-cellval", text: maskKey(rawKey) || "—" });
-			if (rawKey) {
-				keyVal.addClass("is-clickable");
-				keyVal.setAttr("title", t("licenseCopyKey"));
-				keyVal.addEventListener("click", () => {
-					void navigator.clipboard.writeText(rawKey).then(() => new Notice(t("licenseCopied")));
-				});
-			}
-			const devCell = grid.createDiv({ cls: "semlink-license-pro-cell" });
-			devCell.createDiv({ cls: "semlink-license-pro-celllabel", text: t("licenseDevices") });
+			card.createDiv({ cls: "semlink-license-headline", text: t("licenseCardHeadline") });
+			card.createDiv({ cls: "semlink-license-sub", text: t("licenseCardFreeLine") });
+
+			// 弱化 meta：Lifetime + 设备占用收成一行小灰字
 			const used = proInfo?.used ?? 0;
 			const limit = proInfo?.limit ?? 0;
-			devCell.createDiv({
-				cls: "semlink-license-pro-cellval",
-				text: limit ? `${used} / ${limit}` : String(used),
+			const devText = limit ? `${used} / ${limit}` : String(used);
+			card.createDiv({
+				cls: "semlink-license-pro-meta",
+				text: `${t("licenseLifetime")} · ${t("licenseDevices")} ${devText}`,
 			});
 
 			const actions = card.createDiv({ cls: "semlink-license-pro-actions" });
@@ -1232,9 +1204,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					}
 				});
 
-				// 图标槽 28px（file-text）
+				// 图标槽 28px：笔记共享 = file-text，对话共享 = message-square
+				// （用户拍板"图标改成对话图标"——原 share-2 网络图标语义含混）
 				const icon = item.createSpan({ cls: "semlink-share-icon" });
-				setIcon(icon, entry.sessionId.startsWith("note:") ? "file-text" : "share-2");
+				setIcon(icon, entry.sessionId.startsWith("note:") ? "file-text" : "message-square");
 
 				// main 列：标题 + 时间（用户拍板"日期移到链接的位置"：次行不再
 				// 显示 URL，改显相对时间/日期；URL 由行尾按钮承担）
@@ -1250,44 +1223,19 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 						: moment(entry.sharedAt).fromNow(),
 				});
 
-				// 行尾三个 ghost 图标钮：复制（写「标题\nURL」，check 反馈 1.2s）/
-				// 新窗口打开（用户拍板"在复制按钮右边增加在新窗口打开按钮"）
+				// 行尾单个转发钮（用户拍板"去掉复制按钮，点击转发按钮出现
+				// 弹窗"）：打开详情弹窗——二维码/URL 复制/浏览器打开/停止
+				// 共享都收在弹窗里，行内不再堆按钮。
 				const actions = item.createDiv({ cls: "semlink-share-actions" });
-				const copyBtn = actions.createEl("button", {
+				const fwdBtn = actions.createEl("button", {
 					cls: "semlink-btn-ghost semlink-share-act",
-					attr: { "aria-label": t("shareCopy"), type: "button" },
+					attr: { "aria-label": t("shareManage"), type: "button" },
 				});
-				// 图标包 span（直接 setIcon 在 button 上会缩成一点，同 MCP copy 修复）
-				const copyIcon = copyBtn.createSpan({ cls: "semlink-share-act-icon" });
-				setIcon(copyIcon, "copy");
-				let copyTimer: number | null = null;
-				const doCopy = (): void => {
-					void navigator.clipboard.writeText(`${title}\n${url}`).then(() => {
-						copyBtn.addClass("is-copied");
-						setIcon(copyIcon, "check");
-						if (copyTimer != null) window.clearTimeout(copyTimer);
-						copyTimer = window.setTimeout(() => {
-							copyTimer = null;
-							if (!copyBtn.isConnected) return;
-							copyBtn.removeClass("is-copied");
-							setIcon(copyIcon, "copy");
-						}, 1200);
-					}, () => new Notice(t("shareCopyFailed")));
-				};
-				copyBtn.addEventListener("click", (e) => {
+				const fwdIcon = fwdBtn.createSpan({ cls: "semlink-share-act-icon" });
+				setIcon(fwdIcon, "external-link");
+				fwdBtn.addEventListener("click", (e) => {
 					e.stopPropagation();
-					doCopy();
-				});
-				// 日期挪到次行（原行尾时间标签）之后新增：新窗口打开
-				const openBtn = actions.createEl("button", {
-					cls: "semlink-btn-ghost semlink-share-act",
-					attr: { "aria-label": t("shareOpenBrowser"), type: "button" },
-				});
-				const openIcon = openBtn.createSpan({ cls: "semlink-share-act-icon" });
-				setIcon(openIcon, "external-link");
-				openBtn.addEventListener("click", (e) => {
-					e.stopPropagation();
-					window.open(url, "_blank");
+					openDetail();
 				});
 
 				// 删除入口收敛（评审 P1）：行尾 trash 与详情弹窗 "Stop sharing"

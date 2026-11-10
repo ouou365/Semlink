@@ -265,6 +265,7 @@ const zh: Record<keyof typeof en, string> = {
 	shareDeleteAction: "删除",
 	shareCopyFailed: "复制失败，请在详情中手动选择地址",
 	shareOpenBrowser: "在浏览器打开",
+	shareManage: "管理共享",
 	shareTabTitle: "局域网共享",
 	shareQrCode: "二维码",
 	shareBackTop: "回到顶部",

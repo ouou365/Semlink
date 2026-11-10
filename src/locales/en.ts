@@ -263,6 +263,7 @@ const en = {
 	shareDeleteAction: "Delete",
 	shareCopyFailed: "Copy failed — select the address in the detail dialog.",
 	shareOpenBrowser: "Open in browser",
+	shareManage: "Manage share",
 	shareTabTitle: "Share on LAN",
 	shareQrCode: "Show QR code",
 	shareBackTop: "Back to top",

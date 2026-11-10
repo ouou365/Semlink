@@ -259,6 +259,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoke: "공유 중지",
 	shareRevoked: "공유가 중지되어 주소가 더 이상 작동하지 않습니다.",
 	shareOpenBrowser: "브라우저에서 열기",
+	shareManage: "공유 관리",
 	shareTabTitle: "LAN 공유",
 	shareQrCode: "QR 코드",
 	shareBackTop: "맨 위로",

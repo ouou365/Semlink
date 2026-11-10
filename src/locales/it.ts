@@ -261,6 +261,7 @@ const t: Record<keyof typeof en, string> = {
 	shareRevoke: "Interrompi condivisione",
 	shareRevoked: "Condivisione interrotta: l'indirizzo non funziona più.",
 	shareOpenBrowser: "Apri nel browser",
+	shareManage: "Gestisci condivisione",
 	shareTabTitle: "Condivisione in rete locale",
 	shareQrCode: "Codice QR",
 	shareBackTop: "Torna in cima",

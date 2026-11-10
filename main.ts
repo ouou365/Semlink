@@ -627,6 +627,7 @@ export default class SmartVaultPlugin extends Plugin {
 			(path, line) => this.runDebugJump(path, line),
 			(opts) => this.runDebugMeasure(opts),
 			(opts) => this.runDebugShot(opts),
+			() => this.runDebugStats(),
 		);
 		try {
 			await server.start();
@@ -635,6 +636,44 @@ export default class SmartVaultPlugin extends Plugin {
 		} catch (e) {
 			console.warn("[Semlink] debug MCP failed to start:", e);
 		}
+	}
+
+	/** stats 工具执行器：RAG 卡四格（Indexed/Embedded/Skipped/Excluded）+
+	 *  块统计 + 应索引总数 + 运行状态——监控/对账索引进度用。 */
+	private async runDebugStats(): Promise<unknown> {
+		const stats = await this.store.getStats();
+		const [embedded, skipped] = await Promise.all([
+			this.store.getEmbeddedNoteCount(),
+			this.store.getEmbedSkippedNoteCount(),
+		]);
+		const indexable = this.scheduler.countIndexableNotes();
+		const vaultMd = this.app.vault.getMarkdownFiles().length;
+		const excluded = Math.max(0, vaultMd - indexable);
+		const p = this.progress.current;
+		return {
+			cells: {
+				indexed: stats.indexedNotes,
+				embedded,
+				skipped,
+				excluded,
+			},
+			denominator: {
+				indexable,
+				vaultMdFiles: vaultMd,
+			},
+			chunks: {
+				total: stats.totalChunks,
+				active: stats.activeChunks,
+				embedded: stats.embeddedChunks,
+			},
+			run: {
+				phase: p.phase,
+				processed: p.processedNotes,
+				totalNotes: p.totalNotes,
+				isPaused: p.isPaused,
+				embeddedChunks: p.embeddedChunks,
+			},
+		};
 	}
 
 	async stopDebugMcpServer() {
@@ -708,7 +747,7 @@ export default class SmartVaultPlugin extends Plugin {
 		return { mode, resolved, scrollTop: Math.round(scroller?.scrollTop ?? -1), scrollHeight: scroller?.scrollHeight ?? -1, expectedLine: line, totalLines, file: v.file?.path };
 	}
 
-	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; ragDomProbe?: boolean; guideBackProbe?: boolean; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean }): Promise<unknown> {
+	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; ragDomProbe?: boolean; guideBackProbe?: boolean; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean; forcePro?: boolean }): Promise<unknown> {
 		// 可选：先把搜索视图移入独立弹窗再量（弹窗实例的布局与主窗不同）。
 		// width/height 自定弹窗尺寸（≤480 可测窄幅断点）；不传用形态默认值。
 		// 对已在弹窗里的 leaf 再次 moveLeafToPopout = 按新尺寸重建弹窗，
@@ -1533,6 +1572,11 @@ export default class SmartVaultPlugin extends Plugin {
 		// countProbe：vault 可索引数取证——调度器口径（countIndexableNotes）
 		// 与 vault 原始清单、磁盘 walk 对不上时（用户报"共 980 篇不更新"），
 		// 分桶看差在哪：vault md 总数 / 非空 / 命中排除各多少。
+		if (opts?.countProbe && opts?.forcePro) {
+			// 仅供样式目检的内存桩：isPro 强 true（不落盘、重载即消失）
+			const lmAny = this.licenseManager as unknown as { isPro?: () => boolean };
+			lmAny.isPro = () => true;
+		}
 		if (opts?.countProbe) {
 			const dbg: Record<string, unknown> = {};
 			try {
@@ -1562,6 +1606,42 @@ export default class SmartVaultPlugin extends Plugin {
 				dbg.dbEmbeddedNotes = embedded;
 				dbg.timeOrigin = Math.round(performance.timeOrigin);
 				dbg.modals = Array.from(document.querySelectorAll('.smart-vault-progress-modal')).length;
+				const lmAny = this.licenseManager as unknown as { state?: { key?: string; token?: string; instanceId?: string; lastValidatedAt?: number }; fp?: string; appId?: string };
+				// 跨窗口检查 collapse-body-card 的实际计算底色与宿主类
+				const envs: Array<Record<string, unknown>> = [];
+				const allDocs: Document[] = [window.document];
+				const floats = (this.app.workspace as unknown as { floatingSplit?: { children?: Array<{ win?: Window }> } }).floatingSplit;
+				for (const c of floats?.children ?? []) {
+					if (c?.win?.document) allDocs.push(c.win.document);
+				}
+				for (const d of allDocs) {
+					const el = d.querySelector('.semlink-collapse-body-card');
+					if (!el) continue;
+					const cs = d.defaultView!.getComputedStyle(el);
+					const root = el.closest('.semlink-settings-root');
+					envs.push({
+						docTitle: d.title.slice(0, 30),
+						hasSettingsRoot: !!root,
+						classes: el.className,
+						bg: cs.backgroundColor,
+						bgImage: cs.backgroundImage.slice(0, 40),
+						rootVarCard: root ? root.getAttribute('style') + '' : null,
+						varCardResolved: root ? d.defaultView!.getComputedStyle(root).getPropertyValue('--sl-card') : null,
+					});
+				}
+				dbg.collapseEnv = envs;
+				dbg.license = {
+					isPro: this.licenseManager.isPro(),
+					configured: this.licenseManager.configured,
+					hasKey: !!lmAny.state?.key,
+					keyPrefix: (lmAny.state?.key ?? '').slice(0, 4),
+					hasToken: !!lmAny.state?.token,
+					tokenLen: (lmAny.state?.token ?? '').length,
+					hasInstanceId: !!lmAny.state?.instanceId,
+					fpLen: (lmAny.fp ?? '').length,
+					fpHead: (lmAny.fp ?? '').slice(0, 8),
+					appId: lmAny.appId ?? null,
+				};
 			} catch (e) {
 				dbg.error = String(e);
 			}

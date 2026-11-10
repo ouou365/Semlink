@@ -23,6 +23,10 @@ export type DebugMeasureRunner = (opts?: { popout?: boolean }) => Promise<unknow
 /** shot 工具执行器：由 main.ts 注入——Electron capturePage 截取窗口 PNG。 */
 export type DebugShotRunner = (opts?: { target?: string | number; resize?: { index?: number; width: number; height: number } }) => Promise<unknown>;
 
+/** stats 工具执行器：由 main.ts 注入——回报 RAG 卡四格（Indexed/Embedded/
+ *  Skipped/Excluded）+ 块统计 + 运行状态。 */
+export type DebugStatsRunner = () => Promise<unknown>;
+
 interface JsonRpcRequest {
 	jsonrpc: "2.0";
 	id?: string | number | null;
@@ -157,6 +161,17 @@ const RELOAD_TOOL = {
 	inputSchema: { type: "object", properties: {}, required: [] },
 };
 
+const STATS_TOOL = {
+	name: "stats",
+	description:
+		"Report the RAG index stats shown on the settings card: the four stat " +
+		"cells (Indexed / Embedded / Skipped / Excluded notes), chunk counts, " +
+		"the indexable-note total (card denominator) and the live run state " +
+		"(phase / processed). Use it to monitor indexing progress or verify " +
+		"the numbers match the UI.",
+	inputSchema: { type: "object", properties: {}, required: [] },
+};
+
 export class DebugMcpServer {
 	private server: Server | null = null;
 	private _port: number;
@@ -165,7 +180,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -258,7 +273,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -273,8 +288,10 @@ export class DebugMcpServer {
 						if (!jp || !(jl > 0)) throw new Error("jump needs path and a positive line");
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runJump?.(jp, jl)) ?? { error: "no jump runner" }, null, 2) }] };
 					} else if (params.name === "measure") {
-							result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
-						} else if (params.name === "shot") {
+							result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean; forcePro?: boolean } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
+						} else if (params.name === "stats") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runStats?.()) ?? { error: "no stats runner" }, null, 2) }] };
+					} else if (params.name === "shot") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runShot?.(params.arguments as { target?: string | number; resize?: { index?: number; width: number; height: number } } | undefined)) ?? { error: "no shot runner" }, null, 2) }] };
 						} else {
 						result = await this.handleAsk(params);
