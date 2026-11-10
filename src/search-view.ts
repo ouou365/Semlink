@@ -16,7 +16,7 @@ import { buildCitedCards } from "./cite-cards";
 import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
 import { ChatHistoryStore } from "./chat-history";
 import { brandLogoOf, formatContextWindow } from "./settings-models";
-import { LicenseModal } from "./license-modal";
+import { LicenseModal, LicenseInfoModal } from "./license-modal";
 import { UsageModal } from "./usage-modal";
 import { guideInProgress, onboardingActive, renderGuideHub, renderOnboarding } from "./onboarding";
 import { renderSettingsTabInto, type SettingsTab, type SmartVaultSettingTab } from "./settings";
@@ -323,7 +323,15 @@ export class SemanticSearchView extends ItemView {
 		this.upgradeBtnEl = upgradeBtn;
 		setIcon(upgradeBtn, "sparkles");
 		upgradeBtn.addEventListener("click", () => {
-			new LicenseModal(this.app, this.plugin).open();
+			// ✨ 入口按许可状态分流：免费态 = 升级营销窗；Pro 态 = Eagle 式
+			// About 窗（LicenseModal 的 Pro 分支只有状态行 + 停用，观感近空，
+			// 用户反馈"弹窗是空的"；且状态切换瞬间按钮可见性可能与点击时
+			// 实际状态错位，这里以点击时的 isPro 为准）。
+			if (this.plugin.licenseManager.isPro()) {
+				new LicenseInfoModal(this.app, this.plugin).open();
+			} else {
+				new LicenseModal(this.app, this.plugin).open();
+			}
 		});
 		// 对话浮窗（设置左侧）：同一颗按钮双形态——侧栏/主区域实例弹出
 		// （picture-in-picture-2），独立弹窗实例收回侧栏（minimize-2）。

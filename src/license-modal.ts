@@ -6,7 +6,7 @@
 // and device management. Reached from the settings page, the chat panel
 // header and every locked item.
 
-import { App, Modal, Notice, setIcon } from "obsidian";
+import { App, Modal, Notice, Setting, setIcon } from "obsidian";
 import type SmartVaultPlugin from "../main";
 import { licenseErrorMessage } from "./license";
 import { ConfirmModal } from "./confirm-modal";
@@ -26,7 +26,15 @@ export class LicenseModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.render();
+		try {
+			this.render();
+		} catch (e) {
+			console.error("[Semlink] License modal render failed", e);
+			this.contentEl.createDiv({
+				cls: "semlink-license-info-error",
+				text: `License error: ${e instanceof Error ? e.message : String(e)}`,
+			});
+		}
 	}
 
 	onClose(): void {
@@ -163,10 +171,20 @@ export class LicenseInfoModal extends Modal {
 		this.plugin = plugin;
 		this.onClosed = onClosed;
 		this.modalEl.addClass("semlink-license-modal");
+		this.modalEl.addClass("semlink-license-about-modal");
 	}
 
 	onOpen(): void {
-		this.render();
+		try {
+			this.render();
+		} catch (e) {
+			// 渲染异常不再吞成空窗：错误直接落窗内 + 控制台（用户可截图回报）
+			console.error("[Semlink] About modal render failed", e);
+			this.contentEl.createDiv({
+				cls: "semlink-license-info-error",
+				text: `About error: ${e instanceof Error ? e.message : String(e)}`,
+			});
+		}
 	}
 
 	onClose(): void {

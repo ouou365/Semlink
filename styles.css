@@ -6958,12 +6958,21 @@ body .semlink-msg-user::selection {
 /* 弹窗宿主卡片描边已撤（用户拍板"去掉边框颜色"）：白卡在灰页上
    靠明度差区分即可，全包描边显得像旧式框线卡 */
 
+/* 弹窗渲染异常兜底（不再吞成空窗）：错误文本直落窗内 */
+.semlink-license-info-error {
+    font-size: 12px;
+    color: var(--text-error);
+    padding: 8px;
+    white-space: pre-wrap;
+}
+
 /* About 弹窗（License 行点开，用户参考 Eagle.app 的关于窗）：居中贺卡
    ——图标 → 名称 → 标语 → 版本 → hairline → 许可只读行（状态绿、
    密钥掩码点击复制）→ 停用小字 → OK 全宽 → 版权脚。
    紧凑版（用户拍板"压缩高度"）：收窄窗宽 380px、图标 56px、行高 28px、
    各段留白一档压小。 */
-.semlink-license-modal.modal {
+/* 窄宽只属于 About 弹窗（LicenseModal 营销窗内容多，用宿主默认宽度） */
+.semlink-license-about-modal.modal {
     width: min(380px, 92vw);
 }
 .semlink-license-about {
