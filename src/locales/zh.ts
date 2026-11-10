@@ -284,7 +284,7 @@ const zh: Record<keyof typeof en, string> = {
 	excludePathCount: "将排除 {n} 条路径",
 	excludePathsPlaceholder: "每行一个，如：Attachments/",
 	reindexRunning: "索引中…",
-	guideEmbedIntroTitle: "🔍 语义搜索",
+	guideEmbedIntroTitle: "🔍 嵌入",
 	guideEmbedIntroSub: "让知识库读懂你",
 	guideStepEmbedding: "嵌入",
 	mcpServerArgs: "启动参数",

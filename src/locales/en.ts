@@ -282,7 +282,7 @@ const en = {
 	excludePathCount: "{n} paths will be excluded",
 	excludePathsPlaceholder: "One per line, e.g. Attachments/",
 	reindexRunning: "Indexing…",
-	guideEmbedIntroTitle: "🔍 Semantic search",
+	guideEmbedIntroTitle: "🔍 Embedding",
 	guideEmbedIntroSub: "Let your vault understand you",
 	guideStepEmbedding: "Embedding",
 	mcpServerArgs: "Arguments",

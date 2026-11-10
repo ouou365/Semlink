@@ -747,7 +747,7 @@ export default class SmartVaultPlugin extends Plugin {
 		return { mode, resolved, scrollTop: Math.round(scroller?.scrollTop ?? -1), scrollHeight: scroller?.scrollHeight ?? -1, expectedLine: line, totalLines, file: v.file?.path };
 	}
 
-	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; ragDomProbe?: boolean; guideBackProbe?: boolean; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean; forcePro?: boolean }): Promise<unknown> {
+	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; ragDomProbe?: boolean; onboardOpen?: boolean; guideBackProbe?: boolean; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean; forcePro?: boolean }): Promise<unknown> {
 		// 可选：先把搜索视图移入独立弹窗再量（弹窗实例的布局与主窗不同）。
 		// width/height 自定弹窗尺寸（≤480 可测窄幅断点）；不传用形态默认值。
 		// 对已在弹窗里的 leaf 再次 moveLeafToPopout = 按新尺寸重建弹窗，
@@ -1337,6 +1337,25 @@ export default class SmartVaultPlugin extends Plugin {
 				break;
 			}
 			(navDbg ??= {}).guideBack = g;
+		}
+		// onboardOpen：点设置页引导行的 Open（拉取版 Pro 页结构）→ 引导
+		// hub，验证引导头部新窗口切换图标。
+		if (opts?.onboardOpen) {
+			for (const lf of this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)) {
+				const le = ((lf as unknown as { containerEl?: HTMLElement }).containerEl
+					?? (lf.view as unknown as { containerEl?: HTMLElement }).containerEl);
+				const ld = le?.ownerDocument;
+				if (!ld) continue;
+				const btn = ld.querySelector<HTMLElement>(
+					".semlink-guide-row-card .semlink-row-control button");
+				if (!btn) continue;
+				btn.click();
+				await new Promise((r) => window.setTimeout(r, 900));
+				(navDbg ??= {}).onboardGuide = {
+					hubShown: !!ld.querySelector(".semlink-guide-hub"),
+				};
+				break;
+			}
 		}
 		// ragDomProbe：RAG 高级选项折叠体取证——只点**可见**实例的头（此前
 		// 盲取第一个含该 DOM 的 leaf，命中过隐藏副本点了等于白点），点开后

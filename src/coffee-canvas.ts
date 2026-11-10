@@ -70,6 +70,10 @@ export interface CoffeeCanvas {
 	stream(active: boolean): void;
 		/** Finish the brew: big splash + bubble burst + steam before settling. */
 	celebrate(): void;
+		/** Mark done WITHOUT the celebration splash (rerender after celebrate:
+		 *  fresh canvas instance needs done=true → steam, not a replayed
+		 *  splash). Idempotent. */
+	setDone(): void;
 	/** Stop the loop immediately and release the canvas. */
 	destroy(): void;
 	/** Diagnostic snapshot for the debug readout (null if canvas unavailable). */
@@ -654,6 +658,14 @@ export function mountCoffeeCanvas(
 					phase: Math.random() * Math.PI * 2,
 				});
 			}
+			ensureLoop();
+		},
+		setDone() {
+			// 重渲后的新画布补齐 done 态：满杯 + 蒸汽（不重放水花/气泡）。
+			// done 幂等——重复调用无副作用；loop 由 fill 补间驱动至满杯。
+			done = true;
+			brewing = false;
+			target = 1;
 			ensureLoop();
 		},
 		destroy() {

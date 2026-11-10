@@ -117,6 +117,7 @@ const MEASURE_TOOL = {
 			epPick: { description: "Click the variant row whose name contains this text in the modal opened by epClick.", type: "string" },
 			ragDomProbe: { description: "Dump the DOM class tree of the first Setting in the RAG advanced-options body.", type: "boolean" },
 			guideBackProbe: { description: "Click the RAG Embedding Configure button, then the guide back arrow, and report the landing screen.", type: "boolean" },
+			onboardOpen: { description: "Click the settings guide-row Open button to open the guide hub.", type: "boolean" },
 			drillClick: { description: "Click the first visible provider row (drills into the config pane on narrow containers).", type: "boolean" },
 			backClick: { description: "Click the Providers back link (returns to the provider list from the drilled config pane).", type: "boolean" },
 		},

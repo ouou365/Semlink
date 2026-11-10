@@ -30,6 +30,7 @@ import logoSvg from "./semlink-logo.svg";
 import llmIconSvg from "./network-icon.svg";
 import expandIconSvg from "./expand-icon.svg";
 import collapseIconSvg from "./collapse-icon.svg";
+import { fluentEmojiSvg } from "./fluent-emoji";
 
 export const SEARCH_VIEW_TYPE = "semlink-semantic-search";
 
@@ -2530,13 +2531,22 @@ export class SemanticSearchView extends ItemView {
 			});
 			setIcon(langBtn, "languages");
 			langBtn.addEventListener("click", () => this.openLanguageMenu(langBtn));
-			// 设置按钮（语言切换右侧）：不走引导直接打开插件设置页
-			const guideSettingsBtn = rightSide.createEl("button", {
+			// 窗口切换按钮（用户拍板"设置按钮改成窗口切换的图标"）：与设置
+			// 屏/聊天顶栏同款 picture-in-picture-2，弹窗/收回引导所在窗口；
+			// 提示文案按所在位置翻转（togglePopout 异步搬迁后延迟回读）
+			const inPopGuide = this.inPopoutWindow();
+			const guidePopBtn = rightSide.createEl("button", {
 				cls: "semlink-search-icon-btn clickable-icon",
-				attr: { "aria-label": t("openSettings") },
+				attr: { "aria-label": inPopGuide ? t("dockBackWindow") : t("popOutWindow") },
 			});
-			setIcon(guideSettingsBtn, "settings");
-			guideSettingsBtn.addEventListener("click", () => this.openSettingsScreen());
+			setIcon(guidePopBtn, "picture-in-picture-2");
+			guidePopBtn.addEventListener("click", () => {
+				this.togglePopout();
+				window.setTimeout(() => {
+					const nowPop = this.inPopoutWindow();
+					guidePopBtn.setAttr("aria-label", nowPop ? t("dockBackWindow") : t("popOutWindow"));
+				}, 1200);
+			});
 
 			// Modifier class: the guide fills the block top-down so the
 			// stepper can pin to the top while step content scrolls.
@@ -2599,7 +2609,12 @@ export class SemanticSearchView extends ItemView {
 		const emoji = emojiMatch ? emojiMatch[1] : "";
 		const greetingText = emojiMatch ? emojiMatch[2] : firstLine;
 		if (emoji) {
-			welcome.createDiv({ cls: "semlink-search-welcome-emoji", text: emoji });
+			// Fluent flat SVG 优先（用户拍板：苹果原生 emoji 立体阴影太重
+			// ——flat 风格轻盈）；未收录的 emoji 回退系统字形
+			const badge = welcome.createDiv({ cls: "semlink-search-welcome-emoji" });
+			const flat = fluentEmojiSvg(emoji);
+			if (flat) badge.innerHTML = flat;
+			else badge.setText(emoji);
 		}
 		welcome.createDiv({ cls: "semlink-search-welcome-greeting", text: greetingText });
 		if (lines[1]) {

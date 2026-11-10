@@ -2601,6 +2601,13 @@
     justify-content: center;
     font-size: 44px;
     line-height: 1.2;
+}
+
+/* Fluent flat SVG 字形：CSS 尺寸压过 svg 的 width/height 属性（32 → 44） */
+.semlink-search-welcome-emoji svg,
+.semlink-guide-hub-emoji svg {
+    width: 44px;
+    height: 44px;
 }.semlink-search-welcome-greeting {
     /* 与引导 hub 的 name 同规格（22px/700/.2px 字距） */
     font-size: 22px;
@@ -3286,6 +3293,12 @@
     width: 100%;
 }/* The numerals sit above the liquid (both are positioned; the explicit
  * z-index keeps the number on top once the coffee rises). */
+/* 深色主题不要白描边 halo（用户拍板）：深色卡上数字直接落底，白圈
+   显脏；浅色保留（数字悬浮在咖啡液上时描边保证可读） */
+.theme-dark .semlink-guide-index-statnum {
+    -webkit-text-stroke: 0;
+    paint-order: fill;
+}
 .semlink-guide-index-statnum {
     position: relative;
     z-index: 2;
@@ -6903,6 +6916,14 @@ body .semlink-msg-user::selection {
 .theme-dark .semlink-search-view.semlink-settings-active {
     --sl-bg-grouped: #000000;
     background: var(--sl-bg-grouped);
+}
+/* 引导屏同规格（用户拍板"深色下顶部黑条突兀"）：引导模式只定义了
+   --sl-bg-grouped 变量但没涂 leaf——弹窗 body 的深灰 (#1e1e1e) 从下方
+   透出，顶条纯黑在灰页上成了突兀的黑带。涂满 leaf 让整屏同黑，顶条
+   隐入页面（与设置屏深色行为一致）。 */
+.theme-dark .semlink-search-view.semlink-guide-active {
+    --sl-bg-grouped: #000000;
+    background: var(--sl-bg-grouped);
 }/* 内嵌设置屏 / 弹窗宿主统一分组底色 */
 .semlink-search-welcome.semlink-settings-screen {
     background: var(--sl-bg-grouped);
@@ -7141,6 +7162,13 @@ body .semlink-msg-user::selection {
 .semlink-settings-root .semlink-settings-menu-item.is-active {
     background: var(--sl-card);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+/* 深色主题：--sl-card(#1c1c1e) 与轨道(24% 白 over 黑)几乎同值，拇指
+   消失（用户截图"无法区分选中了哪个 tab"）——iOS 深色分段控件做法：
+   选中段提亮到 #636366 实灰，黑阴影在深底不可见一并去掉 */
+.theme-dark .semlink-settings-root .semlink-settings-menu-item.is-active {
+    background: #636366;
+    box-shadow: none;
 }
 /* 键盘焦点环：一级导航与可点行（MCP URL/导航行、分享行等 role=button）
    与按钮三级体系同配方，offset -2 让描边贴行内缘不外溢卡片 */

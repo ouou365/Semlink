@@ -14,6 +14,7 @@
 import { Modal, ToggleComponent, setIcon } from "obsidian";
 import { AddModelModal, AddProviderModal, brandLogoOf, buildGuideProviderGroups, catalogEndpoint, CHAT_CATALOG, EMBEDDING_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, mergeEmbeddingCatalogModels, modelBrandOf, SeriesPickModal, setSvgIcon } from "./settings-models";
 import type { FetchedModel, CatalogEntry } from "./settings-models";
+import { fluentEmojiSvg } from "./fluent-emoji";
 import { mountCoffeeCanvas } from "./coffee-canvas";
 import { t } from "./i18n";
 import type SmartVaultPlugin from "../main";
@@ -306,6 +307,10 @@ export function renderOnboarding(
 				if (!celebrated) {
 					celebrated = true;
 					coffee.celebrate();
+				} else {
+					// 重渲后的新画布实例：直接补 done 态（满杯 + 蒸汽），
+					// 不重放庆祝水花——否则 100% 页面永远是一只空杯
+					coffee.setDone();
 				}
 			} else {
 				coffee.setLevel(pct, state === "running" && p.phase === "embedding");
@@ -593,7 +598,11 @@ function renderIntro(root: HTMLElement, mode: "chat" | "embed" = "chat"): void {
 	const emoji = m ? m[1] : "";
 	const greeting = m ? m[2] : title;
 	if (emoji) {
-		intro.createDiv({ cls: "semlink-search-welcome-emoji", text: emoji });
+		// Fluent flat SVG 优先（同欢迎语徽章），未收录回退系统字形
+		const badge = intro.createDiv({ cls: "semlink-search-welcome-emoji" });
+		const flat = fluentEmojiSvg(emoji);
+		if (flat) badge.innerHTML = flat;
+		else badge.setText(emoji);
 	}
 	intro.createDiv({ cls: "semlink-search-welcome-greeting", text: greeting });
 	intro.createDiv({
@@ -1535,7 +1544,13 @@ export function renderGuideHub(
 	// 品牌 logo + 名称已在顶部角落条出现——这里是问候区：大 emoji +
 	// 欢迎语 + 标语，避免两个 logo 同屏重复。
 	const brand = hub.createDiv({ cls: "semlink-guide-hub-brand" });
-	brand.createDiv({ cls: "semlink-guide-hub-emoji", text: "🥳" });
+	{
+		// Fluent flat SVG（同上）；回退系统字形
+		const hubEmoji = brand.createDiv({ cls: "semlink-guide-hub-emoji" });
+		const flat = fluentEmojiSvg("🥳");
+		if (flat) hubEmoji.innerHTML = flat;
+		else hubEmoji.setText("🥳");
+	}
 	brand.createDiv({ cls: "semlink-guide-hub-name", text: t("hubWelcome") });
 	brand.createDiv({ cls: "semlink-guide-hub-tagline", text: t("guideIntroSub") });
 
