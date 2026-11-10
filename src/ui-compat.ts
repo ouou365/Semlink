@@ -9,14 +9,16 @@
 
 import { ButtonComponent, SliderComponent } from "obsidian";
 
-type DisplayTab = { display(): void };
+type DisplayTab = { display(reset?: boolean): void };
 
 /** Re-render an imperative PluginSettingTab. display() is deprecated on
  *  1.13+ in favour of declarative settings, but it remains the only render
  *  path that covers our whole supported range; retiring this wrapper is part
- *  of the getSettingDefinitions() migration. */
+ *  of the getSettingDefinitions() migration.
+ *  传 false：这是"原地重渲"不是"打开设置"——无参调用在 Semlink 的
+ *  SmartVaultSettingTab 上会被当作打开设置而重置回 Basic tab。 */
 export function rerenderSettingsTab(tab: DisplayTab): void {
-	tab.display();
+	tab.display(false);
 }
 
 /** Slider value display: 1.13+ shows it inline automatically; older hosts

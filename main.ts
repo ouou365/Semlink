@@ -761,15 +761,17 @@ export default class SmartVaultPlugin extends Plugin {
 					await new Promise((r) => window.setTimeout(r, 500));
 					// DOM .click() 在这个嵌入实例上不生效——直接改设置 tab
 					// 实例的 activeTab 并重渲染，确定性切换。
-					// nav 语义 = 菜单位置（用户拍板顺序：Model 第一、Pro 最后）
+					// nav 语义 = 菜单位置（用户拍板顺序：Basic 第一）
 					const ids = ["general", "model", "embedding", "mcp", "share"] as const;
 					const inst = (sv as unknown as {
-						settingsEmbed?: { tab?: { activeTab?: string; display(): void } };
+						settingsEmbed?: { tab?: { activeTab?: string; display(reset?: boolean): void } };
 					}).settingsEmbed?.tab;
 					navDbg = { hadInst: !!inst, instTab: inst?.activeTab ?? null, navRaw: String(opts.nav) };
 					if (inst && ids[navIdx]) {
 						inst.activeTab = ids[navIdx];
-						inst.display();
+						// display(false)：保留刚设置的 activeTab——无参调用会被
+						// 当成"打开设置"重置回 Basic（display 的默认语义）。
+						inst.display(false);
 						// 横向 tab 栏无层级：切 tab 即所见（窄幅下详情也在栏下方
 						// 常显，导航注入直接可读）。
 						navDbg.switched = inst.activeTab;
@@ -2407,15 +2409,16 @@ export default class SmartVaultPlugin extends Plugin {
 			this.progress.initFromStats(stats.indexedNotes, stats.activeChunks, stats.indexedNotes);
 		}
 		const modal = new ProgressModal(this.app, this.progress, async () => {
-			// 覆盖率口径（与 RAG 卡一致）：**已完成嵌入笔记数** / vault 应
-			// 索引总数。曾用「已建索引笔记数」——重嵌入重建期间它恒定不动
-			// （重建不产生新笔记，只刷新向量），弹窗分子冻在 801 很费解
-			// （用户反馈）。完成嵌入 = 真正可被检索，完成一篇涨一篇。
-			const [stats, embedded] = await Promise.all([
-				this.store.getStats(),
+			// 覆盖率口径（与 RAG 卡 hero 一致）：**(Embedded + Skipped)** /
+			// vault 应索引总数。跳过的笔记（空文件/全稀疏）永远不产生向量
+			// 但已处理完，只数 Embedded 会把收尾钉在 99.4% 差一截（用户
+			// 反馈）。曾用「已建索引笔记数」——重嵌入重建期间它恒定不动
+			// （重建不产生新笔记，只刷新向量），弹窗分子冻在 801 很费解。
+			const [embedded, skipped] = await Promise.all([
 				this.store.getEmbeddedNoteCount(),
+				this.store.getEmbedSkippedNoteCount(),
 			]);
-			return { indexed: embedded, total: this.scheduler.countIndexableNotes() };
+			return { indexed: embedded + skipped, total: this.scheduler.countIndexableNotes() };
 		});
 		modal.open();
 	}

@@ -191,6 +191,14 @@ export class LicenseManager {
 		return t("licenseStatusPro") + (limit ? ` · ${used}/${limit}` : "");
 	}
 
+	/** Pro 态展示信息（Basic 页许可身份卡）：密钥原文（调用方自行掩码）
+	 *  与设备占用。非 Pro 返回 null。 */
+	proInfo(): { key: string; used: number; limit: number } | null {
+		const s = this.state;
+		if (!this.isPro()) return null;
+		return { key: s.key ?? "", used: s.activation ?? 0, limit: s.activationLimit ?? 0 };
+	}
+
 	// ── internals ──
 
 	private deviceName(): string {

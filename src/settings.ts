@@ -46,8 +46,10 @@ function revealCollapsedBody(head: HTMLElement, body: HTMLElement): void {
 
 export class SmartVaultSettingTab extends PluginSettingTab {
 	plugin: SmartVaultPlugin;
-	// 默认落第一项 Model（菜单顺序用户拍板：Model 第一、Pro 最后一）。
-	private activeTab: SettingsTab = "model";
+	// 默认落第一项 Basic（菜单顺序用户拍板：Basic 第一）。每次打开设置
+	// 都回到 Basic——display() 的 resetTab 默认为真（Obsidian 打开设置
+	// 即此路径），所有内部/外部重渲一律显式传 false 保留当前 tab。
+	private activeTab: SettingsTab = "general";
 	/** 嵌入式设置屏（displayInto 进入）标记：跳过标题/标语/语言下拉块。 */
 	private embeddedHost = false;
 	/** Provider-list state (models management, embedded in the General tab):
@@ -69,7 +71,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// corners 已有，语言切换挪到右上角图标——这里只剩 tab 栏 + 面板。
 		this.embeddedHost = true;
 		if (opts?.tab) this.activeTab = opts.tab;
-		this.display();
+		this.display(false);
 	}
 
 	/** 嵌入态退出：display() 只在“下一次 display”时清理订阅，嵌入屏退出
@@ -86,7 +88,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	 *  settings with the Model tab active. */
 	openModelTab(): void {
 		this.activeTab = "model";
-		this.display();
+		this.display(false);
 	}
 
 	/** Re-render the current tab while keeping the scroll position — row
@@ -122,7 +124,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		viewWin.setTimeout(restore, 0);
 	}
 
-	display(): void {
+	/** resetTab=true（默认）：Obsidian 打开设置的入口——回到 Basic 首页。
+	 *  内部重渲（setTab 兜底 / displayInto / openModelTab）与外部重渲
+	 *  （rerenderSettingsTab、导航深链）一律传 false，保留当前 tab。 */
+	display(resetTab = true): void {
+		if (resetTab) this.activeTab = "general";
 		// 打开设置即触发一次总笔记数检查：reset 后（换嵌入模型/重索引/重嵌入）
 		// 若尚未跑全量扫描，总数会停在 0，RAG 卡片整体显示 0。
 		this.ensureTotalNotesSeeded();
@@ -277,7 +283,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const panelEl = this.containerEl.querySelector<HTMLElement>(
 			":scope > .semlink-settings-layout > .semlink-settings-detail > .semlink-settings-panel",
 		);
-		if (!panelEl) { this.display(); return; }
+		if (!panelEl) { this.display(false); return; }
 		this.renderPanel(panelEl);
 		const menuEl = this.containerEl.querySelector<HTMLElement>(".semlink-settings-menu");
 		if (menuEl) {
@@ -302,7 +308,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const guideRow = guideCard.createDiv({ cls: "semlink-row is-clickable" });
 		const gLabel = guideRow.createDiv({ cls: "semlink-row-label" });
 		gLabel.createDiv({ cls: "semlink-row-title", text: t("guideRowTitle") });
-		gLabel.createDiv({ cls: "semlink-row-desc", text: t("guideRowDesc") });
 		const guideBtn = guideRow.createDiv({ cls: "semlink-row-control" }).createEl("button", {
 			cls: "semlink-btn-ghost semlink-btn-white",
 			text: t("guideRowOpen"),
@@ -475,18 +480,48 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const pro = lm.isPro();
 
 		if (pro) {
-			// Pro 态：营销退场，降为一条 iOS 设置行（名称 + 状态 · 永久授权 + 停用）。
+			// Pro 态：营销退场，收成一张身份卡——头部（logo + 名称 + Active 徽）
+			// + 信息格（许可密钥点击复制 / 设备占用）+ 操作行（停用）。
+			const proInfo = lm.proInfo();
 			const card = containerEl.createDiv({ cls: "semlink-card semlink-license-procard" });
-			const row = card.createDiv({ cls: "semlink-license-pro-row" });
-			const logo = row.createSpan({ cls: "semlink-license-pro-logo" });
+			const head = card.createDiv({ cls: "semlink-license-pro-head" });
+			const logo = head.createSpan({ cls: "semlink-license-pro-logo" });
 			setIcon(logo, "semlink-logo");
-			const info = row.createDiv({ cls: "semlink-license-pro-info" });
-			info.createDiv({ cls: "semlink-license-pro-name", text: "Semlink Pro" });
-			info.createDiv({
-				cls: "semlink-license-pro-desc",
-				text: `${lm.statusLine()} · ${t("licenseLifetime")}`,
+			const title = head.createDiv({ cls: "semlink-license-pro-info" });
+			title.createDiv({ cls: "semlink-license-pro-name", text: "Semlink Pro" });
+			title.createDiv({ cls: "semlink-license-pro-desc", text: t("licenseLifetime") });
+			const pill = head.createSpan({ cls: "semlink-license-pro-pill" });
+			pill.createSpan({ cls: "semlink-license-pro-dot" });
+			pill.createSpan({ cls: "semlink-license-pro-pilltext", text: t("licenseStatusActive") });
+
+			// 信息格：密钥掩码展示（点击复制全文），设备占用 x/y。
+			const grid = card.createDiv({ cls: "semlink-license-pro-grid" });
+			const keyCell = grid.createDiv({ cls: "semlink-license-pro-cell" });
+			keyCell.createDiv({ cls: "semlink-license-pro-celllabel", text: t("licenseKeyField") });
+			const rawKey = proInfo?.key ?? "";
+			const maskKey = (k: string): string => {
+				const s = k.trim();
+				return s.length <= 8 ? s : `${s.slice(0, 4)}····${s.slice(-4)}`;
+			};
+			const keyVal = keyCell.createDiv({ cls: "semlink-license-pro-cellval", text: maskKey(rawKey) || "—" });
+			if (rawKey) {
+				keyVal.addClass("is-clickable");
+				keyVal.setAttr("title", t("licenseCopyKey"));
+				keyVal.addEventListener("click", () => {
+					void navigator.clipboard.writeText(rawKey).then(() => new Notice(t("licenseCopied")));
+				});
+			}
+			const devCell = grid.createDiv({ cls: "semlink-license-pro-cell" });
+			devCell.createDiv({ cls: "semlink-license-pro-celllabel", text: t("licenseDevices") });
+			const used = proInfo?.used ?? 0;
+			const limit = proInfo?.limit ?? 0;
+			devCell.createDiv({
+				cls: "semlink-license-pro-cellval",
+				text: limit ? `${used} / ${limit}` : String(used),
 			});
-			const de = row.createEl("button", { cls: "semlink-btn-ghost mod-danger semlink-license-deactivate", text: t("licenseDeactivateShort") });
+
+			const actions = card.createDiv({ cls: "semlink-license-pro-actions" });
+			const de = actions.createEl("button", { cls: "semlink-btn-ghost mod-danger semlink-license-deactivate", text: t("licenseDeactivateShort") });
 			de.addEventListener("click", () => {
 				// Deactivate kicks the device out of Pro immediately — confirm first.
 				new ConfirmModal(this.app, t("licenseDeactivate"), t("licenseDeactivateConfirmBody"), () => void (async () => {
@@ -674,9 +709,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 已跳过（用户拍板"嵌入进度要包含已跳过"）：空文件/全稀疏笔记，
 		// 永远不会产生向量
 		const embedSkippedEl = statCell(t("embedSkipped"));
-		// 向量块（第 4 格，用户问"还能放一个数字"采纳建议）：带向量的
-		// chunk 数——索引内容的真实体量，主页"chunks indexed"同口径
-		const chunksEl = statCell(t("embedChunks"));
+		// 已排除（第 4 格，用户拍板"这个改成 Exclude"）：vault 全量 md −
+		// 可索引数 = 命中排除路径（含 .obsidian 配置目录）与空文件——
+		// 这些文件不进索引。数值随 updateHeroSub 刷新（无 DB 依赖）。
+		const excludedEl = statCell(t("excludedNotes"));
 		// 索引总开关：关 = 停止文件监听并暂停当前索引；开 = 恢复监听并继续索引。
 		toggleRow(indexBlock.block, t("autoIndex"), this.plugin.settings.autoIndex, async (v) => {
 			this.plugin.settings.autoIndex = v;
@@ -732,6 +768,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const updateHeroSub = (): void => {
 			try {
 				liveTotal = Math.max(0, this.plugin.scheduler.countIndexableNotes());
+				// 已排除 = vault 全量 md − 可索引数（同一次遍历的两个口径，
+				// 相减即差集；vault 不可用时保持旧值）
+				excludedEl.setText(
+					Math.max(0, this.app.vault.getMarkdownFiles().length - liveTotal).toLocaleString(),
+				);
 			} catch { /* vault 不可用时保持快照 */ }
 			indexBlock.heroSub.setText(t("ragTotalSub").replace("{n}", liveTotal.toLocaleString()));
 		};
@@ -745,7 +786,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				chunkedEl.setText(s.indexedNotes.toLocaleString());
 				vectorizedEl.setText(embeddedNotes.toLocaleString());
 				embedSkippedEl.setText(skippedNotes.toLocaleString());
-				chunksEl.setText(s.embeddedChunks.toLocaleString());
 				// 总数副行：hero 的分母口径（用户拍板"横排统计条"——总数不再
 				// 与三个结果量平铺），用活总数（拷文件期间即时增长）
 				indexBlock.heroSub.setText(t("ragTotalSub").replace("{n}", liveTotal.toLocaleString()));

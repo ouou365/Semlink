@@ -253,6 +253,7 @@ export function renderOnboarding(
 		// 若干拍——事件绝不回改用户意图，否则暂停按钮会立刻被翻回运行态。
 		let state: "running" | "paused" | "done" = "running";
 		let sawBusy = false; // 本步是否见过运行中的进度（进入时可能残留旧 completed）
+		let celebrated = false; // 完成庆祝只播一次（进度事件反复触发 applyProgress）
 		const setBtnAction = (text: string, onClick: () => void): void => {
 			pauseBtn.setText(text);
 			pauseBtn.onclick = onClick;
@@ -293,10 +294,25 @@ export function renderOnboarding(
 			// 分子含已跳过（用户拍板）：嵌入进度 = (已嵌入+已跳过)/总数
 			const done = lastEmbedded + lastSkipped;
 			const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
-			coffee.setLevel(pct, state === "running" && p.phase === "embedding");
-			// 分片在动（fileChunkProgress 在跳动）时保持水柱持续流淌——
-			// 不只是换文件时倒一次；分片停下后水柱自行淡出。
-			coffee.stream(state === "running" && !!p.fileChunkProgress);
+			// 数字口径完成判定：分子（已嵌入+已跳过）追平分母即 done。老判定
+			// （sawBusy + phase=completed）在「进入本步时索引早已收尾」时永不
+			// 触发——sawBusy 恒 false，状态冻在 running：Pause 挂着、完成文案
+			// 空白、杯沿的模型 logo 片不撤（用户截图复现）。
+			if (pct >= 100 && total > 0) state = "done";
+			if (state === "done") {
+				// 完成一次性庆祝：彩水花 + 蒸汽 + 撤走杯沿的模型 logo 片。
+				// 完成态不再喂 setLevel——它会翻回 brewing=true，满杯静止后
+				// 气泡仍不停冒，rAF 循环也因此永不自停。
+				if (!celebrated) {
+					celebrated = true;
+					coffee.celebrate();
+				}
+			} else {
+				coffee.setLevel(pct, state === "running" && p.phase === "embedding");
+				// 分片在动（fileChunkProgress 在跳动）时保持水柱持续流淌——
+				// 不只是换文件时倒一次；分片停下后水柱自行淡出。
+				coffee.stream(state === "running" && !!p.fileChunkProgress);
+			}
 			statnum.setText(`${pct}%`);
 			statlabel.setText(total > 0
 				? `${done.toLocaleString()} / ${total.toLocaleString()}`

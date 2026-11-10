@@ -2016,22 +2016,29 @@ export class AddModelModal extends Modal {
 		ctxInput.value = this.opts.initial?.contextWindow ? String(this.opts.initial.contextWindow) : "";
 		const ctxError = contentEl.createDiv({ cls: "semlink-field-error semlink-hidden" });
 
-		/** 即输即校：刷新两条错误行并联动保存钮；返回当前是否可提交。 */
-		const validate = (): boolean => {
+		/** 即输即校：刷新两条错误行并联动保存钮；返回当前是否可提交。
+		 *  showErrors=false 时只联动按钮不渲染红字——刚开窗未动笔就见
+		 *  "Model ID is required" 是把审错前置了（用户反馈），错误行留给
+		 *  首次输入/点确认的时机。 */
+		const validate = (showErrors: boolean): boolean => {
 			const id = idInput.value.trim();
 			const idErr = !id
 				? t("mtModelIdRequired")
 				: existing.includes(id)
 					? t("mtModelIdDuplicate")
 					: "";
-			idError.setText(idErr);
-			idError.toggleClass("semlink-hidden", !idErr);
+			if (showErrors) {
+				idError.setText(idErr);
+				idError.toggleClass("semlink-hidden", !idErr);
+			}
 			const raw = ctxInput.value.trim();
 			// 留空 = 上下文未知（0，列表徽标随之隐藏）；填了就必须能解析
 			const parsed = raw ? parseContextWindow(raw) : 0;
 			const ctxErr = raw && parsed === null ? t("mtCtxInvalid") : "";
-			ctxError.setText(ctxErr);
-			ctxError.toggleClass("semlink-hidden", !ctxErr);
+			if (showErrors) {
+				ctxError.setText(ctxErr);
+				ctxError.toggleClass("semlink-hidden", !ctxErr);
+			}
 			saveBtn.disabled = !!(idErr || ctxErr);
 			return !idErr && !ctxErr;
 		};
@@ -2048,13 +2055,14 @@ export class AddModelModal extends Modal {
 			.addEventListener("click", () => this.close());
 		const saveBtn = footer.createEl("button", { cls: "semlink-editor-save-btn", text: t("confirm") });
 		saveBtn.addEventListener("click", () => {
-			if (!validate()) return;
+			if (!validate(true)) return;
 			this.opts.onSubmit(idInput.value.trim(), parseContextWindow(ctxInput.value.trim()) ?? 0);
 			this.close();
 		});
-		idInput.addEventListener("input", validate);
-		ctxInput.addEventListener("input", validate);
-		validate();
+		// 输入即视为动笔：此后错误实时现身（即输即校语义不变）。
+		idInput.addEventListener("input", () => validate(true));
+		ctxInput.addEventListener("input", () => validate(true));
+		validate(false);
 		idInput.focus();
 	}
 

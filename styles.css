@@ -7373,7 +7373,7 @@ body .semlink-msg-user::selection {
     box-shadow: none;
     border-radius: var(--sl-radius-inner);
     font-size: 13.5px;
-    font-weight: 550;
+    font-weight: 400;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -7637,24 +7637,21 @@ body .semlink-msg-user::selection {
 .semlink-license-procard {
     margin-bottom: var(--sl-space-3);
 }
-/* Pro 态：营销退场，一条设置行 */
-.semlink-license-procard {
-    margin-bottom: var(--sl-space-3);
-}
-.semlink-license-pro-row {
+/* Pro 态：身份卡——头部（logo + 名称 + Active 徽）+ 信息格 + 操作行。
+   绿色走 --text-success（宿主缺失时回退 iOS 系统绿）。 */
+.semlink-license-pro-head {
     display: flex;
     align-items: center;
     gap: var(--sl-space-3);
-    min-height: 52px;
-    padding: 10px 16px;
+    padding: 12px 16px 10px;
 }
 .semlink-license-pro-logo {
     display: flex;
     color: var(--interactive-accent);
 }
 .semlink-license-pro-logo .svg-icon {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
 }
 .semlink-license-pro-info {
     flex: 1 1 auto;
@@ -7669,6 +7666,59 @@ body .semlink-msg-user::selection {
     font-size: 12.5px;
     color: var(--text-muted);
     margin-top: 2px;
+}
+.semlink-license-pro-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-success, #34c759) 14%, transparent);
+    color: var(--text-success, #34c759);
+    font-size: 11.5px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+.semlink-license-pro-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+.semlink-license-pro-grid {
+    display: flex;
+    margin: 0 16px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--sl-radius-inner);
+    overflow: hidden;
+}
+.semlink-license-pro-cell {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 12px;
+}
+.semlink-license-pro-cell + .semlink-license-pro-cell {
+    border-left: 1px solid var(--background-modifier-border);
+}
+.semlink-license-pro-celllabel {
+    font-size: 11px;
+    color: var(--text-faint);
+    letter-spacing: 0.02em;
+}
+.semlink-license-pro-cellval {
+    font-size: 13px;
+    color: var(--text-normal);
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+}
+.semlink-license-pro-cellval.is-clickable {
+    cursor: pointer;
+}
+.semlink-license-pro-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 10px 16px 12px;
 }
 
 /* ╕═ 通用页：快速开始清单 ╕ */
@@ -7824,6 +7874,8 @@ body .semlink-msg-user::selection {
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
+	align-items: center;
+	text-align: center;
 	gap: 1px;
 	padding: 4px 8px;
 }
@@ -8729,8 +8781,7 @@ body .semlink-msg-user::selection {
     color: var(--sl-secondary-text);
 }
 
-/* 说明句统一二级灰 */
-.semlink-license-keylabel,
+/* 说明句统一二级灰（keylabel 不在此列：激活入口标题保持正文色，用户反馈过淡） */
 .semlink-license-note,
 .semlink-license-sub {
     color: var(--sl-secondary-text);
