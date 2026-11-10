@@ -574,6 +574,7 @@ const t: Record<keyof typeof en, string> = {
 	licenseLifetime: "永久ライセンス",
 	licenseBadge: "アーリーバード",
 	licenseCardHeadline: "無限の生産性を解放",
+	licenseProThanks: "Semlink をサポートしていただき、ありがとうございます",
 	licenseCardFreeLine: "AI のためのエージェンティックナレッジワークスペース。すべてのモデルを一箇所に。プライベートでローカル。",
 	licenseCardCta: "$3 で解放",
 	licenseCardLifetime: "買い切り · サブスクなし",

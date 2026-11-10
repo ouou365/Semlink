@@ -464,26 +464,24 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const pro = lm.isPro();
 
 		if (pro) {
-			// Pro 态：白卡身份卡（用户拍板"整体面板白色、紫只做装饰、要与
-			// 激活前的营销卡有传承性"）：复用营销卡 .semlink-license-card 系
-			// 版式——头部（logo + 名称 + Active 徽）→ 宣传语（headline 复用
-			// licenseCardHeadline + body 复用 licenseCardFreeLine）→ 弱化
-			// meta 行（Lifetime · 设备占用小灰字）→ Deactivate。
-			// License key 激活后不再展示（用户拍板）。
+			// Pro 态：白色贺卡（用户拍板"改成一张漂亮的白色贺卡"）——居中
+			// 版式：logo 圆形徽 → 名称 → Active 徽 → 致谢语（贺卡的"问候
+			// 主体"）→ 产品一句 → 细分隔 → meta 小字 → Deactivate 静音钮。
+			// 卡的装饰（内衬细线框 + 顶部光晕）全在 CSS；License key 激活后
+			// 不再展示（用户拍板）。
 			const proInfo = lm.proInfo();
-			const card = containerEl.createDiv({ cls: "semlink-card semlink-license-card semlink-license-procard" });
-			const head = card.createDiv({ cls: "semlink-license-card-head" });
-			const logo = head.createSpan({ cls: "semlink-license-card-logo" });
-			setIcon(logo, "semlink-logo");
-			head.createSpan({ cls: "semlink-license-card-title", text: "Semlink Pro" });
-			const pill = head.createSpan({ cls: "semlink-license-card-badge is-active" });
+			const card = containerEl.createDiv({ cls: "semlink-card semlink-license-card semlink-license-procard semlink-license-greeting" });
+			const emblem = card.createDiv({ cls: "semlink-license-greeting-emblem" });
+			setIcon(emblem, "semlink-logo");
+			card.createDiv({ cls: "semlink-license-greeting-title", text: "Semlink Pro" });
+			const pill = card.createDiv({ cls: "semlink-license-card-badge is-active semlink-license-greeting-pill" });
 			pill.createSpan({ cls: "semlink-license-pro-dot" });
 			pill.createSpan({ text: t("licenseStatusActive") });
 
-			card.createDiv({ cls: "semlink-license-headline", text: t("licenseCardHeadline") });
+			card.createDiv({ cls: "semlink-license-greeting-thanks", text: t("licenseProThanks") });
 			card.createDiv({ cls: "semlink-license-sub", text: t("licenseCardFreeLine") });
 
-			// 弱化 meta：Lifetime + 设备占用收成一行小灰字
+			// 弱化 meta：Lifetime + 设备占用收成一行小灰字，上下细分隔
 			const used = proInfo?.used ?? 0;
 			const limit = proInfo?.limit ?? 0;
 			const devText = limit ? `${used} / ${limit}` : String(used);
@@ -1210,12 +1208,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				setIcon(icon, entry.sessionId.startsWith("note:") ? "file-text" : "message-square");
 
 				// main 列：标题 + 时间（用户拍板"日期移到链接的位置"：次行不再
-				// 显示 URL，改显相对时间/日期；URL 由行尾按钮承担）
+				// 显示 URL，改显相对时间/日期）
 				const main = item.createDiv({ cls: "semlink-share-main" });
 				const line1 = main.createDiv({ cls: "semlink-share-line1" });
 				line1.createSpan({ cls: "semlink-share-title", text: title });
-				// 日期占原 URL 位置（用户拍板"日期移到链接的位置"）；URL 不再
-				// 展示，由行尾复制/新窗口按钮承担
 				main.createSpan({
 					cls: "semlink-share-url",
 					text: Date.now() - entry.sharedAt > 30 * 24 * 60 * 60 * 1000
@@ -1223,24 +1219,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 						: moment(entry.sharedAt).fromNow(),
 				});
 
-				// 行尾单个转发钮（用户拍板"去掉复制按钮，点击转发按钮出现
-				// 弹窗"）：打开详情弹窗——二维码/URL 复制/浏览器打开/停止
-				// 共享都收在弹窗里，行内不再堆按钮。
-				const actions = item.createDiv({ cls: "semlink-share-actions" });
-				const fwdBtn = actions.createEl("button", {
-					cls: "semlink-btn-ghost semlink-share-act",
-					attr: { "aria-label": t("shareManage"), type: "button" },
-				});
-				const fwdIcon = fwdBtn.createSpan({ cls: "semlink-share-act-icon" });
-				setIcon(fwdIcon, "external-link");
-				fwdBtn.addEventListener("click", (e) => {
-					e.stopPropagation();
-					openDetail();
-				});
-
-				// 删除入口收敛（评审 P1）：行尾 trash 与详情弹窗 "Stop sharing"
-				// 是同一破坏性操作的两条确认路径——行内只留 copy，停止共享
-				// 统一走详情弹窗（后果说明更完整，误触面更小）。
+				// 行尾不再放按钮（用户拍板"去掉这个图标"）：行尾转发钮与整行
+				// 点击打开的是同一个详情弹窗（二维码/URL 复制/浏览器打开/停止
+				// 共享），纯冗余——删掉后行点击即达，键盘路径不变。
 			}
 		})();
 	}

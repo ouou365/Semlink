@@ -2494,6 +2494,23 @@ export class SemanticSearchView extends ItemView {
 					this.renderWelcome();
 				}
 			});
+			// 关闭（X，返回钮右侧）：任何引导屏一步直达主页——结束本次引导
+			// （done 置位，不再自动弹出），嵌入中的索引照常转后台（与进度页
+			// 「Done」同语义，不暂停调度器）。返回钮是逐级回退，X 是退场。
+			const closeBtn = leftSide.createEl("button", {
+				cls: "semlink-search-icon-btn clickable-icon",
+				attr: { "aria-label": t("close") },
+			});
+			setIcon(closeBtn, "x");
+			closeBtn.addEventListener("click", () => {
+				this.guideRequested = false;
+				this.guideStartOverride = false;
+				this.guideDismissed = true;
+				this.plugin.settings.onboarding = { ...(this.plugin.settings.onboarding ?? {}), done: true };
+				void this.plugin.saveSettings();
+				this.messagesEl.empty();
+				this.renderWelcome();
+			});
 			const brandGroup = corners.createDiv({ cls: "semlink-search-brand-group" });
 			const brand = brandGroup.createDiv({ cls: "semlink-search-logo" });
 			setIcon(brand, "semlink-logo");

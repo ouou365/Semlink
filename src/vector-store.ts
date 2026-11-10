@@ -224,6 +224,8 @@ export class VectorStore {
 			case "getStats": return e.getStats();
 			case "getEmbeddedNoteCount": return e.getEmbeddedNoteCount();
 			case "getEmbedSkippedNoteCount": return e.getEmbedSkippedNoteCount();
+			case "listVectorlessNotes": return e.listVectorlessNotes(args[0] as number | undefined);
+			case "listIndexedNotePaths": return e.listIndexedNotePaths();
 			case "markEmbedSkip": return e.markEmbedSkip(args[0] as string, args[1] as boolean);
 			case "backfillEmbedSkips": return e.backfillEmbedSkips();
 			case "saveEmbeddings": return e.saveEmbeddings(args[0] as string[], args[1] as number[][]);
@@ -346,6 +348,15 @@ export class VectorStore {
 
 	async getEmbedSkippedNoteCount(): Promise<number> {
 		return await this.call<number>("getEmbedSkippedNoteCount");
+	}
+
+	/** 诊断：缺向量笔记清单（见 db-engine.listVectorlessNotes）。 */
+	async listVectorlessNotes(limit = 10): Promise<Array<{ notePath: string; chunks: number }>> {
+		return await this.call<Array<{ notePath: string; chunks: number }>>("listVectorlessNotes", [limit]);
+	}
+
+	async listIndexedNotePaths(): Promise<string[]> {
+		return await this.call<string[]>("listIndexedNotePaths");
 	}
 
 	/** 一次性回填历史全稀疏笔记的跳过标记（见 db-engine.backfillEmbedSkips）。

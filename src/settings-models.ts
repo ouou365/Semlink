@@ -1300,11 +1300,44 @@ const PROBE_ORDER: Array<"chat" | "embedding"> = ["chat", "embedding"];
  *  restarts through settings.modelKindCache. */
 const classifyCache = new Map<string, Map<string, ModelKind>>();
 
-/** `v1`-anchored base URL: keeps an existing `/v1` suffix instead of
+/** `v1`-anchored base URL: keeps an existing version suffix instead of
  *  doubling it ("https://api.openai.com/v1" → same; "https://api.deepseek.com"
- *  → "https://api.deepseek.com/v1"). */
+ *  → "https://api.deepseek.com/v1"). Versioned-non-v1 bases pass through too
+ *  — BigModel/Z.AI coding plan ships `/api/coding/paas/v4`, and blindly
+ *  appending `/v1` produced `.../v4/v1/models` → HTTP 404 on Test & Save
+ *  (用户报障的 Z.AI Coding CN 连不上就是这个）。 */
 function v1Base(base: string): string {
-	return base.endsWith("/v1") ? base : `${base}/v1`;
+	return /\/v\d+$/.test(base) ? base : `${base}/v1`;
+}
+
+/** /models 缺失端点的连通性回退（Z.AI/GLM coding 计划实测：GET /v4/models
+ *  → 404，chat 路由却正常）：POST 一个空 JSON 到 chat 路由——不消耗
+ *  token。状态码判读：400/422 = 路由存在、请求体非法（探测性错误请求，
+ *  鉴权已过）→ 连通；401/403 = 密钥无效；404 = 路由确实不存在；5xx =
+ *  服务端问题。返回 null 表示网络层失败（无法判定）。 */
+async function probeChatRoute(
+	base: string,
+	apiKey: string,
+	apiFormat: ChatApiFormat,
+): Promise<{ ok: boolean; message: string } | null> {
+	const suffix = apiFormat === "anthropic" ? "/v1/messages" : "/chat/completions";
+	const url = `${base}${suffix}`;
+	const headers: Record<string, string> = apiFormat === "anthropic"
+		? { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" }
+		: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" };
+	try {
+		const resp = await raceTimeout(requestUrl({ url, method: "POST", headers, body: "{}", throw: false }));
+		const status = resp?.status ?? 0;
+		if (status === 401 || status === 403) {
+			return { ok: false, message: `${t("mtDetectFail")} · HTTP ${status}` };
+		}
+		if (status >= 200 && status < 500 && status !== 404) {
+			return { ok: true, message: t("mtDetectOkNoList") };
+		}
+		return { ok: false, message: `${t("mtDetectFail")} · HTTP ${status}` };
+	} catch {
+		return null;
+	}
 }
 
 /** Query an OpenAI/Anthropic-compatible endpoint for its model ids, keeping
@@ -1327,7 +1360,7 @@ export async function fetchModelIds(
 	if (!Array.isArray(data)) return [];
 	const out: Array<{ id: string; contextWindow?: number }> = [];
 	for (const entry of data) {
-		if (typeof entry !== "object" || entry === null) continue;
+		if (typeof entry === "object" || entry === null) continue;
 		const id = (entry as { id?: unknown }).id;
 		if (typeof id !== "string" || id.length === 0) continue;
 		const ctx = contextOf(entry);
@@ -3264,8 +3297,9 @@ export function renderModelsTab(
 				key: string,
 			): Promise<{ ok: boolean; message: string }> => {
 				const base = live.apiBase.trim().replace(/\/+$/, "");
+				const format = (live.apiFormat ?? "openai") as ChatApiFormat;
 				try {
-					const entries = await raceTimeout(fetchModelIds(base, key, live.apiFormat ?? "openai"));
+					const entries = await raceTimeout(fetchModelIds(base, key, format));
 					const ok = !!entries && entries.length > 0;
 					return {
 						ok,
@@ -3274,6 +3308,12 @@ export function renderModelsTab(
 							: `${t("mtDetectFail")} · 0`,
 					};
 				} catch (err) {
+					// /models 拉取失败不直接判死：一部分端点只声明了 chat 路由、
+					// 没有 /models（Z.AI/GLM coding 计划实测 GET /v4/models →
+					// 404，chat/completions 却正常）。回退用探测性请求打 chat
+					// 路由判定连通性（不消耗 token）。
+					const probe = await probeChatRoute(base, key, format);
+					if (probe) return probe;
 					return { ok: false, message: `${t("mtDetectFail")} · ${err?.message ?? ""}`.trim() };
 				}
 			};

@@ -340,7 +340,7 @@ ${parts.join("\n")}
 <footer class="pc-foot">${logoSvg.replace("<svg ", '<svg class="foot-logo" ')}<span data-ui="slogan">${esc(t("shareBrandSub"))}</span></footer>
 </div>
 <nav class="toc" id="toc" aria-label="Outline"></nav>
-<a class="ask-fab" href="https://community.obsidian.md/plugins/semlink" target="_blank" rel="noreferrer" data-ui="ask">${logoSvg.replace("<svg ", '<svg class="ask-logo" ')}<span>Ask Semlink</span></a>
+<a class="ask-fab" href="https://community.obsidian.md/plugins/semlink" target="_blank" rel="noreferrer" data-ui="ask">${logoSvg.replace("<svg ", '<svg class="ask-logo" ')}<span>Get Semlink</span></a>
 <script>
 (function(){
 	var UI = ${uiJson};

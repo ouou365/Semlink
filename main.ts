@@ -1338,25 +1338,69 @@ export default class SmartVaultPlugin extends Plugin {
 			}
 			(navDbg ??= {}).guideBack = g;
 		}
-		// ragDomProbe：RAG 高级选项第一条 Setting 的 DOM 结构（tag.class 树，
-		// 无文本）——为"数值挪到标题右侧 + 行高缩窄"定位确切挂类点。
+		// ragDomProbe：RAG 高级选项折叠体取证——只点**可见**实例的头（此前
+		// 盲取第一个含该 DOM 的 leaf，命中过隐藏副本点了等于白点），点开后
+		// 逐行读计算底色 + 从行向上回溯每一层祖先的底色（谁在染灰直接现形）。
 		if (opts?.ragDomProbe) {
 			for (const lf of this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)) {
 				const le = ((lf as unknown as { containerEl?: HTMLElement }).containerEl
 					?? (lf.view as unknown as { containerEl?: HTMLElement }).containerEl);
 				const ld = le?.ownerDocument;
 				if (!ld) continue;
+				const head = ld.querySelector<HTMLElement>(".semlink-collapse-head");
+				if (!head || head.offsetParent === null) continue;
+				// 截图取证前置：把折叠头点开（body 在 DOM 里但 semlink-hidden）
+				head.click();
+				await new Promise((r) => window.setTimeout(r, 350));
 				const body = ld.querySelector<HTMLElement>(".semlink-collapse-body");
 				if (!body) continue;
-				// 截图取证前置：把折叠头点开（body 在 DOM 里但 semlink-hidden）
-				ld.querySelector<HTMLElement>(".semlink-collapse-head")?.click();
+				const win = ld.defaultView!;
+				const bgOf = (el: Element): string => {
+					const cs = win.getComputedStyle(el);
+					return cs.backgroundColor + (cs.backgroundImage !== "none" ? " " + cs.backgroundImage.slice(0, 40) : "");
+				};
 				const dump = (el: Element, depth: number): string => {
 					const cls = (el.className || "").toString().slice(0, 70);
 					const line = `${"  ".repeat(depth)}<${el.tagName.toLowerCase()}${cls ? "." + cls.replace(/\s+/g, ".") : ""}>`;
 					if (depth > 5) return line;
 					return line + "\n" + Array.from(el.children).map((c) => dump(c, depth + 1)).join("\n");
 				};
-				(navDbg ??= {}).ragDom = dump(body.children[0] as Element, 0);
+				const dbg: Record<string, unknown> = {};
+				dbg.headWasHidden = body.hasClass("semlink-hidden") === false ? "expanded" : "still-hidden";
+				dbg.bodyBg = bgOf(body);
+				// 折叠头对齐取证：计算样式 + 图标/文字相对头的横向起点
+				{
+					const cs = win.getComputedStyle(head);
+					const hr = head.getBoundingClientRect();
+					const chev = head.querySelector(".semlink-collapse-chevron");
+					const lab = head.querySelector(".semlink-collapse-label");
+					const cr = chev?.getBoundingClientRect();
+					const lr = lab?.getBoundingClientRect();
+					dbg.headStyle = {
+						display: cs.display,
+						justifyContent: cs.justifyContent,
+						headRect: { l: Math.round(hr.left), r: Math.round(hr.right) },
+						chevLeft: cr ? Math.round(cr.left - hr.left) : null,
+						labelLeft: lr ? Math.round(lr.left - hr.left) : null,
+					};
+				}
+				dbg.ragDom = dump(body.children[0] as Element, 0);
+				dbg.rows = Array.from(body.querySelectorAll(".setting-item")).map((row) => ({
+					text: (row.querySelector(".setting-item-name")?.textContent ?? "").slice(0, 24),
+					bg: bgOf(row),
+				}));
+				// 从第一条行向上回溯：把每层有底色的祖先列出来（定位染灰层）
+				const chain: Array<Record<string, unknown>> = [];
+				let el: HTMLElement | null = body.querySelectorAll(".setting-item")[0] ?? null;
+				while (el && chain.length < 14) {
+					const bg = bgOf(el);
+					if (bg !== "rgba(0, 0, 0, 0)") {
+						chain.push({ el: el.tagName.toLowerCase() + "." + (el.className || "").toString().split(/\s+/).slice(0, 3).join("."), bg });
+					}
+					el = el.parentElement;
+				}
+				dbg.bgChain = chain;
+				(navDbg ??= {}).ragProbe = dbg;
 				break;
 			}
 		}
@@ -1604,6 +1648,35 @@ export default class SmartVaultPlugin extends Plugin {
 				]);
 				dbg.db = stats;
 				dbg.dbEmbeddedNotes = embedded;
+				// "卡在 99.8%" 取证：哪些笔记有 active chunk 但零向量（毒丸
+				// 候选），加队列四个计数的快照。
+				dbg.vectorlessNotes = await this.store.listVectorlessNotes(10);
+				dbg.queueCounts = await (this.scheduler as unknown as {
+					queue: { getCounts(): Promise<{ pending: number; processing: number; failed: number; completed: number }> };
+				}).queue.getCounts();
+				// "总数 982 但永远 980" 差集取证：活库应索引清单 vs DB 已索引
+				// 清单——缺的到底是哪几篇、为何进不了库。
+				{
+					const dbPaths = new Set(await this.store.listIndexedNotePaths());
+					const live: string[] = [];
+					for (const f of this.app.vault.getMarkdownFiles()) {
+						if (f.stat.size === 0) continue;
+						if (isEx(f.path)) continue;
+						live.push(f.path);
+					}
+					const missing = live.filter((p) => !dbPaths.has(p));
+					const stale = Array.from(dbPaths).filter((p) => {
+						const f = this.app.vault.getAbstractFileByPath(p);
+						if (!f || !(f instanceof TFile)) return true;
+						return f.stat.size === 0 || isEx(p);
+					});
+					dbg.dbVsLive = {
+						live: live.length,
+						dbIndexed: dbPaths.size,
+						missingFromDb: missing.slice(0, 10),
+						staleInDb: stale.slice(0, 10),
+					};
+				}
 				dbg.timeOrigin = Math.round(performance.timeOrigin);
 				dbg.modals = Array.from(document.querySelectorAll('.smart-vault-progress-modal')).length;
 				const lmAny = this.licenseManager as unknown as { state?: { key?: string; token?: string; instanceId?: string; lastValidatedAt?: number }; fp?: string; appId?: string };
@@ -1630,6 +1703,9 @@ export default class SmartVaultPlugin extends Plugin {
 					});
 				}
 				dbg.collapseEnv = envs;
+				dbg.zaiWire = (this.settings.providers ?? [])
+					.filter((x) => (x.apiBase ?? '').includes('bigmodel') || (x.name ?? '').includes('Z.AI'))
+					.map((x) => ({ name: x.name, apiBase: x.apiBase, wirePath: x.wirePath ?? null, curated: x.curated ?? null }));
 				dbg.license = {
 					isPro: this.licenseManager.isPro(),
 					configured: this.licenseManager.configured,

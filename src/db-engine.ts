@@ -572,6 +572,7 @@ export class DbEngine {
 	 *  (已嵌入 + 已跳过) / 笔记总数。重索引同笔记时按新内容覆写/清除。 */
 	markEmbedSkip(notePath: string, skipped: boolean): void {
 		if (!this.db) return;
+		this.skipCountCache = null;
 		if (skipped) {
 			this.db.run("INSERT OR REPLACE INTO embed_skips (note_path) VALUES (?)", [notePath]);
 		} else {
@@ -579,9 +580,58 @@ export class DbEngine {
 		}
 	}
 
+	/** 「已跳过」精确计数：标记表里"仍然成立"的行——笔记仍有 active chunk
+	 *  且一个向量都没有。COUNT(*) 会把陈旧标记算进来（笔记重嵌拿到向量
+	 *  后标记未清、已删笔记残留），出现 Embedded+Skipped > Indexed 对不上
+	 *  账（用户截图红框）。
+	 *  性能契约（2026-11-10 实测教训）：精确 SQL 是 chunks 全表一遍 GROUP
+	 *  BY（59k+ 行、sql.js 无 JIT，数百 ms），而本计数被多个 UI 订阅随
+	 *  进度事件高频触发——直接查询会把 worker 占满、嵌入 RPC 全部排队，
+		设置卡/进度整屏冻住（用户报"卡住"）。所以带 30s TTL 缓存：worker
+	 *  至多每 30s 算一次精确值，其余走缓存；markEmbedSkip/saveEmbeddings
+	 *  即时失效，标记变化立刻反映。 */
+	private skipCountCache: { value: number; at: number } | null = null;
+	private static SKIP_COUNT_TTL_MS = 30_000;
 	getEmbedSkippedNoteCount(): number {
-		const r = this.db!.exec("SELECT COUNT(*) FROM embed_skips");
-		return r.length > 0 ? (r[0].values[0][0] as number) : 0;
+		const now = Date.now();
+		if (this.skipCountCache && now - this.skipCountCache.at < DbEngine.SKIP_COUNT_TTL_MS) {
+			return this.skipCountCache.value;
+		}
+		const r = this.db!.exec(
+			`SELECT COUNT(*) FROM (
+			   SELECT c.note_path,
+					  SUM(CASE WHEN c.vector IS NOT NULL THEN 1 ELSE 0 END) AS vec
+			   FROM chunks c
+			   WHERE c.status = 'active'
+			   GROUP BY c.note_path
+			 ) t
+			 JOIN embed_skips s ON s.note_path = t.note_path
+			 WHERE t.vec = 0`,
+		);
+		const value = r.length > 0 ? (r[0].values[0][0] as number) : 0;
+		this.skipCountCache = { value, at: now };
+		return value;
+	}
+
+	/** 诊断：有 active chunk 但一个向量都没有的笔记（缺向量清单，含每篇
+	 *  chunk 数）——"卡在 99.8%" 时定位到底是哪几篇、chunk 多大。 */
+	listVectorlessNotes(limit = 10): Array<{ notePath: string; chunks: number }> {
+		const r = this.db!.exec(
+			`SELECT c.note_path, COUNT(*) FROM chunks c
+			 WHERE c.status = 'active'
+			   AND NOT EXISTS (SELECT 1 FROM chunks c2 WHERE c2.note_path = c.note_path AND c2.status = 'active' AND c2.vector IS NOT NULL)
+			 GROUP BY c.note_path LIMIT ${Math.max(1, Math.min(50, limit | 0))}`,
+		);
+		if (r.length === 0) return [];
+		return r[0].values.map((row) => ({ notePath: String(row[0]), chunks: Number(row[1]) }));
+	}
+
+	/** 诊断：DB 里全部已索引笔记路径（active chunk 的 distinct note_path）
+	 *  ——与 vault 活清单做差集，定位"总数 982 但永远 980"缺的是哪几篇。 */
+	listIndexedNotePaths(): string[] {
+		const r = this.db!.exec("SELECT DISTINCT note_path FROM chunks WHERE status = 'active'");
+		if (r.length === 0) return [];
+		return r[0].values.map((row) => String(row[0]));
 	}
 
 	/** 一次性回填 embed_skips：embed_skips 功能上线前就已索引完成的全稀疏
@@ -645,6 +695,7 @@ export class DbEngine {
 	 * Each embedding = EMBEDDING_DIM × Float32 = 4096 bytes.
 	 */
 	saveEmbeddings(chunkIds: string[], embeddings: number[][]): void {
+		this.skipCountCache = null; // 向量落库改变"零向量笔记"集合 → 精确跳过计数失效重算
 		for (let i = 0; i < chunkIds.length; i++) {
 			const embedding = embeddings[i];
 			if (!embedding) continue; // 无向量（纯文本索引）→ 保持 vector 为 NULL

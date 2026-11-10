@@ -56,6 +56,8 @@ export function createDispatcher(): Dispatcher {
 			case "getStats": return engine.getStats();
 			case "getEmbeddedNoteCount": return engine.getEmbeddedNoteCount();
 			case "getEmbedSkippedNoteCount": return engine.getEmbedSkippedNoteCount();
+			case "listVectorlessNotes": return engine.listVectorlessNotes(args[0] as number | undefined);
+			case "listIndexedNotePaths": return engine.listIndexedNotePaths();
 			case "markEmbedSkip": return engine.markEmbedSkip(args[0] as string, args[1] as boolean);
 			case "backfillEmbedSkips": return engine.backfillEmbedSkips();
 			case "saveEmbeddings": return engine.saveEmbeddings(args[0] as string[], args[1] as number[][]);
