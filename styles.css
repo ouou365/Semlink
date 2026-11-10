@@ -291,7 +291,9 @@
        已废弃，无窄幅互斥层级） */
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    /* tab 栏 ↔ 首卡间距 = 卡间间距（用户拍板"全局相等才和谐"）：统一
+       走 --sl-space-4，窄幅容器查询的 10px 一并同步 */
+    gap: var(--sl-space-4, 16px);
     flex: 1 1 auto;
     min-height: 0;
 }.semlink-settings-menu-col {
@@ -5590,7 +5592,7 @@ body .semlink-msg-user::selection {
         padding: 0 12px 0;
     }
     .semlink-settings-layout {
-        gap: 10px;
+        gap: var(--sl-space-4, 16px);
     }
     .semlink-settings-menu-item {
         /* 五段均分后单段 ~65px：只留文字（图标收起），字号随段宽降一档 */
@@ -5689,6 +5691,16 @@ body .semlink-msg-user::selection {
     flex-shrink: 0;
     display: flex;
     align-items: center;
+}
+/* 行前导图标（语言/快速上手，用户拍板"左侧增加图标"）：静音灰细线图 */
+.semlink-row-glyph {
+    display: flex;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+.semlink-row-glyph .svg-icon {
+    width: 17px;
+    height: 17px;
 }
 .semlink-row.is-clickable {
     cursor: pointer;
@@ -6946,127 +6958,125 @@ body .semlink-msg-user::selection {
 /* 弹窗宿主卡片描边已撤（用户拍板"去掉边框颜色"）：白卡在灰页上
    靠明度差区分即可，全包描边显得像旧式框线卡 */
 
-/* Pro 态：白色贺卡（用户拍板"改成一张漂亮的白色贺卡"）——白色卡面 +
-   内衬细线框（贺卡的"卡中有框"）+ 顶部 accent 淡光晕，内容整体居中：
-   logo 圆徽 → 名称 → Active 徽 → 致谢语 → 产品一句 → 分隔+meta →
-   Deactivate 静音钮。紫只做装饰（用户拍板"整体面板白色、紫只做装饰"）。
-   旧的紫渐变玻璃卡整块退役（用户反馈颜色太重、License key 不再展示）。 */
-.semlink-license-greeting {
-    position: relative;
-    text-align: center;
-    padding: 24px 22px 12px;
-    overflow: hidden;
+/* About 弹窗（License 行点开，用户参考 Eagle.app 的关于窗）：居中贺卡
+   ——图标 → 名称 → 标语 → 版本 → hairline → 许可只读行（状态绿、
+   密钥掩码点击复制）→ 停用小字 → OK 全宽 → 版权脚。
+   紧凑版（用户拍板"压缩高度"）：收窄窗宽 380px、图标 56px、行高 28px、
+   各段留白一档压小。 */
+.semlink-license-modal.modal {
+    width: min(380px, 92vw);
 }
-/* 内衬细线框：accent 淡染 1px，向内收 7px，圆角随卡——贺卡仪式感的主
-   来源；pointer-events 关掉避免挡按钮 */
-.semlink-license-greeting::before {
-    content: "";
-    position: absolute;
-    inset: 7px;
-    border: 1px solid hsla(var(--interactive-accent-hsl), 0.16);
-    border-radius: calc(var(--sl-radius-card, 10px) - 5px);
-    pointer-events: none;
+.semlink-license-about {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
-/* 顶部光晕：accent 径向淡染，从卡顶透下来一点暖意 */
-.semlink-license-greeting::after {
-    content: "";
-    position: absolute;
-    top: -70px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 240px;
-    height: 130px;
-    background: radial-gradient(closest-side, hsla(var(--interactive-accent-hsl), 0.12), transparent);
-    pointer-events: none;
-}
-/* logo 圆徽：44px accent 淡染圆底 + 细环，徽居中 */
-.semlink-license-greeting-emblem {
+.semlink-license-about-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
-    margin: 0 auto 10px;
-    border-radius: 50%;
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
     background: hsla(var(--interactive-accent-hsl), 0.10);
-    box-shadow: 0 0 0 1px hsla(var(--interactive-accent-hsl), 0.14);
     color: var(--interactive-accent);
+    margin-bottom: 10px;
 }
-.semlink-license-greeting-emblem .svg-icon {
-    width: 24px;
-    height: 24px;
+.semlink-license-about-icon .svg-icon {
+    width: 36px;
+    height: 36px;
 }
-.semlink-license-greeting-title {
-    font-size: 15px;
+.semlink-license-about-name {
+    font-size: 19px;
     font-weight: 700;
     letter-spacing: -0.01em;
     color: var(--text-normal);
-    margin-bottom: 7px;
 }
-.semlink-license-greeting-pill {
-    margin-left: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+.semlink-license-about-tagline {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    line-height: 1.4;
+    margin-top: 6px;
+    max-width: 26em;
 }
-/* 致谢语：贺卡的问候主体，比正文大半号、加重 */
-.semlink-license-greeting-thanks {
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    line-height: 1.35;
-    color: var(--text-normal);
-    margin: 12px 0 3px;
-}
-.semlink-license-greeting .semlink-license-sub {
-    margin-bottom: 0;
-}
-.semlink-license-card-badge.is-active {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-}
-.semlink-license-pro-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--text-success, #34c759);
-    flex-shrink: 0;
-}
-.semlink-license-pro-meta {
+.semlink-license-about-version {
     font-size: 12px;
     color: var(--text-muted);
-    margin-bottom: 2px;
-    padding-top: 12px;
+    margin-top: 6px;
 }
-/* meta 与致谢块之间一根居中短线（分隔符），弱于通栏 border */
-.semlink-license-pro-meta::before {
-    content: "";
-    display: block;
-    width: 34px;
-    height: 1px;
-    margin: 0 auto 12px;
-    background: hsla(var(--interactive-accent-hsl), 0.22);
+.semlink-license-about-rows {
+    width: 100%;
+    margin-top: 6px;
 }
-.semlink-license-pro-actions {
+.semlink-license-about-row {
     display: flex;
-    justify-content: center;
-    margin-top: 4px;
-    padding-top: 2px;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 32px;
 }
-/* 贺卡上的 Deactivate 静音化：小号灰字，hover 才转 danger——不动确认流 */
-.semlink-license-greeting .semlink-license-deactivate {
-    font-size: 12px;
+.semlink-license-about-rowlabel {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.semlink-license-about-rowvalue {
+    font-size: 13.5px;
+    color: var(--text-normal);
+    font-variant-numeric: tabular-nums;
+}
+.semlink-license-about-rowvalue.is-green {
+    color: #34c759;
+    font-weight: 600;
+}
+.semlink-license-about-rowvalue.is-clickable {
+    cursor: pointer;
+}
+.semlink-license-about-rowvalue.is-clickable:hover {
+    text-decoration: underline;
+}
+.semlink-license-about-actions {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    margin-top: 0;
+}
+.semlink-license-about-actions .semlink-license-deactivate {
+    font-size: 11.5px;
     color: var(--text-muted);
     background: none;
     border: none;
     box-shadow: none;
-    padding: 4px 10px;
+    padding: 1px 8px;
 }
 @media (hover: hover) {
-    .semlink-license-greeting .semlink-license-deactivate:hover {
+    .semlink-license-about-actions .semlink-license-deactivate:hover {
         color: var(--text-error, var(--text-danger, #e03636));
     }
+}
+/* OK 主按钮：弹窗不带 smart-vault-settings 作用域（btn-primary 的紫色
+   规则够不着），直接上 accent 底色；带弹窗作用域提特异性——宿主
+   app.css 的 button:not(.clickable-icon)（0-1-1）会压过单类规则 */
+.semlink-license-modal .semlink-license-about-ok {
+    width: 100%;
+    margin-top: 10px;
+    height: 34px;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    box-shadow: none;
+    font-weight: 600;
+}
+.semlink-license-modal .semlink-license-about-ok:hover {
+    background: var(--interactive-accent-hover);
+}
+.semlink-license-about-ok:active {
+    opacity: 0.85;
+}
+.semlink-license-about-copyright {
+    font-size: 11px;
+    color: var(--text-faint);
+    text-align: center;
+    margin-top: 8px;
 }
 
 /* 模型列表卡在原生设置弹窗宿主不带描边（用户拍板"去掉这个边框"）：

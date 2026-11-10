@@ -9,7 +9,7 @@ import type { IndexProgress, McpClientServer, SmartVaultSettings } from "./types
 import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
-import { LicenseModal } from "./license-modal";
+import { LicenseModal, LicenseInfoModal } from "./license-modal";
 import { licenseErrorMessage } from "./license";
 import { LANGUAGES, t } from "./i18n";
 import { ConfirmModal } from "./confirm-modal";
@@ -281,15 +281,16 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 	/** 通用页的上手清单：对话模型 / 嵌入模型 / 首次问答 / 解锁，四项状态
 	 *  均由实时设置与历史推导（无需用户手动打勾）；每项带直达动作。 */
-	/** 通用详情页：许可（营销/激活）+ 上手清单。 */
+	/** 通用详情页：偏好（语言）→ 上手 → 许可/激活收尾（用户拍板"激活
+	 *  放在快速上手下面"）；语言与上手行带前导图标。 */
 	private renderGeneralTab(panelEl: HTMLElement): void {
-		// 偏好组置顶：General 页此前只有 License/清单（评审：名为 General
-		// 却无一行常规设置）——语言等通用偏好先落地这里。
 		// 组标题 Preferences / Quick start 已去掉（用户拍板"这两个可以
 		// 去掉"）——卡自明，无需组头。
 		this.renderPrefsSection(panelEl);
 		const guideCard = panelEl.createDiv({ cls: "semlink-card semlink-guide-row-card" });
 		const guideRow = guideCard.createDiv({ cls: "semlink-row is-clickable" });
+		const gGlyph = guideRow.createSpan({ cls: "semlink-row-glyph" });
+		setIcon(gGlyph, "rocket");
 		const gLabel = guideRow.createDiv({ cls: "semlink-row-label" });
 		gLabel.createDiv({ cls: "semlink-row-title", text: t("guideRowTitle") });
 		const guideBtn = guideRow.createDiv({ cls: "semlink-row-control" }).createEl("button", {
@@ -315,6 +316,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// （原组标题撑开的空隙随之消失，由本类补回）
 		const card = panelEl.createDiv({ cls: "semlink-card semlink-prefs-card" });
 		const row = card.createDiv({ cls: "semlink-row" });
+		const glyph = row.createSpan({ cls: "semlink-row-glyph" });
+		setIcon(glyph, "languages");
 		row.createDiv({ cls: "semlink-row-label" }).createSpan({
 			cls: "semlink-row-title",
 			text: t("settingsLanguage"),
@@ -464,54 +467,29 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const pro = lm.isPro();
 
 		if (pro) {
-			// Pro 态：白色贺卡（用户拍板"改成一张漂亮的白色贺卡"）——居中
-			// 版式：logo 圆形徽 → 名称 → Active 徽 → 致谢语（贺卡的"问候
-			// 主体"）→ 产品一句 → 细分隔 → meta 小字 → Deactivate 静音钮。
-			// 卡的装饰（内衬细线框 + 顶部光晕）全在 CSS；License key 激活后
-			// 不再展示（用户拍板）。
-			const proInfo = lm.proInfo();
-			const card = containerEl.createDiv({ cls: "semlink-card semlink-license-card semlink-license-procard semlink-license-greeting" });
-			const emblem = card.createDiv({ cls: "semlink-license-greeting-emblem" });
-			setIcon(emblem, "semlink-logo");
-			card.createDiv({ cls: "semlink-license-greeting-title", text: "Semlink Pro" });
-			const pill = card.createDiv({ cls: "semlink-license-card-badge is-active semlink-license-greeting-pill" });
-			pill.createSpan({ cls: "semlink-license-pro-dot" });
-			pill.createSpan({ text: t("licenseStatusActive") });
-
-			card.createDiv({ cls: "semlink-license-greeting-thanks", text: t("licenseProThanks") });
-			card.createDiv({ cls: "semlink-license-sub", text: t("licenseCardFreeLine") });
-
-			// 弱化 meta：Lifetime + 设备占用收成一行小灰字，上下细分隔
-			const used = proInfo?.used ?? 0;
-			const limit = proInfo?.limit ?? 0;
-			const devText = limit ? `${used} / ${limit}` : String(used);
-			card.createDiv({
-				cls: "semlink-license-pro-meta",
-				text: `${t("licenseLifetime")} · ${t("licenseDevices")} ${devText}`,
+			// Pro 态（用户拍板）：一行卡片同 Onboard——gem 图标 + License +
+			// 右侧普通样式 About 钮；点击弹激活信息弹窗（状态/方案/设备/
+			// 密钥/停用）。
+			const card = containerEl.createDiv({ cls: "semlink-card semlink-guide-row-card" });
+			const row = card.createDiv({ cls: "semlink-row is-clickable" });
+			const glyph = row.createSpan({ cls: "semlink-row-glyph" });
+			setIcon(glyph, "gem");
+			row.createDiv({ cls: "semlink-row-label" }).createDiv({
+				cls: "semlink-row-title",
+				text: t("licenseRowTitle"),
 			});
-
-			const actions = card.createDiv({ cls: "semlink-license-pro-actions" });
-			const de = actions.createEl("button", { cls: "semlink-btn-ghost mod-danger semlink-license-deactivate", text: t("licenseDeactivateShort") });
-			de.addEventListener("click", () => {
-				// Deactivate kicks the device out of Pro immediately — confirm first.
-				new ConfirmModal(this.app, t("licenseDeactivate"), t("licenseDeactivateConfirmBody"), () => void (async () => {
-					if (de.dataset.busy === "1") return;
-					de.dataset.busy = "1";
-					de.setAttr("disabled", "true");
-					de.addClass("is-busy");
-					try {
-						await lm.deactivate();
-						new Notice(t("licenseDeactivated"));
-						rerenderSettingsTab(this);
-					} catch (e) {
-						new Notice(licenseErrorMessage(e));
-					} finally {
-						de.dataset.busy = "";
-						de.removeClass("is-busy");
-						de.removeAttribute("disabled");
-					}
-				})()).open();
+			const openInfo = (): void => {
+				new LicenseInfoModal(this.app, this.plugin, () => rerenderSettingsTab(this)).open();
+			};
+			const aboutBtn = row.createDiv({ cls: "semlink-row-control" }).createEl("button", {
+				cls: "semlink-btn-ghost semlink-btn-white",
+				text: t("licenseAbout"),
 			});
+			aboutBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				openInfo();
+			});
+			row.addEventListener("click", openInfo);
 			return;
 		}
 
@@ -1153,7 +1131,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 		containerEl.createDiv({
 			cls: "semlink-card-title",
-			text: `${t("shareGroupTitle")} · ${shares.length}`,
+			text: t("shareGroupTitle"),
 		});
 		const list = containerEl.createDiv({ cls: "semlink-card semlink-share-list" });
 		void (async () => {

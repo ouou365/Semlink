@@ -6,9 +6,10 @@
 // and device management. Reached from the settings page, the chat panel
 // header and every locked item.
 
-import { App, Modal, Notice, Setting } from "obsidian";
+import { App, Modal, Notice, setIcon } from "obsidian";
 import type SmartVaultPlugin from "../main";
 import { licenseErrorMessage } from "./license";
+import { ConfirmModal } from "./confirm-modal";
 import { t } from "./i18n";
 
 export class LicenseModal extends Modal {
@@ -147,4 +148,107 @@ export class LicenseModal extends Modal {
 	}
 
 	private pendingKey = "";
+}
+
+/** About 弹窗（Basic 页 License 行点开，用户参考 Eagle.app 的关于窗）：
+ *  居中贺卡——大图标 → 名称 → 标语 → 版本 → hairline → 许可只读行
+ *  （状态/方案/设备/密钥掩码点击复制）→ 停用 → OK 全宽 → 版权。
+ *  停用成功后关窗并回调重渲设置页。 */
+export class LicenseInfoModal extends Modal {
+	private plugin: SmartVaultPlugin;
+	private onClosed?: () => void;
+
+	constructor(app: App, plugin: SmartVaultPlugin, onClosed?: () => void) {
+		super(app);
+		this.plugin = plugin;
+		this.onClosed = onClosed;
+		this.modalEl.addClass("semlink-license-modal");
+	}
+
+	onOpen(): void {
+		this.render();
+	}
+
+	onClose(): void {
+		this.onClosed?.();
+	}
+
+	private render(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.addClass("semlink-license-about");
+		const lm = this.plugin.licenseManager;
+		const info = lm.proInfo();
+
+		// ── 头部：图标 → 名称 → 标语 → 版本 ──
+		const icon = contentEl.createDiv({ cls: "semlink-license-about-icon" });
+		setIcon(icon, "semlink-logo");
+		contentEl.createDiv({ cls: "semlink-license-about-name", text: "Semlink" });
+		contentEl.createDiv({ cls: "semlink-license-about-tagline", text: t("settingsTagline") });
+		contentEl.createDiv({
+			cls: "semlink-license-about-version",
+			text: t("licenseAboutVersion").replace("{v}", this.plugin.manifest.version),
+		});
+
+		// ── 许可只读行（内嵌信息卡）：label 左、value 右 ──
+		const rows = contentEl.createDiv({ cls: "semlink-license-about-rows" });
+		const row = (label: string): HTMLElement => {
+			const r = rows.createDiv({ cls: "semlink-license-about-row" });
+			r.createSpan({ cls: "semlink-license-about-rowlabel", text: label });
+			return r.createSpan({ cls: "semlink-license-about-rowvalue" });
+		};
+		const status = row(t("licenseFieldStatus"));
+		status.addClass("is-green");
+		status.setText(t("licenseStatusActive"));
+		row(t("licenseFieldPlan")).setText(t("licenseLifetime"));
+		const used = info?.used ?? 0;
+		const limit = info?.limit ?? 0;
+		row(t("licenseDevices")).setText(limit ? `${used} / ${limit}` : String(used));
+
+		// 密钥：掩码展示，点击复制全文
+		const rawKey = info?.key ?? "";
+		const keyVal = row(t("licenseKeyField"));
+		keyVal.setText(rawKey.length > 8 ? `${rawKey.slice(0, 4)}····${rawKey.slice(-4)}` : rawKey || "—");
+		if (rawKey) {
+			keyVal.addClass("is-clickable");
+			keyVal.setAttr("title", t("licenseCopyKey"));
+			keyVal.addEventListener("click", () => {
+				void navigator.clipboard.writeText(rawKey).then(() => new Notice(t("licenseCopied")));
+			});
+		}
+
+		// 停用：小字危险钮，确认流与设置页同款；成功关窗 → onClosed 重渲
+		const actions = contentEl.createDiv({ cls: "semlink-license-about-actions" });
+		const de = actions.createEl("button", {
+			cls: "semlink-btn-ghost mod-danger semlink-license-deactivate",
+			text: t("licenseDeactivateShort"),
+		});
+		de.addEventListener("click", () => {
+			new ConfirmModal(this.app, t("licenseDeactivate"), t("licenseDeactivateConfirmBody"), () => void (async () => {
+				if (de.dataset.busy === "1") return;
+				de.dataset.busy = "1";
+				de.setAttr("disabled", "true");
+				de.addClass("is-busy");
+				try {
+					await lm.deactivate();
+					new Notice(t("licenseDeactivated"));
+					this.close();
+				} catch (e) {
+					new Notice(licenseErrorMessage(e));
+				} finally {
+					de.dataset.busy = "";
+					de.removeClass("is-busy");
+					de.removeAttribute("disabled");
+				}
+			})()).open();
+		});
+
+		// OK 全宽 + 版权脚
+		const ok = contentEl.createEl("button", {
+			cls: "semlink-btn-primary semlink-btn-block semlink-license-about-ok",
+			text: t("licenseAboutOk"),
+		});
+		ok.addEventListener("click", () => this.close());
+		contentEl.createDiv({ cls: "semlink-license-about-copyright", text: t("licenseCopyright") });
+	}
 }
