@@ -280,6 +280,7 @@ const zh: Record<keyof typeof en, string> = {
 	ragGroupStatus: "状态",
 	ragGroupConfig: "配置",
 	ragGroupMaintain: "维护",
+	ragSetup: "设置",
 	excludePathsShort: "匹配的文件不参与索引",
 	excludePathCount: "将排除 {n} 条路径",
 	excludePathsPlaceholder: "每行一个，如：Attachments/",

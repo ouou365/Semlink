@@ -2272,13 +2272,27 @@
    var(--sl-bg-grouped)，但该变量只定义在 .semlink-settings-root 上——
    引导屏取不到就回退白底（--background-primary），与下方灰底页面形成
    接缝（用户反馈"这个怎么是白底的"）。在视图根上补变量定义，
-   顶条与其余引用处一并取到；深色跟随设置屏的纯黑。 */
+   顶条与其余引用处一并取到；深色跟随首页底色（见下方分派规则）。 */
 .semlink-search-view.semlink-guide-active,
 .semlink-search-view.semlink-settings-active {
     --sl-bg-grouped: #f6f6f6;
-}.theme-dark .semlink-search-view.semlink-guide-active,
+}/* 深色设置/引导屏不再定死纯黑：跟随主题底色，与深色首页同色，切换零跳变。
+   首页自身不涂底——主区域/弹窗 leaf 露 --background-primary，左右侧栏
+   leaf 露核心给的 --background-secondary；屏自己涂 leaf 就得按容器分派
+   同款变量（侧栏里 primary 是 #1c1c1c，跟首页 #282828 仍差一档）。 */
 .theme-dark .semlink-search-view.semlink-settings-active {
-    --sl-bg-grouped: #000000;
+    --sl-bg-grouped: var(--background-primary);
+}
+.theme-dark .mod-left-split .semlink-search-view.semlink-settings-active,
+.theme-dark .mod-right-split .semlink-search-view.semlink-settings-active {
+    --sl-bg-grouped: var(--background-secondary);
+}
+.theme-dark .semlink-search-view.semlink-guide-active {
+    --sl-bg-grouped: var(--background-primary);
+}
+.theme-dark .mod-left-split .semlink-search-view.semlink-guide-active,
+.theme-dark .mod-right-split .semlink-search-view.semlink-guide-active {
+    --sl-bg-grouped: var(--background-secondary);
 }
 .semlink-search-view.semlink-main-tab {
     transition: padding-left 0.25s ease;
@@ -2645,7 +2659,7 @@
     color: var(--text-muted);
     cursor: pointer;
     text-align: left;
-    transition: transform 0.12s ease, border-color 0.12s ease;
+    transition: transform 0.12s ease;
 }/* Leading emoji badge on each prompt card. */
 .semlink-search-welcome-sug-icon {
     font-size: 16px;
@@ -2664,10 +2678,11 @@
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
 }.semlink-search-welcome-sug:hover {
+    /* 紫色边框高亮已去（用户拍板"去掉悬停紫色边框"）：悬停反馈保留
+       背景/文字提亮 + 上浮 1px，边框恒为中性分隔线色。 */
     background: var(--background-modifier-hover);
     color: var(--text-normal);
     transform: translateY(-1px);
-    border-color: var(--interactive-accent);
 }/* Index stats as a small muted line: "已索引 N 篇笔记 · X 个片段". */
 .semlink-search-welcome-stats {
     font-size: 12px;
@@ -6165,6 +6180,11 @@ body .semlink-msg-user::selection {
 	   同一 16px 节奏 */
 	margin-bottom: var(--sl-space-4);
 }
+/* RAG 组标题已去（用户拍板"去掉小标题"）：原组标题的 margin 撑着卡间
+   距，去掉后由状态卡自己承担与下一张卡的 16px 节奏。 */
+.semlink-settings-panel .semlink-rag-status {
+	margin-bottom: var(--sl-space-4);
+}
 .semlink-rag-block {
 	flex: 1 1 auto;
 	display: flex;
@@ -6219,6 +6239,13 @@ body .semlink-msg-user::selection {
 .semlink-rag-block.is-running .semlink-rag-hero-spin {
 	display: flex;
 	animation: semlink-spin 1s linear infinite;
+}
+/* 完成 ✅ 徽章（用户拍板"索引完成则旋转图标改成完成✅"）：check-circle
+   静态绿色（与 MCP 行 running/on 的绿色语言一致），无旋转动画。 */
+.semlink-rag-block.is-done .semlink-rag-hero-spin {
+	display: flex;
+	animation: none;
+	color: var(--color-green);
 }
 .semlink-rag-hero-value {
 	font-size: 22px;
@@ -6893,7 +6920,10 @@ body .semlink-msg-user::selection {
     background: var(--sl-bg-grouped);
 }
 .theme-dark .semlink-settings-root {
-    --sl-bg-grouped: #000000;
+    /* 跟随首页底色（用户拍板"设置界面也改 #282828"）：容器分派见 2276
+       规则——这里取 primary，侧栏实例由下方 override 提到 secondary。
+       卡保持 #1c1c1e：与引导 hub 卡同款，暗卡浮在灰页上。 */
+    --sl-bg-grouped: var(--background-primary);
     --sl-card: #1c1c1e;
     --sl-sep: rgba(84, 84, 88, 0.65);
     --sl-scrollbar: rgba(235, 235, 245, 0.22); /* 深色下白系比灰系更柔，同样近隐形 */
@@ -6914,15 +6944,23 @@ body .semlink-msg-user::selection {
     background: var(--sl-bg-grouped);
 }
 .theme-dark .semlink-search-view.semlink-settings-active {
-    --sl-bg-grouped: #000000;
+    --sl-bg-grouped: var(--background-primary);
     background: var(--sl-bg-grouped);
+}
+/* 设置屏 leaf 涂色同容器分派（侧栏取 secondary，见 2276 规则注释）：
+   变量已在 view 上定值，这里 override 只需换值即可与 root/顶条同源。 */
+.theme-dark .mod-left-split .semlink-settings-root,
+.theme-dark .mod-right-split .semlink-settings-root {
+    --sl-bg-grouped: var(--background-secondary);
 }
 /* 引导屏同规格（用户拍板"深色下顶部黑条突兀"）：引导模式只定义了
    --sl-bg-grouped 变量但没涂 leaf——弹窗 body 的深灰 (#1e1e1e) 从下方
-   透出，顶条纯黑在灰页上成了突兀的黑带。涂满 leaf 让整屏同黑，顶条
-   隐入页面（与设置屏深色行为一致）。 */
+   透出，顶条纯黑在灰页上成了突兀的黑带。涂满 leaf 让整屏同色，顶条
+   隐入页面。深色取主题底色而非纯黑：与深色首页同底（#000000 vs 首页
+   #282828 的接缝，用户反馈修正）；侧栏实例取 --background-secondary，
+   见 2276 规则注释——分派逻辑在那里，这里只管涂 leaf。 */
 .theme-dark .semlink-search-view.semlink-guide-active {
-    --sl-bg-grouped: #000000;
+    --sl-bg-grouped: var(--background-primary);
     background: var(--sl-bg-grouped);
 }/* 内嵌设置屏 / 弹窗宿主统一分组底色 */
 .semlink-search-welcome.semlink-settings-screen {

@@ -28,6 +28,37 @@ const BYTES_PER_FLOAT = 4;
 const DB_FILE = "vault.db";
 const VECTORS_FILE_LEGACY = "vectors.bin";
 
+/** 诊断：在当前上下文里用 sql.js 打开一段 DB 字节并数行——判断「字节
+ *  里有数据但 engine 没读到」还是「字节本身是空库」。browser 用 atob
+ *  解 wasm（无 Buffer），node 走 Buffer。 */
+export async function probeSqliteBytes(buf: Uint8Array): Promise<{
+	chunks: number;
+	queue: number;
+	distinctNotes: number;
+	error?: string;
+}> {
+	try {
+		const wasmBinary = typeof Buffer !== "undefined"
+			? Buffer.from(wasmBase64 as string, "base64")
+			: Uint8Array.from(atob(wasmBase64 as string), (c) => c.charCodeAt(0));
+		const SQL = await initSqlJs({ wasmBinary } as Parameters<typeof initSqlJs>[0]);
+		const db = new SQL.Database(buf);
+		const q = (sql: string): number => {
+			const r = db.exec(sql);
+			return r.length > 0 && r[0].values.length > 0 ? Number(r[0].values[0][0]) : 0;
+		};
+		const out = {
+			chunks: q("SELECT COUNT(*) FROM chunks"),
+			queue: q("SELECT COUNT(*) FROM queue"),
+			distinctNotes: q("SELECT COUNT(DISTINCT note_path) FROM chunks"),
+		};
+		db.close();
+		return out;
+	} catch (e) {
+		return { chunks: -1, queue: -1, distinctNotes: -1, error: e instanceof Error ? `${e.message}`.slice(0, 200) : String(e) };
+	}
+}
+
 export class DbEngine {
 	private db: Database | null = null;
 	private dataDir: string;
@@ -252,6 +283,24 @@ export class DbEngine {
 	 *  lookups returned nothing → everything treated as new). */
 	save(): void {
 		if (!this.db) return;
+		// 空库保险丝：内存库零 chunk 而磁盘库是几百 MB 的老库 = 上游加载
+		// 失败后退化成空库（真机 2026-11-11：worker 未知原因空库启动）。
+		// 此时导出会用空库覆盖 vault.db，把整份索引抹掉——拒绝落盘并把
+		// 判断线索留给日志。正常场景不受影响（全新 vault 本来就没有
+		// 大磁盘库）。
+		const dbPath = join(this.dataDir, DB_FILE);
+		if (existsSync(dbPath)) {
+			const diskSize = statSync(dbPath).size;
+			let memoryChunks = 0;
+			try {
+				const r = this.db.exec("SELECT COUNT(*) FROM chunks");
+				memoryChunks = r.length > 0 && r[0].values.length > 0 ? Number(r[0].values[0][0]) : 0;
+			} catch { /* 表还没建：按 0 处理 */ }
+			if (memoryChunks === 0 && diskSize > 100 * 1024 * 1024) {
+				console.error(`[Semlink] save() REFUSED: in-memory DB has 0 chunks but ${dbPath} is ${(diskSize / 1048576).toFixed(0)}MB — refusing to overwrite a large index with an empty DB (load must have failed upstream).`);
+				return;
+			}
+		}
 		// export() already returns a fresh Uint8Array — passing it straight
 		// to writeFileSync skips a full-DB Buffer copy (hundreds of MB).
 		const data = this.db.export();
@@ -460,6 +509,57 @@ export class DbEngine {
 			return val ? (val as number) : null;
 		}
 		return null;
+	}
+
+	/** 只推 mtime 不动内容/向量：扫描按 file.mtime > MAX(chunk.mtime) 判
+	 *  「已修改」，外部同步工具/系统常摸文件但不改内容——processNote 重
+	 *  分块后逐块比对相同即走这里，避免无意义的全量重嵌（API 调用）。 */
+	touchNoteMtime(notePath: string, mtime: number): void {
+		this.db!.run("UPDATE chunks SET mtime = ? WHERE note_path = ?", [mtime, notePath]);
+	}
+
+	/** 有 active chunk 但全部无向量的笔记总数（诊断：「一直嵌入」是否
+	 *  由「无向量笔记被反复补嵌」驱动——注意稀疏表格块本就该无向量，
+	 *  只有整篇无向量才可疑）。 */
+	countVectorlessNotes(): number {
+		const r = this.db!.exec(
+			`SELECT COUNT(DISTINCT note_path) FROM chunks c
+			 WHERE c.status = 'active'
+			   AND NOT EXISTS (SELECT 1 FROM chunks c2 WHERE c2.note_path = c.note_path AND c2.status = 'active' AND c2.vector IS NOT NULL)`,
+		);
+		return r.length > 0 && r[0].values.length > 0 ? Number(r[0].values[0][0]) : 0;
+	}
+
+	/** 队列诊断（debug 工具）：action×status 计数、同一笔记多条 pending
+	 *  （反复入队的直接证据）、最老 pending 行年龄。定位「无新文档却
+	 *  一直索引」：残留行跨重载存活、扫描只清 completed/failed。 */
+	queueDiagnostics(): {
+		byActionStatus: Array<{ action: string; status: string; count: number }>;
+		duplicatePending: Array<{ notePath: string; rows: number }>;
+		oldestPendingAgeSec: number | null;
+	} {
+		const byActionStatus: Array<{ action: string; status: string; count: number }> = [];
+		const r1 = this.db!.exec("SELECT action, status, COUNT(*) FROM queue GROUP BY action, status ORDER BY COUNT(*) DESC");
+		if (r1.length > 0) {
+			for (const row of r1[0].values) {
+				byActionStatus.push({ action: String(row[0]), status: String(row[1]), count: Number(row[2]) });
+			}
+		}
+		const duplicatePending: Array<{ notePath: string; rows: number }> = [];
+		const r2 = this.db!.exec(
+			"SELECT note_path, COUNT(*) FROM queue WHERE status = 'pending' GROUP BY note_path HAVING COUNT(*) > 1 ORDER BY COUNT(*) DESC LIMIT 10",
+		);
+		if (r2.length > 0) {
+			for (const row of r2[0].values) {
+				duplicatePending.push({ notePath: String(row[0]), rows: Number(row[1]) });
+			}
+		}
+		let oldestPendingAgeSec: number | null = null;
+		const r3 = this.db!.exec("SELECT MIN(created_at) FROM queue WHERE status = 'pending'");
+		if (r3.length > 0 && r3[0].values.length > 0 && r3[0].values[0][0]) {
+			oldestPendingAgeSec = Math.max(0, Math.round((Date.now() - Number(r3[0].values[0][0])) / 1000));
+		}
+		return { byActionStatus, duplicatePending, oldestPendingAgeSec };
 	}
 
 	getAllIndexedPaths(): Set<string> {

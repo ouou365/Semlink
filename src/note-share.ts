@@ -14,8 +14,20 @@
 import { App, Component, Notice, TFile } from "obsidian";
 import { ShareServer } from "./share-server";
 import { ShareQrModal } from "./share-modal";
-import { renderSharePage, renderMarkdownChunked } from "./share-page";
-import { t } from "./i18n";
+import { renderSharePage, renderMarkdownChunked, type ShareTheme } from "./share-page";
+import { getLang, t } from "./i18n";
+
+/** 分享者的当前 Obsidian 基础主题 → 分享页主题 token。读 body class——
+ *  "跟随系统" 模式下这是唯一权威（appearance.theme 可能是 "system"）。
+ *  锁进 URL（?theme=..）：访客页面深浅与分享者所见一致。 */
+function currentShareTheme(): ShareTheme {
+	return document.body.classList.contains("theme-dark") ? "dark" : "light";
+}
+
+/** 与聊天分享路径同款 query 语义（lang + theme 锁进链接）。 */
+function shareQuery(): string {
+	return `lang=${getLang()}&theme=${currentShareTheme()}`;
+}
 
 export class NoteShare {
 	constructor(
@@ -64,7 +76,7 @@ export class NoteShare {
 			[{ role: "assistant", content, timestamp: sharedAt }],
 			path.split("/").pop()?.replace(/\.[^.]+$/, "") || path,
 			this.component,
-			"light",
+			currentShareTheme(),
 			sharedAt,
 			html,
 		);
@@ -98,8 +110,9 @@ export class NoteShare {
 				await this.renderPage(path, content, Date.now(), (done, total) => modal.setProgress(done, total)),
 			);
 			// Register caches the snapshot; re-share refreshes it to CURRENT
-			// content while the URL stays stable.
-			modal.setUrl(this.server.urls(token)[0]);
+			// content while the URL stays stable. Query 锁 lang+theme（与聊天
+			// 分享同款）：访客页面深浅跟随分享者当前主题。
+			modal.setUrl(this.server.urls(token, shareQuery())[0]);
 		} catch (e) {
 			modal.setError(e instanceof Error ? e.message : String(e));
 			return;
@@ -118,7 +131,7 @@ export class NoteShare {
 			return;
 		}
 		new ShareQrModal(this.app, {
-			url: this.server.urls(token)[0],
+			url: this.server.urls(token, shareQuery())[0],
 			name: path.split("/").pop()?.replace(/\.[^.]+$/, "") || path,
 			onRevoke: () => {
 				this.revoke(path);

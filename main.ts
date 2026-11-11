@@ -51,6 +51,16 @@ export default class SmartVaultPlugin extends Plugin {
 	 *  startMcpServer 成功置 null、失败写 err.message，MCP 设置页据此
 	 *  把内置服务行渲染成「连接失败」态并展示原因。 */
 	mcpLastError: string | null = null;
+	/** RAG 统计快照（瞬态，不进 data.json）：启动 DB 就绪后播种（与状态栏
+	 *  同一趟查询）、索引完成回写、设置页成功查询写透。设置页 RAG tab
+	 *  首帧用它直出 Indexed/Embedded/Skipped/hero%，不再空「—」等 DB
+	 *  往返；后台 refreshStats 照跑纠偏，快照最多滞后一轮。 */
+	ragStatsCache: { indexedNotes: number; embeddedNotes: number; skippedNotes: number; ready: boolean } = {
+		indexedNotes: 0,
+		embeddedNotes: 0,
+		skippedNotes: 0,
+		ready: false,
+	};
 	/** LAN share server for conversation snapshots. Token↔session pairs
 	 *  persist in data/share-registry.json and the port in settings, so a
 	 *  share URL keeps working across restarts (unchanged IP); page HTML is
@@ -214,6 +224,9 @@ export default class SmartVaultPlugin extends Plugin {
 				// Always refresh on completion so the final count is shown.
 				this.lastStatusBarUpdate = Date.now();
 				this.updateStatusBar(this.progress.current);
+				// 完成即回写 RAG 统计快照：索引/删除/重分块后设置页打开
+				// 就是新值（fire-and-forget，失败等下一个播种点）。
+				void this.refreshRagStatsCache();
 			} else if (event.type === "progress") {
 				const now = Date.now();
 				if (now - this.lastStatusBarUpdate >= 500) {
@@ -627,7 +640,8 @@ export default class SmartVaultPlugin extends Plugin {
 			(path, line) => this.runDebugJump(path, line),
 			(opts) => this.runDebugMeasure(opts),
 			(opts) => this.runDebugShot(opts),
-			() => this.runDebugStats(),
+			(opts) => this.runDebugStats(opts),
+			(opts) => this.runDebugUi(opts),
 		);
 		try {
 			await server.start();
@@ -639,18 +653,68 @@ export default class SmartVaultPlugin extends Plugin {
 	}
 
 	/** stats 工具执行器：RAG 卡四格（Indexed/Embedded/Skipped/Excluded）+
-	 *  块统计 + 应索引总数 + 运行状态——监控/对账索引进度用。 */
-	private async runDebugStats(): Promise<unknown> {
+	 *  块统计 + 进度弹窗卡片全字段 + 队列诊断——免截图直接读索引卡片
+	 *  数值。op="save"/"compact" 触发补救动作（全量导出有成本，慢库
+	 *  慎用；compact 适合刚重载、库还在磁盘尺寸时跑一次）。 */
+	private async runDebugStats(opts?: { op?: string }): Promise<unknown> {
+		const op = opts?.op?.toLowerCase();
+		if (op === "save" || op === "compact") {
+			const t0 = Date.now();
+			try {
+				if (op === "compact") await this.store.compact();
+				else await this.store.save();
+				return { op, done: true, durationMs: Date.now() - t0 };
+			} catch (e) {
+				return { op, done: false, error: e instanceof Error ? e.message : String(e), durationMs: Date.now() - t0 };
+			}
+		}
+		if (op === "resetopfsdb") {
+			try {
+				const r = await this.store.resetOpfsDb();
+				return { op, ...r, note: "reload now — seedDb will re-seed OPFS from the disk vault.db" };
+			} catch (e) {
+				return { op, error: e instanceof Error ? e.message : String(e) };
+			}
+		}
+		if (op) return { error: `unknown op "${op}" (save | compact | resetOpfsDb)` };
 		const stats = await this.store.getStats();
-		const [embedded, skipped] = await Promise.all([
+		// 存储模式诊断：空索引 + 大磁盘库 = 上游加载失败（worker 初始化
+		// 失败掉进 browser-worker/sync 空库、或加载抛错）——定位「索引清零」。
+		let diskDbSizeMb: number | null = null;
+		try {
+			const req2 = (window as unknown as { require?: (m: string) => unknown }).require;
+			const fsMod = req2?.("fs") as { statSync(p: string): { size: number } } | undefined;
+			if (fsMod) diskDbSizeMb = Math.round(fsMod.statSync(this.pluginDir + "/data/vault.db").size / 1048576);
+		} catch { /* 文件不存在等 */ }
+		const [embedded, skipped, queue, vectorlessTotal, vectorlessSample, queueDiag] = await Promise.all([
 			this.store.getEmbeddedNoteCount(),
 			this.store.getEmbedSkippedNoteCount(),
+			this.scheduler.queueCounts(),
+			this.store.countVectorlessNotes(),
+			this.store.listVectorlessNotes(8),
+			this.store.queueDiagnostics(),
 		]);
 		const indexable = this.scheduler.countIndexableNotes();
 		const vaultMd = this.app.vault.getMarkdownFiles().length;
 		const excluded = Math.max(0, vaultMd - indexable);
 		const p = this.progress.current;
 		return {
+			storage: {
+				mode: this.store.storageMode,
+				nodeWorkerError: this.store.lastNodeWorkerError,
+				diskDbSizeMb,
+				memoryChunks: stats.totalChunks,
+				// 空内存库 + 大磁盘库 = 加载失败（空库保险丝会拒绝 save 覆盖）
+				loadMismatch: stats.totalChunks === 0 && (diskDbSizeMb ?? 0) > 100,
+				// browser-worker 模式：OPFS 命名空间清单 + SQLite 头探测——
+				// 确认原索引还在命名空间里可救、判断是「被清空」还是「加载失败」。
+				opfs: this.store.storageMode === "browser-worker"
+					? {
+						files: await this.store.fsList().catch((e) => ({ error: String(e) })),
+						probe: await this.store.fsProbe().catch((e) => ({ error: String(e) })),
+					}
+					: undefined,
+			},
 			cells: {
 				indexed: stats.indexedNotes,
 				embedded,
@@ -673,6 +737,50 @@ export default class SmartVaultPlugin extends Plugin {
 				isPaused: p.isPaused,
 				embeddedChunks: p.embeddedChunks,
 			},
+			// 进度弹窗卡片（Semlink Index Progress）的全部数值：
+			modal: {
+				phase: p.phase,
+				progress: `${p.processedNotes} / ${p.totalNotes}`,
+				embeddedChunks: p.embeddedChunks,
+				failedChunks: p.failedChunks,
+				skippedChunks: p.skippedChunks,
+				currentFile: p.currentFile || null,
+				activeFiles: p.activeFiles,
+				fileChunkProgress: p.fileChunkProgress || null,
+				avgResponseMs: p.avgResponseMs,
+				network: p.networkStatus,
+				consecutiveFailures: p.consecutiveFailures,
+				backoffRemainingSec: p.backoffRemainingSec,
+				lastError: p.lastError || null,
+				isPaused: p.isPaused,
+				isAutoPaused: p.isAutoPaused,
+				startedAt: p.startedAt || null,
+				etaSec: p.estimatedRemainingSec,
+				hnswNodeCount: p.hnswNodeCount,
+				dbSizeMb: p.dbSizeMb,
+			},
+			queue,
+			// 队列深诊断：pending 残留行（跨重载存活，扫描只清
+			// completed/failed）、同一笔记多条 pending（反复入队证据）、
+			// 最老 pending 年龄。
+			queueDiag,
+			// 整篇无向量的笔记（稀疏块无向量是设计行为，整篇无向量才可疑
+			// ——「一直嵌入」可能由反复补嵌这些笔记驱动）。
+			vectorless: {
+				total: vectorlessTotal,
+				sample: vectorlessSample,
+			},
+			// 静默对账（setupSilentReconcile）状态：获焦/启动都会触发全量
+			// 扫描——「无新文档却一直索引」先看这里的触发节奏。
+			reconcile: {
+				autoIndex: this.settings.autoIndex,
+				lastFocusReconcileAt: this.lastFocusReconcile || null,
+				lastFocusReconcileAgoSec: this.lastFocusReconcile ? Math.round((Date.now() - this.lastFocusReconcile) / 1000) : null,
+				schedulerBusy: this.scheduler.isRunning,
+				// phase 停在 running 集合但 busy=false = 进度条残留态
+				phaseIsStale: !this.scheduler.isRunning && ["scanning", "chunking", "embedding", "building_index"].includes(p.phase),
+			},
+			pendingSample: await this.scheduler.debugPendingMtimeSample(),
 		};
 	}
 
@@ -2424,6 +2532,116 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 	}
 
+	/** ui 执行器：通用 DOM 级界面交互（query/click/type）。文档收集 = 主窗 +
+	 *  全部 leaf 的 ownerDocument（popout 窗口各自一份 document；modal 挂在
+	 *  所在窗的 body 上，随窗覆盖）。可见判定 = getBoundingClientRect 非零
+	 *  （display:none / 未激活 tab 零尺寸被过滤）。文本匹配取最内层命中——
+	 *  外层行与内层按钮同时含文本时只留内层，点它才走真按钮处理器。
+	 *  跨 realm 注意：popout 元素不能 instanceof 主窗构造函数，一律用
+	 *  tagName / isContentEditable 判定，value setter 取元素自己 realm 的原型。 */
+	private async runDebugUi(opts?: { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string }): Promise<unknown> {
+		const action = (opts?.action ?? "query").toLowerCase();
+		const sel = opts?.selector?.trim() ?? "";
+		const text = opts?.text?.trim() ?? "";
+		const idx = typeof opts?.index === "number" ? Math.max(0, Math.floor(opts.index)) : 0;
+		const docFilter = opts?.doc?.trim().toLowerCase() ?? "";
+		if (action !== "query" && action !== "click" && action !== "type") {
+			return { error: `unknown action "${action}" (query | click | type)` };
+		}
+		if (action === "type" && !sel) return { error: "type needs a selector (input target)" };
+		if (!sel && !text) return { error: "ui needs a selector and/or text" };
+
+		const docs = new Set<Document>([window.document]);
+		this.app.workspace.iterateAllLeaves((leaf) => {
+			const el = (leaf as unknown as { containerEl?: HTMLElement }).containerEl
+				?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl;
+			if (el?.ownerDocument) docs.add(el.ownerDocument);
+		});
+
+		interface UiMatch {
+			doc: string;
+			tag: string;
+			cls: string;
+			text: string;
+			rect: { x: number; y: number; w: number; h: number };
+			el: Element;
+		}
+		const matches: UiMatch[] = [];
+		for (const doc of docs) {
+			let found: Element[];
+			try {
+				found = sel ? Array.from(doc.querySelectorAll(sel)) : Array.from(doc.querySelectorAll("*"));
+			} catch (e) {
+				return { error: `bad selector: ${e instanceof Error ? e.message : String(e)}` };
+			}
+			const lower = text.toLowerCase();
+			for (const el of found) {
+				if (text && !(el.textContent ?? "").trim().toLowerCase().includes(lower)) continue;
+				const r = el.getBoundingClientRect();
+				if (r.width <= 0 || r.height <= 0) continue;
+				const docName = doc === window.document ? "main" : "popout";
+				// doc 过滤：同名按钮/文本在主窗与 popout 各有一份时精确定位
+				if (docFilter && docName !== docFilter) continue;
+				matches.push({
+					doc: docName,
+					tag: el.tagName.toLowerCase(),
+					cls: el.getAttribute("class") ?? "",
+					text: (el.textContent ?? "").trim().slice(0, 80),
+					rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+					el,
+				});
+			}
+		}
+		if (text) {
+			// 只留最内层：没有更深的命中包含在自己里面
+			for (let i = matches.length - 1; i >= 0; i--) {
+				const m = matches[i];
+				if (matches.some((o) => o !== m && m.el.contains(o.el))) matches.splice(i, 1);
+			}
+		}
+		const info = matches.map(({ el, ...rest }) => rest);
+
+		if (action === "query") return { action, count: matches.length, matches: info };
+		const m = matches[idx];
+		if (!m) {
+			return { error: `visible match index ${idx} out of range (${matches.length} matches)`, matches: info };
+		}
+		if (action === "click") {
+			const el = m.el as HTMLElement;
+			if (typeof el.click === "function") el.click();
+			else el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+			return { action, clicked: info[idx] };
+		}
+		// type：input/textarea/select/contenteditable 统一入口。赋值走元素
+		// 自己 realm 的原型 setter（兼容 value-tracker 类框架），再补
+		// input+change 事件——与真实编辑等价。
+		const el = m.el;
+		const value = opts?.value ?? "";
+		const win = el.ownerDocument.defaultView as unknown as {
+			HTMLInputElement?: { prototype: Record<string, unknown> };
+			HTMLTextAreaElement?: { prototype: Record<string, unknown> };
+		};
+		const tag = el.tagName;
+		if (tag === "INPUT" || tag === "TEXTAREA") {
+			const proto = tag === "TEXTAREA" ? win.HTMLTextAreaElement?.prototype : win.HTMLInputElement?.prototype;
+			const setter = proto ? Object.getOwnPropertyDescriptor(proto, "value")?.set : null;
+			if (setter) setter.call(el, value);
+			else (el as HTMLInputElement).value = value;
+			el.dispatchEvent(new Event("input", { bubbles: true }));
+			el.dispatchEvent(new Event("change", { bubbles: true }));
+		} else if (tag === "SELECT") {
+			(el as HTMLSelectElement).value = value;
+			el.dispatchEvent(new Event("change", { bubbles: true }));
+		} else if ((el as HTMLElement).isContentEditable) {
+			(el as HTMLElement).focus();
+			(el as HTMLElement).textContent = value;
+			el.dispatchEvent(new Event("input", { bubbles: true }));
+		} else {
+			return { error: "target is not an input/textarea/select/contenteditable", matched: info[idx] };
+		}
+		return { action, typed: info[idx], value };
+	}
+
 	private runDebugReload(): void {
 		// commands 在当前 obsidian 类型里未公开，与 setting 等内部 API 同款断言
 		(this.app as unknown as { commands: { executeCommandById(id: string): void } })
@@ -2530,8 +2748,9 @@ export default class SmartVaultPlugin extends Plugin {
 
 	// ──── Indexing ────
 
-	/** 获焦对账上次触发时间（节流用）。 */
-	private lastFocusReconcile = 0;
+	/** 获焦对账上次触发时间（节流用；debug 工具读数——判断「一直索引」
+	 *  是否由获焦对账反复触发全量扫描）。 */
+	lastFocusReconcile = 0;
 
 	/** 静默对账：mtime 增量全扫（scanVault），未变更文件零成本跳过，只有
 	 *  新增/变更文件真正分块嵌入。兜住 watcher 收不到的事件——Obsidian
@@ -2698,7 +2917,23 @@ export default class SmartVaultPlugin extends Plugin {
 					stats.activeChunks,
 					Math.max(this.progress.current.totalNotes, stats.indexedNotes),
 				);
+				// 同一趟顺路播种 RAG 统计快照（并行补 Embedded/Skipped 两查，
+				// 失败静默）：此后设置页 RAG tab 打开即有值，不等 DB 往返。
+				void this.refreshRagStatsCache();
 			}
 		}
+	}
+
+	/** RAG 统计快照刷新（三查并行）：失败静默保旧值——worker 未就绪/繁忙
+	 *  时由设置页自身的退避重试兜底，快照只求「大概率新鲜」，不求强一致。 */
+	async refreshRagStatsCache(): Promise<void> {
+		try {
+			const [s, embeddedNotes, skippedNotes] = await Promise.all([
+				this.store.getStats(),
+				this.store.getEmbeddedNoteCount(),
+				this.store.getEmbedSkippedNoteCount(),
+			]);
+			this.ragStatsCache = { indexedNotes: s.indexedNotes, embeddedNotes, skippedNotes, ready: true };
+		} catch { /* 保旧值，等下一个播种点（完成事件/设置页写透） */ }
 	}
 }

@@ -36,6 +36,7 @@ export class Scheduler {
 	}
 	private saveInterval = 40; // 每处理 N 个笔记存盘一次（sync 模式下 save 是全量导出，代价很高）
 	private lastSaveAt = 0; // 上次存盘时刻 — sync 模式下两次全量导出之间至少隔 20s
+	private saveGapMs = 20000; // 当前两次存盘的最小间隔（慢导出自适应退避，见 maybeSaveAsync）
 	private processedSinceSave = 0;
 	/** Guards backfillDocVectors against concurrent runs (onload + manual index). */
 	private backfilling = false;
@@ -178,6 +179,57 @@ export class Scheduler {
 		return this.vault.getMarkdownFiles()
 			.filter((f) => f.stat.size > 0 && !this.isExcluded(f.path, excludePatterns))
 			.length;
+	}
+
+	/** 队列四计数（debug 工具读数用）：pending 持续增长 = 有东西在反复
+	 *  入队，是「无新文档却一直索引」类问题的第一诊断信号。 */
+	async queueCounts(): Promise<{ pending: number; processing: number; failed: number; completed: number }> {
+		return this.queue.getCounts();
+	}
+
+	/** pending 队列 mtime 取样（debug 工具诊断用）：vault 文件 mtime vs
+	 *  库内 chunk mtime 的差值——delta 以分钟计且巨大 = 外部工具批量摸
+	 *  文件（mtime 被顶新）或库内 mtime 陈旧；delta≈0 = 刚被 watcher
+	 *  入队的真实修改。前 2 条另做现算分块 vs 库存分块的逐块比对
+	 *  （contentMatch），定位 update 短路为何未命中。 */
+	async debugPendingMtimeSample(limit = 5): Promise<Array<{ path: string; vaultMtime: number | null; storedMtime: number | null; deltaMin: number | null; contentMatch?: { freshChunks: number; storedChunks: number; firstDiffIdx: number; freshLen: number; storedLen: number } }>> {
+		const paths = await this.queue.getPendingPaths();
+		const out: Array<{ path: string; vaultMtime: number | null; storedMtime: number | null; deltaMin: number | null; contentMatch?: { freshChunks: number; storedChunks: number; firstDiffIdx: number; freshLen: number; storedLen: number } }> = [];
+		for (let i = 0; i < paths.length && i < limit; i++) {
+			const p = paths[i];
+			const f = this.vault.getAbstractFileByPath(p);
+			const vaultMtime = f instanceof TFile ? f.stat.mtime : null;
+			const storedMtime = await this.store.getNoteMtime(p);
+			const row: out[number] = {
+				path: p,
+				vaultMtime,
+				storedMtime,
+				deltaMin: vaultMtime != null && storedMtime != null ? Math.round((vaultMtime - storedMtime) / 60000) : null,
+			};
+			// 前 2 条：重读文件现算分块，与库存块逐条比内容（只报首个差异
+			// 索引与两侧长度——足以区分「参数变了」「分块算法变了」「内容变了」）
+			if (i < 2 && f instanceof TFile) {
+				try {
+					const content = await this.vault.read(f);
+					const fresh = await this.store.chunk(content, p, this.settings.chunkSize, this.settings.chunkOverlap);
+					const stored = await this.store.getChunksByNotePath(p);
+					let firstDiffIdx = -1;
+					for (let k = 0; k < Math.min(fresh.length, stored.length); k++) {
+						if (fresh[k].content !== stored[k].content) { firstDiffIdx = k; break; }
+					}
+					if (firstDiffIdx < 0 && fresh.length !== stored.length) firstDiffIdx = Math.min(fresh.length, stored.length);
+					row.contentMatch = {
+						freshChunks: fresh.length,
+						storedChunks: stored.length,
+						firstDiffIdx,
+						freshLen: firstDiffIdx >= 0 && firstDiffIdx < fresh.length ? fresh[firstDiffIdx].content.length : -1,
+						storedLen: firstDiffIdx >= 0 && firstDiffIdx < stored.length ? stored[firstDiffIdx].content.length : -1,
+					};
+				} catch { /* 诊断取样失败不阻塞主流程 */ }
+			}
+			out.push(row);
+		}
+		return out;
 	}
 
 	/**
@@ -323,15 +375,29 @@ export class Scheduler {
 		const content = await this.vault.read(file);
 		const mtime = file.stat.mtime;
 
-		// For updates: mark old chunks as stale
-		if (action === "update") {
-			await this.store.markChunksStale(notePath);
-		}
-
 		// Chunk the note — runs in the worker thread so large-file string
 		// processing doesn't block the UI while typing.
 		this.progress.setPhase("chunking");
 		const chunks = await this.store.chunk(content, notePath, this.settings.chunkSize, this.settings.chunkOverlap);
+
+		// 内容未变短路（先比对再标记 stale）：扫描只看 mtime——外部同步
+		// 工具/系统批量摸文件（真机实测单次启动 902/1142 篇被判「已修改」）
+		// 会把全部笔记送进重嵌管线。重分块后与库存块逐块比对，完全相同
+		// 则只推 mtime 让扫描恢复 unchanged 判定，零 API 调用。
+		if (action === "update" && chunks.length > 0) {
+			const existing = await this.store.getChunksByNotePath(notePath);
+			const identical = existing.length === chunks.length &&
+				existing.every((c, i) => c.content === chunks[i].content);
+			if (identical) {
+				await this.store.touchNoteMtime(notePath, mtime);
+				return false;
+			}
+		}
+
+		// For updates: mark old chunks as stale
+		if (action === "update") {
+			await this.store.markChunksStale(notePath);
+		}
 
 		if (chunks.length === 0) {
 			// 空文件（用户拍板"嵌入进度要包含已跳过"）：无分块、永远不会产生
@@ -627,11 +693,23 @@ export class Scheduler {
 		this.processedSinceSave++;
 		// A full-DB export blocks the main thread for seconds in sync mode —
 		// space saves out in time as well as note count.
-		if (Date.now() - this.lastSaveAt < 20000) return;
+		if (Date.now() - this.lastSaveAt < this.saveGapMs) return;
 		if (this.processedSinceSave >= this.saveInterval) {
 			await this.yieldControl();
+			const t0 = Date.now();
 			await this.store.save();
+			const durMs = Date.now() - t0;
 			this.lastSaveAt = Date.now();
+			// 慢导出自适应退避：sql.js save = 全库导出，库到几百 MB 后一次
+			// 导出可达分钟级（真机实测：vault.db 自 10/17 起从未写成、worker
+			// 3.5 核持续空转、索引器整体楔死）。导出越慢下次间隔越长，
+			// 20s → 80s → 320s → 封顶 30min；导出恢复快则回到 20s。
+			if (durMs > 15000) {
+				this.saveGapMs = Math.min(this.saveGapMs * 4, 30 * 60000);
+				debugLog(`[Semlink] save took ${(durMs / 1000).toFixed(1)}s — backing off to ${(this.saveGapMs / 1000).toFixed(0)}s gap`);
+			} else {
+				this.saveGapMs = 20000;
+			}
 			const stats = await this.store.getStats();
 			this.progress.setDbSizeMb(stats.dbSizeMb);
 			this.processedSinceSave = 0;

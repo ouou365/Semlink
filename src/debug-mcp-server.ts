@@ -24,8 +24,21 @@ export type DebugMeasureRunner = (opts?: { popout?: boolean }) => Promise<unknow
 export type DebugShotRunner = (opts?: { target?: string | number; resize?: { index?: number; width: number; height: number } }) => Promise<unknown>;
 
 /** stats 工具执行器：由 main.ts 注入——回报 RAG 卡四格（Indexed/Embedded/
- *  Skipped/Excluded）+ 块统计 + 运行状态。 */
-export type DebugStatsRunner = () => Promise<unknown>;
+ *  Skipped/Excluded）+ 块统计 + 运行状态；op 参数触发补救动作
+ *  （save/compact——大库全量导出有成本，见 db-engine）。 */
+export type DebugStatsRunner = (opts?: { op?: string }) => Promise<unknown>;
+
+/** ui 工具执行器：由 main.ts 注入——在插件可见的各窗口文档（主窗 +
+ *  popout）里按 CSS 选择器/可见文本查找元素并交互（query/click/type）。
+ *  通用的界面交互入口：新走查不再需要给 measure 加一次性 boolean 开关。 */
+export type DebugUiRunner = (opts?: {
+	action?: string;
+	selector?: string;
+	text?: string;
+	value?: string;
+	index?: number;
+	doc?: string;
+}) => Promise<unknown>;
 
 interface JsonRpcRequest {
 	jsonrpc: "2.0";
@@ -151,6 +164,30 @@ const SHOT_TOOL = {
 	},
 };
 
+const UI_TOOL = {
+	name: "ui",
+	description:
+		"Interact with the plugin UI directly at the DOM level (runs inside the " +
+		"Obsidian renderer, across the main window and popout windows): query " +
+		"elements by CSS selector or visible text, click them, or type into " +
+		"inputs. Returns every match with tag/classes/text/rect/visibility so " +
+		"you can pick an index. Prefer this over OS-level UI automation — " +
+		"selectors are the plugin's own class names (.semlink-*). Typical " +
+		"walkthrough: ui{action:\"click\",selector:...} then shot to inspect.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			action: { type: "string", description: "\"query\" (default: report matches only) | \"click\" | \"type\"." },
+			selector: { type: "string", description: "CSS selector. Optional for click when `text` is given instead." },
+			text: { type: "string", description: "Visible-text match (substring, trimmed): clicked/queried element whose textContent contains this. Use alone (no selector) or as a filter on query results." },
+			value: { type: "string", description: "Value to set (action=\"type\"): input/textarea/select value or contenteditable text; dispatches input+change like real editing." },
+			index: { type: "number", description: "Which visible match to act on (0-based, default 0). query returns all matches; pick the index from its output." },
+			doc: { type: "string", description: "Restrict to one window document: \"main\" or \"popout\" — same-named buttons exist in both when a popout is open." },
+		},
+		required: [],
+	},
+};
+
 const RELOAD_TOOL = {
 	name: "reload",
 	description:
@@ -167,10 +204,22 @@ const STATS_TOOL = {
 	description:
 		"Report the RAG index stats shown on the settings card: the four stat " +
 		"cells (Indexed / Embedded / Skipped / Excluded notes), chunk counts, " +
-		"the indexable-note total (card denominator) and the live run state " +
-		"(phase / processed). Use it to monitor indexing progress or verify " +
-		"the numbers match the UI.",
-	inputSchema: { type: "object", properties: {}, required: [] },
+		"the indexable-note total (card denominator). Also returns the FULL " +
+		"progress-modal card (Semlink Index Progress) as plain data — phase, " +
+		"processed/total, embedded chunks, failed, skipped, current file, " +
+		"active files, avg response, network health, failures/backoff/last " +
+		"error, pause state, ETA — plus index queue diagnostics (pending rows " +
+		"by action, duplicate pending paths, oldest pending age), the silent " +
+		"reconcile trigger state, the whole-vault vectorless-note census and a " +
+		"pending-row mtime/content sample. Read this instead of taking " +
+		"screenshots when monitoring or debugging indexing.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			op: { type: "string", description: "Optional remediation action instead of a plain read: \"save\" (persist the in-memory DB — a full export, slow on large DBs) or \"compact\" (VACUUM + save, reclaims ghost pages once; run right after a reload while the DB is at its on-disk size)." },
+		},
+		required: [],
+	},
 };
 
 export class DebugMcpServer {
@@ -181,7 +230,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -274,7 +323,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -290,9 +339,11 @@ export class DebugMcpServer {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runJump?.(jp, jl)) ?? { error: "no jump runner" }, null, 2) }] };
 					} else if (params.name === "measure") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean; forcePro?: boolean } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
-						} else if (params.name === "stats") {
-						result = { content: [{ type: "text", text: JSON.stringify((await this.runStats?.()) ?? { error: "no stats runner" }, null, 2) }] };
-					} else if (params.name === "shot") {
+					} else if (params.name === "stats") {
+							result = { content: [{ type: "text", text: JSON.stringify((await this.runStats?.(params.arguments as { op?: string } | undefined)) ?? { error: "no stats runner" }, null, 2) }] };
+						} else if (params.name === "ui") {
+							result = { content: [{ type: "text", text: JSON.stringify((await this.runUi?.(params.arguments as { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string } | undefined)) ?? { error: "no ui runner" }, null, 2) }] };
+						} else if (params.name === "shot") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runShot?.(params.arguments as { target?: string | number; resize?: { index?: number; width: number; height: number } } | undefined)) ?? { error: "no shot runner" }, null, 2) }] };
 						} else {
 						result = await this.handleAsk(params);

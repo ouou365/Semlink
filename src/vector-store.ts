@@ -51,6 +51,8 @@ export class VectorStore {
 	private pending = new Map<number, PendingRequest>();
 	private fallback = false;
 	private browserWorker: Worker | null = null;
+	/** node worker 初始化失败原因（诊断：「为什么掉进 browser-worker」。 */
+	lastNodeWorkerError: string | null = null;
 
 	// Synchronous engine used only on the fallback path.
 	private engine: DbEngine | null = null;
@@ -76,8 +78,11 @@ export class VectorStore {
 			try {
 				await this.initWorker();
 				return;
-			} catch {
-				debugLog("node worker_threads unavailable in the renderer — using the browser worker instead");
+			} catch (e) {
+				// 失败原因必须可见（真机 2026-11-11：node worker 静默回退到
+				// browser-worker/OPFS，索引"清零"半天查不到原因）。
+				console.error("[Semlink] node worker init failed — falling back to browser worker:", e);
+				this.lastNodeWorkerError = e instanceof Error ? e.message : String(e);
 			}
 		}
 		if (this.browserWorkerUrl && typeof Worker !== "undefined") {
@@ -146,13 +151,23 @@ export class VectorStore {
 		this.browserWorker = w;
 		// One-time seed: copy the legacy disk DB into the worker OPFS so the
 		// existing index survives the switch. The worker skips this if its
-		// own copy already exists (never overwrite a newer OPFS index).
+		// own copy already exists (never overwrite a newer OPFS index) —
+		// unless a `reseed.requested` marker file sits in the data dir
+		// (recovery flow: overwrite OPFS with the disk DB once, marker
+		// self-deletes after).
 		try {
 			const fsMod = (window as unknown as { require?: (id: string) => typeof import("fs") }).require?.("fs");
 			const dbPath = join(this.dataDir, "vault.db");
+			const markerPath = join(this.dataDir, "reseed.requested");
+			const forceSeed = fsMod?.existsSync(markerPath) ?? false;
 			if (fsMod?.existsSync(dbPath)) {
-				await this.call("seedDb", [new Uint8Array(fsMod.readFileSync(dbPath))]);
+				const res = await this.call<{ seeded: boolean; force: boolean; existingBytes: number; seedBytes: number }>(
+					"seedDb",
+					[new Uint8Array(fsMod.readFileSync(dbPath)), forceSeed],
+				);
+				debugLog(`[Semlink] OPFS seed: ${JSON.stringify(res)}`);
 			}
+			if (forceSeed) fsMod?.unlinkSync(markerPath);
 		} catch (seedErr) {
 			console.warn("[Semlink] OPFS seed skipped:", seedErr);
 		}
@@ -219,12 +234,15 @@ export class VectorStore {
 			case "deleteStaleChunks": return e.deleteStaleChunks(args[0] as string);
 			case "renameNotePath": return e.renameNotePath(args[0] as string, args[1] as string);
 			case "getNoteMtime": return e.getNoteMtime(args[0] as string);
+			case "touchNoteMtime": return e.touchNoteMtime(args[0] as string, args[1] as number);
 			case "getAllIndexedPaths": return e.getAllIndexedPaths();
 			case "pruneOrphanedPaths": return e.pruneOrphanedPaths(args[0] as Set<string>);
 			case "getStats": return e.getStats();
 			case "getEmbeddedNoteCount": return e.getEmbeddedNoteCount();
 			case "getEmbedSkippedNoteCount": return e.getEmbedSkippedNoteCount();
 			case "listVectorlessNotes": return e.listVectorlessNotes(args[0] as number | undefined);
+			case "countVectorlessNotes": return e.countVectorlessNotes();
+			case "queueDiagnostics": return e.queueDiagnostics();
 			case "listIndexedNotePaths": return e.listIndexedNotePaths();
 			case "markEmbedSkip": return e.markEmbedSkip(args[0] as string, args[1] as boolean);
 			case "backfillEmbedSkips": return e.backfillEmbedSkips();
@@ -314,6 +332,10 @@ export class VectorStore {
 	async getNoteMtime(notePath: string): Promise<number | null> {
 		return await this.call<number | null>("getNoteMtime", [notePath]);
 	}
+	/** 内容未变只推 mtime（update 短路用），避免无意义重嵌。 */
+	async touchNoteMtime(notePath: string, mtime: number): Promise<void> {
+		return await this.call<void>("touchNoteMtime", [notePath, mtime]);
+	}
 	async getAllIndexedPaths(): Promise<Set<string>> {
 		return await this.call<Set<string>>("getAllIndexedPaths");
 	}
@@ -353,6 +375,44 @@ export class VectorStore {
 	/** 诊断：缺向量笔记清单（见 db-engine.listVectorlessNotes）。 */
 	async listVectorlessNotes(limit = 10): Promise<Array<{ notePath: string; chunks: number }>> {
 		return await this.call<Array<{ notePath: string; chunks: number }>>("listVectorlessNotes", [limit]);
+	}
+	/** 诊断：缺向量笔记总数（整篇无向量才可疑；稀疏块无向量是设计行为）。 */
+	async countVectorlessNotes(): Promise<number> {
+		return await this.call<number>("countVectorlessNotes");
+	}
+	/** 诊断：队列 action×status 计数 + 重复 pending + 最老 pending 年龄。 */
+	async queueDiagnostics(): Promise<{
+		byActionStatus: Array<{ action: string; status: string; count: number }>;
+		duplicatePending: Array<{ notePath: string; rows: number }>;
+		oldestPendingAgeSec: number | null;
+	}> {
+		return await this.call("queueDiagnostics");
+	}
+
+	/** 诊断：OPFS 命名空间文件清单（仅 browser-worker 通道实现；sync 模式
+	 *  无 OPFS，直接报不可用）。排查「索引清零」时确认原库还在命名空间里。 */
+	async fsList(): Promise<Array<{ name: string; size: number }> | { error: string }> {
+		if (this.storageMode !== "browser-worker") {
+			return { error: `fsList is only available in browser-worker mode (current: ${this.storageMode})` };
+		}
+		return await this.call<Array<{ name: string; size: number }>>("fsList");
+	}
+
+	/** 诊断：解析 OPFS vault.db 的 SQLite 头（页数/空闲页）。 */
+	async fsProbe(): Promise<unknown> {
+		if (this.storageMode !== "browser-worker") {
+			return { error: `fsProbe is only available in browser-worker mode (current: ${this.storageMode})` };
+		}
+		return await this.call("fsProbe");
+	}
+
+	/** 补救：删除 OPFS 空壳 vault.db（0 行数据），让下次 init 的 seedDb
+	 *  重新从磁盘库播种。仅 browser-worker 模式可用。 */
+	async resetOpfsDb(): Promise<{ removed: boolean }> {
+		if (this.storageMode !== "browser-worker") {
+			throw new Error(`resetOpfsDb is only available in browser-worker mode (current: ${this.storageMode})`);
+		}
+		return await this.call<{ removed: boolean }>("fsResetDb");
 	}
 
 	async listIndexedNotePaths(): Promise<string[]> {

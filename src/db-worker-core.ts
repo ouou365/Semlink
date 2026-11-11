@@ -51,12 +51,15 @@ export function createDispatcher(): Dispatcher {
 			case "deleteStaleChunks": return engine.deleteStaleChunks(args[0] as string);
 			case "renameNotePath": return engine.renameNotePath(args[0] as string, args[1] as string);
 			case "getNoteMtime": return engine.getNoteMtime(args[0] as string);
+			case "touchNoteMtime": return engine.touchNoteMtime(args[0] as string, args[1] as number);
 			case "getAllIndexedPaths": return engine.getAllIndexedPaths();
 			case "pruneOrphanedPaths": return engine.pruneOrphanedPaths(args[0] as Set<string>);
 			case "getStats": return engine.getStats();
 			case "getEmbeddedNoteCount": return engine.getEmbeddedNoteCount();
 			case "getEmbedSkippedNoteCount": return engine.getEmbedSkippedNoteCount();
 			case "listVectorlessNotes": return engine.listVectorlessNotes(args[0] as number | undefined);
+			case "countVectorlessNotes": return engine.countVectorlessNotes();
+			case "queueDiagnostics": return engine.queueDiagnostics();
 			case "listIndexedNotePaths": return engine.listIndexedNotePaths();
 			case "markEmbedSkip": return engine.markEmbedSkip(args[0] as string, args[1] as boolean);
 			case "backfillEmbedSkips": return engine.backfillEmbedSkips();

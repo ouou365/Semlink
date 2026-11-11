@@ -303,7 +303,11 @@ html[data-theme="dark"] .msg.assistant .bubble.md pre{color:#c9cdd6}
    宽屏默认显示，toc-off 隐藏；窄屏（<1360px）大纲栏无常规落点，
    点按钮以右侧覆盖层强制显示（toc-force），不挤占卡片布局 */
 html.toc-off .toc{display:none !important}
-html.toc-force .toc.has-toc{display:block;position:fixed;right:14px;left:auto;top:72px;width:min(240px,calc(100vw - 32px));max-height:calc(100vh - 140px);overflow:auto;font-size:12.5px;line-height:1.5;padding:2px 8px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px -12px rgba(15,23,42,.25);z-index:50}
+/* toc-force（窄屏点按钮强制显示）：不再一律悬浮压在卡片上——卡片两侧
+   各有 (100vw-840)/2 的余量，目录宽度自适应缩进右缘余量（用户拍板
+   "明明左边还有大量空白，右侧目录不要悬浮"）。余量 < ~150px（窗口
+   <~1140）时 clamp 触底 120px，才真正覆盖卡片（极窄屏无解，保底可用）。 */
+html.toc-force .toc.has-toc{display:block;position:fixed;right:16px;left:auto;top:72px;width:clamp(120px,calc((100% - 840px)/2 - 32px),240px);max-height:calc(100vh - 140px);overflow:auto;font-size:12.5px;line-height:1.5;padding:2px 8px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px -12px rgba(15,23,42,.25);z-index:50}
 .toc-top{display:flex;align-items:center;gap:6px;padding:6px 10px 8px;margin-bottom:6px;border-bottom:1px dashed var(--line);color:var(--muted);text-decoration:none;cursor:pointer;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toc-top svg{width:13px;height:13px;flex:none}
 .toc-top:hover{color:var(--brand-ink)}

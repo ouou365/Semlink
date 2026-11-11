@@ -278,6 +278,7 @@ const en = {
 	ragGroupStatus: "Status",
 	ragGroupConfig: "Setup",
 	ragGroupMaintain: "Maintenance",
+	ragSetup: "Setup",
 	excludePathsShort: "Matched files stay out of the index",
 	excludePathCount: "{n} paths will be excluded",
 	excludePathsPlaceholder: "One per line, e.g. Attachments/",

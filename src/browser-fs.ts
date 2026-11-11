@@ -142,3 +142,28 @@ export function statSync(path: string): { size: number; isFile: () => boolean; m
 	const h = getHandle(path);
 	return { size: h.getSize(), isFile: () => true, mtimeMs: Date.now() };
 }
+
+/** OPFS 命名空间文件清单（诊断用）：名字 + 当前大小。engine 把加载失败
+ *  的库改名 vault.db.corrupt-* 备份后开空库——排查「索引清零」时用它
+ *  确认原库还躺在命名空间里可救。优先用已打开的 sync handle 取大小
+ *  （sync access handle 同一文件只能开一个，重开 throws）。 */
+export async function listFiles(): Promise<Array<{ name: string; size: number }>> {
+	await initBrowserFs();
+	const out: Array<{ name: string; size: number }> = [];
+	for await (const [name, handle] of rootDir!.entries()) {
+		if (handle.kind !== "file") continue;
+		const existing = handles.get(norm(name));
+		if (existing) {
+			let size = 0;
+			try { size = existing.getSize(); } catch { /* 不可读只报名字 */ }
+			out.push({ name, size });
+			continue;
+		}
+		let size = 0;
+		try {
+			size = (await (handle as unknown as FileHandleLike).createSyncAccessHandle()).getSize();
+		} catch { /* 句柄被占：只报名字 */ }
+		out.push({ name, size });
+	}
+	return out;
+}

@@ -605,10 +605,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 也应该更新呀"）。同步失败保持旧值（快照兜底）。
 		let liveTotal = totalNotes();
 
-		containerEl.createDiv({ cls: "semlink-card-title", text: t("ragGroupStatus") });
 		// 状态 = 单张卡（用户拍板"两个卡片可以合并"：索引/嵌入同源同节奏，
 		// 双卡双 hero 是冗余）：hero（含总数副行）+ 进度条 + 横排统计条
-		// + 自动索引开关。
+		// + 自动索引开关。组标题已去（用户拍板"去掉小标题"）。
 
 		// ── 块骨架：hero（标题 + spinner + 总数副行 + 大数字）→ 进度条（统计条/开关由调用处按序追加） ──
 		interface RagBlock {
@@ -674,21 +673,36 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// settings.autoEmbed 保留默认 true 的底层语义（调度器仍读它）。
 
 		// hero 大数字 = 百分比（封顶 100%）；总数未知（totalNotes=0）→「—」淡化。
+		// hero 徽章三态（用户拍板"索引完成则旋转图标改成完成✅"）：
+		// 运行中 = loader-2 旋转；完成（非运行且 100%）= check-circle 圆形✅；
+		// 全新空库（从未索引）= 无图标。heroDone 由 setHero 按分子==总数更新。
+		let heroDone = false;
+		let runningNow = RAG_RUNNING_PHASES.has(this.plugin.progress.current.phase);
+		const updateBadge = (): void => {
+			indexBlock.block.toggleClass("is-running", runningNow);
+			indexBlock.block.toggleClass("is-done", !runningNow && heroDone);
+			setIcon(spinEl, runningNow || !heroDone ? "loader-2" : "check-circle");
+		};
 		const setHero = (b: RagBlock, num: number): void => {
 			const total = liveTotal;
 			if (total === 0) {
 				b.valueEl.setText("—");
 				b.valueEl.addClass("is-empty");
 				b.fillEl.style.transform = "scaleX(0)";
+				heroDone = false;
+				updateBadge();
 				return;
 			}
 			const pct = Math.min(100, (num / total) * 100);
 			b.valueEl.setText(`${pct.toFixed(1)}%`);
 			b.valueEl.removeClass("is-empty");
 			b.fillEl.style.transform = `scaleX(${pct / 100})`;
+			heroDone = num >= total;
+			updateBadge();
 		};
 		const setRunning = (running: boolean): void => {
-			indexBlock.block.toggleClass("is-running", running);
+			runningNow = running;
+			updateBadge();
 			if (reindexRef) reindexRef.running = running;
 			const btn = reindexRef?.btn;
 			if (btn) {
@@ -741,6 +755,13 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				// （空文件/全稀疏）永远不会产生向量，但已被处理完——两者
 				// 相加恰为处理完成数，索引收尾时 hero 精确到 100%
 				setHero(indexBlock, embeddedNotes + skippedNotes);
+				// 写透快照：这次查询的值就是下次打开设置页的首帧缓存
+				Object.assign(this.plugin.ragStatsCache, {
+					indexedNotes: s.indexedNotes,
+					embeddedNotes,
+					skippedNotes,
+					ready: true,
+				});
 			} catch (e) {
 				if (attempt >= 8) {
 					console.warn("[Semlink] index stats unavailable:", e);
@@ -751,6 +772,15 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		};
 		setRunning(RAG_RUNNING_PHASES.has(this.plugin.progress.current.phase));
 		updateHeroSub();
+		// 首帧先用快照直出（plugin 启动播种/上次查询写透的 ragStatsCache）：
+		// 打开 RAG tab 不再空「—」等 DB 往返；下方 refreshStats 照跑纠偏。
+		const seed = this.plugin.ragStatsCache;
+		if (seed.ready) {
+			chunkedEl.setText(seed.indexedNotes.toLocaleString());
+			vectorizedEl.setText(seed.embeddedNotes.toLocaleString());
+			embedSkippedEl.setText(seed.skippedNotes.toLocaleString());
+			setHero(indexBlock, seed.embeddedNotes + seed.skippedNotes);
+		}
 		void refreshStats();
 
 		// 单一合并订阅：进度事件实时刷新运行态 + 总数（不依赖 DB）+ 数值行节流查库（≤1s 一次）
@@ -776,8 +806,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const reindexRef: { btn?: HTMLButtonElement; running?: boolean } = {};
 		this.renderIndexCard(containerEl, reindexRef);
 
-		// ── 组「配置」：嵌入模型 + 排除路径 ──
-		containerEl.createDiv({ cls: "semlink-card-title", text: t("ragGroupConfig") });
+		// ── 组「配置」：嵌入模型 + 排除路径（组标题已去，用户拍板） ──
 		const configCard = containerEl.createDiv({ cls: "semlink-card semlink-rag-card" });
 
 		// 配置了 Key 且带有嵌入模型的供应商 → 当前生效的模型/供应商
@@ -804,9 +833,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const modelBtn = modelRow.createDiv({ cls: "semlink-row-control" }).createEl("button", {
 			// 白色普通钮（用户拍板）：不再按配置态切换 primary/secondary
 			cls: "semlink-btn-ghost semlink-btn-white",
-			// 文案统一用「配置」（用户拍板"改成配置"）——与相邻排除路径行
-			// 的按钮同键（configure），未配置态仍用主色样式引导首次设置。
-			text: t("configure"),
+			// 文案统一用「Setup」（用户拍板"Configure 改成 Setup"）——与
+			// 相邻排除路径行的按钮同键（ragSetup）。
+			text: t("ragSetup"),
 		});
 		modelBtn.addEventListener("click", () => {
 			// 关闭设置页，打开侧边栏的向量检索配置引导
@@ -821,12 +850,12 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		excludeLabel.createDiv({ cls: "semlink-row-desc", text: t("excludePathsShort") });
 		const excludeBtn = excludeRow.createDiv({ cls: "semlink-row-control" }).createEl("button", {
 			cls: "semlink-btn-ghost semlink-btn-white",
-			text: t("configure"),
+			text: t("ragSetup"),
 		});
 		excludeBtn.addEventListener("click", () => new ExcludePathsModal(this.app, this.plugin).open());
 
-		// ── 组「维护」：重新索引（清空全部索引从 0 重建，破坏性带确认） ──
-		containerEl.createDiv({ cls: "semlink-card-title", text: t("ragGroupMaintain") });
+		// ── 组「维护」：重新索引（清空全部索引从 0 重建，破坏性带确认；
+		//    组标题已去，用户拍板） ──
 		const maintainCard = containerEl.createDiv({ cls: "semlink-card semlink-rag-card" });
 		const reindexRow = maintainCard.createDiv({ cls: "semlink-row" });
 		const reindexLabel = reindexRow.createDiv({ cls: "semlink-row-label" });
