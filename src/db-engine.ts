@@ -328,27 +328,56 @@ export class DbEngine {
 	 *  uses an ATOMIC WRITE: temp file + rename, so a process death mid-write
 	 *  leaves the old DB intact (a torn DB was the historical root cause of
 	 *  "all chunks re-indexed after every reload"). */
-	/** 最近一次索引写入时间（RAG 统计第 4 格「更新时间」）：MAX(chunk.mtime)
-	 *  与 meta.last_index_activity（删除/清理等非 chunk 写入也会触碰）取
-	 *  较大者。两者皆无（空库）返回 null。 */
+	/** 「更新时间」（RAG 统计第 4 格）：meta.last_index_activity——只在
+	 *  Indexed/Embedded 两格数量发生变化时由 syncActivityStamp 前移
+	 *  （用户拍板「由数量变化的时间去更新」）。普通 save/压缩/清扫数量
+	 *  不变不移动。键缺失（空库）返回 null。 */
 	lastIndexTime(): number | null {
 		const r = this.db!.exec(
-			"SELECT MAX(m) FROM (SELECT MAX(mtime) AS m FROM chunks " +
-			"UNION ALL SELECT CAST(value AS INTEGER) FROM meta WHERE key = 'last_index_activity')",
+			"SELECT CAST(value AS INTEGER) FROM meta WHERE key = 'last_index_activity'",
 		);
 		const v = r.length > 0 && r[0].values.length > 0 ? r[0].values[0][0] : null;
 		return v ? Number(v) : null;
 	}
 
-	/** 触碰活动时间戳（meta.last_index_activity = now）：删除/清理等不产生
-	 *  chunk mtime 的写路径也调用，让「更新时间」如实反映最近一次索引
-	 *  活动。失败静默（meta 表缺失时不阻塞主流程）。 */
+	/** 数量快照键（meta.last_activity_counts = "indexed:embedded"）：
+	 *  syncActivityStamp 每次与其比对，仅在计数不同时前移更新时间。 */
+
+	/** 触碰活动时间戳（meta.last_index_activity = now）：删除/清理等计数
+	 *  必然变化的写路径显式调用。失败静默（meta 表缺失时不阻塞主流程）。 */
 	private touchIndexActivity(now = Date.now()): void {
 		try {
 			this.db!.run(
 				"INSERT OR REPLACE INTO meta (key, value) VALUES ('last_index_activity', ?)",
 				[String(now)]
 			);
+		} catch { /* 非致命：更新时间格保持旧值 */ }
+	}
+
+	/** 数量比对戳：把当前 Indexed/Embedded（与统计卡同口径）快照进
+	 *  meta.last_activity_counts；与上次快照不同 → 触碰 last_index_activity
+	 *  = now（用户拍板：更新时间只跟数量变化走，save() 每次都调也不动
+	 *  时间）。首次播种（无快照）只记录不触碰——升级后首次 save / clearAll
+	 *  清 meta 后不得凭空前移；随后 0→N 的首个数量变化才是真实索引时刻。
+	 *  失败静默。 */
+	private syncActivityStamp(now = Date.now()): void {
+		try {
+			const r = this.db!.exec(
+				"SELECT (SELECT COUNT(DISTINCT note_path) FROM chunks WHERE status = 'active')," +
+				"(SELECT COUNT(DISTINCT note_path) FROM chunks WHERE status = 'active' AND vector IS NOT NULL)",
+			);
+			const sig = r.length > 0 && r[0].values.length > 0
+				? `${Number(r[0].values[0][0])}:${Number(r[0].values[0][1])}`
+				: "0:0";
+			const prev = this.db!.exec("SELECT value FROM meta WHERE key = 'last_activity_counts'");
+			const prevSig = prev.length > 0 && prev[0].values.length > 0 ? String(prev[0].values[0][0]) : null;
+			if (prevSig !== sig) {
+				if (prevSig !== null) this.touchIndexActivity(now);
+				this.db!.run(
+					"INSERT OR REPLACE INTO meta (key, value) VALUES ('last_activity_counts', ?)",
+					[sig]
+				);
+			}
 		} catch { /* 非致命：更新时间格保持旧值 */ }
 	}
 
@@ -360,9 +389,39 @@ export class DbEngine {
 		return this.db.export();
 	}
 
+	/** 持久化诊断（reload/杀进程丢数据取证）：journal/synchronous 实际
+	 *  生效值、flushed 槽字节数 vs 引擎整库字节数——差值 = 未落盘窗口。 */
+	durabilityInfo(): { mode: string; journalMode: string; synchronous: string; slotBytes: number; bytesTotal: number } | { error: string } {
+		if (!this.db) return { error: "no db" };
+		if (this.dbMode !== "wasm") return { error: `durabilityInfo only in wasm mode (current: ${this.dbMode})` };
+		const w = this.db as SqliteWasmDb;
+		return { mode: this.dbMode, ...w.durabilityInfo() };
+	}
+
+	/** 立即写一次耐久快照（诊断/加固验证用，绕过 ≥10min 节流）：返回写入
+	 *  结果与耗时——writeLegacySnapshot 失败一直是静默的，这里把错误带出
+	 *  worker。空库照旧拒绝（不覆盖好快照）。 */
+	writeSnapshotNow(): { ok: boolean; bytes: number; durMs: number; error?: string } {
+		const t0 = Date.now();
+		if (!this.db) return { ok: false, bytes: 0, durMs: 0, error: "no db" };
+		if (this.dbMode !== "wasm") return { ok: false, bytes: 0, durMs: Date.now() - t0, error: `snapshot only in wasm mode (current: ${this.dbMode})` };
+		try {
+			const wasm = this.db as SqliteWasmDb;
+			const r = this.db.exec("SELECT COUNT(*) FROM chunks");
+			const chunks = Number(r[0]?.values?.[0]?.[0] ?? 0);
+			if (chunks <= 0) return { ok: false, bytes: 0, durMs: Date.now() - t0, error: "empty db fuse (chunks=0)" };
+			const ok = wasm.writeLegacySnapshot();
+			return { ok, bytes: ok ? -1 : 0, durMs: Date.now() - t0, error: ok ? undefined : "writeLegacySnapshot returned false (see worker console)" };
+		} catch (e) {
+			return { ok: false, bytes: 0, durMs: Date.now() - t0, error: e instanceof Error ? e.message : String(e) };
+		}
+	}
+
 	save(): void {
 		if (!this.db) return;
-		this.touchIndexActivity();
+		// 更新时间戳：只在 Indexed/Embedded 数量相对上次快照变化时前移
+		// （数量不变的高频 save 不再凭空刷新「更新时间」格）。
+		this.syncActivityStamp();
 		if (this.dbMode === "wasm") {
 			// 页级落盘由 sahpool 事务提交承担；这里做两件事：
 			// 1) PRAGMA optimize（查询规划维护）
@@ -375,8 +434,10 @@ export class DbEngine {
 			const chunks = Number(r[0]?.values?.[0]?.[0] ?? 0);
 			if (chunks <= 0) return;
 			const wasm = this.db as SqliteWasmDb;
+			// 失败也推进节流戳：writeLegacySnapshot 失败是静默的，若不推进，
+			// 每次进来的 save（~20s 一次）都会重试 400MB 导出。
+			this.lastSnapshotAt = now;
 			if (wasm.writeLegacySnapshot()) {
-				this.lastSnapshotAt = now;
 				console.error(`[Semlink] durable snapshot written (chunks=${chunks})`);
 			}
 			return;

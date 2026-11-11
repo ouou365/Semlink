@@ -275,6 +275,8 @@ export class VectorStore {
 			case "purgeGhostQueue": return e.purgeGhostQueue(args[0] as Set<string>);
 			case "clearQueue": return e.clearQueue();
 			case "getPendingPaths": return e.getPendingPaths();
+			case "durability": return e.durabilityInfo();
+			case "snapshotNow": return e.writeSnapshotNow();
 			default: throw new Error(`Unknown op: ${op}`);
 		}
 	}
@@ -286,6 +288,11 @@ export class VectorStore {
 	/** 嵌入模型变更：清向量保留块，并重置 mtime 让全量笔记重走嵌入。 */
 	async clearVectors(): Promise<void> { await this.call("clearVectors"); }
 	async compact(): Promise<void> { await this.call("compact"); }
+	/** 持久化诊断（丢数据取证）：journal/synchronous/flushed 槽字节数 vs
+	 *  引擎整库字节数——差值 = 未落盘窗口（仅 wasm 模式）。 */
+	async durability(): Promise<unknown> { return await this.call("durability"); }
+	/** 立即写一次耐久快照（绕过 ≥10min 节流），带回错误详情。 */
+	async snapshotNow(): Promise<unknown> { return await this.call("snapshotNow"); }
 
 	/**
 	 * Close + flush. In worker mode this sends a synchronous `close` op: the

@@ -134,7 +134,7 @@ const en = {
 	statusInit: "Semlink: Initializing...",
 	statusReady: "Semlink: Ready",
 	statusCompleted: "Semlink: Index complete ✓",
-	statusIndexed: "notes indexed",
+	statusIndexed: "notes",
 	statusFilesCount: "files",
 
 // ──── Notices ────

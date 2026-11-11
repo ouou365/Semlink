@@ -136,7 +136,7 @@ const zh: Record<keyof typeof en, string> = {
 	statusInit: "Semlink: 初始化中...",
 	statusReady: "Semlink: 就绪",
 	statusCompleted: "Semlink: 索引完成 ✓",
-	statusIndexed: "笔记已索引",
+	statusIndexed: "笔记",
 	statusFilesCount: "个文件",
 
 // ──── Notices ────

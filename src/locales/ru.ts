@@ -136,7 +136,7 @@ const t: Record<keyof typeof en, string> = {
 	statusInit: "Semlink: Инициализация...",
 	statusReady: "Semlink: Готово",
 	statusCompleted: "Semlink: Индексация завершена ✓",
-	statusIndexed: "заметок проиндексировано",
+	statusIndexed: "заметок",
 	statusFilesCount: "файлов",
 
 // ──── Notices ────

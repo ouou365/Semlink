@@ -652,6 +652,7 @@ export default class SmartVaultPlugin extends Plugin {
 			(opts) => this.runDebugShot(opts),
 			(opts) => this.runDebugStats(opts),
 			(opts) => this.runDebugUi(opts),
+			(opts) => this.runDebugOpfs(opts),
 		);
 		try {
 			await server.start();
@@ -720,7 +721,53 @@ export default class SmartVaultPlugin extends Plugin {
 				return { op, error: e instanceof Error ? e.message : String(e) };
 			}
 		}
-		if (op) return { error: `unknown op "${op}" (save | compact | resetOpfsDb | repairFromBak | seedFromDisk | auditLog)` };
+		if (op === "durability") {
+			// 持久化取证：journal/synchronous 实际生效值 + flushed 槽字节数 vs
+			// 引擎整库字节数——差值 = 未落盘窗口（reload/杀进程丢数据对账）。
+			try { return { op, ...(await this.store.durability() as Record<string, unknown>) }; }
+			catch (e) { return { op, error: e instanceof Error ? e.message : String(e) }; }
+		}
+		if (op === "snapshot") {
+			// 立即写一次耐久快照并带回错误详情（writeLegacySnapshot 一直静默失败，
+			// 这里把 worker 里的异常带出来定位根因）。
+			try { return { op, ...(await this.store.snapshotNow() as Record<string, unknown>) }; }
+			catch (e) { return { op, error: e instanceof Error ? e.message : String(e) }; }
+		}
+		if (op === "dumpslot") {
+			// 法证通道：主线程直读 sahpool 槽文件（getFile 跨 agent cluster 可用）
+			// 字节落真磁盘，供离线 python-sqlite3 检查——完全绕开引擎，看「flushed
+			// 槽里到底有什么」。槽文件布局 = 4KB sahpool 头（前 512B = 关联路径
+			// 字符串）+ SQLite 镜像；这里按路径头精确选中 /vault.db 的槽。
+			try {
+				const root = await navigator.storage.getDirectory();
+				const opaque = await root.getDirectoryHandle(".opfs-sahpool").then((d) => d.getDirectoryHandle(".opaque"));
+				let target: { name: string; size: number } | null = null;
+				const slots: Array<{ name: string; path: string; size: number }> = [];
+				for await (const [name, handle] of opaque.entries()) {
+					if (handle.kind !== "file") continue;
+					const f = await (handle as FileSystemFileHandle).getFile();
+					const head = new Uint8Array(await f.slice(0, 520).arrayBuffer());
+					let path = "";
+					for (let i = 0; i < 512 && head[i]; i++) path += String.fromCharCode(head[i]);
+					slots.push({ name, path, size: f.size });
+					if (path === "/vault.db") target = { name, size: f.size };
+				}
+				if (!target) return { op, error: "no slot with path /vault.db under .opfs-sahpool/.opaque", slots };
+				const fh = await opaque.getFileHandle(target.name);
+				const buf = await (await fh.getFile()).arrayBuffer();
+				const req = (window as unknown as { require?: (m: string) => unknown }).require;
+				const fsMod = req?.("fs") as { writeFileSync(p: string, d: Buffer): void; mkdirSync(p: string, o?: unknown): void } | undefined;
+				if (!fsMod) return { op, error: "no fs" };
+				const dir = this.pluginDir + "/diag";
+				try { fsMod.mkdirSync(dir); } catch { /* 已存在 */ }
+				const out = dir + "/slot.bin";
+				fsMod.writeFileSync(out, Buffer.from(buf));
+				return { op, slot: target.name, size: target.size, dumpedBytes: buf.byteLength, out };
+			} catch (e) {
+				return { op, error: e instanceof Error ? e.message : String(e) };
+			}
+		}
+		if (op) return { error: `unknown op "${op}" (save | compact | resetOpfsDb | repairFromBak | seedFromDisk | auditLog | durability | snapshot | dumpslot)` };
 		const stats = await this.store.getStats();
 		// 存储模式诊断：空索引 + 大磁盘库 = 上游加载失败（worker 初始化
 		// 失败掉进 browser-worker/sync 空库、或加载抛错）——定位「索引清零」。
@@ -826,6 +873,100 @@ export default class SmartVaultPlugin extends Plugin {
 				phaseIsStale: !this.scheduler.isRunning && ["scanning", "chunking", "embedding", "building_index"].includes(p.phase),
 			},
 			pendingSample: await this.scheduler.debugPendingMtimeSample(),
+		};
+	}
+
+	/** opfs 工具执行器：主线程直读 OPFS（不依赖 DB worker 存活——worker
+	 *  死掉/加载失败时 stats 可能失真，这里看真实落盘状态）：storage.estimate
+	 *  配额用量、persisted 持久化标记、整树递归清单（可读文件带 size/
+	 *  lastModified；被 sync access handle 占用的文件——sahpool 槽与 fs-shim
+	 *  命名空间——DOM 规范拒绝 getFile，报 locked:true），按顶层命名空间
+	 *  聚合小计。semlink-db/vault.db 的 lastModified = 最近一次耐久快照时刻。 */
+	private async runDebugOpfs(opts?: { maxDepth?: number; maxEntries?: number }): Promise<unknown> {
+		const maxDepth = Math.max(1, Math.min(10, Math.floor(opts?.maxDepth ?? 5)));
+		const maxEntries = Math.max(10, Math.min(2000, Math.floor(opts?.maxEntries ?? 300)));
+		// OPFS 句柄结构类型：项目 DOM lib 早于 entries()/getFile 的完整声明
+		// （同 browser-fs.ts 的做法），本地声明 + unknown 断言（禁 any）。
+		interface OpfsFileHandle { kind: "file"; getFile(): Promise<{ size: number; lastModified: number }>; }
+		interface OpfsDirHandle { kind: "directory"; entries(): AsyncIterableIterator<[string, OpfsFileHandle | OpfsDirHandle]>; }
+		interface OpfsNode {
+			name: string;
+			kind: "file" | "directory";
+			size?: number;
+			lastModified?: number;
+			locked?: boolean;
+			error?: string;
+			children?: OpfsNode[];
+		}
+
+		let root: OpfsDirHandle;
+		try {
+			root = (await navigator.storage.getDirectory()) as unknown as OpfsDirHandle;
+		} catch (e) {
+			return { available: false, error: `OPFS unavailable: ${e instanceof Error ? e.message : String(e)}` };
+		}
+
+		let dirs = 0, files = 0, readableBytes = 0, lockedFiles = 0, truncated = false;
+		const namespaces = new Map<string, { files: number; readableBytes: number; lockedFiles: number }>();
+
+		const walk = async (dir: OpfsDirHandle, depth: number, ns: string | null): Promise<OpfsNode[]> => {
+			const out: OpfsNode[] = [];
+			try {
+				for await (const [name, handle] of dir.entries()) {
+					if (out.length >= maxEntries) { truncated = true; break; }
+					const childNs = ns ?? name; // 第一层目录名 = 命名空间（semlink-db / .opfs-sahpool）
+					if (handle.kind === "directory") {
+						dirs++;
+						const node: OpfsNode = { name, kind: "directory" };
+						if (depth < maxDepth) node.children = await walk(handle as OpfsDirHandle, depth + 1, childNs);
+						else truncated = true;
+						out.push(node);
+						continue;
+					}
+					files++;
+					const agg = namespaces.get(childNs) ?? { files: 0, readableBytes: 0, lockedFiles: 0 };
+					agg.files++;
+					namespaces.set(childNs, agg);
+					const node: OpfsNode = { name, kind: "file" };
+					try {
+						const f = await (handle as OpfsFileHandle).getFile();
+						node.size = f.size;
+						node.lastModified = f.lastModified;
+						readableBytes += f.size;
+						agg.readableBytes += f.size;
+					} catch {
+						// sync access handle 被活的 DB worker 持有（sahpool 槽、
+						// fs-shim 文件）：同文件不允许再开/读——只报 locked。
+						node.locked = true;
+						lockedFiles++;
+						agg.lockedFiles++;
+					}
+					out.push(node);
+				}
+			} catch (e) {
+				out.push({ name: "<entries>", kind: "directory", error: e instanceof Error ? e.message : String(e) });
+			}
+			return out;
+		};
+
+		const tree = await walk(root, 1, null);
+		let estimate: unknown = null, estimateError: string | undefined;
+		try { estimate = await navigator.storage.estimate(); } catch (e) { estimateError = e instanceof Error ? e.message : String(e); }
+		let persisted: boolean | null = null;
+		try { persisted = await navigator.storage.persisted(); } catch { /* 不支持/未授权：保持 null */ }
+
+		return {
+			available: true,
+			// 对照位：wasm = sahpool 槽被驱动持有（locked 属正常）；browser-worker
+			// = fs-shim 命名空间被持有。worker 死掉时 locked 应全消失。
+			storageMode: this.store.storageMode,
+			estimate,
+			estimateError,
+			persisted,
+			tree,
+			totals: { directories: dirs, files, readableBytes, lockedFiles, truncated },
+			namespaces: Object.fromEntries(namespaces),
+			legend: "locked:true = file held by an open sync access handle in the live DB worker (opfs-sahpool slots / semlink-db fs-shim files) — spec refuses getFile() from other contexts, size invisible here. readableBytes sums readable files only; estimate.usage is the authoritative OPFS footprint. semlink-db/vault.db lastModified = last durable snapshot moment.",
 		};
 	}
 
@@ -2954,7 +3095,8 @@ export default class SmartVaultPlugin extends Plugin {
 			// 状态栏显示已索引数量（用户拍板"右下角应该显示已索引的数量"）：
 			// processedNotes 在调度器 incremental 启动时已从 DB 重同步
 			// （旧的跨轮累计乱涨问题已修），运行中实时爬升、完成后=总数。
-			// 复用现成 i18n 键 statusIndexed（"980 笔记已索引"/"980 notes indexed"）。
+			// 复用现成 i18n 键 statusIndexed（"980 notes"/"980 篇笔记"——用户
+			// 拍板去掉 indexed 字样，只留数量+名词）。
 			// 钳制：处理数不得超过总数（迁移过渡曾把重处理重复计入，
 			// 状态栏一度显示 1372 > 总数 1142 的"越索引越多"）
 			const shown = p.totalNotes > 0 ? Math.min(p.processedNotes, p.totalNotes) : p.processedNotes;

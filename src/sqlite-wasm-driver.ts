@@ -38,7 +38,9 @@ export type DbMode = "wasm" | "sqljs";
 interface OfficialStmt {
 	bind(params?: unknown[]): void;
 	step(): boolean;
-	get(): unknown[];
+	/** 官方 API 两种形态都有：get()（带列索引）与 get(array)（整行回填，
+	 *  本驱动统一用后者——无参 get() 会走 affirmColIndex(undefined) 抛越界）。 */
+	get(data?: unknown[]): unknown[];
 	reset(): void;
 	finalize(): void;
 	getColumnNames(target?: string[]): string[];
@@ -59,8 +61,15 @@ interface OfficialCapi {
 	sqlite3_js_db_export(pDb: number, schema?: string | number): Uint8Array;
 }
 
+interface PoolSahLike {
+	getSize(): number;
+}
+
 interface PoolUtilLike {
 	importDb(name: string, bytes: Uint8Array): Promise<void>;
+	/** 槽句柄（同一 sync access handle 只能开一个——pool 自己持有，
+	 *  这里只借用 getSize 取槽字节数做诊断）。 */
+	getSAHForPath?(path: string): PoolSahLike | undefined;
 }
 
 interface OfficialModule {
@@ -171,40 +180,89 @@ export class SqliteWasmDb {
 		} catch (e) {
 			throw new Error(`[wasm-driver installOpfsSAHPoolVfs] ${e instanceof Error ? e.message : String(e)}`);
 		}
-		// 迁移：shim 命名空间（'semlink-db'）的旧库 → importDb 进 pool。
+		// shim 命名空间（'semlink-db'）里的 vault.db 有两种身份：
+		// a) sql.js 时代的旧库（一次性迁移源）；b) 耐久快照（writeLegacySnapshot
+		// 每 ≥10min 写一次的整库副本，槽丢失时的恢复源）。
 		// 名字必须用 canonical 的 DB_PATH（带斜杠），与 open 对齐（见 DB_PATH 注释）。
 		const legacySize = shimExists(DB_FILE) ? shimStat(DB_FILE).size : 0;
-		if (legacySize > 0) {
+		const openDb = (): OfficialDb => new mod.oo1.DB({ filename: DB_PATH, vfs: "opfs-sahpool" });
+		const pageCountOf = (d: OfficialDb): number => {
+			const stmt = d.prepare("PRAGMA page_count");
+			try {
+				// get() 无参重载会 affirmColIndex(undefined) 抛越界（见本文件
+				// exec 的注释）——必须用 get(array) 回填。
+				const row: unknown[] = [];
+				stmt.step();
+				stmt.get(row);
+				return Number(row[0] ?? 0);
+			} finally { stmt.finalize(); }
+		};
+		// 导入 shim 镜像进槽（恢复场景专用）+ bak 留底 + 源清零。
+		// await 必须显式：ensureFileSync 是 async（SAH 注册在微任务后），
+		// 不 await 的话 renameSync 落笔时 handles 还没有 bak → 写进
+		// memoryFiles（进程死即失），磁盘 bak 永远 0 字节（真机 2026-11-11）。
+		const importLegacy = async (reason: string): Promise<void> => {
 			const legacy = shimRead(DB_FILE);
 			await poolUtil.importDb(DB_PATH, legacy);
-			// 备份 + 源清零（shim renameSync = 写新文件 + 源截零；源句柄保留）。
-			// size 0 = 已迁移标记，下次启动跳过。
-			// await 必须显式：ensureFileSync 是 async（SAH 注册在微任务后），
-			// 不 await 的话 renameSync 落笔时 handles 还没有 bak → 写进
-			// memoryFiles（进程死即失），磁盘 bak 永远 0 字节（真机 2026-11-11）。
 			await shimEnsure(`${DB_FILE}.pre-wasm.bak`);
 			shimRename(DB_FILE, `${DB_FILE}.pre-wasm.bak`);
-			// 迁移完成标记：断掉「自动播种 → 迁移」的死循环——shim vault.db
-			// 被清零后，vector-store 的启动播种会把化石盘库再塞回来（被误当
-			// 从未播种），下个 worker 又导入一遍。有标记后 auto-seed 跳过，
-			// 显式恢复走 force 通道不受影响。
-			// marker 必须先 ensureFileSync（真机 2026-11-11 第二轮事故）：
-			// shimWrite 无句柄时落 memoryFiles，worker 一死标记即失 → 下轮
-			// 启动化石重播种 + 重迁移 → importDb 覆盖含新嵌入进度的活槽
-			// （「重载之后数据会丢失」的第二根因）。句柄写入才能活过重启。
+			// 迁移完成标记：断掉「自动播种 → 迁移」的死循环（详见旧注释——
+			// marker 失踪会让化石盘库被反复播种/导入，覆盖活槽）。
+			// marker 必须先 ensureFileSync：shimWrite 无句柄时落 memoryFiles，
+			// worker 一死标记即失 → 下轮启动化石重播种 + 重迁移。
 			await shimEnsure(`${DB_FILE}.migrated`);
 			shimWrite(`${DB_FILE}.migrated`, new Uint8Array(1));
-			console.error(`[Semlink][migdbg] bakSize=${shimStat(`${DB_FILE}.pre-wasm.bak`).size} vaultSize=${shimStat(DB_FILE).size} handles-visible-to-driver`);
-			console.log(`[Semlink] migrated legacy sql.js DB (${Math.round(legacySize / 1048576)}MB) into sqlite3-wasm opfs-sahpool storage`);
+			console.error(`[Semlink][migdbg] import(${reason}) legacyBytes=${legacy.byteLength} bakSize=${shimStat(`${DB_FILE}.pre-wasm.bak`).size} vaultSize=${shimStat(DB_FILE).size}`);
+		};
+
+		// 首开探测（守卫的核心）：sqlite 自己报槽状态——
+		//   open 抛错            → 槽页撕裂/损坏
+		//   page_count == 0      → 槽空（从未初始化或槽丢失）
+		//   page_count > 0       → 活槽健在，内容必然 ≥ 任何 shim 快照
+		// 旧代码只看 legacySize>0 就 importDb——耐久快照写成功后，下次 reload
+		// 就把活槽整体回滚到快照时刻（真机 2026-11-23:23:36/23:44 两次实测
+		// 216→203、300→251 的「reload 丢已嵌入数据」根因），还把 pre-wasm.bak
+		// 顶掉。守卫三分支：
+		//   活槽健在 + 快照在 → 快照过期冗余，清零防后患（绝不 import）
+		//   槽空 + 快照在     → 真恢复场景，导入
+		//   槽撕裂 + 快照在   → 整槽覆盖重建后重开
+		let db: OfficialDb | null = null;
+		let pageCount = -1;
+		let openErr: unknown = null;
+		try {
+			db = openDb();
+			pageCount = pageCountOf(db);
+		} catch (e) {
+			openErr = e;
+			try { db?.close(); } catch { /* 已死 */ }
+			db = null;
+		}
+		if (db && pageCount === 0 && legacySize > 0) {
+			db.close();
+			db = null;
+			await importLegacy("slot-empty recovery");
+			db = openDb();
+			pageCount = pageCountOf(db);
+		} else if (!db && legacySize > 0) {
+			await importLegacy("slot-corrupt repair");
+			db = openDb();
+			pageCount = pageCountOf(db);
+		} else if (db && pageCount > 0 && legacySize > 0) {
+			// 活槽 ≥ 快照：清零 shim 快照（writeFileSync 截零，句柄保留），
+			// 否则这份过期镜像会一直躺在命名空间里等下一次 reload 误导回。
+			shimWrite(DB_FILE, new Uint8Array(0));
+			console.error(`[Semlink][migdbg] live slot intact (${pageCount} pages) — stale shim snapshot (${legacySize}B) discarded, NO import`);
+		} else if (!db) {
+			throw openErr instanceof Error ? openErr : new Error(String(openErr));
 		}
 
-		const db = new mod.oo1.DB({ filename: DB_PATH, vfs: "opfs-sahpool" });
+		if (!db) throw new Error("[wasm-driver] unreachable: db not opened");
 		// 一次性开好 shim vault.db 的句柄：worker 生命周期内的 shim 写
 		// （writeLegacySnapshot 耐久快照、迁移标记等）全部落 OPFS 句柄，
 		// 跨 worker 重启存活——无句柄的 shimWrite 落 memoryFiles，进程死
 		// 即失（marker 失踪引发的化石重播种死循环，见迁移块注释）。
 		await shimEnsure(DB_FILE);
-		return new SqliteWasmDb(db, mod.capi, poolUtil, () => new mod.oo1.DB({ filename: DB_PATH, vfs: "opfs-sahpool" }));
+		return new SqliteWasmDb(db, mod.capi, poolUtil, openDb);
 	}
 
 	/** 查询（SELECT/PRAGMA）：返回 sql.js 形态的结果组。DML 返回空数组，
@@ -298,6 +356,19 @@ export class SqliteWasmDb {
 			console.error(`[Semlink] snapshot write failed: ${e instanceof Error ? e.message : String(e)}`);
 			return false;
 		}
+	}
+
+	/** 持久化诊断：连接层 journal/synchronous 实际生效值 + 引擎侧整库字节
+	 *  数（page_count×page_size）。reload/杀进程丢数据时先看这里：配置被
+	 *  改成 non-durable 会直接暴露。 */
+	durabilityInfo(): { journalMode: string; synchronous: string; bytesTotal: number } {
+		const jm = this.exec("PRAGMA journal_mode")[0]?.values?.[0]?.[0];
+		const sync = this.exec("PRAGMA synchronous")[0]?.values?.[0]?.[0];
+		return {
+			journalMode: String(jm ?? "?"),
+			synchronous: String(sync ?? "?"),
+			bytesTotal: this.bytesTotal,
+		};
 	}
 
 	close(): void {

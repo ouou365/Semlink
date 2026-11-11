@@ -1,10 +1,9 @@
 // ========================================
 // Semlink - Debug MCP Server (semlink-debug)
 // ========================================
-// 单工具 MCP：ask —— 把问题送进真实的聊天问答管线（与侧栏同一条
-// ChatClient.chat 路径：检索 + agentic 工具循环 + 强制引用），返回最终
-// 回答与完整思考过程（每条 thought、每次工具调用的参数与结果）。
-// 用途：ZCode 等 agent 对问答功能做端到端回归测试。
+// 调试 MCP：ask（真实问答管线端到端回归）、jump、measure、shot、ui、
+// stats、opfs（OPFS 存储监测）、reload。
+// 用途：ZCode 等 agent 对问答与索引功能做端到端回归 / 诊断。
 // 仅监听 127.0.0.1——它能触发真实的 LLM API 调用，不暴露到局域网。
 
 import { createServer, IncomingMessage, ServerResponse, Server } from "http";
@@ -39,6 +38,11 @@ export type DebugUiRunner = (opts?: {
 	index?: number;
 	doc?: string;
 }) => Promise<unknown>;
+
+/** opfs 工具执行器：由 main.ts 注入——主线程直读 OPFS（配额/用量/
+ *  persisted + 递归树），不依赖 DB worker 存活，与 stats.storage.opfs
+ *  （worker 侧 fsList/fsProbe，仅 browser-worker 模式）互补。 */
+export type DebugOpfsRunner = (opts?: { maxDepth?: number; maxEntries?: number }) => Promise<unknown>;
 
 interface JsonRpcRequest {
 	jsonrpc: "2.0";
@@ -222,6 +226,29 @@ const STATS_TOOL = {
 	},
 };
 
+const OPFS_TOOL = {
+	name: "opfs",
+	description:
+		"Monitor the OPFS storage Semlink's SQLite database lives in: " +
+		"navigator.storage.estimate() (quota/usage/usageDetails), persisted() " +
+		"state, and a recursive walk of the whole OPFS tree read from the MAIN " +
+		"thread — independent of the DB worker, so it still works when the " +
+		"worker is dead or the index failed to load (use it alongside stats to " +
+		"tell 'wiped' from 'unloadable'). Per file: size/lastModified when " +
+		"readable; files held open by a sync access handle (the opfs-sahpool " +
+		"slot files and the semlink-db fs-shim namespace) report locked:true " +
+		"with no size. Per-namespace totals for growth tracking. Note the " +
+		"semlink-db/vault.db lastModified = the last durable snapshot moment.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			maxDepth: { type: "number", description: "Walk depth cap (default 5, max 10)." },
+			maxEntries: { type: "number", description: "Total entry cap across the whole walk (default 300, max 2000)." },
+		},
+		required: [],
+	},
+};
+
 export class DebugMcpServer {
 	private server: Server | null = null;
 	private _port: number;
@@ -230,7 +257,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -323,7 +350,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL, OPFS_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -341,6 +368,8 @@ export class DebugMcpServer {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean; forcePro?: boolean } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
 					} else if (params.name === "stats") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runStats?.(params.arguments as { op?: string } | undefined)) ?? { error: "no stats runner" }, null, 2) }] };
+						} else if (params.name === "opfs") {
+							result = { content: [{ type: "text", text: JSON.stringify((await this.runOpfs?.(params.arguments as { maxDepth?: number; maxEntries?: number } | undefined)) ?? { error: "no opfs runner" }, null, 2) }] };
 						} else if (params.name === "ui") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runUi?.(params.arguments as { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string } | undefined)) ?? { error: "no ui runner" }, null, 2) }] };
 						} else if (params.name === "shot") {

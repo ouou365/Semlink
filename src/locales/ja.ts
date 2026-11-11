@@ -137,7 +137,7 @@ const t: Record<keyof typeof en, string> = {
 	statusInit: "Semlink: 初期化中...",
 	statusReady: "Semlink: 準備完了",
 	statusCompleted: "Semlink: インデックス完了 ✓",
-	statusIndexed: "ノートをインデックス済み",
+	statusIndexed: "ノート",
 	statusFilesCount: "ファイル",
 
 // ──── Notices ────

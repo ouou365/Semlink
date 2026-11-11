@@ -137,7 +137,7 @@ const t: Record<keyof typeof en, string> = {
 	statusInit: "Semlink: Inicializando...",
 	statusReady: "Semlink: Pronto",
 	statusCompleted: "Semlink: Indexação concluída ✓",
-	statusIndexed: "notas indexadas",
+	statusIndexed: "notas",
 	statusFilesCount: "arquivos",
 
 // ──── Notices ────

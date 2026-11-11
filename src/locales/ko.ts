@@ -135,7 +135,7 @@ const t: Record<keyof typeof en, string> = {
 	statusInit: "Semlink: 초기화 중...",
 	statusReady: "Semlink: 준비됨",
 	statusCompleted: "Semlink: 인덱싱 완료 ✓",
-	statusIndexed: "개 노트 인덱싱됨",
+	statusIndexed: "개 노트",
 	statusFilesCount: "개 파일",
 
 // ──── Notices ────

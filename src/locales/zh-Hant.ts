@@ -138,7 +138,7 @@ mtProvidersTitle: "供應商",
 	statusInit: "Semlink: 初始化中...",
 	statusReady: "Semlink: 就緒",
 	statusCompleted: "Semlink: 索引完成 ✓",
-	statusIndexed: "篇筆記已索引",
+	statusIndexed: "篇筆記",
 	statusFilesCount: "個檔案",
 
 // ──── Notices ────

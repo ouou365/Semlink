@@ -38,6 +38,8 @@ export function createDispatcher(): Dispatcher {
 			case "exportDb": return engine.exportDb();
 			case "lastIndexTime": return engine.lastIndexTime();
 			case "auditlog": return engine.auditLog();
+			case "durability": return engine.durabilityInfo();
+			case "snapshotNow": return engine.writeSnapshotNow();
 			case "repairFromBytes": return engine.repairFromBytes(args[0] as Uint8Array, args[1] === true);
 			case "clearAll": return engine.clearAll();
 			case "clearVectors": return engine.clearVectors();

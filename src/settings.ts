@@ -657,8 +657,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 已跳过（用户拍板"嵌入进度要包含已跳过"）：空文件/全稀疏笔记，
 		// 永远不会产生向量
 		const embedSkippedEl = statCell(t("embedSkipped"));
-		// 更新时间（第 4 格，用户拍板"改成更新时间"）：MAX(chunk.mtime)
-		// ——最近一次索引写入的时刻；今天显示 HH:mm，更早显示 MM-dd HH:mm
+		// 更新时间（第 4 格，用户拍板"改成更新时间"）：Indexed/Embedded 数量
+		// 变化的时刻（db-engine.syncActivityStamp 比对快照后前移 last_index_activity）
+		// ——普通 save/压缩/清扫数量不变不移动；今天显示 HH:mm，更早显示 MM-dd
 		const updatedEl = statCell(t("ragUpdated"));
 		// 索引总开关：关 = 停止文件监听并暂停当前索引；开 = 恢复监听并继续索引。
 		toggleRow(indexBlock.block, t("autoIndex"), this.plugin.settings.autoIndex, async (v) => {
