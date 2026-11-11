@@ -16,3 +16,4 @@ node_modules/
 
 # 引用编号测试脚手架（本地）
 .cite-test/
+.DS_Store
