@@ -657,10 +657,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 已跳过（用户拍板"嵌入进度要包含已跳过"）：空文件/全稀疏笔记，
 		// 永远不会产生向量
 		const embedSkippedEl = statCell(t("embedSkipped"));
-		// 已排除（第 4 格，用户拍板"这个改成 Exclude"）：vault 全量 md −
-		// 可索引数 = 命中排除路径（含 .obsidian 配置目录）与空文件——
-		// 这些文件不进索引。数值随 updateHeroSub 刷新（无 DB 依赖）。
-		const excludedEl = statCell(t("excludedNotes"));
+		// 更新时间（第 4 格，用户拍板"改成更新时间"）：MAX(chunk.mtime)
+		// ——最近一次索引写入的时刻；今天显示 HH:mm，更早显示 MM-dd HH:mm
+		const updatedEl = statCell(t("ragUpdated"));
 		// 索引总开关：关 = 停止文件监听并暂停当前索引；开 = 恢复监听并继续索引。
 		toggleRow(indexBlock.block, t("autoIndex"), this.plugin.settings.autoIndex, async (v) => {
 			this.plugin.settings.autoIndex = v;
@@ -739,11 +738,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const updateHeroSub = (): void => {
 			try {
 				liveTotal = Math.max(0, this.plugin.scheduler.countIndexableNotes());
-				// 已排除 = vault 全量 md − 可索引数（同一次遍历的两个口径，
-				// 相减即差集；vault 不可用时保持旧值）
-				excludedEl.setText(
-					Math.max(0, this.app.vault.getMarkdownFiles().length - liveTotal).toLocaleString(),
-				);
 			} catch { /* vault 不可用时保持快照 */ }
 			indexBlock.heroSub.setText(t("ragTotalSub").replace("{n}", liveTotal.toLocaleString()));
 		};
@@ -757,6 +751,16 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				chunkedEl.setText(s.indexedNotes.toLocaleString());
 				vectorizedEl.setText(embeddedNotes.toLocaleString());
 				embedSkippedEl.setText(skippedNotes.toLocaleString());
+				const idxTime = await this.plugin.store.lastIndexTime();
+				if (idxTime) {
+					const d = new Date(idxTime);
+					const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+					updatedEl.setText(
+						d.toDateString() === new Date().toDateString()
+							? hm
+							: `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${hm}`,
+					);
+				}
 				// 总数副行：hero 的分母口径（用户拍板"横排统计条"——总数不再
 				// 与三个结果量平铺），用活总数（拷文件期间即时增长）
 				indexBlock.heroSub.setText(t("ragTotalSub").replace("{n}", liveTotal.toLocaleString()));
@@ -882,6 +886,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			cls: "semlink-btn-ghost mod-danger",
 			text: t("reindexAll"),
 		});
+		// 数据文件夹行已撤（用户拍板"去掉 Data folder"）：OPFS 位置对普通
+		// 用户不可达，文件名+体积无操作价值。
 		// 三态文案切换器（renderIndexCard 的进度订阅回填 apply）：
 		// 运行 = 暂停/继续，空闲 = 重新索引。
 		const applyReindexState = (): void => reindexRef.apply?.();

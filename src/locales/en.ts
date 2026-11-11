@@ -337,6 +337,8 @@ const en = {
 	guideIndexResume: "Start",
 	embedModelChanged: "Embedding model changed — re-embedding required (press Start embedding in the guide).",
 	vectorizedChunks: "Embedded",
+	ragUpdated: "Updated",
+	ragChunkCount: "Chunk",
 	excludedNotes: "Excluded",
 	embedSkipped: "Skipped",
 	ragTotalSub: "{n} notes in total",

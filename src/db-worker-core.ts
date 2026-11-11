@@ -36,6 +36,7 @@ export function createDispatcher(): Dispatcher {
 			case "chunk": return chunkMarkdown(args[0] as string, args[1] as string, args[2] as number, args[3] as number);
 			case "save": return engine.save();
 			case "exportDb": return engine.exportDb();
+			case "lastIndexTime": return engine.lastIndexTime();
 			case "auditlog": return engine.auditLog();
 			case "repairFromBytes": return engine.repairFromBytes(args[0] as Uint8Array, args[1] === true);
 			case "clearAll": return engine.clearAll();
@@ -90,6 +91,9 @@ export function createDispatcher(): Dispatcher {
 			case "cleanupQueue": return engine.cleanupQueue();
 			case "reviveProcessing": return engine.reviveProcessing();
 			case "purgeGhostQueue": return engine.purgeGhostQueue(args[0] as Set<string>);
+			case "purgeRedundantQueue": return engine.purgeRedundantQueue(args[0] as Array<{ path: string; mtime: number }>);
+			case "exportDb": return engine.exportDb();
+			case "lastIndexTime": return engine.lastIndexTime();
 			case "clearQueue": return engine.clearQueue();
 			case "getPendingPaths": return engine.getPendingPaths();
 			default:

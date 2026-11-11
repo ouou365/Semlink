@@ -339,6 +339,8 @@ const zh: Record<keyof typeof en, string> = {
 	guideIndexResume: "开始",
 	embedModelChanged: "嵌入模型已变更，需要重新嵌入（在引导中点击「开始嵌入」）。",
 	vectorizedChunks: "已嵌入",
+	ragUpdated: "更新时间",
+	ragChunkCount: "切块",
 	excludedNotes: "已排除",
 	embedSkipped: "已跳过",
 	ragTotalSub: "共 {n} 篇笔记",

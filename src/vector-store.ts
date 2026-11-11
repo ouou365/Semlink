@@ -358,6 +358,20 @@ export class VectorStore {
 		return await this.call<number>("reviveProcessing");
 	}
 	/** Delete queue rows whose note_path no longer exists in the vault. */
+	async purgeRedundantQueue(entries: Array<{ path: string; mtime: number }>): Promise<number> {
+		return await this.call<number>("purgeRedundantQueue", [entries]);
+	}
+
+	/** 整库字节导出（Data folder「Open」用；~400MB 跨 worker 拷贝） */
+	async exportDb(): Promise<Uint8Array> {
+		return await this.call<Uint8Array>("exportDb");
+	}
+
+	/** 最近一次索引写入时间（RAG 统计第 4 格「更新时间」） */
+	async lastIndexTime(): Promise<number | null> {
+		return await this.call<number | null>("lastIndexTime");
+	}
+
 	async purgeGhostQueue(existingPaths: Set<string>): Promise<number> {
 		return await this.call<number>("purgeGhostQueue", [existingPaths]);
 	}

@@ -785,7 +785,7 @@ export default class SmartVaultPlugin extends Plugin {
 			// 进度弹窗卡片（Semlink Index Progress）的全部数值：
 			modal: {
 				phase: p.phase,
-				progress: `${p.processedNotes} / ${p.totalNotes}`,
+				progress: `${p.totalNotes > 0 ? Math.min(p.processedNotes, p.totalNotes) : p.processedNotes} / ${p.totalNotes}`,
 				embeddedChunks: p.embeddedChunks,
 				failedChunks: p.failedChunks,
 				skippedChunks: p.skippedChunks,
@@ -2955,7 +2955,10 @@ export default class SmartVaultPlugin extends Plugin {
 			// processedNotes 在调度器 incremental 启动时已从 DB 重同步
 			// （旧的跨轮累计乱涨问题已修），运行中实时爬升、完成后=总数。
 			// 复用现成 i18n 键 statusIndexed（"980 笔记已索引"/"980 notes indexed"）。
-			count.textContent = `${p.processedNotes} ${t("statusIndexed")}`;
+			// 钳制：处理数不得超过总数（迁移过渡曾把重处理重复计入，
+			// 状态栏一度显示 1372 > 总数 1142 的"越索引越多"）
+			const shown = p.totalNotes > 0 ? Math.min(p.processedNotes, p.totalNotes) : p.processedNotes;
+			count.textContent = `${shown} ${t("statusIndexed")}`;
 		}
 	}
 

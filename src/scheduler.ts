@@ -150,8 +150,27 @@ export class Scheduler {
 		// re-process old entries and progress can exceed 100%.
 		const cleaned = await this.store.cleanupQueue();
 		const purged = await this.store.purgeGhostQueue(existingPaths);
-		if (cleaned > 0 || purged > 0) {
-			debugLog(`[Semlink] Queue cleanup: ${cleaned} stale + ${purged} ghost rows removed`);
+		// 冗余 pending（迁移过渡把全量笔记当新增重入队、而库内 mtime 完好）
+		// ——逐条比对 MAX(chunk.mtime) ≥ file.mtime 即删，否则 paused 里的
+		// 索引器稍后处理它们会二次嵌入（embeddedChunks 曾涨到 73,030 >
+		// 总块数 65,237）。每 200 条让出 UI。
+		const pendingPaths = await this.queue.getPendingPaths();
+		const redundant: Array<{ path: string; mtime: number }> = [];
+		let pendingChecked = 0;
+		for (const pendingPath of pendingPaths) {
+			const file = this.vault.getAbstractFileByPath(pendingPath) as TFile | null;
+			if (!file || !("stat" in file)) continue;
+			const stored = await this.store.getNoteMtime(pendingPath);
+			if (stored !== null && file.stat.mtime <= stored) {
+				redundant.push({ path: pendingPath, mtime: file.stat.mtime });
+			}
+			if (++pendingChecked % 200 === 0) await this.yieldControl();
+		}
+		const redundantRemoved = redundant.length > 0
+			? await this.store.purgeRedundantQueue(redundant)
+			: 0;
+		if (cleaned > 0 || purged > 0 || redundantRemoved > 0) {
+			debugLog(`[Semlink] Queue cleanup: ${cleaned} stale + ${purged} ghost + ${redundantRemoved} redundant rows removed`);
 		}
 
 		// totalNotes = already indexed + to be indexed (excluding empty files)

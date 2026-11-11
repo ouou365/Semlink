@@ -328,8 +328,41 @@ export class DbEngine {
 	 *  uses an ATOMIC WRITE: temp file + rename, so a process death mid-write
 	 *  leaves the old DB intact (a torn DB was the historical root cause of
 	 *  "all chunks re-indexed after every reload"). */
+	/** 最近一次索引写入时间（RAG 统计第 4 格「更新时间」）：MAX(chunk.mtime)
+	 *  与 meta.last_index_activity（删除/清理等非 chunk 写入也会触碰）取
+	 *  较大者。两者皆无（空库）返回 null。 */
+	lastIndexTime(): number | null {
+		const r = this.db!.exec(
+			"SELECT MAX(m) FROM (SELECT MAX(mtime) AS m FROM chunks " +
+			"UNION ALL SELECT CAST(value AS INTEGER) FROM meta WHERE key = 'last_index_activity')",
+		);
+		const v = r.length > 0 && r[0].values.length > 0 ? r[0].values[0][0] : null;
+		return v ? Number(v) : null;
+	}
+
+	/** 触碰活动时间戳（meta.last_index_activity = now）：删除/清理等不产生
+	 *  chunk mtime 的写路径也调用，让「更新时间」如实反映最近一次索引
+	 *  活动。失败静默（meta 表缺失时不阻塞主流程）。 */
+	private touchIndexActivity(now = Date.now()): void {
+		try {
+			this.db!.run(
+				"INSERT OR REPLACE INTO meta (key, value) VALUES ('last_index_activity', ?)",
+				[String(now)]
+			);
+		} catch { /* 非致命：更新时间格保持旧值 */ }
+	}
+
+	/** 整库字节（Data folder「Open」导出用）：wasm 走 capi export，
+	 *  sqljs 走内置 export。热路径不调用（~400MB）。 */
+	exportDb(): Uint8Array {
+		if (!this.db) return new Uint8Array(0);
+		if (this.dbMode === "wasm") return (this.db as SqliteWasmDb).export();
+		return this.db.export();
+	}
+
 	save(): void {
 		if (!this.db) return;
+		this.touchIndexActivity();
 		if (this.dbMode === "wasm") {
 			// 页级落盘由 sahpool 事务提交承担；这里做两件事：
 			// 1) PRAGMA optimize（查询规划维护）
@@ -410,6 +443,7 @@ export class DbEngine {
 		this.db.run("DELETE FROM chunks");
 		this.db.run("DELETE FROM queue");
 		this.db.run("DELETE FROM meta");
+		this.touchIndexActivity();
 		this.db.run("DELETE FROM note_doc_vectors");
 		this.db.run("DELETE FROM embed_skips");
 		this.allVectors = null;
@@ -438,6 +472,7 @@ export class DbEngine {
 		this.db.run("UPDATE chunks SET status = 'pending_embed', vector = NULL WHERE vector IS NOT NULL OR status = 'active'");
 		this.db.run("DELETE FROM note_doc_vectors");
 		this.db.run("DELETE FROM meta");
+		this.touchIndexActivity();
 		this.allVectors = null;
 		this.allVectorIds = [];
 		this.allVectorPaths = [];
@@ -691,6 +726,7 @@ export class DbEngine {
 			console.error(`[Semlink][audit] pruneOrphanedPaths removed ${removed}/${indexed.length} paths — existingPaths.size=${existingPaths.size}`);
 		}
 		if (removed > 0) {
+			this.touchIndexActivity();
 			this.cacheLoaded = false;
 			this.docCacheLoaded = false;
 		}
@@ -734,6 +770,24 @@ export class DbEngine {
 	 * entries otherwise keep re-enqueueing forever.
 	 * Returns the number of rows deleted.
 	 */
+	/** 冗余 pending 清理（sqlite-wasm 迁移过渡遗留）：迁移/切槽期间全量
+	 *  笔记被当作「新增」重入队，而库内 chunk mtime 完好——file.mtime ≤
+	 *  存储即无需重嵌，行是纯垃圾（854 行级别），且被处理时会二次嵌入
+	 *  造成 embeddedChunks 超过总块数。仅删 pending；processing/completed
+	 *  归 cleanupQueue/revive 管辖。返回删除行数。 */
+	purgeRedundantQueue(entries: Array<{ path: string; mtime: number }>): number {
+		let removed = 0;
+		for (const { path, mtime } of entries) {
+			const result = this.db!.run(
+				"DELETE FROM queue WHERE status = 'pending' AND note_path = ? " +
+				"AND (SELECT MAX(mtime) FROM chunks WHERE note_path = ?) >= ?",
+				[path, path, mtime]
+			);
+			removed += result.changes;
+		}
+		return removed;
+	}
+
 	purgeGhostQueue(existingPaths: Set<string>): number {
 		const rows = this.db!.exec("SELECT id, note_path FROM queue") as unknown as QueryResult[];
 		if (rows.length === 0) return 0;
