@@ -284,8 +284,6 @@ const zh: Record<keyof typeof en, string> = {
 	excludePathsShort: "匹配的文件不参与索引",
 	excludePathCount: "将排除 {n} 条路径",
 	excludePathsPlaceholder: "每行一个，如：Attachments/",
-	pauseIndex: "暂停索引",
-	resumeIndex: "继续索引",
 	guideEmbedIntroTitle: "🔍 嵌入",
 	guideEmbedIntroSub: "让知识库读懂你",
 	guideStepEmbedding: "嵌入",

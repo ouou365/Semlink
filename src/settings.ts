@@ -702,17 +702,15 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			heroDone = num >= total;
 			updateBadge();
 		};
-		// 运行态三态按钮：运行中 = 暂停索引；运行中已暂停（手动或网络自动
-		// 暂停）= 继续索引；空闲 = 重新索引。红字危险态只属于破坏性的
-		// 重新索引——暂停/继续是无损操作，恢复白钮。
+		// Re-index 按钮回归专职（用户拍板"暂停和开始另外再加一行"）：本钮
+		// 只负责破坏性的重新索引——运行中禁用（暂停/继续走独立行），空闲
+		// 才可点，红字危险态恒定。
 		const applyReindexBtn = (): void => {
 			const btn = reindexRef?.btn;
 			if (!btn) return;
-			const running = reindexRef?.running ?? false;
-			const paused = this.plugin.progress.current.isPaused;
-			btn.removeAttribute("disabled");
-			btn.toggleClass("mod-danger", !running);
-			btn.setText(running ? (paused ? t("resumeIndex") : t("pauseIndex")) : t("reindexAll"));
+			if (reindexRef?.running) btn.setAttribute("disabled", "true");
+			else btn.removeAttribute("disabled");
+			btn.setText(t("reindexAll"));
 		};
 		const setRunning = (running: boolean): void => {
 			runningNow = running;
@@ -876,9 +874,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		});
 		excludeBtn.addEventListener("click", () => new ExcludePathsModal(this.app, this.plugin).open());
 
-		// ── 组「维护」：重新索引（清空全部索引从 0 重建，破坏性带确认；
-		//    组标题已去，用户拍板） ──
+		// ── 组「维护」：重新索引（破坏性带确认；组标题已去）。暂停/继续
+		//    行已整行撤掉（用户拍板）——运行控制只保留进度弹窗与状态栏。 ──
 		const maintainCard = containerEl.createDiv({ cls: "semlink-card semlink-rag-card" });
+
 		const reindexRow = maintainCard.createDiv({ cls: "semlink-row" });
 		const reindexLabel = reindexRow.createDiv({ cls: "semlink-row-label" });
 		reindexLabel.createDiv({ cls: "semlink-row-title", text: t("reindexAll") });
@@ -889,26 +888,17 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		});
 		// 数据文件夹行已撤（用户拍板"去掉 Data folder"）：OPFS 位置对普通
 		// 用户不可达，文件名+体积无操作价值。
-		// 三态文案切换器（renderIndexCard 的进度订阅回填 apply）：
-		// 运行 = 暂停/继续，空闲 = 重新索引。
-		const applyReindexState = (): void => reindexRef.apply?.();
 		reindexBtn.addEventListener("click", () => {
-			// 运行态 = 暂停/继续开关（无损，免确认）；空闲才走重索引确认流。
-			// 暂停后事件流停了，这里主动刷一次按钮文案。
-			if (reindexRef.running) {
-				if (this.plugin.progress.current.isPaused) this.plugin.scheduler.resume();
-				else this.plugin.scheduler.pause();
-				applyReindexState();
-				return;
-			}
+			// 运行中禁用（暂停/继续走上一行）；空闲才走重索引确认流。
+			if (reindexRef.running) return;
 			new ConfirmModal(this.app, t("reindexAll"), t("reindexConfirm"), () => {
 				void this.plugin.reindexAll();
 			}).open();
 		});
 		reindexRef.btn = reindexBtn;
-		// 打开页面时索引已在进行 → 按钮直接进入暂停/继续运行态
+		// 打开页面时索引已在进行 → 按钮直接进入禁用运行态
 		// （进度订阅只在事件到来时更新，空闲时没有事件可依赖）。
-		applyReindexState();
+		reindexRef.apply?.();
 
 		// ── 高级选项（默认收起）：分块 / 批量 / 延迟 / 并发 ──
 		// chevron 只 setIcon 一次，开合用 CSS rotate(90deg)；body 展开瞬间

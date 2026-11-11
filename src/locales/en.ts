@@ -282,8 +282,6 @@ const en = {
 	excludePathsShort: "Matched files stay out of the index",
 	excludePathCount: "{n} paths will be excluded",
 	excludePathsPlaceholder: "One per line, e.g. Attachments/",
-	pauseIndex: "Pause indexing",
-	resumeIndex: "Resume indexing",
 	guideEmbedIntroTitle: "🔍 Embedding",
 	guideEmbedIntroSub: "Let your vault understand you",
 	guideStepEmbedding: "Embedding",

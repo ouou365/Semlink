@@ -65,13 +65,16 @@ selfAsAny.onmessage = async (e: MessageEvent) => {
 		return;
 	}
 	if (op === "fsResetDb") {
-		// 补救：把 OPFS 里被写坏的空壳 vault.db 删掉让路——下一次 init 的
-		// seedDb 会把磁盘库重新种进来。空壳数据已确认 0 行（fsProbe），
-		// 无保留价值；磁盘另有 vault.db.bak-20261111 兜底。
+		// 补救：把 OPFS shim 命名空间重置到「待播种/待迁移」态——删掉
+		// vault.db（空壳/残留）与 .migrated 标记（无句柄时代的标记会随
+		// worker 死亡丢失；反过来残留的标记又会挡住再播种）。下次 init：
+		// seedDb 从磁盘库种入 shim → 迁移通道导入 canonical 槽。
+		// 磁盘另有 vault.db.bak-20261111 兜底。
 		try {
 			await initBrowserFs("semlink-db");
 			const existed = existsSyncShim("vault.db");
 			if (existed) unlinkSync("vault.db");
+			if (existsSyncShim("vault.db.migrated")) unlinkSync("vault.db.migrated");
 			selfAsAny.postMessage({ reqId, result: { removed: existed } });
 		} catch (err) {
 			selfAsAny.postMessage({ reqId, error: String(err instanceof Error ? err.message : err) });

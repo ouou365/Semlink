@@ -188,12 +188,22 @@ export class SqliteWasmDb {
 			// 被清零后，vector-store 的启动播种会把化石盘库再塞回来（被误当
 			// 从未播种），下个 worker 又导入一遍。有标记后 auto-seed 跳过，
 			// 显式恢复走 force 通道不受影响。
+			// marker 必须先 ensureFileSync（真机 2026-11-11 第二轮事故）：
+			// shimWrite 无句柄时落 memoryFiles，worker 一死标记即失 → 下轮
+			// 启动化石重播种 + 重迁移 → importDb 覆盖含新嵌入进度的活槽
+			// （「重载之后数据会丢失」的第二根因）。句柄写入才能活过重启。
+			await shimEnsure(`${DB_FILE}.migrated`);
 			shimWrite(`${DB_FILE}.migrated`, new Uint8Array(1));
 			console.error(`[Semlink][migdbg] bakSize=${shimStat(`${DB_FILE}.pre-wasm.bak`).size} vaultSize=${shimStat(DB_FILE).size} handles-visible-to-driver`);
 			console.log(`[Semlink] migrated legacy sql.js DB (${Math.round(legacySize / 1048576)}MB) into sqlite3-wasm opfs-sahpool storage`);
 		}
 
 		const db = new mod.oo1.DB({ filename: DB_PATH, vfs: "opfs-sahpool" });
+		// 一次性开好 shim vault.db 的句柄：worker 生命周期内的 shim 写
+		// （writeLegacySnapshot 耐久快照、迁移标记等）全部落 OPFS 句柄，
+		// 跨 worker 重启存活——无句柄的 shimWrite 落 memoryFiles，进程死
+		// 即失（marker 失踪引发的化石重播种死循环，见迁移块注释）。
+		await shimEnsure(DB_FILE);
 		return new SqliteWasmDb(db, mod.capi, poolUtil, () => new mod.oo1.DB({ filename: DB_PATH, vfs: "opfs-sahpool" }));
 	}
 
