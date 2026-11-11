@@ -53,6 +53,9 @@ export class VectorStore {
 	private browserWorker: Worker | null = null;
 	/** node worker 初始化失败原因（诊断：「为什么掉进 browser-worker」。 */
 	lastNodeWorkerError: string | null = null;
+	/** browser worker 初始化失败原因（含栈头）——诊断「为什么掉进 sync
+	 *  fallback」。经 stats 调试响应透出。 */
+	lastBrowserWorkerError: string | null = null;
 
 	// Synchronous engine used only on the fallback path.
 	private engine: DbEngine | null = null;
@@ -90,13 +93,16 @@ export class VectorStore {
 				await this.initBrowserWorker(this.browserWorkerUrl);
 				return;
 			} catch (e) {
+				const msg = e instanceof Error ? e.message : String(e);
+				const stack = e instanceof Error ? (e.stack ?? "").slice(0, 600) : "";
+				this.lastBrowserWorkerError = msg + (stack ? " | " + stack.split("\n").slice(1, 4).join(" | ") : "");
 				console.error("[Semlink] browser worker init failed — using sync fallback. Reason:", e);
 			}
 		}
 		// Fallback: run the engine synchronously on the main thread.
 		this.fallback = true;
 		this.engine = new DbEngine(this.dataDir);
-		await this.engine.init();
+		await this.engine.init("sqljs");
 		console.warn("[Semlink] VectorStore running in sync (fallback) mode — animations may stutter during indexing");
 	}
 
@@ -120,8 +126,8 @@ export class VectorStore {
 			this.pending.clear();
 		});
 
-		// Send init.
-		await this.call("init", [this.dataDir]);
+		// Send init. mode="sqljs"：sql.js 内存镜像 + 全量导出（历史形态）。
+		await this.call("init", [this.dataDir, "sqljs"]);
 		debugLog("[Semlink] VectorStore running in worker mode");
 	}
 
@@ -172,8 +178,9 @@ export class VectorStore {
 			console.warn("[Semlink] OPFS seed skipped:", seedErr);
 		}
 		// The browser entry ignores the passed dataDir and uses the OPFS
-		// namespace root as its virtual root.
-		await this.call("init", [""]);
+		// namespace root as its virtual root. mode="wasm"：sqlite3-wasm +
+		// opfs-sahpool（事务即落盘；旧 sql.js 库由驱动自动迁移进 sahpool）。
+		await this.call("init", ["", "wasm"]);
 		debugLog("[Semlink] VectorStore running in browser worker mode — DB engine is off the main thread");
 	}
 

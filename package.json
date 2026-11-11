@@ -27,6 +27,7 @@
 	},
 	"dependencies": {
 		"@larksuiteoapi/node-sdk": "^1.72.0",
+		"@sqlite.org/sqlite-wasm": "^3.54.1-build1",
 		"@types/pako": "^2.0.4",
 		"force-graph": "^1.51.4",
 		"pako": "^3.0.1",

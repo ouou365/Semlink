@@ -235,6 +235,15 @@ export function renderOnboarding(
 		// 已跳过"）：嵌入进度 = (已嵌入+已跳过)/总笔记数。
 		let lastEmbedded = 0;
 		let lastSkipped = 0;
+		// 首帧播种实时快照：DB 首查常败于 worker 繁忙（退避期间一直败），
+		// 没有播种分子就钉在 0——「0 / 982、0%」但底部状态栏明明 334 篇
+		// （用户拍板"这个数值能不能加实时缓存"）。缓存由启动/完成事件/
+		// 进度事件 5s 节流回写持续保鲜。
+		const seedCache = plugin.ragStatsCache;
+		if (seedCache.ready) {
+			lastEmbedded = seedCache.embeddedNotes;
+			lastSkipped = seedCache.skippedNotes;
+		}
 		let lastStatsAt = 0;
 		const refreshEmbedded = async (): Promise<void> => {
 			try {
@@ -246,7 +255,13 @@ export function renderOnboarding(
 				lastSkipped = skipped;
 				applyProgress(plugin.progress.current);
 			} catch {
-				/* worker 未就绪：下一拍重试 */
+				/* worker 未就绪/繁忙：退实时快照，别让分子回退到旧值以下 */
+				const c = plugin.ragStatsCache;
+				if (c.ready && (c.embeddedNotes + c.skippedNotes > lastEmbedded + lastSkipped)) {
+					lastEmbedded = c.embeddedNotes;
+					lastSkipped = c.skippedNotes;
+					applyProgress(plugin.progress.current);
+				}
 			}
 		};
 		// 意图状态机（只由按钮点击改变）：running ⇄ paused → done。
@@ -289,7 +304,11 @@ export function renderOnboarding(
 			const busy = p.phase === "scanning" || p.phase === "chunking"
 				|| p.phase === "embedding" || p.phase === "building_index";
 			if (busy) sawBusy = true;
-			const total = Math.max(p.totalNotes, 0);
+			// 分母：本轮运行计数优先；重嵌入等无扫描阶段 totalNotes=0 时
+			// 兜底主线程可索引数（纯文件遍历，无 DB 依赖，恒可用）。
+			const total = p.totalNotes > 0
+				? Math.max(p.totalNotes, 0)
+				: Math.max(plugin.scheduler.countIndexableNotes(), 0);
 			if (sawBusy && total > 0 && p.phase === "completed") state = "done";
 			// 文档口径：已嵌入文档 / 总笔记数（嵌入步只汇报向量化进度）；
 			// 分子含已跳过（用户拍板）：嵌入进度 = (已嵌入+已跳过)/总数

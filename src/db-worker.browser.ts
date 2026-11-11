@@ -16,6 +16,9 @@ import { probeSqliteBytes } from "./db-engine";
 // Virtual root: all engine paths are relative to the OPFS namespace.
 const dispatch = createDispatcher();
 let ready = false;
+/** init（含旧库迁移 + 大库 OPFS 加载）完成前到达的调用在此排队，init 后
+ *  按序补处理——替代旧行为的直接 throw（主线程会把调用当失败）。 */
+const preInitQueue: Array<{ reqId?: number; op: string; args?: unknown[] }> = [];
 
 interface WorkerScope {
 	postMessage(msg: unknown): void;
@@ -101,14 +104,30 @@ selfAsAny.onmessage = async (e: MessageEvent) => {
 
 	try {
 		if (!ready) {
-			if (op !== "init") throw new Error(`Engine not initialized (op=${op})`);
+			if (op !== "init") {
+				// init（含旧库迁移 + 大库加载）完成前到达的调用入队，init 后
+				// 按序补处理——直接 throw 会让主线程把调用当失败（真机报障：
+				// "purgeExcludedFromIndex failed: Engine not initialized"，2026-11-11）。
+				preInitQueue.push({ reqId, op, args: args ?? [] });
+				return;
+			}
 			await initBrowserFs("semlink-db");
-			// Pre-open every path the engine will write synchronously.
-			await ensureFileSync("vault.db");
-			await ensureFileSync("vault.db.tmp");
-			await dispatch("init", [""]); // dataDir "" = the OPFS namespace root
+			// mode="wasm"：sqlite3-wasm + opfs-sahpool（事务即落盘）。旧 sql.js
+			// 库的迁移（semlink-db/vault.db → OPFS 根 → 备份清零）封装在驱动
+			// open() 里；不再需要 sql.js 时代的 .tmp 草稿文件。
+			await dispatch("init", ["", "wasm"]);
 			ready = true;
 			selfAsAny.postMessage({ reqId, result: null });
+			// 补处理 init 期间排队的调用
+			const queued = preInitQueue.splice(0);
+			for (const item of queued) {
+				try {
+					const result = await dispatch(item.op, item.args ?? []);
+					selfAsAny.postMessage({ reqId: item.reqId, result });
+				} catch (err) {
+					selfAsAny.postMessage({ reqId: item.reqId, error: String(err instanceof Error ? err.message : err) });
+				}
+			}
 			return;
 		}
 		if (op === "close") {
@@ -121,9 +140,12 @@ selfAsAny.onmessage = async (e: MessageEvent) => {
 		const result = await dispatch(op, args ?? []);
 		selfAsAny.postMessage({ reqId, result });
 	} catch (err) {
+		// init 失败必须可远程诊断：错误消息 + 栈头一起回主线程
+		const msg = err instanceof Error ? err.message : String(err);
+		const stack = err instanceof Error ? (err.stack ?? "").split("\n").slice(0, 4).join(" | ") : "";
 		selfAsAny.postMessage({
 			reqId,
-			error: err instanceof Error ? err.message : String(err),
+			error: msg + (stack ? " | " + stack : ""),
 		});
 	}
 };

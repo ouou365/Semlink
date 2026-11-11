@@ -69,6 +69,8 @@ const t: Record<keyof typeof en, string> = {
 	reindexAll: "再インデックス",
 	reindexAllDesc: "インデックス全体（チャンク含む）を消去し、すべてのノートを最初からチャンク化し直します",
 	reindexConfirm: "インデックス全体を消去して最初からチャンク化し直します。時間がかかる場合があります。続行しますか？",
+	pauseIndex: "インデックスを一時停止",
+	resumeIndex: "インデックスを再開",
 	noticeRebuildStarted: "インデックスを再構築中…",
 	modelRecommended: "推奨・8192 トークン",
 	modelEnhanced: "強化版",

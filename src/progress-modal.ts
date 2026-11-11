@@ -41,10 +41,21 @@ export class ProgressModal extends Modal {
 	private networkEl!: HTMLElement;
 	private errorEl!: HTMLElement;
 
-	constructor(app: App, progress: ProgressTracker, coverage?: () => Promise<{ indexed: number; total: number }>) {
+	constructor(
+		app: App,
+		progress: ProgressTracker,
+		coverage?: () => Promise<{ indexed: number; total: number }>,
+		/** 覆盖率首帧播种：DB 首查（常败于 worker 繁忙）到达前先直出快照，
+		 *  不再显示 0/0（用户拍板"这个数值能不能加实时缓存"）。 */
+		seed?: { indexed: number; total: number },
+	) {
 		super(app);
 		this.progress = progress;
 		this.coverage = coverage;
+		if (seed) {
+			this.coverageIndexed = seed.indexed;
+			this.coverageTotal = seed.total;
+		}
 		this.modalEl.addClass("smart-vault-progress-modal");
 	}
 

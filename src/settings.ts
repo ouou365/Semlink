@@ -595,9 +595,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	/** RAG 页组「状态」：单张卡（hero 大数字 + 总数副行 + 进度条 +
 	 *  横排统计条 Indexed/Embedded/Skipped + Auto Index 开关）。
 	 *  数据由进度事件与数据库统计双路刷新。reindexRef 由调用方传入：
-	 *  重新索引按钮在「维护」组创建后回填引用，进度订阅据此在索引
-	 *  进行中把按钮置为「索引中…」禁用态。 */
-	private renderIndexCard(containerEl: HTMLElement, reindexRef?: { btn?: HTMLButtonElement; running?: boolean }): void {
+	 *  重新索引按钮在「维护」组创建后回填引用，进度订阅据此把按钮切成
+	 *  运行态三态（暂停索引/继续索引，用户拍板"索引中应该显示暂停索引
+	 *  按钮"），空闲时恢复「重新索引」。 */
+	private renderIndexCard(containerEl: HTMLElement, reindexRef?: { btn?: HTMLButtonElement; running?: boolean; apply?: () => void }): void {
 		const totalNotes = (): number => Math.max(0, this.plugin.progress.current.totalNotes);
 		// 活总数：refreshStats 时同步一次 vault 实际可索引数（countIndexable
 		// Notes 与调度器扫描同口径：md + 非空 + 排除规则）——拷文件期间
@@ -681,7 +682,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const updateBadge = (): void => {
 			indexBlock.block.toggleClass("is-running", runningNow);
 			indexBlock.block.toggleClass("is-done", !runningNow && heroDone);
-			setIcon(spinEl, runningNow || !heroDone ? "loader-2" : "check-circle");
+			// spinEl 在 makeBlock 闭包里，本作用域不可见（拉取代码引用裸名
+			// spinEl → ReferenceError，RAG 页整页崩）——用 indexBlock 徽章。
+			setIcon(indexBlock.spinEl, runningNow || !heroDone ? "loader-2" : "check-circle");
 		};
 		const setHero = (b: RagBlock, num: number): void => {
 			const total = liveTotal;
@@ -700,20 +703,26 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			heroDone = num >= total;
 			updateBadge();
 		};
+		// 运行态三态按钮：运行中 = 暂停索引；运行中已暂停（手动或网络自动
+		// 暂停）= 继续索引；空闲 = 重新索引。红字危险态只属于破坏性的
+		// 重新索引——暂停/继续是无损操作，恢复白钮。
+		const applyReindexBtn = (): void => {
+			const btn = reindexRef?.btn;
+			if (!btn) return;
+			const running = reindexRef?.running ?? false;
+			const paused = this.plugin.progress.current.isPaused;
+			btn.removeAttribute("disabled");
+			btn.toggleClass("mod-danger", !running);
+			btn.setText(running ? (paused ? t("resumeIndex") : t("pauseIndex")) : t("reindexAll"));
+		};
 		const setRunning = (running: boolean): void => {
 			runningNow = running;
 			updateBadge();
-			if (reindexRef) reindexRef.running = running;
-			const btn = reindexRef?.btn;
-			if (btn) {
-				if (running) {
-					btn.setAttribute("disabled", "true");
-					btn.setText(t("reindexRunning"));
-				} else {
-					btn.removeAttribute("disabled");
-					btn.setText(t("reindexAll"));
-				}
+			if (reindexRef) {
+				reindexRef.running = running;
+				reindexRef.apply = applyReindexBtn;
 			}
+			applyReindexBtn();
 		};
 
 		// 数值行取数据库真实状态（笔记数），hero 百分比 = 已索引（已嵌入） / 总笔记数。
@@ -786,13 +795,21 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 单一合并订阅：进度事件实时刷新运行态 + 总数（不依赖 DB）+ 数值行节流查库（≤1s 一次）
 		let lastEmbedRefresh = 0;
 		const unIndex = this.plugin.progress.onProgress((e) => {
-			if (e.type !== "progress") return;
-			setRunning(RAG_RUNNING_PHASES.has(e.progress.phase));
-			const now = Date.now();
-			if (now - lastEmbedRefresh >= 1000) {
-				lastEmbedRefresh = now;
-				updateHeroSub();
-				void refreshStats();
+			if (e.type === "progress") {
+				setRunning(RAG_RUNNING_PHASES.has(e.progress.phase));
+				const now = Date.now();
+				if (now - lastEmbedRefresh >= 1000) {
+					lastEmbedRefresh = now;
+					updateHeroSub();
+					void refreshStats();
+				}
+				return;
+			}
+			// 暂停/恢复：phase 不变（仍处运行相位），按钮要在这两个事件瞬间
+			// 翻转——等下一个 progress 事件会卡在旧文案（暂停后循环退出，
+			// 事件流也停了）。
+			if (e.type === "pause" || e.type === "resume") {
+				setRunning(RAG_RUNNING_PHASES.has(this.plugin.progress.current.phase));
 			}
 		});
 		this.indexCardUnsub = () => {
@@ -803,7 +820,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 	private renderEmbeddingTab(containerEl: HTMLElement): void {
 		// reindex 按钮引用前传给状态组的进度订阅（状态组先渲染，维护组后创建）
-		const reindexRef: { btn?: HTMLButtonElement; running?: boolean } = {};
+		const reindexRef: { btn?: HTMLButtonElement; running?: boolean; apply?: () => void } = {};
 		this.renderIndexCard(containerEl, reindexRef);
 
 		// ── 组「配置」：嵌入模型 + 排除路径（组标题已去，用户拍板） ──
@@ -865,18 +882,26 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			cls: "semlink-btn-ghost mod-danger",
 			text: t("reindexAll"),
 		});
+		// 三态文案切换器（renderIndexCard 的进度订阅回填 apply）：
+		// 运行 = 暂停/继续，空闲 = 重新索引。
+		const applyReindexState = (): void => reindexRef.apply?.();
 		reindexBtn.addEventListener("click", () => {
+			// 运行态 = 暂停/继续开关（无损，免确认）；空闲才走重索引确认流。
+			// 暂停后事件流停了，这里主动刷一次按钮文案。
+			if (reindexRef.running) {
+				if (this.plugin.progress.current.isPaused) this.plugin.scheduler.resume();
+				else this.plugin.scheduler.pause();
+				applyReindexState();
+				return;
+			}
 			new ConfirmModal(this.app, t("reindexAll"), t("reindexConfirm"), () => {
 				void this.plugin.reindexAll();
 			}).open();
 		});
 		reindexRef.btn = reindexBtn;
-		// 打开页面时索引已在进行 → 按钮直接进入「索引中…」运行态
+		// 打开页面时索引已在进行 → 按钮直接进入暂停/继续运行态
 		// （进度订阅只在事件到来时更新，空闲时没有事件可依赖）。
-		if (reindexRef.running) {
-			reindexBtn.setAttribute("disabled", "true");
-			reindexBtn.setText(t("reindexRunning"));
-		}
+		applyReindexState();
 
 		// ── 高级选项（默认收起）：分块 / 批量 / 延迟 / 并发 ──
 		// chevron 只 setIcon 一次，开合用 CSS rotate(90deg)；body 展开瞬间

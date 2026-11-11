@@ -92,6 +92,9 @@ export default class SmartVaultPlugin extends Plugin {
 
 	private statusBarEl: HTMLElement | null = null;
 	private lastStatusBarUpdate = 0;
+	/** ragStatsCache 的进度事件节流戳：索引运行期间也保持快照新鲜
+	 *  （弹窗/引导的实时缓存回退都吃它，见 showProgressModal/onboarding）。 */
+	private lastRagCacheRefresh = 0;
 
 	/** 上次清理索引时用的排除规则（saveSettings 里比对，规则变了才重跑 purge）。 */
 	private lastPurgedExcludePaths = "";
@@ -232,6 +235,13 @@ export default class SmartVaultPlugin extends Plugin {
 				if (now - this.lastStatusBarUpdate >= 500) {
 					this.lastStatusBarUpdate = now;
 					this.updateStatusBar(event.progress);
+				}
+				// 索引运行期间节流回写 RAG 统计快照（≥5s 一次）：进度弹窗的
+				// 覆盖率回退与引导杯的分子播种都靠它当实时缓存——以前只在
+				// 完成/设置页写透时刷新，运行中缓存一直陈旧。
+				if (now - this.lastRagCacheRefresh >= 5000) {
+					this.lastRagCacheRefresh = now;
+					void this.refreshRagStatsCache();
 				}
 			}
 		});
@@ -702,6 +712,7 @@ export default class SmartVaultPlugin extends Plugin {
 			storage: {
 				mode: this.store.storageMode,
 				nodeWorkerError: this.store.lastNodeWorkerError,
+				browserWorkerError: this.store.lastBrowserWorkerError,
 				diskDbSizeMb,
 				memoryChunks: stats.totalChunks,
 				// 空内存库 + 大磁盘库 = 加载失败（空库保险丝会拒绝 save 覆盖）
@@ -2808,11 +2819,23 @@ export default class SmartVaultPlugin extends Plugin {
 			// 但已处理完，只数 Embedded 会把收尾钉在 99.4% 差一截（用户
 			// 反馈）。曾用「已建索引笔记数」——重嵌入重建期间它恒定不动
 			// （重建不产生新笔记，只刷新向量），弹窗分子冻在 801 很费解。
-			const [embedded, skipped] = await Promise.all([
-				this.store.getEmbeddedNoteCount(),
-				this.store.getEmbedSkippedNoteCount(),
-			]);
-			return { indexed: embedded + skipped, total: this.scheduler.countIndexableNotes() };
+			try {
+				const [embedded, skipped] = await Promise.all([
+					this.store.getEmbeddedNoteCount(),
+					this.store.getEmbedSkippedNoteCount(),
+				]);
+				return { indexed: embedded + skipped, total: this.scheduler.countIndexableNotes() };
+			} catch {
+				// worker 繁忙/退避中 DB 查询失败：退实时快照（索引运行中每
+				// 5s 节流回写），别把弹窗钉在 0/0——分母走主线程文件遍历，
+				// 零 DB 依赖，永远拿得到。
+				const c = this.ragStatsCache;
+				return { indexed: c.embeddedNotes + c.skippedNotes, total: this.scheduler.countIndexableNotes() };
+			}
+		}, {
+			// 首帧播种：DB 查询到达前先直出快照（同「0/0」根因的修复）
+			indexed: this.ragStatsCache.embeddedNotes + this.ragStatsCache.skippedNotes,
+			total: this.scheduler.countIndexableNotes(),
 		});
 		modal.open();
 	}
@@ -2894,10 +2917,11 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 
 		if (count) {
-			// 状态栏显示应索引总数（与 RAG 卡 hero 副行同口径同源）。曾显示
-			// processedNotes——那是跨轮累计的已处理计数器，会超过库总数
-			// （真机 1049 files > vault 实际数），看着像总数在乱涨。
-			count.textContent = `${this.scheduler.countIndexableNotes()} ${t("statusFilesCount")}`;
+			// 状态栏显示已索引数量（用户拍板"右下角应该显示已索引的数量"）：
+			// processedNotes 在调度器 incremental 启动时已从 DB 重同步
+			// （旧的跨轮累计乱涨问题已修），运行中实时爬升、完成后=总数。
+			// 复用现成 i18n 键 statusIndexed（"980 笔记已索引"/"980 notes indexed"）。
+			count.textContent = `${p.processedNotes} ${t("statusIndexed")}`;
 		}
 	}
 
@@ -2908,7 +2932,7 @@ export default class SmartVaultPlugin extends Plugin {
 			const count = this.statusBarEl.querySelector(".status-count");
 			if (count) {
 				const stats = await this.store.getStats();
-				count.textContent = `${this.scheduler.countIndexableNotes()} ${t("statusFilesCount")}`;
+				count.textContent = `${stats.indexedNotes} ${t("statusIndexed")}`;
 				// 用 DB 权威值播种进度追踪器：否则启动后任何一次进度事件
 				// （扫描枚举阶段 processedNotes=0）都会把状态栏覆盖成
 				// 「0 个文件」，直到打开面板/设置触发重播种才恢复。

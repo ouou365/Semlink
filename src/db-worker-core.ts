@@ -9,12 +9,15 @@
 
 import { DbEngine } from "./db-engine";
 import { chunkMarkdown } from "./chunker";
+import type { DbMode } from "./sqlite-wasm-driver";
 import type { NoteChunk, QueueAction } from "./types";
 
 export type Dispatcher = (op: string, args: unknown[]) => Promise<unknown>;
 
 /** Create a dispatcher closure owning one DbEngine instance. The dataDir
- *  arrives with the "init" op (each host passes its own). */
+ *  arrives with the "init" op (each host passes its own); args[1] = 存储驱动
+ *  模式（"wasm" = 浏览器 Worker + OPFS 页级持久化；缺省 "sqljs" = sql.js
+ *  内存镜像 + 全量导出，Node worker / sync fallback 兼容形态）。 */
 export function createDispatcher(): Dispatcher {
 	let engine: DbEngine | null = null;
 
@@ -23,7 +26,7 @@ export function createDispatcher(): Dispatcher {
 			// Only "init" is valid before the engine exists.
 			if (op === "init") {
 				engine = new DbEngine(args[0] as string);
-				await engine.init();
+				await engine.init((args[1] as DbMode | undefined) ?? "sqljs");
 				return null;
 			}
 			throw new Error(`Engine not initialized (op=${op})`);

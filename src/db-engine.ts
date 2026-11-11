@@ -11,12 +11,13 @@
 // writes) lives here. Keeping it in one class lets us reuse the exact same code
 // for both the worker and the fallback, so behavior is identical either way.
 
-import initSqlJs, { Database } from "sql.js";
+import initSqlJs, { Database as SqlJsDatabase } from "sql.js";
 import { debugLog } from "./log";
 import { isSparseContent } from "./chunker";
 import wasmBase64 from "sql.js/dist/sql-wasm.wasm";
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
+import { SqliteWasmDb, SqlJsSemDb, SemDb, DbMode } from "./sqlite-wasm-driver";
 import type { NoteChunk, SearchResult, QueueItem, QueueAction, QueueItemStatus } from "./types";
 
 /** Minimal shape of sql.js exec() results — the package's own typings do not
@@ -60,7 +61,11 @@ export async function probeSqliteBytes(buf: Uint8Array): Promise<{
 }
 
 export class DbEngine {
-	private db: Database | null = null;
+	/** 引擎无关的 DB 句柄：浏览器 Worker = sqlite3-wasm（opfs-sahpool，事务
+	 *  即持久）；Node worker / sync fallback = sql.js（内存镜像 + 全量导出，
+	 *  历史形态）。两种驱动都实现 SemDb 小接口，engine 其余代码引擎无关。 */
+	private db: SemDb | null = null;
+	private dbMode: DbMode = "sqljs";
 	private dataDir: string;
 
 	// In-memory vector cache for fast search
@@ -89,13 +94,27 @@ export class DbEngine {
 		}
 	}
 
-	/** The raw sql.js handle — exposed so the fallback proxy can satisfy any
+	/** The raw driver handle — exposed so the fallback proxy can satisfy any
 	 *  legacy direct-db callers during the transition. */
-	get rawDb(): Database | null {
+	get rawDb(): SemDb | null {
 		return this.db;
 	}
 
-	async init(): Promise<void> {
+	/** mode = 运行形态：
+	 *  - "wasm"  : 浏览器 Web Worker → @sqlite.org/sqlite-wasm + opfs-sahpool
+	 *              （OPFS 页级持久化，事务即落盘，无全量导出）
+	 *  - "sqljs" : Node worker / sync fallback → sql.js + 磁盘文件
+	 *              （整库内存镜像，save 全量导出——历史形态，保留兼容） */
+	async init(mode: DbMode = "sqljs"): Promise<void> {
+		this.dbMode = mode;
+
+		if (mode === "wasm") {
+			this.db = await SqliteWasmDb.open();
+			this.createTables();
+			await this.migrateIfNeeded();
+			return;
+		}
+
 		// Decode inline WASM base64
 		const wasmBinary = Buffer.from(wasmBase64 as string, "base64");
 		const SQL = await initSqlJs({ wasmBinary } as Parameters<typeof initSqlJs>[0]);
@@ -108,10 +127,11 @@ export class DbEngine {
 			try { unlinkSync(tmpPath); } catch { /* ignore */ }
 		}
 
+		let raw: SqlJsDatabase;
 		if (existsSync(dbPath)) {
 			try {
 				const buf = readFileSync(dbPath);
-				this.db = new SQL.Database(buf);
+				raw = new SQL.Database(buf);
 			} catch (e) {
 				// Corrupted/torn DB (e.g. from a pre-atomic-write crash). Don't
 				// silently rebuild — back it up so the data is recoverable, then
@@ -120,11 +140,12 @@ export class DbEngine {
 				try {
 					renameSync(dbPath, `${dbPath}.corrupt-${Date.now()}`);
 				} catch { /* ignore */ }
-				this.db = new SQL.Database();
+				raw = new SQL.Database();
 			}
 		} else {
-			this.db = new SQL.Database();
+			raw = new SQL.Database();
 		}
+		this.db = new SqlJsSemDb(raw);
 
 		this.createTables();
 		await this.migrateIfNeeded();
@@ -283,11 +304,15 @@ export class DbEngine {
 	 *  lookups returned nothing → everything treated as new). */
 	save(): void {
 		if (!this.db) return;
-		// 空库保险丝：内存库零 chunk 而磁盘库是几百 MB 的老库 = 上游加载
-		// 失败后退化成空库（真机 2026-11-11：worker 未知原因空库启动）。
-		// 此时导出会用空库覆盖 vault.db，把整份索引抹掉——拒绝落盘并把
-		// 判断线索留给日志。正常场景不受影响（全新 vault 本来就没有
-		// 大磁盘库）。
+		if (this.dbMode === "wasm") {
+			// sqlite3-wasm/opfs-sahpool：事务提交即页级落盘，无"保存"概念。
+			// 委托驱动做周期维护（PRAGMA optimize）。
+			this.db.save();
+			return;
+		}
+		// sqljs 分支（sync fallback / Node worker）：空库保险丝 + 全量导出
+		// + tmp+rename 原子写。rename 同目录原子——进程死于写中时旧库完好
+		// （"重载后全部重索引"的历史根因防护，保留）。
 		const dbPath = join(this.dataDir, DB_FILE);
 		if (existsSync(dbPath)) {
 			const diskSize = statSync(dbPath).size;
@@ -301,15 +326,10 @@ export class DbEngine {
 				return;
 			}
 		}
-		// export() already returns a fresh Uint8Array — passing it straight
-		// to writeFileSync skips a full-DB Buffer copy (hundreds of MB).
 		const data = this.db.export();
-		const finalPath = join(this.dataDir, DB_FILE);
 		const tmpPath = join(this.dataDir, `${DB_FILE}.tmp`);
 		writeFileSync(tmpPath, data);
-		// fsync isn't available on every platform via this import; rename alone
-		// still protects against torn writes from a killed process.
-		renameSync(tmpPath, finalPath);
+		renameSync(tmpPath, dbPath);
 	}
 
 	/** Clear all stored data (chunks, queue, vectors) for a full rebuild */
@@ -781,9 +801,13 @@ export class DbEngine {
 		const r3 = this.db!.exec("SELECT COUNT(DISTINCT note_path) FROM chunks WHERE status = 'active'");
 		const indexedNotes = r3.length > 0 ? (r3[0].values[0][0] as number) : 0;
 
-		const dbPath = join(this.dataDir, DB_FILE);
 		let dbSizeMb = 0;
-		try { dbSizeMb = statSync(dbPath).size / (1024 * 1024); } catch { /* file gone */ }
+		if (this.dbMode === "wasm") {
+			// wasm 驱动：库驻留 OPFS（无磁盘路径）→ 用页数×页大小算体积
+			dbSizeMb = Math.round(((this.db as SqliteWasmDb).bytesTotal / (1024 * 1024)) * 10) / 10;
+		} else {
+			try { dbSizeMb = statSync(join(this.dataDir, DB_FILE)).size / (1024 * 1024); } catch { /* file gone */ }
+		}
 
 		return { totalChunks, activeChunks, embeddedChunks, indexedNotes, dbSizeMb: Math.round(dbSizeMb * 10) / 10 };
 	}

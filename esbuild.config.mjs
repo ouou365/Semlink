@@ -42,6 +42,10 @@ const buildOptions = {
 	platform: "node",
 	define: {
 		"process.env.NODE_ENV": prod ? '"production"' : '"development"',
+		// esbuild 的 iife 构建会把 import.meta 替换成空对象——官方 sqlite3
+		// glue 里 new URL(x, import.meta.url) 因此 Invalid URL（Blob Worker
+		// 尤其如此）。给一个合法绝对 URL 兜底（wasmBinary 直供后不会 fetch）。
+		"import.meta.url": '"file:///semlink-virtual/bundle.mjs"',
 	},
 	loader: {
 		".wasm": "base64",
