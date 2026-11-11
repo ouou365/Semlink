@@ -754,11 +754,12 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				const idxTime = await this.plugin.store.lastIndexTime();
 				if (idxTime) {
 					const d = new Date(idxTime);
+					// 今天 = 时分；非今天 = 只显月-日（用户拍板"MM-dd"）
 					const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 					updatedEl.setText(
 						d.toDateString() === new Date().toDateString()
 							? hm
-							: `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${hm}`,
+							: `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
 					);
 				}
 				// 总数副行：hero 的分母口径（用户拍板"横排统计条"——总数不再
