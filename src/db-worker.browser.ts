@@ -85,19 +85,58 @@ selfAsAny.onmessage = async (e: MessageEvent) => {
 		// 规则：OPFS 文件 0 字节 → 播种；主线程传 force=true（磁盘有
 		// reseed.requested 标记，恢复流程用）→ 无条件覆盖。非 0 且无
 		// force = 已有更新索引，跳过（绝不拿化石磁盘库覆盖活索引）。
+		// [2026-11-11 补] 迁移完成标记（vault.db.migrated）存在时也跳过
+		// ——否则 shim 被迁移清零后每轮启动又把化石塞回来，下个 worker
+		// 的迁移通道把化石重导入活槽，覆盖真实索引（死循环源）。
 		try {
 			await initBrowserFs("semlink-db");
 			await ensureFileSync("vault.db");
 			const bytes = (args?.[0] as Uint8Array) ?? new Uint8Array(0);
 			const force = args?.[1] === true;
+			const migrated = existsSyncShim("vault.db.migrated");
 			const cur = statSyncShim("vault.db").size;
-			const shouldSeed = force || (cur === 0 && bytes.length > 0);
+			const shouldSeed = force || (!migrated && cur === 0 && bytes.length > 0);
 			if (shouldSeed && bytes.length > 0) {
 				writeFileSync("vault.db", bytes);
 			}
-			selfAsAny.postMessage({ reqId, result: { seeded: shouldSeed && bytes.length > 0, force, existingBytes: cur, seedBytes: bytes.length } });
+			selfAsAny.postMessage({ reqId, result: { seeded: shouldSeed && bytes.length > 0, force, migrated, existingBytes: cur, seedBytes: bytes.length } });
 		} catch (err) {
 			selfAsAny.postMessage({ reqId, error: String(err instanceof Error ? err.message : err) });
+		}
+		return;
+	}
+
+	if (op === "repairFromBak") {
+		// 修复通道（真机 2026-11-11 槽名错位事故）：shim 命名空间里的
+		// pre-wasm.bak（= 迁移前完整旧索引）原地导入 canonical 槽。字节
+		// 全程 worker 内读写——523MB 不走主线程 IPC。成功后删 bak（修复
+		// 完成标记）；live 非空时引擎侧拒绝，force=true 才覆盖。
+		try {
+			await initBrowserFs("semlink-db");
+			const bakPath = "vault.db.pre-wasm.bak";
+			const exists = existsSyncShim(bakPath);
+			let size = -1;
+			let sizeErr = "";
+			let readLen = -1;
+			let readErr = "";
+			try { size = exists ? statSyncShim(bakPath).size : -1; } catch (e) { sizeErr = String(e instanceof Error ? e.message : e); }
+			let bytes = new Uint8Array(0);
+			try { bytes = readFileSync(bakPath); readLen = bytes.byteLength; } catch (e) { readErr = String(e instanceof Error ? e.message : e); }
+			if (!exists || size <= 0 || readLen <= 0) {
+				selfAsAny.postMessage({
+					reqId,
+					result: { error: `no bak (exists=${exists} statSize=${size}${sizeErr ? " statErr=" + sizeErr : ""} readLen=${readLen}${readErr ? " readErr=" + readErr : ""})` },
+				});
+				return;
+			}
+			const result = await dispatch("repairFromBytes", [bytes, args?.[0] === true]);
+			const res = result as { replaced?: boolean };
+			if (res?.replaced) unlinkSync(bakPath);
+			selfAsAny.postMessage({ reqId, result });
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			const stack = err instanceof Error ? (err.stack ?? "").split("\n").slice(0, 4).join(" | ") : "";
+			selfAsAny.postMessage({ reqId, error: msg + (stack ? " | " + stack : "") });
 		}
 		return;
 	}

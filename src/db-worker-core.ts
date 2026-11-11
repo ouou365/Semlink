@@ -35,6 +35,9 @@ export function createDispatcher(): Dispatcher {
 		switch (op) {
 			case "chunk": return chunkMarkdown(args[0] as string, args[1] as string, args[2] as number, args[3] as number);
 			case "save": return engine.save();
+			case "exportDb": return engine.exportDb();
+			case "auditlog": return engine.auditLog();
+			case "repairFromBytes": return engine.repairFromBytes(args[0] as Uint8Array, args[1] === true);
 			case "clearAll": return engine.clearAll();
 			case "clearVectors": return engine.clearVectors();
 			case "compact": return engine.compact();

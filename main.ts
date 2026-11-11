@@ -686,7 +686,41 @@ export default class SmartVaultPlugin extends Plugin {
 				return { op, error: e instanceof Error ? e.message : String(e) };
 			}
 		}
-		if (op) return { error: `unknown op "${op}" (save | compact | resetOpfsDb)` };
+		if (op === "repairfrombak") {
+			// 槽名错位事故修复通道：pre-wasm.bak（迁移前完整旧索引）原地
+			// 导入 canonical 槽。force=true 时活库非空也覆盖。
+			try {
+				const r = await this.store.repairFromBak((opts as { force?: boolean })?.force === true);
+				return { op, ...r };
+			} catch (e) {
+				return { op, error: e instanceof Error ? e.message : String(e) };
+			}
+		}
+		if (op === "seedfromdisk") {
+			// 恢复通道：把插件目录 data/vault.db（真磁盘化石，523MB 完整
+			// 旧索引）强制播种进 shim 命名空间；重载后迁移通道自动导入。
+			try {
+				const req = (window as unknown as { require?: (m: string) => unknown }).require;
+				const fsMod = req?.("fs") as { readFileSync(p: string): { buffer: ArrayBuffer } } | undefined;
+				const p = this.pluginDir + "/data/vault.db";
+				const raw = fsMod?.readFileSync(p);
+				if (!raw) return { op, error: "cannot read data/vault.db" };
+				const r = await this.store.seedFromBytes(new Uint8Array(raw.buffer));
+				return { op, ...r, note: "reload now — the migration imports it" };
+			} catch (e) {
+				return { op, error: e instanceof Error ? e.message : String(e) };
+			}
+		}
+		if (op === "auditlog") {
+			// 黑匣子回读：chunks 删除现场（时间 + 剩余行数）
+			try {
+				const r = await this.store.auditLog();
+				return { op, audit: r };
+			} catch (e) {
+				return { op, error: e instanceof Error ? e.message : String(e) };
+			}
+		}
+		if (op) return { error: `unknown op "${op}" (save | compact | resetOpfsDb | repairFromBak | seedFromDisk | auditLog)` };
 		const stats = await this.store.getStats();
 		// 存储模式诊断：空索引 + 大磁盘库 = 上游加载失败（worker 初始化
 		// 失败掉进 browser-worker/sync 空库、或加载抛错）——定位「索引清零」。

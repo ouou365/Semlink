@@ -422,6 +422,24 @@ export class VectorStore {
 		return await this.call<{ removed: boolean }>("fsResetDb");
 	}
 
+	/** 修复通道（真机 2026-11-11 槽名错位事故）：把 shim 命名空间里的
+	 *  pre-wasm.bak（迁移前完整旧索引）原地导入 canonical 槽。worker 内
+	 *  读写 bak 字节，不经过主线程。force=true 时活库非空也覆盖。 */
+	async repairFromBak(force = false): Promise<{ chunks: number; replaced: boolean; error?: string }> {
+		return await this.call<{ chunks: number; replaced: boolean; error?: string }>("repairFromBak", [force]);
+	}
+
+	/** 恢复通道：主线程读到的盘库字节（如 data/vault.db 化石）强制播种
+	 *  进 shim 命名空间，重载后迁移通道自动导入。 */
+	async seedFromBytes(bytes: Uint8Array): Promise<{ seeded: boolean; force: boolean; migrated: boolean; existingBytes: number; seedBytes: number }> {
+		return await this.call("seedDb", [bytes, true]);
+	}
+
+	/** [审计] 黑匣子回读：最近的 chunks 删除现场（时间 + 剩余行数）。 */
+	async auditLog(): Promise<unknown> {
+		return await this.call("auditlog");
+	}
+
 	async listIndexedNotePaths(): Promise<string[]> {
 		return await this.call<string[]>("listIndexedNotePaths");
 	}

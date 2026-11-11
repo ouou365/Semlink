@@ -28,7 +28,7 @@ import type { Database as SqlJsDatabase } from "sql.js";
 // 直接相对路径引入 OPFS shim（不要走 "fs" 别名：驱动同时被打进 Node 构建，
 // 那里 "fs" 是真 fs，没有 ensureFileSync 这类 shim 导出）。旧库迁移（读
 // sql.js 时代的命名空间文件）需要它；shim 顶层无副作用，打进 main.js 无害。
-import { existsSync as shimExists, readFileSync as shimRead, statSync as shimStat, renameSync as shimRename, ensureFileSync as shimEnsure } from "./browser-fs";
+import { existsSync as shimExists, readFileSync as shimRead, statSync as shimStat, renameSync as shimRename, ensureFileSync as shimEnsure, writeFileSync as shimWrite } from "./browser-fs";
 
 /** sql.js 形态的查询结果（与 DbEngine 现有消费方式逐字节兼容）。 */
 type QueryResult = { columns: string[]; values: unknown[][] };
@@ -54,6 +54,9 @@ interface OfficialDb {
 
 interface OfficialCapi {
 	sqlite3_changes(dbPtr: number): number;
+	/** 整库序列化（export/备份诊断用）：本构建的 sqlite3_serialize 绑定返回
+	 *  裸指针数字，Uint8Array 适配层在 sqlite3_js_db_export（官方 JS 包装）。 */
+	sqlite3_js_db_export(pDb: number, schema?: string | number): Uint8Array;
 }
 
 interface PoolUtilLike {
@@ -69,6 +72,11 @@ interface OfficialModule {
 }
 
 const DB_FILE = "vault.db";
+/** sahpool 槽的 canonical 名（xOpen 经 getSlasherPath 加前导斜杠）。
+ *  importDb 不做 canonical 化——真机 2026-11-11 事故：importDb("vault.db")
+ *  落在无斜杠槽，open("vault.db") 解析成 "/vault.db" 另开空槽 → 迁移数据
+ *  全部不可见 → 全量重扫。所有 API 统一用 DB_PATH。 */
+const DB_PATH = "/vault.db";
 
 /** 把 base64 的 wasm 解码成字节（browser worker 无 Buffer）。 */
 function decodeBase64(b64: string): Uint8Array {
@@ -118,13 +126,15 @@ export class SqlJsSemDb implements SemDb {
 export class SqliteWasmDb {
 	private db: OfficialDb;
 	private capi: OfficialCapi;
+	private poolUtil: PoolUtilLike;
 	private stmtCache = new Map<string, OfficialStmt>();
 	/** 页大小 × 页数（getStats 的 dbSizeMb 用，替代磁盘 statSync）。 */
 	bytesTotal = 0;
 
-	private constructor(db: OfficialDb, capi: OfficialCapi) {
+	private constructor(db: OfficialDb, capi: OfficialCapi, poolUtil: PoolUtilLike, private reopenDb: () => OfficialDb) {
 		this.db = db;
 		this.capi = capi;
+		this.poolUtil = poolUtil;
 		const r = this.exec("PRAGMA page_count");
 		const page = this.exec("PRAGMA page_size");
 		this.bytesTotal = Number(r[0]?.values[0]?.[0] ?? 0) * Number(page[0]?.values[0]?.[0] ?? 0);
@@ -162,19 +172,29 @@ export class SqliteWasmDb {
 			throw new Error(`[wasm-driver installOpfsSAHPoolVfs] ${e instanceof Error ? e.message : String(e)}`);
 		}
 		// 迁移：shim 命名空间（'semlink-db'）的旧库 → importDb 进 pool。
+		// 名字必须用 canonical 的 DB_PATH（带斜杠），与 open 对齐（见 DB_PATH 注释）。
 		const legacySize = shimExists(DB_FILE) ? shimStat(DB_FILE).size : 0;
 		if (legacySize > 0) {
 			const legacy = shimRead(DB_FILE);
-			await poolUtil.importDb(DB_FILE, legacy);
+			await poolUtil.importDb(DB_PATH, legacy);
 			// 备份 + 源清零（shim renameSync = 写新文件 + 源截零；源句柄保留）。
 			// size 0 = 已迁移标记，下次启动跳过。
-			shimEnsure(`${DB_FILE}.pre-wasm.bak`);
+			// await 必须显式：ensureFileSync 是 async（SAH 注册在微任务后），
+			// 不 await 的话 renameSync 落笔时 handles 还没有 bak → 写进
+			// memoryFiles（进程死即失），磁盘 bak 永远 0 字节（真机 2026-11-11）。
+			await shimEnsure(`${DB_FILE}.pre-wasm.bak`);
 			shimRename(DB_FILE, `${DB_FILE}.pre-wasm.bak`);
+			// 迁移完成标记：断掉「自动播种 → 迁移」的死循环——shim vault.db
+			// 被清零后，vector-store 的启动播种会把化石盘库再塞回来（被误当
+			// 从未播种），下个 worker 又导入一遍。有标记后 auto-seed 跳过，
+			// 显式恢复走 force 通道不受影响。
+			shimWrite(`${DB_FILE}.migrated`, new Uint8Array(1));
+			console.error(`[Semlink][migdbg] bakSize=${shimStat(`${DB_FILE}.pre-wasm.bak`).size} vaultSize=${shimStat(DB_FILE).size} handles-visible-to-driver`);
 			console.log(`[Semlink] migrated legacy sql.js DB (${Math.round(legacySize / 1048576)}MB) into sqlite3-wasm opfs-sahpool storage`);
 		}
 
-		const db = new mod.oo1.DB({ filename: DB_FILE, vfs: "opfs-sahpool" });
-		return new SqliteWasmDb(db, mod.capi);
+		const db = new mod.oo1.DB({ filename: DB_PATH, vfs: "opfs-sahpool" });
+		return new SqliteWasmDb(db, mod.capi, poolUtil, () => new mod.oo1.DB({ filename: DB_PATH, vfs: "opfs-sahpool" }));
 	}
 
 	/** 查询（SELECT/PRAGMA）：返回 sql.js 形态的结果组。DML 返回空数组，
@@ -227,6 +247,18 @@ export class SqliteWasmDb {
 		try { this.exec("PRAGMA optimize"); } catch { /* 维护失败不影响主流程 */ }
 	}
 
+	/** 用完整 DB 字节替换当前槽内容（修复通道）：关连接 → importDb 覆盖
+	 *  canonical 槽 → 重开。importDb 对已关联的槽 = 原地覆盖（mapFilename
+	 *  ToSAH.get 命中同一个 SAH）。调用方负责 guards（活库非空拒换）。 */
+	async replaceFromBytes(bytes: Uint8Array): Promise<void> {
+		this.close();
+		await this.poolUtil.importDb(DB_PATH, bytes);
+		this.db = this.reopenDb();
+		const r = this.exec("PRAGMA page_count");
+		const page = this.exec("PRAGMA page_size");
+		this.bytesTotal = Number(r[0]?.values[0]?.[0] ?? 0) * Number(page[0]?.values[0]?.[0] ?? 0);
+	}
+
 	/** 删除 OPFS 根上的库文件（损坏恢复：备份后删库重开）。静态方法，
 	 *  不持有 sahpool 句柄时才能删——只在 open 失败路径调用。 */
 	static async removeDbFile(): Promise<void> {
@@ -234,9 +266,28 @@ export class SqliteWasmDb {
 		try { await root.removeEntry(DB_FILE); } catch { /* 本就不存在 */ }
 	}
 
-	/** 整库字节（备份/诊断用；热路径不调用）。 */
+	/** 整库字节（备份/诊断用；热路径不调用）。OO DB 本构建没有 serialize
+	 *  方法、capi.sqlite3_serialize 是裸指针绑定——官方 JS 包装
+	 *  sqlite3_js_db_export 才回 Uint8Array。 */
 	export(): Uint8Array {
-		return this.db.serialize();
+		return this.capi.sqlite3_js_db_export(this.db.pointer);
+	}
+
+	/** 耐久快照：整库序列化后写进 shim 命名空间的 vault.db（shim 的
+	 *  writeFileSync 自带 flush，真机证实跨 worker 存活——与 pool 槽的
+	 *  「杀进程即丢」形成互补）。下次 init 的 legacy 迁移通道会自动把
+	 *  非空 shim vault.db 导回 canonical 槽，恢复零新代码。
+	 *  返回是否实际写入（调用方负责 fuse：空库不得覆盖好快照）。 */
+	writeLegacySnapshot(): boolean {
+		try {
+			const bytes = this.export();
+			if (bytes.byteLength <= 0) return false;
+			shimWrite(DB_FILE, bytes);
+			return true;
+		} catch (e) {
+			console.error(`[Semlink] snapshot write failed: ${e instanceof Error ? e.message : String(e)}`);
+			return false;
+		}
 	}
 
 	close(): void {

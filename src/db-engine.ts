@@ -206,6 +206,12 @@ export class DbEngine {
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_note_path ON chunks (note_path)");
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_status ON chunks (status)");
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_queue_status ON queue (status, priority)");
+		this.installAuditTrigger();
+	}
+
+	/** [审计] 黑匣子回读：最近的 chunks 删除现场（时间 + 剩余行数）。 */
+	auditLog(): unknown {
+		return this.db!.exec("SELECT ts, remaining, stage FROM audit_log ORDER BY rowid DESC LIMIT 40");
 	}
 
 	/** Migrate from old vector_offset + vectors.bin to BLOB storage */
@@ -293,21 +299,53 @@ export class DbEngine {
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_status ON chunks (status)");
 	}
 
+	/** [审计] 黑匣子：chunks 删除现场（时间戳 + 剩余行数）落库，跨重载可查
+	 *  ——「索引归零」删除者的取证通道（python/sqlite 直读 audit_log）。 */
+	private installAuditTrigger(): void {
+		this.db!.run(`
+			CREATE TABLE IF NOT EXISTS audit_log (
+				ts TEXT NOT NULL,
+				remaining INTEGER NOT NULL,
+				stage TEXT NOT NULL DEFAULT ''
+			);
+		`);
+		this.db!.run(`
+			CREATE TRIGGER IF NOT EXISTS chunks_audit_del AFTER DELETE ON chunks
+			BEGIN
+				INSERT INTO audit_log (ts, remaining, stage)
+				VALUES (datetime('now'), (SELECT COUNT(*) FROM chunks), 'delete');
+			END;
+		`);
+	}
+
+	/** 耐久快照节流戳：save() 在 wasm 模式下把整库快照写进 shim 命名空间
+	 *  （writeFileSync 自带 flush，跨 worker 存活），pool 槽「杀进程即丢」
+	 *  的兜底。≥10 分钟一次 + 空库保险丝（空库绝不覆盖好快照）。 */
+	private lastSnapshotAt = 0;
+
 	/** Persist the in-memory DB to disk. Runs entirely off the main thread in
-	 *  worker mode (db.export + write of a ~400MB file).
-	 *
-	 *  ATOMIC WRITE: write to a temp file in the same directory, then rename
-	 *  over the real DB. rename() is atomic on the same filesystem — if the
-	 *  process dies mid-write (Obsidian reload, power loss), the old DB file
-	 *  stays intact instead of being left truncated/corrupted. A torn DB was
-	 *  the root cause of "all chunks re-indexed after every reload" (mtime
-	 *  lookups returned nothing → everything treated as new). */
+	 *  worker mode (db.export + write of a ~400MB file). The sqljs branch
+	 *  uses an ATOMIC WRITE: temp file + rename, so a process death mid-write
+	 *  leaves the old DB intact (a torn DB was the historical root cause of
+	 *  "all chunks re-indexed after every reload"). */
 	save(): void {
 		if (!this.db) return;
 		if (this.dbMode === "wasm") {
-			// sqlite3-wasm/opfs-sahpool：事务提交即页级落盘，无"保存"概念。
-			// 委托驱动做周期维护（PRAGMA optimize）。
+			// 页级落盘由 sahpool 事务提交承担；这里做两件事：
+			// 1) PRAGMA optimize（查询规划维护）
+			// 2) 耐久快照（≥10 分钟节流 + 空库保险丝——空库绝不覆盖好快照）。
+			//    快照落 shim 命名空间，下次 init 的迁移通道自动导回。
 			this.db.save();
+			const now = Date.now();
+			if (now - this.lastSnapshotAt < 600_000) return;
+			const r = this.db.exec("SELECT COUNT(*) FROM chunks");
+			const chunks = Number(r[0]?.values?.[0]?.[0] ?? 0);
+			if (chunks <= 0) return;
+			const wasm = this.db as SqliteWasmDb;
+			if (wasm.writeLegacySnapshot()) {
+				this.lastSnapshotAt = now;
+				console.error(`[Semlink] durable snapshot written (chunks=${chunks})`);
+			}
 			return;
 		}
 		// sqljs 分支（sync fallback / Node worker）：空库保险丝 + 全量导出
@@ -332,9 +370,43 @@ export class DbEngine {
 		renameSync(tmpPath, dbPath);
 	}
 
+	/** 整库字节快照（诊断/备份用）：wasm = serialize（sahpool 槽即库本体），
+	 *  sqljs = 内存镜像导出。热路径不调用。 */
+	exportDb(): Uint8Array {
+		if (!this.db) return new Uint8Array(0);
+		return this.db.export();
+	}
+
+	/** 修复通道：用完整 DB 字节替换活槽（真机 2026-11-11：importDb/open
+	 *  槽名错位导致迁移库不可见，旧索引整体丢在孤儿槽里；本通道把备份
+	 *  字节原地导入 canonical 槽）。活库非空时拒绝（force 才放行）——
+	 *  防止拿旧备份盖掉活索引。 */
+	async repairFromBytes(bytes: Uint8Array, force = false): Promise<{ chunks: number; replaced: boolean; shape?: string }> {
+		if (!this.db) throw new Error("engine not initialized");
+		if (this.dbMode !== "wasm") throw new Error("repairFromBytes is wasm-mode only");
+		const r0 = this.db.exec("SELECT COUNT(*) FROM chunks");
+		const liveChunks = Number(r0[0]?.values?.[0]?.[0] ?? 0);
+		if (liveChunks > 0 && !force) {
+			return { chunks: liveChunks, replaced: false };
+		}
+		const wasm = this.db as SqliteWasmDb;
+		await wasm.replaceFromBytes(bytes);
+		// 备份库自带 schema；保险起见跑一次幂等建表
+		this.createTables();
+		const r1 = this.db.exec("SELECT COUNT(*) FROM chunks");
+		return {
+			chunks: Number(r1[0]?.values?.[0]?.[0] ?? 0),
+			replaced: true,
+			// [migdbg] 临时：空槽上 COUNT(*) 的返回形状取证（2026-11-11 TypeError 定位）
+			shape: JSON.stringify(r0)?.slice(0, 120),
+		};
+	}
+
 	/** Clear all stored data (chunks, queue, vectors) for a full rebuild */
 	clearAll(): void {
 		if (!this.db) return;
+		// [审计] 全清是「索引归零」的头号嫌疑路径——留面包屑对时间线
+		console.error("[Semlink][audit] clearAll() called — wiping chunks/queue/meta/vectors/skips");
 		this.db.run("DELETE FROM chunks");
 		this.db.run("DELETE FROM queue");
 		this.db.run("DELETE FROM meta");
@@ -612,6 +684,11 @@ export class DbEngine {
 				this.db!.run("DELETE FROM note_doc_vectors WHERE note_path = ?", [path]);
 				removed++;
 			}
+		}
+		// [审计] prune 本该只删幽灵路径；一次删掉 >10% 即异常（空集合传入
+		// 会把全部索引当幽灵清掉——「索引归零」的第二嫌疑路径）
+		if (indexed.length > 0 && removed > indexed.length * 0.1) {
+			console.error(`[Semlink][audit] pruneOrphanedPaths removed ${removed}/${indexed.length} paths — existingPaths.size=${existingPaths.size}`);
 		}
 		if (removed > 0) {
 			this.cacheLoaded = false;
