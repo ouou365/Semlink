@@ -44,6 +44,20 @@ export type DebugUiRunner = (opts?: {
  *  （worker 侧 fsList/fsProbe，仅 browser-worker 模式）互补。 */
 export type DebugOpfsRunner = (opts?: { maxDepth?: number; maxEntries?: number }) => Promise<unknown>;
 
+/** model 工具执行器：由 main.ts 注入——查询/切换/添加/移除当前对话模型
+ *  （chatClient.getActiveModel/setActiveModel + settings.providers 模型清单
+ *  增删 + saveSettings 落盘），供 agent 程序化切模型做端到端验证。 */
+export type DebugModelRunner = (opts?: {
+	op?: string;
+	provider?: string;
+	model?: string;
+	contextWindow?: number;
+}) => Promise<unknown>;
+
+/** chatview 工具执行器：由 main.ts 注入——读取侧栏聊天视图的实时状态
+ *  （状态头/思考预览/流式正文/最终答案文本），供 agent 观察流式渲染。 */
+export type DebugChatViewRunner = () => Promise<unknown>;
+
 interface JsonRpcRequest {
 	jsonrpc: "2.0";
 	id?: string | number | null;
@@ -263,6 +277,46 @@ const RPCDIAG_TOOL = {
 	inputSchema: { type: "object", properties: {}, required: [] },
 };
 
+const CHAT_TOOL = {
+	name: "chatview",
+	description:
+		"Read the LIVE state of the sidebar chat view: the status header " +
+		"('思考了 N 秒…'), the live thinking preview text, the STREAMING " +
+		"answer body (with its length, so repeated calls reveal the " +
+		"typewriter growth curve), and the last finalized answer text. " +
+		"Use it to observe streaming behavior or to capture what the user " +
+		"is currently seeing, without screenshots.",
+	inputSchema: { type: "object", properties: {}, required: [] },
+};
+
+const MODEL_TOOL = {
+	name: "model",
+	description:
+		"Inspect and manage the ACTIVE CHAT MODEL of the sidebar chat (the " +
+		"same model the ask pipeline uses). Default (no op) returns the " +
+		"current model (provider, model id, apiFormat, endpoint, context " +
+		"window) plus every switchable option grouped by provider. " +
+		"op=\"switch\" changes it: pass provider (id or name substring) and " +
+		"model (id substring) — persisted immediately. op=\"add\" adds a " +
+		"model id to a provider's chat list (contextWindow optional). " +
+		"op=\"remove\" deletes a model id from a provider (if it was active, " +
+		"the selection falls back to the provider's first model). " +
+		"op=\"list\" lists providers and models without the active block. " +
+		"Use it to switch providers/models programmatically before running " +
+		"ask or streaming walkthroughs (e.g. test a coding-plan endpoint vs " +
+		"deepseek).",
+	inputSchema: {
+		type: "object",
+		properties: {
+			op: { type: "string", description: "\"get\" (default) | \"switch\" | \"add\" | \"remove\" | \"list\"." },
+			provider: { type: "string", description: "Provider id or name substring (required for switch/add/remove)." },
+			model: { type: "string", description: "Model id (exact for add; substring match for switch/remove)." },
+			contextWindow: { type: "number", description: "Context window in tokens for op=add (default 128000)." },
+		},
+		required: [],
+	},
+};
+
 export class DebugMcpServer {
 	private server: Server | null = null;
 	private _port: number;
@@ -271,7 +325,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -364,7 +418,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -386,6 +440,10 @@ export class DebugMcpServer {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runOpfs?.(params.arguments as { maxDepth?: number; maxEntries?: number } | undefined)) ?? { error: "no opfs runner" }, null, 2) }] };
 						} else if (params.name === "rpcdiag") {
 						result = { content: [{ type: "text", text: JSON.stringify(this.runRpcDiag?.() ?? { error: "no rpcdiag runner" }, null, 2) }] };
+					} else if (params.name === "model") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runModel?.(params.arguments as { op?: string; provider?: string; model?: string; contextWindow?: number } | undefined)) ?? { error: "no model runner" }, null, 2) }] };
+					} else if (params.name === "chatview") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runChatView?.()) ?? { error: "no chatview runner" }, null, 2) }] };
 					} else if (params.name === "ui") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runUi?.(params.arguments as { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string } | undefined)) ?? { error: "no ui runner" }, null, 2) }] };
 						} else if (params.name === "shot") {

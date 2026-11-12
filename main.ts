@@ -723,6 +723,8 @@ export default class SmartVaultPlugin extends Plugin {
 			(opts) => this.runDebugUi(opts),
 			(opts) => this.runDebugOpfs(opts),
 			() => ({ ...this.store.rpcDiag(), arrival: this.watcher?.lastArrivalDiag ?? null }),
+			(opts) => this.runDebugModel(opts),
+			() => this.runDebugChatView(),
 		);
 		try {
 			await server.start();
@@ -1058,6 +1060,119 @@ export default class SmartVaultPlugin extends Plugin {
 			totals: { directories: dirs, files, readableBytes, lockedFiles, truncated },
 			namespaces: Object.fromEntries(namespaces),
 			legend: "locked:true = file held by an open sync access handle in the live DB worker (opfs-sahpool slots / semlink-db fs-shim files) — spec refuses getFile() from other contexts, size invisible here. readableBytes sums readable files only; estimate.usage is the authoritative OPFS footprint. semlink-db/vault.db lastModified = last durable snapshot moment.",
+		};
+	}
+
+	/** model 工具执行器：查询/切换/添加/移除对话模型。get 返回当前模型与
+	 *  全部可选项；switch 走 chatClient.setActiveModel（落盘 activeChatModel）；
+	 *  add/remove 直接改 settings.providers[].models（kind=chat、enabled=true）
+	 *  后 saveSettings + chatClient.updateSettings 强制重同步——被移除的是
+	 *  当前模型时选择自动回落到该供应商第一个可用模型。 */
+	private async runDebugModel(opts?: {
+		op?: string;
+		provider?: string;
+		model?: string;
+		contextWindow?: number;
+	}): Promise<unknown> {
+		const op = (opts?.op ?? "get").toLowerCase();
+		const findProvider = (needle?: string) => {
+			const n = (needle ?? "").trim().toLowerCase();
+			if (!n) return null;
+			return this.settings.providers.find((p) => p.id.toLowerCase() === n)
+				?? this.settings.providers.find((p) => p.name.toLowerCase().includes(n))
+				?? this.settings.providers.find((p) => p.id.toLowerCase().includes(n))
+				?? null;
+		};
+		const snapshot = () => ({
+			active: (() => {
+				const a = this.chatClient.getActiveModel();
+				return a ? { providerId: a.provider.id, providerName: a.provider.name, model: a.model.id, contextWindow: a.model.contextWindow, apiFormat: a.provider.apiFormat ?? "openai", endpoint: a.provider.baseUrl + (a.provider.wirePath ?? "") } : null;
+			})(),
+			label: this.chatClient.getActiveModelLabel(),
+			options: this.chatClient.getModelOptions().map((g) => ({
+				providerId: g.providerId,
+				providerName: g.providerName,
+				models: g.models.map((m) => m.id),
+			})),
+		});
+
+		if (op === "get" || op === "list") {
+			const snap = snapshot();
+			return op === "get" ? snap : { options: snap.options };
+		}
+		if (op === "switch") {
+			const provider = findProvider(opts?.provider);
+			if (!provider) return { op, error: `provider not found: "${opts?.provider}"`, available: this.settings.providers.map((p) => ({ id: p.id, name: p.name })) };
+			const needle = (opts?.model ?? "").trim().toLowerCase();
+			if (!needle) return { op, error: "model is required for switch" };
+			const model = provider.models.find((m) => (m.kind ?? "chat") === "chat" && m.enabled === true && m.id.toLowerCase() === needle)
+				?? provider.models.find((m) => (m.kind ?? "chat") === "chat" && m.enabled === true && m.id.toLowerCase().includes(needle));
+			if (!model) return { op, error: `chat model not found in "${provider.name}": "${opts?.model}"`, models: provider.models.filter((m) => (m.kind ?? "chat") === "chat" && m.enabled === true).map((m) => m.id) };
+			const ok = this.chatClient.setActiveModel(provider.id, model.id);
+			if (!ok) return { op, error: "setActiveModel returned false" };
+			await this.saveSettings();
+			return { op, done: true, ...snapshot() };
+		}
+		if (op === "add") {
+			const provider = findProvider(opts?.provider);
+			if (!provider) return { op, error: `provider not found: "${opts?.provider}"`, available: this.settings.providers.map((p) => ({ id: p.id, name: p.name })) };
+			const id = (opts?.model ?? "").trim();
+			if (!id) return { op, error: "model id is required for add" };
+			if (provider.models.some((m) => m.id === id)) return { op, error: `model "${id}" already exists in "${provider.name}"`, models: provider.models.map((m) => m.id) };
+			provider.models.push({ id, contextWindow: Math.max(4096, Math.floor(opts?.contextWindow ?? 128000)), kind: "chat", enabled: true });
+			await this.saveSettings();
+			this.chatClient.updateSettings(this.settings);
+			return { op, done: true, provider: provider.name, added: id, models: provider.models.filter((m) => (m.kind ?? "chat") === "chat").map((m) => m.id) };
+		}
+		if (op === "remove") {
+			const provider = findProvider(opts?.provider);
+			if (!provider) return { op, error: `provider not found: "${opts?.provider}"`, available: this.settings.providers.map((p) => ({ id: p.id, name: p.name })) };
+			const needle = (opts?.model ?? "").trim().toLowerCase();
+			if (!needle) return { op, error: "model id is required for remove" };
+			const before = provider.models.length;
+			provider.models = provider.models.filter((m) => m.id.toLowerCase() !== needle);
+			if (provider.models.length === before) return { op, error: `model not found in "${provider.name}": "${opts?.model}"`, models: provider.models.map((m) => m.id) };
+			await this.saveSettings();
+			// 强制重同步：被移除的是当前模型时 activeChatModel 失效，回落
+			// 到该供应商第一个可用模型（syncPersistedModel 语义）。
+			this.chatClient.updateSettings(this.settings);
+			return { op, done: true, provider: provider.name, removed: opts?.model, ...snapshot() };
+		}
+		return { error: `unknown op "${op}" (get | list | switch | add | remove)` };
+	}
+
+	/** chatview 工具执行器：读侧栏聊天视图的实时 DOM 状态——状态头、
+	 *  思考预览（滑动尾窗）、流式正文（长度 + 全文，重复调用可看出打字机
+	 *  生长曲线）、最近一条已完成的答案全文。取的是用户实际看到的东西，
+	 *  比截图便宜、比内部状态真实。 */
+	private async runDebugChatView(): Promise<unknown> {
+		const leaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+		const view = leaves[0]?.view as SemanticSearchView | undefined;
+		const root = view?.contentEl;
+		if (!root) return { viewFound: false };
+		const text = (sel: string): string | null => root.querySelector(sel)?.textContent ?? null;
+		const streamEl = root.querySelector(".semlink-msg-stream");
+		const streaming = !!streamEl && !streamEl.hasClass("semlink-hidden");
+		const streamText = streaming ? text(".semlink-msg-stream .semlink-msg-answer") : null;
+		// 最终答案 = 不在流式容器里的最后一个 .semlink-msg-answer
+		const finals = Array.from(root.querySelectorAll(".semlink-msg-answer"))
+			.filter((el) => !el.closest(".semlink-msg-stream"))
+			.map((el) => el.textContent ?? "").filter((t) => t.trim().length > 0);
+		return {
+			viewFound: true,
+			model: this.chatClient.getActiveModelLabel(),
+			header: text(".semlink-msg-loading-text"),
+			thinking: {
+				liveReasoning: text(".semlink-live-reasoning"),
+				liveBodyLen: text(".semlink-thinking-live-body")?.length ?? 0,
+			},
+			answer: {
+				streaming,
+				streamLen: streamText?.length ?? 0,
+				streamText,
+				lastFinalLen: finals.at(-1)?.length ?? 0,
+				lastFinal: finals.at(-1) ?? null,
+			},
 		};
 	}
 
@@ -3286,8 +3401,9 @@ export default class SmartVaultPlugin extends Plugin {
 
 	/** RAG 统计快照落盘（data/rag-stats-cache.json，~120 字节同步写）：重启
 	 *  后状态栏/设置页/弹窗首帧直出上一会话的值（loadRagStatsCacheFromDisk
-	 *  预载），DB 就绪后写透纠偏。失败静默——最坏回退为原来的等 DB 行为。 */
-	private persistRagStatsCache(): void {
+	 *  预载），DB 就绪后写透纠偏。失败静默——最坏回退为原来的等 DB 行为。
+	 *  settings 页轮询兜底也写透（数值变化才写），须跨类可见。 */
+	persistRagStatsCache(): void {
 		try {
 			writeFileSync(
 				join(this.pluginDir, "data", "rag-stats-cache.json"),

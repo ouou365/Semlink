@@ -1090,17 +1090,36 @@ export class SemanticSearchView extends ItemView {
 						stopTypewriter();
 						return;
 					}
-					// Adaptive reveal: sweep big backlogs fast (a large chunk
-					// arrives at once), keep a brisk baseline (≈130 字/秒 at
-					// 30ms ticks) so the reveal stays neck-and-neck with the
-					// model instead of trailing behind it.
-					const step = Math.min(80, Math.max(4, Math.ceil(remaining / 6)));
+					// Adaptive reveal（用户拍板 2026-11-12「要有打字机效果」）：
+					// 旧参数 max 80 字/tick（≈2600 字/秒）+ 4 tick 才画一次 =
+					// 每次 painted 300+ 字，DeepSeek 把 submit_answer 参数整块
+					// 一次发到时 221 字 180ms 内播完——视觉上等于没有打字机。
+					// 新参数 max 10 字/tick（≈333 字/秒 追平上限，min 3 兜底）：
+					// 逐字可见、又能追平正常流速率（流式速率 <333字/s 时始终
+					// 颈贴颈，不积压）。
+					const step = Math.min(10, Math.max(3, Math.ceil(remaining / 12)));
 					shownText = streamText.slice(0, shownText.length + step);
 					typeTicks++;
-					// Markdown re-render paced (~every 4th tick ≈ 120ms), and
-					// always the moment we catch up so the tail never lags.
+					// Markdown re-render paced (~every 4th tick ≈ 120ms)，追平
+					// 时必画——尾部不滞后。
 					if (typeTicks % 4 === 0 || shownText.length >= streamText.length) void renderShown();
 				};
+				/** 等 reveal 追平 streamText（完成路径在最终替换前调用——
+				 *  DeepSeek 整块下发答案时，最终替换若不等这里，221 字会
+				 *  一闪而过、打字机形同虚设。6s 封顶防病态挂死。 */
+				const typewriterDrain = (timeoutMs = 6000): Promise<void> => new Promise<void>((resolve) => {
+					if (streamText.length === 0 || shownText.length >= streamText.length || !streamEl.isConnected) {
+						resolve();
+						return;
+					}
+					const started = Date.now();
+					const iv = window.setInterval(() => {
+						if (shownText.length >= streamText.length || Date.now() - started > timeoutMs || !streamEl.isConnected) {
+							window.clearInterval(iv);
+							resolve();
+						}
+					}, 40);
+				});
 					const startTypewriter = (): void => {
 						// Always stop + recreate on the CURRENT view window (never
 						// reuse a timer anchored to a previous window): while the
@@ -1453,6 +1472,9 @@ export class SemanticSearchView extends ItemView {
 							usedNotes,
 						)
 						: this.buildOrderedSources(sourceContext, sourcePaths);
+					// 打字机收尾（用户拍板 2026-11-12）：等流式正文 reveal 播完
+					// 再做最终替换——整块下发的答案也能逐字播出，而不是一闪而过。
+					await typewriterDrain();
 					this.renderThinking(loadingEl, firstStep ? [firstStep, ...thinking] : thinking, elapsedSec);
 					this.updateContextInfo(result.contextTokens, result.contextBreakdown, result.cacheHitRate);
 					// Render the answer as markdown (Obsidian's renderer handles

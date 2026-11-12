@@ -10,6 +10,7 @@
 
 import type { SmartVaultSettings, ChatProvider, ChatModel, ContextBreakdown, HistoryMessage } from "./types";
 import { activeEmbeddingProvider } from "./types";
+import { requestUrl } from "obsidian";
 import { debugLog } from "./log";
 import type { SemlinkTools } from "./chat-tools";
 import { createCiteRegistry } from "./cite-cards";
@@ -1506,6 +1507,144 @@ export class ChatClient {
 		return finalize(t("searchNoMatchAnswer"));
 	}
 
+	/** CORS-hostile 主机的非流式兜底（详见 streamOpenAIChat catch 内注释）：
+	 *  requestUrl 整发整收，HTTP 层错误直接以 extractError 抛出（比笼统的
+	 *  NETWORK 更会说话），requestUrl 自身网络失败才回 null。无 SSE——
+	 *  content 一次性经 onStream 喂回。 */
+	private async openAIChatOnce(
+		url: string,
+		provider: ChatProvider,
+		body: OpenAIChatBody,
+		onStream?: (text: string) => void,
+		signal?: AbortSignal,
+	): Promise<{ content: string; reasoning: string; toolCalls: OpenAIToolCall[]; finishReason: string; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number } | null> {
+		if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+		try {
+			// stream_options 只在 stream:true 下合法（部分网关非流式带它 422）。
+			const { stream_options: _streamOptions, ...rest } = body;
+			const resp = await requestUrl({
+				url,
+				method: "POST",
+				headers: { "Content-Type": "application/json", "Authorization": `Bearer ${provider.apiKey}` },
+				body: JSON.stringify({ ...rest, stream: false }),
+				throw: false,
+			});
+			if (resp.status !== 200) {
+				let parsed: unknown = {};
+				try { parsed = resp.json; } catch { /* not JSON */ }
+				throw this.extractError(resp.status, parsed);
+			}
+			const json = (resp.json ?? {}) as {
+				choices?: Array<{
+					message?: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null; tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }> };
+					finish_reason?: string;
+				}>;
+				usage?: { prompt_tokens?: number; completion_tokens?: number };
+			};
+			const choice = json.choices?.[0];
+			const msg = choice?.message ?? {};
+			const content = typeof msg.content === "string" ? msg.content : "";
+			const reasoning = typeof msg.reasoning_content === "string"
+				? msg.reasoning_content
+				: typeof msg.reasoning === "string" ? msg.reasoning : "";
+			const toolCalls: OpenAIToolCall[] = (msg.tool_calls ?? []).map((tc, i) => ({
+				id: tc.id ?? `call_${i}`,
+				type: "function",
+				function: { name: tc.function?.name ?? "", arguments: tc.function?.arguments ?? "" },
+			}));
+			const finishReason = choice?.finish_reason ?? (toolCalls.length > 0 ? "tool_calls" : "stop");
+			if (onStream && content) onStream(content);
+			return {
+				content,
+				reasoning,
+				toolCalls,
+				finishReason,
+				usageTokens: json.usage?.completion_tokens ?? 0,
+				cacheHits: [],
+				roundIn: json.usage?.prompt_tokens ?? 0,
+				roundOut: json.usage?.completion_tokens ?? 0,
+			};
+		} catch (e) {
+			if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+			// extractError 抛出的 HTTP 层错误（带 status）原样上抛——provider
+			// 的具体报错比笼统 NETWORK 有用；requestUrl 自身失败（真网络
+			// 问题，无 status）回 null 交回调用方抛 NETWORK。
+			if ((e as { status?: number })?.status != null) throw e;
+			return null;
+		}
+	}
+
+	/** Anthropic 版非流式兜底（同 openAIChatOnce 的场景与代价）。contentBlocks
+	 *  的 tool_use.input 与流式路径同形（JSON 字符串），toolUses/rawToolInputs
+	 *  同步解析好，调用方零改动。 */
+	private async anthropicChatOnce(
+		url: string,
+		provider: ChatProvider,
+		body: AnthropicChatBody,
+		onStream?: (text: string) => void,
+		signal?: AbortSignal,
+	): Promise<{ contentBlocks: ContentBlock[]; toolUses: AnthropicToolUse[]; stopReason: string; usageTokens: number; cacheHits: CacheSample[]; roundIn: number; roundOut: number; rawToolInputs: Record<string, string> } | null> {
+		if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+		try {
+			const resp = await requestUrl({
+				url,
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": provider.apiKey,
+					"anthropic-version": "2023-06-01",
+				},
+				body: JSON.stringify({ ...body, stream: false }),
+				throw: false,
+			});
+			if (resp.status !== 200) {
+				let parsed: unknown = {};
+				try { parsed = resp.json; } catch { /* not JSON */ }
+				throw this.extractError(resp.status, parsed);
+			}
+			const json = (resp.json ?? {}) as {
+				content?: Array<{ type?: string; text?: string; thinking?: string; id?: string; name?: string; input?: Record<string, unknown> }>;
+				stop_reason?: string;
+				usage?: { input_tokens?: number; output_tokens?: number };
+			};
+			const blocks = Array.isArray(json.content) ? json.content : [];
+			const contentBlocks: ContentBlock[] = [];
+			const toolUses: AnthropicToolUse[] = [];
+			const rawToolInputs: Record<string, string> = {};
+			let text = "";
+			for (const b of blocks) {
+				if (b.type === "text" && typeof b.text === "string") {
+					contentBlocks.push({ type: "text", text: b.text });
+					text += b.text;
+				} else if (b.type === "thinking" && typeof b.thinking === "string") {
+					contentBlocks.push({ type: "thinking", thinking: b.thinking });
+				} else if (b.type === "tool_use" && typeof b.name === "string") {
+					const input = (b.input ?? {}) as Record<string, unknown>;
+					const raw = JSON.stringify(input);
+					const id = b.id ?? `toolu_${toolUses.length}`;
+					contentBlocks.push({ type: "tool_use", id, name: b.name, input: raw });
+					toolUses.push({ id, name: b.name, input });
+					rawToolInputs[b.name] = raw;
+				}
+			}
+			if (onStream && text) onStream(text);
+			return {
+				contentBlocks,
+				toolUses,
+				stopReason: json.stop_reason ?? (toolUses.length > 0 ? "tool_use" : "end_turn"),
+				usageTokens: json.usage?.output_tokens ?? 0,
+				cacheHits: [],
+				roundIn: json.usage?.input_tokens ?? 0,
+				roundOut: json.usage?.output_tokens ?? 0,
+				rawToolInputs,
+			};
+		} catch (e) {
+			if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+			if ((e as { status?: number })?.status != null) throw e;
+			return null;
+		}
+	}
+
 	private buildOpenAITools(): OpenAIToolSchema[] {
 		if (!this.tools) return [];
 		return this.tools.list().map((tool) => ({
@@ -1554,8 +1693,15 @@ export class ChatClient {
 			if (signal?.aborted || (e as Error)?.name === "AbortError") {
 				throw new DOMException("Aborted", "AbortError");
 			}
-			// Network-level failure (CORS / DNS / connection reset / offline).
-			// Prefix marks it as retryable — chat() retries once.
+			// CORS-hostile 主机的非流式兜底（真机 2026-11-12 Z.AI Coding CN：
+			// 智谱网关对任何 Origin 都不回 Access-Control-* 头，渲染进程
+			// fetch 必死在预检——shell curl 却通，「无法连接 API 服务」）。
+			// requestUrl 走 Electron 主进程网络栈无视 CORS；代价是没有 SSE，
+			// 整段回答一次性经 onStream 喂回（UI 打字机 sweep 照常播放）。
+			const once = await this.openAIChatOnce(url, provider, body, onStream, signal);
+			if (once) return once;
+			// Network-level failure (DNS / connection reset / offline — CORS
+			// 已被上面的兜底覆盖). Prefix marks it as retryable — chat() retries once.
 			throw new Error(`NETWORK:无法连接 API 服务（${url}），请检查网络连接后重试`);
 		}
 		if (resp.status !== 200) {
@@ -2299,6 +2445,10 @@ export class ChatClient {
 			if (signal?.aborted || (e as Error)?.name === "AbortError") {
 				throw new DOMException("Aborted", "AbortError");
 			}
+			// CORS-hostile 主机兜底（同 streamOpenAIChat catch 内注释——
+			// requestUrl 非流式整发，整段回答一次性经 onStream 喂回）。
+			const once = await this.anthropicChatOnce(url, provider, body, onStream, signal);
+			if (once) return once;
 			// Network-level failure — marked retryable; chat() retries once.
 			throw new Error(`NETWORK:无法连接 API 服务（${url}），请检查网络连接后重试`);
 		}

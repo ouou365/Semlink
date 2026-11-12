@@ -3298,24 +3298,29 @@ export function renderModelsTab(
 			): Promise<{ ok: boolean; message: string }> => {
 				const base = live.apiBase.trim().replace(/\/+$/, "");
 				const format = (live.apiFormat ?? "openai") as ChatApiFormat;
+				let fetchErr: unknown = null;
 				try {
 					const entries = await raceTimeout(fetchModelIds(base, key, format));
-					const ok = !!entries && entries.length > 0;
-					return {
-						ok,
-						message: ok
-							? t("mtDetectOk").replace("{n}", String(entries!.length))
-							: `${t("mtDetectFail")} · 0`,
-					};
+					if (entries && entries.length > 0) {
+						return { ok: true, message: t("mtDetectOk").replace("{n}", String(entries.length)) };
+					}
+					// HTTP 200 但列表空/缺省（Z.AI Coding CN 实测：/models 200、
+					// data 缺省 → fetchModelIds 返回 []，用户报障「连接失败 · 0」
+					// 而端点明明活着）≠ 端点死——与下方 /models 抛错一样回退
+					// chat 路由探测。原代码只给抛错分支回退，漏了空列表这支。
 				} catch (err) {
-					// /models 拉取失败不直接判死：一部分端点只声明了 chat 路由、
-					// 没有 /models（Z.AI/GLM coding 计划实测 GET /v4/models →
-					// 404，chat/completions 却正常）。回退用探测性请求打 chat
-					// 路由判定连通性（不消耗 token）。
-					const probe = await probeChatRoute(base, key, format);
-					if (probe) return probe;
-					return { ok: false, message: `${t("mtDetectFail")} · ${err?.message ?? ""}`.trim() };
+					fetchErr = err;
 				}
+				// /models 拉取失败不直接判死：一部分端点只声明了 chat 路由、
+				// 没有 /models（Z.AI/GLM coding 计划实测 GET /v4/models →
+				// 404，chat/completions 却正常）。回退用探测性请求打 chat
+				// 路由判定连通性（不消耗 token）。
+				const probe = await probeChatRoute(base, key, format);
+				if (probe) return probe;
+				if (fetchErr instanceof Error) {
+					return { ok: false, message: `${t("mtDetectFail")} · ${fetchErr.message}`.trim() };
+				}
+				return { ok: false, message: `${t("mtDetectFail")} · 0` };
 			};
 			// 配置弹窗（用户拍板参考 Cherry Configuration 流程）：空态 ghost
 			// 钮与已配置态铅笔都进本弹窗；Test & Save = 落盘 + 检测反馈

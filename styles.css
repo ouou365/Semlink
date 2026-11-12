@@ -4011,17 +4011,24 @@ body .semlink-msg-user::selection {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    border: none;
+    /* 显式描边：此前靠 var(--input-shadow) 的 inset 环撑边框观感，
+       Obsidian 1.15 新默认主题把该变量压平（不再含 inset 描边环），
+       按钮变成无边框幽灵——改为实边框，不再依赖主题变量。 */
+    border: 1px solid var(--background-modifier-border);
     border-radius: 8px;
     cursor: pointer;
     padding: 5px 12px;
     font-size: 13px;
     background: transparent;
     color: var(--text-normal);
-    box-shadow: var(--input-shadow);
 }.semlink-search-view .semlink-search-newchat:hover {
     /* Background appears on hover only (gray, like the send button). */
     background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}.semlink-search-view .semlink-search-newchat:active {
+    /* 按下反馈：底色略深，描边转交互色（与工具栏 is-active 口径一致）。 */
+    background: var(--background-modifier-hover);
+    border-color: var(--interactive-accent);
     color: var(--text-normal);
 }.semlink-search-view .semlink-search-newchat .svg-icon {
     width: 14px;

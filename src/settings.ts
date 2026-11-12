@@ -681,14 +681,16 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 
 		// hero 大数字 = 百分比（封顶 100%）；总数未知（totalNotes=0）→「—」淡化。
 		// hero 徽章三态（用户拍板"索引完成则旋转图标改成完成✅"）：
-		// 运行中 = loader-2 旋转；完成（非运行且 100%）= check-circle 圆形✅；
+		// 运行中 = loader-2 旋转；完成（非运行且分子==总数严格相等）=
+		// check-circle 圆形✅；数量不一致（分子≠分母，删除/排除/改名过渡）
+		// = 转圈追平（用户拍板 2026-11-12「不一致时应该开始转圈」）；
 		// 全新空库（从未索引）= 无图标。heroDone 由 setHero 按分子==总数更新。
 		let heroDone = false;
 		let runningNow = this.plugin.scheduler.isRunning;
 		const updateBadge = (): void => {
 			// 完成优先（用户拍板 2026-11-12「百分百之后应该把图标变成✅」）：
 			// 分子==分母即 ✅，即使调度器还在跑（扫描/收尾阶段活已干完，转圈
-			// 让人误以为还有活）；下一笔真实变更把分子拉回 <总数 时自然回
+			// 让人误以为还有活）；下一笔真实变更把分子拉回 != 总数 时自然回
 			// 转圈。旧逻辑 runningNow 一票压死 is-done，100.0% 也转圈。
 			if (heroDone) {
 				indexBlock.block.toggleClass("is-running", false);
@@ -704,7 +706,13 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			const manualPaused = !runningNow
 				&& this.plugin.progress.current.isPaused === true
 				&& this.plugin.progress.current.isAutoPaused !== true;
-			indexBlock.block.toggleClass("is-running", runningNow);
+			// 数量不一致（用户拍板 2026-11-12「不一致时应该开始转圈」）：
+			// 分子≠分母 = 与 vault 还没对齐（真机：索引 1,143 > 总数 1,142，
+			// 索引里多一笔待收敛——删除/排除/改名过渡）→ 转圈表达「追平中」，
+			// 直到 reconcile/prune 把两侧拉平。暂停优先（暂停下不会收敛，
+			// 转圈是撒谎）；空库（total==0）无待办不空转。
+			const mismatch = liveTotal > 0 && !manualPaused;
+			indexBlock.block.toggleClass("is-running", runningNow || mismatch);
 			indexBlock.block.toggleClass("is-done", false);
 			indexBlock.block.toggleClass("is-paused", manualPaused);
 			// spinEl 在 makeBlock 闭包里，本作用域不可见（拉取代码引用裸名
@@ -725,7 +733,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			b.valueEl.setText(`${pct.toFixed(1)}%`);
 			b.valueEl.removeClass("is-empty");
 			b.fillEl.style.transform = `scaleX(${pct / 100})`;
-			heroDone = num >= total;
+			// 严格相等才算完成（用户拍板 2026-11-12「不一致时应该开始转圈」）：
+			// num > total（索引比 vault 多一笔，删除/排除/改名未收敛）也算
+			// 未完成 → 徽章转圈，直到 reconcile/prune 把两侧拉平。
+			heroDone = num === total;
 			updateBadge();
 		};
 		// Rebuild 按钮恒可用（用户拍板「不要 Indexing，保持 Rebuild 随时
@@ -779,6 +790,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 首查常见于插件刚加载、DB worker 尚在初始化——失败不能静默吞掉
 		// （空闲时没有进度事件来重试），退避重试直到 worker 就绪补上数值。
 		let statsRetryTimer: number | null = null;
+		// 在途去重：轮询与进度事件都会调 refreshStats——上一轮没回来时不叠
+		// 加新查询，防止 worker 忙时请求堆积（2026-11-11 饿死事故的教训）。
+		let statsRefreshInFlight = false;
 		// 总数副行独立刷新：不依赖 DB 往返——重索引期间 worker 繁忙，
 		// getStats 可能连续失败走退避重试，总数若挂在它后面会冻结在旧值
 		// （真机复现：状态栏 1016 而副行恒 980）。vault 文件遍历轻量
@@ -790,6 +804,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			indexBlock.heroSub.setText(t("ragTotalSub").replace("{n}", liveTotal.toLocaleString()));
 		};
 		const refreshStats = async (attempt = 0): Promise<void> => {
+			if (statsRefreshInFlight) return;
+			statsRefreshInFlight = true;
 			try {
 				const [s, embeddedNotes, skippedNotes] = await Promise.all([
 					this.plugin.store.getStats(),
@@ -812,23 +828,44 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				// 相加恰为处理完成数，索引收尾时 hero 精确到 100%
 				setHero(indexBlock, embeddedNotes + skippedNotes);
 				// 写透快照：这次查询的值就是下次打开设置页的首帧缓存
-				// （persistRagStatsCache 同步落盘 → 重启后首帧直出）
-				Object.assign(this.plugin.ragStatsCache, {
-					indexedNotes: s.indexedNotes,
-					embeddedNotes,
-					skippedNotes,
-					updatedMs: idxTime,
-					ready: true,
-				});
-				this.plugin.persistRagStatsCache();
+				// （persistRagStatsCache 同步落盘 → 重启后首帧直出）。
+				// 5s 轮询下多数轮数值不变——变了才落盘，避免常态性磁盘写。
+				const cache = this.plugin.ragStatsCache;
+				const changed = !cache.ready
+					|| cache.embeddedNotes !== embeddedNotes
+					|| cache.skippedNotes !== skippedNotes
+					|| cache.indexedNotes !== s.indexedNotes
+					|| cache.updatedMs !== idxTime;
+				if (changed) {
+					Object.assign(cache, {
+						indexedNotes: s.indexedNotes,
+						embeddedNotes,
+						skippedNotes,
+						updatedMs: idxTime,
+						ready: true,
+					});
+					this.plugin.persistRagStatsCache();
+				}
 			} catch (e) {
 				if (attempt >= 8) {
 					console.warn("[Semlink] index stats unavailable:", e);
 					return;
 				}
 				statsRetryTimer = window.setTimeout(() => void refreshStats(attempt + 1), 1000 * (attempt + 1));
+			} finally {
+				statsRefreshInFlight = false;
 			}
 		};
+		// 兜底轮询（用户报「没有同步更新」真机 2026-11-12：卡片定格 19:22 的
+		// 1,138，DB 早已 1,139——收尾那一笔没落在 15s 节流门内 + 退避 8 次
+		// 放弃后，事件驱动的刷新链就断了）。卡片可见期间每 5s 补一查：
+		// 运行中跳过（进度事件 + 15s 门负责，防重演 worker 饿死）、后台
+		// 标签页跳过、上一轮在途跳过——空闲 worker 上 3 个 RPC 毫秒级，无感。
+		let statsPollTimer: number | null = null;
+		statsPollTimer = window.setInterval(() => {
+			if (document.hidden || runningNow || statsRefreshInFlight) return;
+			void refreshStats();
+		}, 5000);
 		setRunning(this.plugin.scheduler.isRunning);
 		updateHeroSub();
 		// 首帧先用快照直出（plugin 启动播种/上次查询写透的 ragStatsCache）：
@@ -876,6 +913,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			unIndex();
 			stopRunningPoll();
 			if (statsRetryTimer != null) window.clearTimeout(statsRetryTimer);
+			if (statsPollTimer != null) window.clearInterval(statsPollTimer);
 		};
 	}
 
