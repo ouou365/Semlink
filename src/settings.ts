@@ -655,6 +655,18 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 变化的时刻（db-engine.syncActivityStamp 比对快照后前移 last_index_activity）
 		// ——普通 save/压缩/清扫数量不变不移动；今天显示 HH:mm，更早显示 MM-dd
 		const updatedEl = statCell(t("ragUpdated"));
+		// 更新时间格绘制（今天 = 时分；非今天 = 只显月-日，用户拍板"MM-dd"）
+		// ——首帧种子与 DB 回查共用同一格式化，缓存命中时四格全部直出
+		// （用户拍板「Updated 的时间没有缓存」）。
+		const paintUpdated = (ms: number | null): void => {
+			if (!ms) return;
+			const d = new Date(ms);
+			updatedEl.setText(
+				d.toDateString() === new Date().toDateString()
+					? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+					: `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+			);
+		};
 		// 索引总开关：关 = 停止文件监听并暂停当前索引；开 = 恢复监听并继续索引。
 		toggleRow(indexBlock.block, t("autoIndex"), this.plugin.settings.autoIndex, async (v) => {
 			this.plugin.settings.autoIndex = v;
@@ -674,22 +686,30 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		let heroDone = false;
 		let runningNow = this.plugin.scheduler.isRunning;
 		const updateBadge = (): void => {
+			// 完成优先（用户拍板 2026-11-12「百分百之后应该把图标变成✅」）：
+			// 分子==分母即 ✅，即使调度器还在跑（扫描/收尾阶段活已干完，转圈
+			// 让人误以为还有活）；下一笔真实变更把分子拉回 <总数 时自然回
+			// 转圈。旧逻辑 runningNow 一票压死 is-done，100.0% 也转圈。
+			if (heroDone) {
+				indexBlock.block.toggleClass("is-running", false);
+				indexBlock.block.toggleClass("is-done", true);
+				indexBlock.block.toggleClass("is-paused", false);
+				setIcon(indexBlock.spinEl, "check-circle");
+				return;
+			}
 			// 暂停徽章（用户拍板"暂停的话这个图标也变成暂停"）：手动暂停
 			// （状态栏/进度弹窗/Auto Index 开关）→ pause 图标静态灰。自动
 			// 让路（用户操作中/网络退避，isAuto）不在此列——循环仍活着会
 			// 自动续跑，若显示暂停会随用户每次点击闪烁。
-			const manualPaused = !runningNow && !heroDone
+			const manualPaused = !runningNow
 				&& this.plugin.progress.current.isPaused === true
 				&& this.plugin.progress.current.isAutoPaused !== true;
 			indexBlock.block.toggleClass("is-running", runningNow);
-			indexBlock.block.toggleClass("is-done", !runningNow && heroDone);
+			indexBlock.block.toggleClass("is-done", false);
 			indexBlock.block.toggleClass("is-paused", manualPaused);
 			// spinEl 在 makeBlock 闭包里，本作用域不可见（拉取代码引用裸名
 			// spinEl → ReferenceError，RAG 页整页崩）——用 indexBlock 徽章。
-			setIcon(
-				indexBlock.spinEl,
-				runningNow || !heroDone ? (manualPaused ? "pause" : "loader-2") : "check-circle",
-			);
+			setIcon(indexBlock.spinEl, manualPaused ? "pause" : "loader-2");
 		};
 		const setHero = (b: RagBlock, num: number): void => {
 			const total = liveTotal;
@@ -733,6 +753,11 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const startRunningPoll = (): void => {
 			if (runningPollTimer != null) return;
 			runningPollTimer = window.setInterval(() => {
+				// 总数副行 500ms 跟拍：扫描枚举阶段几乎不发进度事件（只在
+				// 首尾各一次），期间新增文件只有弹窗（2s 轮询）能看见，设置页
+				// 会冻在旧值（真机 2026-11-12：987 vs 988 再打架）。零 DB、
+				// ~1ms 文件遍历，跟拍无感。
+				updateHeroSub();
 				if (!this.plugin.scheduler.isRunning) setRunning(false);
 			}, 500);
 		};
@@ -778,16 +803,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				vectorizedEl.setText(embeddedNotes.toLocaleString());
 				embedSkippedEl.setText(skippedNotes.toLocaleString());
 				const idxTime = await this.plugin.store.lastIndexTime();
-				if (idxTime) {
-					const d = new Date(idxTime);
-					// 今天 = 时分；非今天 = 只显月-日（用户拍板"MM-dd"）
-					const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-					updatedEl.setText(
-						d.toDateString() === new Date().toDateString()
-							? hm
-							: `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
-					);
-				}
+				paintUpdated(idxTime);
 				// 总数副行：hero 的分母口径（用户拍板"横排统计条"——总数不再
 				// 与三个结果量平铺），用活总数（拷文件期间即时增长）
 				indexBlock.heroSub.setText(t("ragTotalSub").replace("{n}", liveTotal.toLocaleString()));
@@ -796,12 +812,15 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				// 相加恰为处理完成数，索引收尾时 hero 精确到 100%
 				setHero(indexBlock, embeddedNotes + skippedNotes);
 				// 写透快照：这次查询的值就是下次打开设置页的首帧缓存
+				// （persistRagStatsCache 同步落盘 → 重启后首帧直出）
 				Object.assign(this.plugin.ragStatsCache, {
 					indexedNotes: s.indexedNotes,
 					embeddedNotes,
 					skippedNotes,
+					updatedMs: idxTime,
 					ready: true,
 				});
+				this.plugin.persistRagStatsCache();
 			} catch (e) {
 				if (attempt >= 8) {
 					console.warn("[Semlink] index stats unavailable:", e);
@@ -821,6 +840,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			vectorizedEl.setText(seed.embeddedNotes.toLocaleString());
 			embedSkippedEl.setText(seed.skippedNotes.toLocaleString());
 			setHero(indexBlock, seed.embeddedNotes + seed.skippedNotes);
+			// 更新时间格同帧直出（用户拍板「Updated 的时间没有缓存」）
+			paintUpdated(seed.updatedMs);
 		}
 		void refreshStats();
 
@@ -829,10 +850,18 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const unIndex = this.plugin.progress.onProgress((e) => {
 			if (e.type === "progress") {
 				setRunning(this.plugin.scheduler.isRunning);
+				// 总数副行不节流（用户拍板「取值统一」，2026-11-12：985 vs 986
+				// 当众打架）——vault 文件遍历是主线程轻活（~千文件 <1ms、零 DB
+				// 依赖），每个进度事件都跟着刷新。曾与 DB 回查一起压在节流门
+				// 内：运行中新增文件时弹窗（2s 轮询）先到 986、设置页滞后 ≤15s。
+				updateHeroSub();
 				const now = Date.now();
-				if (now - lastEmbedRefresh >= 1000) {
+				// 15s 节流：DB 回查（getStats + 两个 COUNT）在 5 万 chunk 级的库上
+				// 每次要数百 ms，1s 一次会把 worker 占满、饿死其它 RPC（真机
+				// 2026-11-11：设置页开着 → 快照/审计等所有 op 排不上队）。数字
+				// 显示由 5s 节流的 ragStatsCache 兜底，视觉无感。
+				if (now - lastEmbedRefresh >= 15000) {
 					lastEmbedRefresh = now;
-					updateHeroSub();
 					void refreshStats();
 				}
 				return;

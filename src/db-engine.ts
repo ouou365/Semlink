@@ -60,6 +60,20 @@ export async function probeSqliteBytes(buf: Uint8Array): Promise<{
 	}
 }
 
+/** 一趟 GROUP BY 派生的全库笔记级统计（见 DbEngine.statsSnapshot 注释）。 */
+export interface StatsSnapshot {
+	totalChunks: number;
+	activeChunks: number;
+	embeddedChunks: number;
+	indexedNotes: number;
+	embeddedNotes: number;
+	skippedNotes: number;
+	indexedPaths: Set<string>;
+	noteMtimes: Map<string, number>;
+	/** active 且零向量的笔记（诊断「卡在 99.9%」用），vec=0 即入列。 */
+	vectorless: Array<{ notePath: string; chunks: number }>;
+}
+
 export class DbEngine {
 	/** 引擎无关的 DB 句柄：浏览器 Worker = sqlite3-wasm（opfs-sahpool，事务
 	 *  即持久）；Node worker / sync fallback = sql.js（内存镜像 + 全量导出，
@@ -206,7 +220,39 @@ export class DbEngine {
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_note_path ON chunks (note_path)");
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_status ON chunks (status)");
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_queue_status ON queue (status, priority)");
+		// 部分索引（只收 vector IS NOT NULL 的行，不存 BLOB 值）：让
+		// listVectorlessNotes/queueDiagnostics 的 NOT EXISTS 探测和
+		// getEmbeddedNoteCount 的 COUNT 走索引——5 万+ chunk 的大表上这类
+		// 查询全表扫要分钟级，把 worker 排成阻塞长龙（真机 2026-11-11）。
+		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_path_active_vec ON chunks (note_path, status) WHERE vector IS NOT NULL");
 		this.installAuditTrigger();
+
+		// [更新时间播种] 数量快照缺失时在 init 补种（升级/换机/耐久快照导回
+		// 都可能丢 meta）——否则 syncActivityStamp 的首播种「只记录不触碰」
+		// 碰上数量已稳定（索引 100% 后不再变化）的库，last_index_activity
+		// 永远没有机会写入，「Updated」格死「—」（真机 2026-11-12：985 笔
+		// 100% 稳定常驻「—」）。库里有内容 → 播种快照 + 以 now 触碰时间戳
+		// （真实最后更新时刻已不可考，init 时刻是可用的最佳近似，此后由
+		// 数量比对机制真实前移）；空库只播快照不触碰（没有任何更新可言，
+		// 「—」是诚实值，首笔笔记索引时经 save 比对 0:0→1:1 自然触到）。
+		// 每次 init 两条小 SELECT，命中快照时零写入。
+		const seeded = this.db!.exec("SELECT value FROM meta WHERE key = 'last_activity_counts'");
+		if (seeded.length === 0 || seeded[0].values.length === 0) {
+			const chunkRow = this.db!.exec("SELECT COUNT(*) FROM chunks");
+			const hasContent = chunkRow.length > 0 && Number(chunkRow[0].values[0][0]) > 0;
+			const sigRow = this.db!.exec(
+				"SELECT (SELECT COUNT(DISTINCT note_path) FROM chunks WHERE status = 'active')," +
+				"(SELECT COUNT(DISTINCT note_path) FROM chunks WHERE status = 'active' AND vector IS NOT NULL)",
+			);
+			const sig = sigRow.length > 0 && sigRow[0].values.length > 0
+				? `${Number(sigRow[0].values[0][0])}:${Number(sigRow[0].values[0][1])}`
+				: "0:0";
+			this.db!.run(
+				"INSERT OR REPLACE INTO meta (key, value) VALUES ('last_activity_counts', ?)",
+				[sig],
+			);
+			if (hasContent) this.touchIndexActivity();
+		}
 	}
 
 	/** [审计] 黑匣子回读：最近的 chunks 删除现场（时间 + 剩余行数）。 */
@@ -321,7 +367,13 @@ export class DbEngine {
 	/** 耐久快照节流戳：save() 在 wasm 模式下把整库快照写进 shim 命名空间
 	 *  （writeFileSync 自带 flush，跨 worker 存活），pool 槽「杀进程即丢」
 	 *  的兜底。≥10 分钟一次 + 空库保险丝（空库绝不覆盖好快照）。 */
-	private lastSnapshotAt = 0;
+	// 耐久快照节流戳初始化为 worker 启动时刻：否则 reload 后第一笔 save()
+	// 就过 ≥10min 闸，548MB 全库导出把 worker 占住几十秒——扫描 RPC、
+	// UI 查询、debug stats 全部排队（真机 2026-11-12「嵌入卡住/扫描很慢」
+	// 与每轮 reload 后 worker 磨死的推手）。页级持久化（sahpool 事务提交）
+	// 才是主存盘、始终即时；shim 快照只是灾难恢复保险丝，推迟到启动
+	// ≥10min 后的第一笔保存完全可接受。
+	private lastSnapshotAt = Date.now();
 
 	/** Persist the in-memory DB to disk. Runs entirely off the main thread in
 	 *  worker mode (db.export + write of a ~400MB file). The sqljs branch
@@ -368,13 +420,11 @@ export class DbEngine {
 	 *  失败静默。 */
 	private syncActivityStamp(now = Date.now()): void {
 		try {
-			const r = this.db!.exec(
-				"SELECT (SELECT COUNT(DISTINCT note_path) FROM chunks WHERE status = 'active')," +
-				"(SELECT COUNT(DISTINCT note_path) FROM chunks WHERE status = 'active' AND vector IS NOT NULL)",
-			);
-			const sig = r.length > 0 && r[0].values.length > 0
-				? `${Number(r[0].values[0][0])}:${Number(r[0].values[0][1])}`
-				: "0:0";
+			// 签名取自统计快照（共享 3s TTL 一趟扫描）——原内嵌两条
+			// COUNT(DISTINCT note_path) 在 68k 行冷库上单次 8.6s，而本方法
+			// 挂在 save() 上逐笔记触发（2026-11-12 rpcdiag：save 8640ms）。
+			const snap = this.statsSnapshot();
+			const sig = `${snap.indexedNotes}:${snap.embeddedNotes}`;
 			const prev = this.db!.exec("SELECT value FROM meta WHERE key = 'last_activity_counts'");
 			const prevSig = prev.length > 0 && prev[0].values.length > 0 ? String(prev[0].values[0][0]) : null;
 			if (prevSig !== sig) {
@@ -521,6 +571,7 @@ export class DbEngine {
 		this.touchIndexActivity();
 		this.db.run("DELETE FROM note_doc_vectors");
 		this.db.run("DELETE FROM embed_skips");
+		this.statsSnapCache = null;
 		this.allVectors = null;
 		this.allVectorIds = [];
 		this.allVectorPaths = [];
@@ -548,6 +599,7 @@ export class DbEngine {
 		this.db.run("DELETE FROM note_doc_vectors");
 		this.db.run("DELETE FROM meta");
 		this.touchIndexActivity();
+		this.statsSnapCache = null;
 		this.allVectors = null;
 		this.allVectorIds = [];
 		this.allVectorPaths = [];
@@ -701,6 +753,71 @@ export class DbEngine {
 		return result.changes;
 	}
 
+	/** 全库统计快照：一趟 GROUP BY 全表扫描（sqlite C 层完成聚合，只回传
+	 *  ~千行笔记级结果）派生全部笔记级统计。原来 getStats / getEmbeddedNoteCount /
+	 *  getEmbedSkippedNoteCount / getAllIndexedPaths / getAllNoteMtimeEntries
+	 *  各自独立 DISTINCT/GROUP BY——68k 行上每条秒级（rpcdiag 取证：
+	 *  getStats 单条 9.4s），启动链串行排成分钟级风暴（2026-11-12）。
+	 *  TTL 3s：写路径不逐个失效（漏一个就脏），计数容忍 ≤3s 滞后——UI
+	 *  轮询节奏本来就 ≥2s；语义敏感的清空路径（clearAll/clearVectors）
+	 *  显式失效。skipped 的精确口径（active 零向量且在 embed_skips 中）
+	 *  在 JS 侧 JOIN（embed_skips 全表很小）。
+	 *  TTL 8s > 重算成本：一趟 GROUP BY 热态 ~2.3s/冷态 ~7s（wasm 无 JIT
+	 *  + OPFS 冷页）——TTL 短于重算会让每个调用者都撞上过期重算、缓存
+	 *  反成放大器（2026-11-12 实测 stats 工具 8 子调用横跨 3s 窗口全员
+	 *  重算）。运行中数值按 ≤8s 步进刷新；毫秒级实时进度走内存 tracker，
+	 *  不经此路径。终态方向（未做）：per-note 摘要表把聚合降到 ms 级。 */
+	private statsSnapCache: { snap: StatsSnapshot; at: number } | null = null;
+	private static STATS_SNAP_TTL_MS = 8_000;
+
+	private statsSnapshot(): StatsSnapshot {
+		const now = Date.now();
+		if (this.statsSnapCache && now - this.statsSnapCache.at < DbEngine.STATS_SNAP_TTL_MS) {
+			return this.statsSnapCache.snap;
+		}
+		const rows = this.db!.exec(
+			`SELECT note_path,
+					COUNT(*) AS tot,
+					SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS act,
+					SUM(CASE WHEN status = 'active' AND vector IS NOT NULL THEN 1 ELSE 0 END) AS vec,
+					MAX(mtime) AS mtime
+			 FROM chunks GROUP BY note_path`,
+		);
+		const skipRows = this.db!.exec("SELECT note_path FROM embed_skips");
+		const skips = new Set<string>((skipRows[0]?.values ?? []).map((r) => String(r[0])));
+		let totalChunks = 0, activeChunks = 0, embeddedChunks = 0;
+		let indexedNotes = 0, embeddedNotes = 0, skippedNotes = 0;
+		const indexedPaths = new Set<string>();
+		const noteMtimes = new Map<string, number>();
+		const vectorless: Array<{ notePath: string; chunks: number }> = [];
+		for (const row of rows[0]?.values ?? []) {
+			const path = String(row[0]);
+			const tot = Number(row[1]), act = Number(row[2]), vec = Number(row[3]);
+			totalChunks += tot;
+			if (act <= 0) continue;
+			indexedNotes++;
+			indexedPaths.add(path);
+			activeChunks += act;
+			embeddedChunks += vec;
+			if (vec > 0) embeddedNotes++;
+			else {
+				if (skips.has(path)) skippedNotes++;
+				vectorless.push({ notePath: path, chunks: act });
+			}
+			if (row[4] != null) noteMtimes.set(path, Number(row[4]));
+		}
+		const snap: StatsSnapshot = { totalChunks, activeChunks, embeddedChunks, indexedNotes, embeddedNotes, skippedNotes, indexedPaths, noteMtimes, vectorless };
+		this.statsSnapCache = { snap, at: now };
+		return snap;
+	}
+
+	/** 显式失效统计快照（调度器运行收尾调用，用户拍板「完成要马上改数值」）：
+	 *  完成后下一次读取强制重算（单趟 GROUP BY 1-2s/次，运行完成频率低
+	 *  可承受），运行中的 8s 步进节流不受影响。 */
+	invalidateStats(): void {
+		this.statsSnapCache = null;
+	}
+
 	getNoteMtime(notePath: string): number | null {
 		const results = this.db!.exec(
 			"SELECT MAX(mtime) as mtime FROM chunks WHERE note_path = ?",
@@ -711,6 +828,14 @@ export class DbEngine {
 			return val ? (val as number) : null;
 		}
 		return null;
+	}
+
+	/** 全量 note→mtime（entries 形式过 RPC 传输，结构化克隆双保险）：
+	 *  scanVault 逐文件 getNoteMtime 在千文件库上每轮全扫几十秒——每 RPC
+	 *  排队开销几十 ms × 1147；一趟 GROUP BY 拉回后本地 diff，扫描降到
+	 *  亚秒级（2026-11-12「嵌入比较慢」根治）。 */
+	getAllNoteMtimeEntries(): Array<[string, number]> {
+		return Array.from(this.statsSnapshot().noteMtimes.entries());
 	}
 
 	/** 只推 mtime 不动内容/向量：扫描按 file.mtime > MAX(chunk.mtime) 判
@@ -765,14 +890,7 @@ export class DbEngine {
 	}
 
 	getAllIndexedPaths(): Set<string> {
-		const results = this.db!.exec("SELECT DISTINCT note_path FROM chunks WHERE status = 'active'");
-		const paths = new Set<string>();
-		if (results.length > 0) {
-			for (const row of results[0].values) {
-				paths.add(row[0] as string);
-			}
-		}
-		return paths;
+		return this.statsSnapshot().indexedPaths;
 	}
 
 	/**
@@ -786,6 +904,9 @@ export class DbEngine {
 	 * Returns the number of removed paths.
 	 */
 	pruneOrphanedPaths(existingPaths: Set<string>): number {
+		// [守卫] 空集合 = 扫描未就绪（reload 后 vault 清单可能为空），绝不
+		// 把全部索引当幽灵清掉（真机 2026-11-11 归零元凶，双保险之二）。
+		if (existingPaths.size === 0) return 0;
 		const indexed = this.getAllIndexedPaths();
 		let removed = 0;
 		for (const path of indexed) {
@@ -886,10 +1007,7 @@ export class DbEngine {
 	 *  口径。与文档向量表不同，chunk 向量不会被算法迁移或补算重置清空，
 	 *  且与笔记嵌入同事务落库——进度只增不减，不出现迁移期归零。 */
 	getEmbeddedNoteCount(): number {
-		const r = this.db!.exec(
-			"SELECT COUNT(DISTINCT note_path) FROM chunks WHERE status = 'active' AND vector IS NOT NULL",
-		);
-		return r.length > 0 ? (r[0].values[0][0] as number) : 0;
+		return this.statsSnapshot().embeddedNotes;
 	}
 
 	/** 「已跳过」标记（用户拍板"嵌入进度要包含已跳过"）：索引时判定该笔记
@@ -898,7 +1016,6 @@ export class DbEngine {
 	 *  (已嵌入 + 已跳过) / 笔记总数。重索引同笔记时按新内容覆写/清除。 */
 	markEmbedSkip(notePath: string, skipped: boolean): void {
 		if (!this.db) return;
-		this.skipCountCache = null;
 		if (skipped) {
 			this.db.run("INSERT OR REPLACE INTO embed_skips (note_path) VALUES (?)", [notePath]);
 		} else {
@@ -916,40 +1033,39 @@ export class DbEngine {
 		设置卡/进度整屏冻住（用户报"卡住"）。所以带 30s TTL 缓存：worker
 	 *  至多每 30s 算一次精确值，其余走缓存；markEmbedSkip/saveEmbeddings
 	 *  即时失效，标记变化立刻反映。 */
-	private skipCountCache: { value: number; at: number } | null = null;
-	private static SKIP_COUNT_TTL_MS = 30_000;
 	getEmbedSkippedNoteCount(): number {
-		const now = Date.now();
-		if (this.skipCountCache && now - this.skipCountCache.at < DbEngine.SKIP_COUNT_TTL_MS) {
-			return this.skipCountCache.value;
-		}
-		const r = this.db!.exec(
-			`SELECT COUNT(*) FROM (
-			   SELECT c.note_path,
-					  SUM(CASE WHEN c.vector IS NOT NULL THEN 1 ELSE 0 END) AS vec
-			   FROM chunks c
-			   WHERE c.status = 'active'
-			   GROUP BY c.note_path
-			 ) t
-			 JOIN embed_skips s ON s.note_path = t.note_path
-			 WHERE t.vec = 0`,
-		);
-		const value = r.length > 0 ? (r[0].values[0][0] as number) : 0;
-		this.skipCountCache = { value, at: now };
-		return value;
+		// 精确口径并入统计快照（active 零向量且在 embed_skips 中，JS 侧
+		// JOIN）——原 30s TTL 独立缓存退役（快照 TTL 3s 更新鲜且共享一趟扫描）。
+		return this.statsSnapshot().skippedNotes;
 	}
 
 	/** 诊断：有 active chunk 但一个向量都没有的笔记（缺向量清单，含每篇
 	 *  chunk 数）——"卡在 99.8%" 时定位到底是哪几篇、chunk 多大。 */
-	listVectorlessNotes(limit = 10): Array<{ notePath: string; chunks: number }> {
+	/** [诊断] 按路径直查一篇笔记的索引状态（chunks 数/激活数/带向量数/
+	 *  mtime/skip 标记）——「这篇为什么没嵌入」一发即知（2026-11-12）。 */
+	noteProbe(notePath: string): { chunks: number; active: number; withVector: number; maxMtime: number | null; skipFlag: boolean } {
 		const r = this.db!.exec(
-			`SELECT c.note_path, COUNT(*) FROM chunks c
-			 WHERE c.status = 'active'
-			   AND NOT EXISTS (SELECT 1 FROM chunks c2 WHERE c2.note_path = c.note_path AND c2.status = 'active' AND c2.vector IS NOT NULL)
-			 GROUP BY c.note_path LIMIT ${Math.max(1, Math.min(50, limit | 0))}`,
+			"SELECT COUNT(*)," +
+			"SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END)," +
+			"SUM(CASE WHEN vector IS NOT NULL THEN 1 ELSE 0 END)," +
+			"MAX(mtime) FROM chunks WHERE note_path = ?",
+			[notePath],
 		);
-		if (r.length === 0) return [];
-		return r[0].values.map((row) => ({ notePath: String(row[0]), chunks: Number(row[1]) }));
+		const row = r[0]?.values?.[0] ?? [];
+		const sk = this.db!.exec("SELECT 1 FROM embed_skips WHERE note_path = ?", [notePath]);
+		return {
+			chunks: Number(row[0] ?? 0),
+			active: Number(row[1] ?? 0),
+			withVector: Number(row[2] ?? 0),
+			maxMtime: row[3] != null ? Number(row[3]) : null,
+			skipFlag: sk.length > 0 && sk[0].values.length > 0,
+		};
+	}
+
+	listVectorlessNotes(limit = 10): Array<{ notePath: string; chunks: number }> {
+		// 快照派生（原逐行 NOT EXISTS 探测在 68k 行上秒级——stats 工具冷态
+		// 8s 的主要成分，2026-11-12 rpcdiag 取证）。
+		return this.statsSnapshot().vectorless.slice(0, Math.max(1, Math.min(50, limit | 0)));
 	}
 
 	/** 诊断：DB 里全部已索引笔记路径（active chunk 的 distinct note_path）
@@ -994,18 +1110,10 @@ export class DbEngine {
 	}
 
 	getStats(): { totalChunks: number; activeChunks: number; embeddedChunks: number; indexedNotes: number; dbSizeMb: number } {
-		let totalChunks = 0, activeChunks = 0, embeddedChunks = 0;
-		const r1 = this.db!.exec("SELECT COUNT(*) FROM chunks");
-		if (r1.length > 0) totalChunks = r1[0].values[0][0] as number;
-
-		const r2 = this.db!.exec("SELECT COUNT(*) FROM chunks WHERE status = 'active'");
-		if (r2.length > 0) activeChunks = r2[0].values[0][0] as number;
-
-		const r2b = this.db!.exec("SELECT COUNT(*) FROM chunks WHERE status = 'active' AND vector IS NOT NULL");
-		if (r2b.length > 0) embeddedChunks = r2b[0].values[0][0] as number;
-
-		const r3 = this.db!.exec("SELECT COUNT(DISTINCT note_path) FROM chunks WHERE status = 'active'");
-		const indexedNotes = r3.length > 0 ? (r3[0].values[0][0] as number) : 0;
+		// 快照派生（原 4 条独立 COUNT/DISTINCT 在 68k 行上单条秒级——
+		// 2026-11-12 rpcdiag 取证后合并进单趟 GROUP BY 快照）。
+		const snap = this.statsSnapshot();
+		const { totalChunks, activeChunks, embeddedChunks, indexedNotes } = snap;
 
 		let dbSizeMb = 0;
 		if (this.dbMode === "wasm") {

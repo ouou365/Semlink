@@ -507,6 +507,9 @@ export interface IndexProgress {
 	estimatedRemainingSec: number;
 	isPaused: boolean;
 	isAutoPaused: boolean;
+	/** 让路等待倒计时（ms，0=不在等待）：waitForIdle 每 500ms 推送，
+	 *  弹窗网络行显示 ⏳Ns——「为什么不动」可视化（2026-11-12 用户要求）。 */
+	waitMs: number;
 	hnswNodeCount: number;
 	dbSizeMb: number;
 	lastError: string;
@@ -532,6 +535,7 @@ export const EMPTY_PROGRESS: IndexProgress = {
 	estimatedRemainingSec: 0,
 	isPaused: false,
 	isAutoPaused: false,
+	waitMs: 0,
 	hnswNodeCount: 0,
 	dbSizeMb: 0,
 	lastError: "",

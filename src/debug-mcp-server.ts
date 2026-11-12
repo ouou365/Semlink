@@ -220,7 +220,8 @@ const STATS_TOOL = {
 	inputSchema: {
 		type: "object",
 		properties: {
-			op: { type: "string", description: "Optional remediation action instead of a plain read: \"save\" (persist the in-memory DB — a full export, slow on large DBs) or \"compact\" (VACUUM + save, reclaims ghost pages once; run right after a reload while the DB is at its on-disk size)." },
+			op: { type: "string", description: "Optional remediation action instead of a plain read: \"save\" (persist the in-memory DB — a full export, slow on large DBs), \"compact\" (VACUUM + save, reclaims ghost pages once; run right after a reload while the DB is at its on-disk size), or \"noteprobe\" (query one note's index state — requires `path`; returns registered/file stat + chunks/active/withVector/maxMtime/skipFlag/stale)." },
+			path: { type: "string", description: "Vault-relative note path — required only for op=\"noteprobe\"." },
 		},
 		required: [],
 	},
@@ -249,6 +250,19 @@ const OPFS_TOOL = {
 	},
 };
 
+
+const RPCDIAG_TOOL = {
+	name: "rpcdiag",
+	description:
+		"Report main-thread-side worker RPC observability: in-flight RPC " +
+		"requests (op name + how long each has been waiting) and the last 40 " +
+		"completed RPCs with durations. Reads ONLY main-thread state — it " +
+		"never touches the DB worker, so it still answers while the worker " +
+		"is stuck. Use this FIRST when indexing appears frozen: the op with " +
+		"the largest waitMs is what the worker is blocked on.",
+	inputSchema: { type: "object", properties: {}, required: [] },
+};
+
 export class DebugMcpServer {
 	private server: Server | null = null;
 	private _port: number;
@@ -257,7 +271,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -350,7 +364,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL, OPFS_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -370,7 +384,9 @@ export class DebugMcpServer {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runStats?.(params.arguments as { op?: string } | undefined)) ?? { error: "no stats runner" }, null, 2) }] };
 						} else if (params.name === "opfs") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runOpfs?.(params.arguments as { maxDepth?: number; maxEntries?: number } | undefined)) ?? { error: "no opfs runner" }, null, 2) }] };
-						} else if (params.name === "ui") {
+						} else if (params.name === "rpcdiag") {
+						result = { content: [{ type: "text", text: JSON.stringify(this.runRpcDiag?.() ?? { error: "no rpcdiag runner" }, null, 2) }] };
+					} else if (params.name === "ui") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runUi?.(params.arguments as { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string } | undefined)) ?? { error: "no ui runner" }, null, 2) }] };
 						} else if (params.name === "shot") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runShot?.(params.arguments as { target?: string | number; resize?: { index?: number; width: number; height: number } } | undefined)) ?? { error: "no shot runner" }, null, 2) }] };

@@ -3,6 +3,7 @@
 // ========================================
 
 import { Notice, Plugin, FileSystemAdapter, WorkspaceLeaf, WorkspaceSidedock, addIcon, MarkdownView, TFile } from "obsidian";
+import { readFileSync, writeFileSync } from "fs";
 import { debugLog, setDebugLogging } from "./src/log";
 import { join } from "path";
 import { DEFAULT_SETTINGS, activeEmbeddingProvider, mergeDuplicateProviders, migrateEmbeddingSettings, type SmartVaultSettings, type HistoryMessage } from "./src/types";
@@ -51,14 +52,17 @@ export default class SmartVaultPlugin extends Plugin {
 	 *  startMcpServer 成功置 null、失败写 err.message，MCP 设置页据此
 	 *  把内置服务行渲染成「连接失败」态并展示原因。 */
 	mcpLastError: string | null = null;
-	/** RAG 统计快照（瞬态，不进 data.json）：启动 DB 就绪后播种（与状态栏
-	 *  同一趟查询）、索引完成回写、设置页成功查询写透。设置页 RAG tab
-	 *  首帧用它直出 Indexed/Embedded/Skipped/hero%，不再空「—」等 DB
-	 *  往返；后台 refreshStats 照跑纠偏，快照最多滞后一轮。 */
-	ragStatsCache: { indexedNotes: number; embeddedNotes: number; skippedNotes: number; ready: boolean } = {
+	/** RAG 统计快照：启动 DB 就绪后播种（与状态栏同一趟查询）、索引完成
+	 *  回写、设置页成功查询写透——三处均同步落盘 data/rag-stats-cache.json
+	 *  （persistRagStatsCache），重启后 loadRagStatsCacheFromDisk 预载，
+	 *  状态栏/设置页首帧直出、不等 DB 往返；后台查询照跑纠偏，快照最多
+	 *  滞后一轮。updatedMs = meta.last_index_activity（更新时间格，用户
+	 *  拍板「Updated 的时间没有缓存」——同样要首帧直出）。 */
+	ragStatsCache: { indexedNotes: number; embeddedNotes: number; skippedNotes: number; updatedMs: number | null; ready: boolean } = {
 		indexedNotes: 0,
 		embeddedNotes: 0,
 		skippedNotes: 0,
+		updatedMs: null,
 		ready: false,
 	};
 	/** LAN share server for conversation snapshots. Token↔session pairs
@@ -100,7 +104,17 @@ export default class SmartVaultPlugin extends Plugin {
 	private lastPurgedExcludePaths = "";
 
 	async onload() {
+		// [启动性能面包屑] 各阶段耗时累积，onload 后 8s 由静默对账定时器
+		// 落盘 data/boot-perf.json——「Loading plugins 变久」的远程取证通道
+		// （最后一条 mark = 卡点；正常启动整表可读）。
+		const bootT0 = Date.now();
+		const bootMarks: Array<{ at: string; ms: number }> = [];
+		const bootMark = (label: string): void => {
+			bootMarks.push({ at: label, ms: Date.now() - bootT0 });
+		};
+		bootMark("onload-enter");
 		await this.loadSettings();
+		bootMark("loadSettings");
 		setDebugLogging(this.settings.debugLogging ?? false);
 
 		// Initialize i18n
@@ -125,6 +139,13 @@ export default class SmartVaultPlugin extends Plugin {
 
 		const dataDir = join(this.pluginDir, "data");
 
+		// [快照首帧] 预载上一会话的 RAG 统计快照（persistRagStatsCache 落盘）：
+		// 状态栏/设置页/弹窗首帧立即直出，不等 DB 往返——启动后 worker 被
+		// 任务链占住，首批查询排队分钟级（真机 2026-11-12「打开 Vault 很久
+		// 才显数值」）。索引只在 Obsidian 运行中发生，正常退出时的快照近乎
+		// 精确；崩溃丢的尾巴由 DB 就绪后的写透静默纠偏。
+		this.loadRagStatsCacheFromDisk();
+
 		// Initialize components
 		this.progress = new ProgressTracker();
 		// Browser Web Worker fallback channel: loads the same DB engine from
@@ -140,11 +161,13 @@ export default class SmartVaultPlugin extends Plugin {
 			);
 			browserWorkerUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
 		} catch { /* leave undefined → sync fallback */ }
+		bootMark("worker-script-read");
 		this.store = new VectorStore(dataDir, browserWorkerUrl);
 		// 向量搜索总开关（设置页 RAG 标签）：实时读设置，关掉即全部语义检索返回空
 		// 向量搜索可用性 = 嵌入模型已配置（无独立开关）
 		this.store.searchGate = () => activeEmbeddingProvider(this.settings).apiKey.trim() !== "";
 		await this.store.init();
+		bootMark("store.init");
 		// 一次性回填 embed_skips（embed_skips 上线前已完成索引的全稀疏笔记
 		// 等不到重索引、也产生不了向量——嵌入进度永远差几个点，如真机的
 		// 974/980=99.4%）。幂等、候选集趋近空集，后台跑不阻塞启动。
@@ -197,9 +220,32 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 
 		// File watcher
-		this.watcher = new VaultWatcher(this.app, this.scheduler, this.settings);
+		this.watcher = new VaultWatcher(this.app, this.scheduler, this.settings, () => this.store.getAllIndexedPaths());
 		this.watcher.start(this.settings.autoIndex);
 		this.setupSilentReconcile();
+		bootMark("watcher+reconcile-setup");
+
+		// [启动性能面包屑] onload 后 8s 落盘 data/boot-perf.json（此时 onload
+		// 必已结束；若仍在 store.init，最后一条 mark 即卡点）。
+		window.setTimeout(() => {
+			try {
+				const req = (window as unknown as { require?: (m: string) => unknown }).require;
+				const fsMod = req?.("fs") as { writeFileSync(p: string, d: string): void } | undefined;
+				fsMod?.writeFileSync(
+					join(dataDir, "boot-perf.json"),
+					// onloadMs = 最后一条 mark 的时刻：onload-done 已打即 onload
+					// 完成耗时；8s 写盘时 onload 若仍未结束，最后一条 mark 就是
+					// 卡点（取证语义）。旧版 totalMs 用定时器触发时刻（恒 ≈8s+），
+					// 会被误读成「插件加载 9.4s」。
+					JSON.stringify({
+						onloadDone: bootMarks.some((m) => m.at === "onload-done"),
+						onloadMs: bootMarks.length > 0 ? bootMarks[bootMarks.length - 1].ms : -1,
+						writtenAtMs: Date.now() - bootT0,
+						marks: bootMarks,
+					}, null, 1),
+				);
+			} catch { /* 取证失败不影响主流程 */ }
+		}, 8000);
 
 		// Background: ensure document-level vectors exist (one-time backfill if
 		// the table is empty or an algorithm bump cleared it). Runs async —
@@ -214,6 +260,14 @@ export default class SmartVaultPlugin extends Plugin {
 		this.statusBarEl.createSpan({ text: "Semlink" });
 		this.statusBarEl.createSpan({ cls: "status-dot" });
 		this.statusBarEl.createSpan({ cls: "status-count" });
+		// 数量首帧直出持久化快照（用户拍板「打开 Vault 很久才显数值」）：
+		// 预载快照已就绪则立即显示，DB 就绪后 updateInitialStatusBar 纠偏。
+		if (this.ragStatsCache.ready) {
+			const count = this.statusBarEl.querySelector(".status-count");
+			if (count) {
+				count.textContent = `${this.ragStatsCache.embeddedNotes + this.ragStatsCache.skippedNotes} ${t("statusIndexed")}`;
+			}
+		}
 		this.statusBarEl.onClickEvent(() => {
 			void this.showProgressModal();
 		});
@@ -247,18 +301,25 @@ export default class SmartVaultPlugin extends Plugin {
 		});
 
 		// Show initial status bar with existing index data
-		await this.updateInitialStatusBar();
+		bootMark("pre-updateInitialStatusBar");
+		// 不阻塞 onload：getStats 在数万 chunk 的库上要数秒（冷启动 SAH
+		// 冷读 + COUNT 全扫），await 会把「Loading plugins」拖住——状态栏
+		// 元素已就位，数字就绪后自行填充（真机 2026-11-12 启动卡 8s+ 根因）。
+		void this.updateInitialStatusBar();
+		bootMark("updateInitialStatusBar(fired)");
 
 		// Start MCP server：默认开启；用户手动关闭后（mcpEnabled=false）保持关闭
 		if (this.settings.mcpEnabled !== false) {
 			await this.startMcpServer();
 		}
+		bootMark("mcp-server");
 
 		// 调试问答服务（semlink-debug）：ask 单工具，端到端跑真实问答管线，
 		// 供 ZCode 等 agent 回归测试。仅监听 127.0.0.1（会触发真实 LLM 调用）。
 		if (this.settings.debugMcpEnabled === true) {
 			await this.startDebugMcpServer();
 		}
+		bootMark("debug-server");
 
 		// Register settings tab
 		this.addSettingTab(new SmartVaultSettingTab(this.app, this));
@@ -271,8 +332,14 @@ export default class SmartVaultPlugin extends Plugin {
 			if (!already) void runOpfsSpike(this.app, this.manifest.id);
 		}
 
-		// Start any enabled Feishu bots.
-		await this.syncFeishuBots();
+		// Start any enabled Feishu bots. 不阻塞 onload——start() 首步是
+		// await verifyFeishuApp()：到 open.feishu.cn 的 HTTPS 往返，网络
+		// 一慢「Loading plugins」被整段拖住（真机 2026-11-12 启动慢根因
+		// 之一）。机器人是后台长连接，失败已有 scheduleRetry + 状态回调兜底。
+		bootMark("feishu-bots(kick)");
+		void this.syncFeishuBots()
+			.catch((e) => console.warn("[Semlink] Feishu bots sync failed:", e))
+			.then(() => bootMark("feishu-bots-done"));
 
 		// Semantic Search sidebar view
 		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SemanticSearchView(
@@ -423,9 +490,11 @@ export default class SmartVaultPlugin extends Plugin {
 			})
 		);
 
-		// Update initial status bar
-		await this.updateInitialStatusBar();
-
+		// Update initial status bar：onload 前段（updateInitialStatusBar(fired)）
+		// 已 fire-and-forget，这里不再重复 await——真机 2026-11-12 启动慢根因
+		// 之一：getStats + 两个 COUNT 在数万 chunk 的冷库上要数秒，await 把
+		// onload 尾巴拖住且旧面包屑停在 mcp-server 完全不可见。
+		bootMark("onload-done");
 		debugLog("[Semlink] Plugin loaded");
 	}
 
@@ -653,6 +722,7 @@ export default class SmartVaultPlugin extends Plugin {
 			(opts) => this.runDebugStats(opts),
 			(opts) => this.runDebugUi(opts),
 			(opts) => this.runDebugOpfs(opts),
+			() => ({ ...this.store.rpcDiag(), arrival: this.watcher?.lastArrivalDiag ?? null }),
 		);
 		try {
 			await server.start();
@@ -669,6 +739,27 @@ export default class SmartVaultPlugin extends Plugin {
 	 *  慎用；compact 适合刚重载、库还在磁盘尺寸时跑一次）。 */
 	private async runDebugStats(opts?: { op?: string }): Promise<unknown> {
 		const op = opts?.op?.toLowerCase();
+		if (op === "noteprobe") {
+			// [诊断] 按路径查单篇索引状态 + 登记状态——「这篇为什么没嵌入」
+			// 一发即知：registered=false = Obsidian 未登记（获焦登记/等待
+			// 外部落盘轮询）；registered=true 且 chunks=0 = 已登记未索引
+			// （队列/排除规则问题）。
+			const path = (opts as { path?: string })?.path ?? "";
+			if (!path) return { op, error: "path required" };
+			const probe = await this.store.noteProbe(path);
+			const abstract = this.app.vault.getAbstractFileByPath(path);
+			const fileStat = abstract instanceof TFile
+				? { size: abstract.stat.size, mtime: abstract.stat.mtime }
+				: null;
+			return {
+				op,
+				path,
+				registered: abstract instanceof TFile,
+				file: fileStat,
+				index: probe,
+				stale: fileStat != null && probe.maxMtime != null && fileStat.mtime > probe.maxMtime,
+			};
+		}
 		if (op === "save" || op === "compact") {
 			const t0 = Date.now();
 			try {
@@ -2954,10 +3045,24 @@ export default class SmartVaultPlugin extends Plugin {
 			this.lastFocusReconcile = now;
 			this.startFullIndex();
 		});
-		// 启动对账：等 watcher 5s 宽限期与启动风暴过去后再跑一次。
-		this.registerInterval(window.setTimeout(() => {
-			if (this.settings.autoIndex) this.startFullIndex();
-		}, 8000));
+		// 启动对账：等 watcher 5s 宽限期与启动风暴过去后再跑。vault 清单可能
+		// 比插件更晚就绪（真机 2026-11-12：8s 时 getMarkdownFiles() 仍为空 →
+		// 对账白跑、prune 被守卫跳过，且一次定终身只能等 ≥5min 获焦对账）。
+		// 改为「先探清单再跑」：countIndexableNotes()==0 = 未就绪，8s 后再探，
+		// 至多 5 轮；就绪即跑一次收尾。计时器全部挂 registerInterval，unload
+		// 自动清。真空库（本来就没笔记）多探几轮后照跑一次，是廉价 no-op。
+		let bootReconcileTries = 0;
+		const tryBootReconcile = (): void => {
+			if (!this.settings.autoIndex) return;
+			if (this.scheduler.countIndexableNotes() === 0 && bootReconcileTries < 5) {
+				bootReconcileTries++;
+				console.warn(`[Semlink] boot reconcile: vault manifest not ready (${bootReconcileTries}/5), retrying in 8s`);
+				this.registerInterval(window.setTimeout(tryBootReconcile, 8000));
+				return;
+			}
+			this.startFullIndex();
+		};
+		this.registerInterval(window.setTimeout(tryBootReconcile, 8000));
 	}
 
 	startFullIndex() {
@@ -3133,12 +3238,13 @@ export default class SmartVaultPlugin extends Plugin {
 			if (dot) dot.className = "status-dot idle";
 			const count = this.statusBarEl.querySelector(".status-count");
 			if (count) {
-				// 三查并行：状态栏数量（覆盖率口径，用户拍板「三处值同步」）
-				// + 进度追踪器权威播种 + RAG 快照写透，一趟拿全。
-				const [stats, embedded, skipped] = await Promise.all([
+				// 四查并行：状态栏数量（覆盖率口径，用户拍板「三处值同步」）
+				// + 进度追踪器权威播种 + RAG 快照写透（含更新时间），一趟拿全。
+				const [stats, embedded, skipped, idxTime] = await Promise.all([
 					this.store.getStats(),
 					this.store.getEmbeddedNoteCount(),
 					this.store.getEmbedSkippedNoteCount(),
+					this.store.lastIndexTime(),
 				]);
 				count.textContent = `${embedded + skipped} ${t("statusIndexed")}`;
 				// 用 DB 权威值播种进度追踪器：否则启动后任何一次进度事件
@@ -3155,8 +3261,10 @@ export default class SmartVaultPlugin extends Plugin {
 					indexedNotes: stats.indexedNotes,
 					embeddedNotes: embedded,
 					skippedNotes: skipped,
+					updatedMs: idxTime,
 					ready: true,
 				});
+				this.persistRagStatsCache();
 			}
 		}
 	}
@@ -3165,12 +3273,47 @@ export default class SmartVaultPlugin extends Plugin {
 	 *  时由设置页自身的退避重试兜底，快照只求「大概率新鲜」，不求强一致。 */
 	async refreshRagStatsCache(): Promise<void> {
 		try {
-			const [s, embeddedNotes, skippedNotes] = await Promise.all([
+			const [s, embeddedNotes, skippedNotes, updatedMs] = await Promise.all([
 				this.store.getStats(),
 				this.store.getEmbeddedNoteCount(),
 				this.store.getEmbedSkippedNoteCount(),
+				this.store.lastIndexTime(),
 			]);
-			this.ragStatsCache = { indexedNotes: s.indexedNotes, embeddedNotes, skippedNotes, ready: true };
+			this.ragStatsCache = { indexedNotes: s.indexedNotes, embeddedNotes, skippedNotes, updatedMs, ready: true };
+			this.persistRagStatsCache();
 		} catch { /* 保旧值，等下一个播种点（完成事件/设置页写透） */ }
+	}
+
+	/** RAG 统计快照落盘（data/rag-stats-cache.json，~120 字节同步写）：重启
+	 *  后状态栏/设置页/弹窗首帧直出上一会话的值（loadRagStatsCacheFromDisk
+	 *  预载），DB 就绪后写透纠偏。失败静默——最坏回退为原来的等 DB 行为。 */
+	private persistRagStatsCache(): void {
+		try {
+			writeFileSync(
+				join(this.pluginDir, "data", "rag-stats-cache.json"),
+				JSON.stringify(this.ragStatsCache),
+				"utf-8",
+			);
+		} catch { /* 快照写失败不致命 */ }
+	}
+
+	private loadRagStatsCacheFromDisk(): void {
+		try {
+			const raw = readFileSync(join(this.pluginDir, "data", "rag-stats-cache.json"), "utf-8");
+			const c = JSON.parse(raw) as { indexedNotes?: unknown; embeddedNotes?: unknown; skippedNotes?: unknown; updatedMs?: unknown };
+			if (
+				typeof c.indexedNotes === "number" && c.indexedNotes >= 0 &&
+				typeof c.embeddedNotes === "number" && c.embeddedNotes >= 0 &&
+				typeof c.skippedNotes === "number" && c.skippedNotes >= 0
+			) {
+				this.ragStatsCache = {
+					indexedNotes: c.indexedNotes,
+					embeddedNotes: c.embeddedNotes,
+					skippedNotes: c.skippedNotes,
+					updatedMs: typeof c.updatedMs === "number" && c.updatedMs > 0 ? c.updatedMs : null,
+					ready: true,
+				};
+			}
+		} catch { /* 无文件/损坏 → 空快照，走原 DB 路径 */ }
 	}
 }

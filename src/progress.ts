@@ -182,6 +182,14 @@ export class ProgressTracker {
 		this.emitProgress();
 	}
 
+	/** 让路等待倒计时（waitForIdle 每 500ms 推送，0=不在等待）：
+	 *  弹窗网络行 ⏳Ns——「为什么不动」可视化（2026-11-12 用户要求）。 */
+	setWaitMs(ms: number) {
+		if (this.progress.waitMs === ms) return;
+		this.progress.waitMs = ms;
+		this.emitProgress();
+	}
+
 	// ──── ETA calculation ────
 
 	private updateEta() {

@@ -104,6 +104,11 @@ export class Scheduler {
 		let alreadyIndexed = 0;
 		const existingPaths = new Set<string>();
 
+		// 一次 GROUP BY 拉回全量 note→mtime，本地 diff。原逐文件 getNoteMtime
+		// RPC 在千文件库上每轮全扫几十秒（每 RPC 排队开销几十 ms × 1147），
+		// 是「改一个文件也要等几十秒才开始嵌入」的主因（2026-11-12）。
+		const storedMtimes = new Map(await this.store.getAllNoteMtimeEntries());
+
 		for (let fi = 0; fi < filteredFiles.length; fi++) {
 			const file = filteredFiles[fi];
 			// Skip empty files — they produce no chunks and would never be counted
@@ -111,8 +116,8 @@ export class Scheduler {
 
 			existingPaths.add(file.path);
 
-			const storedMtime = await this.store.getNoteMtime(file.path);
-			if (storedMtime === null) {
+			const storedMtime = storedMtimes.get(file.path);
+			if (storedMtime === undefined) {
 				// New file
 				items.push({ notePath: file.path, action: "add", priority: 2 });
 			} else if (file.stat.mtime > storedMtime) {
@@ -122,13 +127,14 @@ export class Scheduler {
 				// Unchanged - already indexed
 				alreadyIndexed++;
 			}
-			// Yield every 200 files to keep UI responsive; also hold off the
-			// scan itself while the user is actively working.
+			// Yield every 200 files to keep UI responsive. 扫描不做用户空闲
+			// 门（waitForIdle 已删，2026-11-12「嵌入卡住」事故）：扫描是本地
+			// mtime 读，单文件微秒级、总开销秒级——用户盯着进度看时恰恰全程
+			// 「活跃」，waitForIdle 会让整个管线在扫描阶段无限让路（只剩 1 个
+			// 文件也永远 99.9%）。重活（嵌入批次/写库）在处理循环里仍受
+			// activity gate 约束。
 			if (fi > 0 && fi % 200 === 0) {
 				await this.yieldControl();
-				if (this.gate && !this.gate.isIdle()) {
-					await this.waitForIdle();
-				}
 			}
 		}
 
@@ -136,9 +142,16 @@ export class Scheduler {
 		// renamed, or deleted while the plugin (or its watcher) wasn't active.
 		// Without this the DB grows unbounded (seen: 397MB→802MB after
 		// reorganizing the vault) and search returns dead paths.
-		const pruned = await this.store.pruneOrphanedPaths(existingPaths);
-		if (pruned > 0) {
-			debugLog(`[Semlink] Pruned ${pruned} orphaned note paths from index`);
+		// [守卫] existingPaths 为空 = vault 清单还没就绪（reload 后 8s 的
+		// 启动对账撞上 vault 解析未完成，getMarkdownFiles() 返回空），绝不能
+		// 据此把全部索引当幽灵清掉——真机 2026-11-11 每轮重载后归零的元凶。
+		if (existingPaths.size === 0 && filteredFiles.length === 0) {
+			console.error(`[Semlink][audit] scanVault saw 0 vault files — skipping prune (vault not ready?)`);
+		} else {
+			const pruned = await this.store.pruneOrphanedPaths(existingPaths);
+			if (pruned > 0) {
+				debugLog(`[Semlink] Pruned ${pruned} orphaned note paths from index`);
+			}
 		}
 
 		// Queue hygiene: drop stale completed/failed rows from earlier runs and
@@ -346,6 +359,13 @@ export class Scheduler {
 			}
 
 			if (!this.aborted) {
+				// [完成即新鲜] 统计快照 TTL 8s 会让完成时刻的读取滞后 ≤8s
+				// （用户 2026-11-12 反馈「嵌入完成没有马上修改数值」）——收尾
+				// 先失效快照：下面 getStats 播种、complete 事件触发的
+				// ragStatsCache 回写/状态栏/弹窗覆盖率，全部拿到真实终值。
+				// 每次运行仅此一次重算（单趟 GROUP BY 1-2s，运行完成频率低，
+				// 可承受；运行中数值按 8s 步进不变）。
+				this.store.invalidateStats();
 				// For incremental runs (no scan), processedNotes was incremented per
 				// file on top of a stale baseline — it no longer reflects the real
 				// note count. Re-sync from the DB so the status bar shows the true
@@ -623,10 +643,13 @@ export class Scheduler {
 
 			// Re-check between concurrency groups — a single batch can embed
 			// for a while, so don't wait until the whole batch finishes before
-			// noticing the user is back.
+			// noticing the user is back. 暂停态与批次循环一致（弹窗 ⏸ 徽章 +
+			// 倒计时可见）。
 			if (this.gate && !this.gate.isIdle()) {
+				this.progress.setPaused(true, true);
 				await this.waitForIdle();
 				if (this.aborted) break;
+				this.progress.setPaused(false);
 			}
 
 			const chunk = noteEntries.slice(i, i + this.concurrency);
@@ -792,14 +815,17 @@ export class Scheduler {
 	}
 
 	/** Wait until the user has been idle for IDLE_MS (checked every 500ms).
-	 *  Resolves immediately when the gate is absent. */
+	 *  Resolves immediately when the gate is absent. 每 500ms 把剩余倒计时
+	 *  推进 progress.waitMs（弹窗网络行 ⏳Ns，「为什么不动」可视化）。 */
 	private waitForIdle(): Promise<void> {
 		return new Promise((resolve) => {
 			const check = () => {
 				if (this.aborted || !this.gate || this.gate.isIdle()) {
+					this.progress.setWaitMs(0);
 					resolve();
 					return;
 				}
+				this.progress.setWaitMs(this.gate.remainingMs());
 				window.setTimeout(check, 500);
 			};
 			check();

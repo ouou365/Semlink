@@ -19,10 +19,20 @@ export class ActivityGate {
 	constructor() {
 		// Capture phase + passive so the listeners never block the UI and
 		// clicks/keys anywhere in the app (including editor panels) count.
-		const mark = () => {
+		// 插件自身 UI（盯进度弹窗/开设置/滚侧栏/聊天输入）不算「用户忙」：
+		// 让路是为了不与用户的笔记工作抢资源，而「看着进度等索引」是正当
+		// 场景——把插件 UI 算活跃会让索引无限让路，剩 1 个文件也永远
+		// 99.9%（2026-11-12 用户拍板「操作插件不要触发等待」）。笔记编辑
+		// 器、Obsidian 本体、其它插件的界面照常计时。
+		const isPluginUi = (e: Event): boolean =>
+			e.target instanceof Element &&
+			e.target.closest('[class*="semlink-"], .smart-vault-progress-modal, .smart-vault-status-bar') !== null;
+		const mark = (e: Event) => {
+			if (isPluginUi(e)) return;
 			this.lastActivity = Date.now();
 		};
-		const markScroll = () => {
+		const markScroll = (e: Event) => {
+			if (isPluginUi(e)) return;
 			const now = Date.now();
 			if (now - this.lastScrollAt < SCROLL_THROTTLE_MS) return;
 			this.lastScrollAt = now;
@@ -41,6 +51,11 @@ export class ActivityGate {
 	/** True when the user has been inactive for at least IDLE_MS. */
 	isIdle(): boolean {
 		return Date.now() - this.lastActivity >= IDLE_MS;
+	}
+
+	/** 距离「空闲」还差多少 ms（IDLE_MS − 已静默时长），等待倒计时显示用。 */
+	remainingMs(): number {
+		return Math.max(0, IDLE_MS - (Date.now() - this.lastActivity));
 	}
 
 	/** Stop listening (plugin unload). */

@@ -23,6 +23,7 @@ export class ProgressModal extends Modal {
 	private lastCoverageAt = 0;
 	private coverageIndexed = 0;
 	private coverageTotal = 0;
+	private coverageTimer: number | null = null;
 
 	// Buttons
 	private btnContainer!: HTMLElement;
@@ -108,6 +109,13 @@ export class ProgressModal extends Modal {
 		});
 		// 覆盖率首查（进度事件到来前就显示真实库覆盖进度）
 		void this.refreshCoverage();
+		// [分母活性] 覆盖率不能只挂进度事件——扫描/空闲阶段几乎没有事件，
+		// 文件增删后分母会冻在开窗时的旧值（真机 2026-11-12：设置页总数
+		// 983 vs 弹窗 984，两处同读 countIndexableNotes 只是读到不同时刻）。
+		// 开窗期间 2s 一拉：分母走主线程文件遍历（零 DB 依赖），分子 COUNT
+		// 在部分索引 idx_chunks_path_active_vec 下已不再全表扫；refreshCoverage
+		// 自带 ≥1s 节流且置戳先于 await，与事件驱动路径天然去重不叠加。
+		this.coverageTimer = window.setInterval(() => void this.refreshCoverage(), 2000);
 		this.attachDrag();
 	}
 
@@ -168,6 +176,10 @@ export class ProgressModal extends Modal {
 	}
 
 	onClose() {
+		if (this.coverageTimer !== null) {
+			window.clearInterval(this.coverageTimer);
+			this.coverageTimer = null;
+		}
 		this.detachDrag?.();
 		this.dragOffset = { x: 0, y: 0 };
 		this.modalEl.style.transform = "";
@@ -220,6 +232,11 @@ export class ProgressModal extends Modal {
 		let networkText = `${t("networkLabel")} ${statusLabels[p.networkStatus] || p.networkStatus}`;
 		if (p.isPaused) {
 			networkText += ` ${p.isAutoPaused ? t("autoPaused") : t("manualPaused")}`;
+			// 让路倒计时（用户拍板「等待操作的倒计时在这上面打出来」）：
+			// ⏳Ns = 距离自动续跑还差几秒（期间再操作会重新计时）。
+			if (p.isAutoPaused && p.waitMs > 0) {
+				networkText += ` ⏳${Math.ceil(p.waitMs / 1000)}s`;
+			}
 		}
 		if (p.consecutiveFailures > 0) {
 			networkText += ` ${t("consecutiveFailures")} ${p.consecutiveFailures}`;

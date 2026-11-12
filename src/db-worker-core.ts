@@ -60,6 +60,7 @@ export function createDispatcher(): Dispatcher {
 			case "deleteStaleChunks": return engine.deleteStaleChunks(args[0] as string);
 			case "renameNotePath": return engine.renameNotePath(args[0] as string, args[1] as string);
 			case "getNoteMtime": return engine.getNoteMtime(args[0] as string);
+			case "getAllNoteMtimeEntries": return engine.getAllNoteMtimeEntries();
 			case "touchNoteMtime": return engine.touchNoteMtime(args[0] as string, args[1] as number);
 			case "getAllIndexedPaths": return engine.getAllIndexedPaths();
 			case "pruneOrphanedPaths": return engine.pruneOrphanedPaths(args[0] as Set<string>);
@@ -96,6 +97,8 @@ export function createDispatcher(): Dispatcher {
 			case "purgeRedundantQueue": return engine.purgeRedundantQueue(args[0] as Array<{ path: string; mtime: number }>);
 			case "exportDb": return engine.exportDb();
 			case "lastIndexTime": return engine.lastIndexTime();
+			case "noteProbe": return engine.noteProbe(args[0] as string);
+			case "invalidateStats": return engine.invalidateStats();
 			case "clearQueue": return engine.clearQueue();
 			case "getPendingPaths": return engine.getPendingPaths();
 			default:

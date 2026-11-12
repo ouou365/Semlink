@@ -26,6 +26,8 @@ interface WorkerResponse {
 interface PendingRequest {
 	resolve: (value: unknown) => void;
 	reject: (err: unknown) => void;
+	op: string;
+	startedAt: number;
 }
 
 export class VectorStore {
@@ -88,6 +90,9 @@ export class VectorStore {
 			const pending = this.pending.get(reqId);
 			if (!pending) return;
 			this.pending.delete(reqId);
+			// RPC 耗时环形记录（rpcDiag 观测用，cap 40）。
+			this.rpcRecent.push({ op: pending.op, ms: Date.now() - pending.startedAt });
+			if (this.rpcRecent.length > 40) this.rpcRecent.shift();
 			if (error) pending.reject(new Error(error));
 			else pending.resolve(result);
 		};
@@ -166,9 +171,25 @@ export class VectorStore {
 		}
 		return new Promise((resolve, reject) => {
 			const reqId = ++this.reqId;
-			this.pending.set(reqId, { resolve, reject });
+			this.pending.set(reqId, { resolve, reject, op, startedAt: Date.now() });
 			this.browserWorker!.postMessage({ reqId, op, args });
 		});
+	}
+
+	/** 最近完成的 worker RPC（op + 耗时，cap 40，新的在前由 rpcDiag 反转）。 */
+	private rpcRecent: Array<{ op: string; ms: number }> = [];
+
+	/** RPC 观测（纯主线程，不经 worker——worker 堵死/stall 期间也能应答）：
+	 *  inFlight = 在途请求及其已等待时长（直接点名「worker 被哪个 op 堵住、
+	 *  等了多久」，2026-11-12 第三次「卡住但不知道哪卡」后补的观测通道）。 */
+	rpcDiag(): unknown {
+		const now = Date.now();
+		const inFlight = Array.from(this.pending.entries()).map(([reqId, p]) => ({
+			reqId,
+			op: p.op,
+			waitMs: now - p.startedAt,
+		}));
+		return { inFlight, recent: this.rpcRecent.slice(-40).reverse() };
 	}
 
 	// ──── Public API (all async now) ────
@@ -238,6 +259,22 @@ export class VectorStore {
 	}
 	async getNoteMtime(notePath: string): Promise<number | null> {
 		return await this.call<number | null>("getNoteMtime", [notePath]);
+	}
+
+	/** 全量 note→mtime（entries 过 RPC，本地重建 Map）：scanVault 批量对账用。 */
+	async getAllNoteMtimeEntries(): Promise<Array<[string, number]>> {
+		return await this.call<Array<[string, number]>>("getAllNoteMtimeEntries");
+	}
+
+	/** [诊断] 按路径直查单篇索引状态（see DbEngine.noteProbe）。 */
+	async noteProbe(notePath: string): Promise<{ chunks: number; active: number; withVector: number; maxMtime: number | null; skipFlag: boolean }> {
+		return await this.call("noteProbe", [notePath]);
+	}
+
+	/** 显式失效统计快照（调度器运行收尾调用）：完成后下一次统计读取强制
+	 *  重算——「嵌入完成马上改数值」（2026-11-12 用户反馈）。 */
+	async invalidateStats(): Promise<void> {
+		await this.call("invalidateStats");
 	}
 	/** 内容未变只推 mtime（update 短路用），避免无意义重嵌。 */
 	async touchNoteMtime(notePath: string, mtime: number): Promise<void> {
