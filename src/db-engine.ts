@@ -344,14 +344,20 @@ export class DbEngine {
 	 *  syncActivityStamp 每次与其比对，仅在计数不同时前移更新时间。 */
 
 	/** 触碰活动时间戳（meta.last_index_activity = now）：删除/清理等计数
-	 *  必然变化的写路径显式调用。失败静默（meta 表缺失时不阻塞主流程）。 */
+	 *  必然变化的写路径显式调用。失败不再全静默——更新时间格会因此永久
+	 *  卡死且无任何线索（2026-11-12 排查「数字在变时间不动」），留下错误
+	 *  到 lastStampError 供 stats 透出，控制台只 warn 一次。 */
+	private lastStampError: string | null = null;
 	private touchIndexActivity(now = Date.now()): void {
 		try {
 			this.db!.run(
 				"INSERT OR REPLACE INTO meta (key, value) VALUES ('last_index_activity', ?)",
 				[String(now)]
 			);
-		} catch { /* 非致命：更新时间格保持旧值 */ }
+		} catch (e) {
+			this.lastStampError = e instanceof Error ? e.message : String(e);
+			console.warn("[Semlink] activity stamp write failed:", this.lastStampError);
+		}
 	}
 
 	/** 数量比对戳：把当前 Indexed/Embedded（与统计卡同口径）快照进
@@ -378,7 +384,11 @@ export class DbEngine {
 					[sig]
 				);
 			}
-		} catch { /* 非致命：更新时间格保持旧值 */ }
+		} catch (e) {
+			// 非致命：更新时间格保持旧值，但不能无声——永久冻结时要有线索。
+			this.lastStampError = e instanceof Error ? e.message : String(e);
+			console.warn("[Semlink] activity stamp sync failed:", this.lastStampError);
+		}
 	}
 
 	/** 整库字节（Data folder「Open」导出用）：wasm 走 capi export，
@@ -421,24 +431,28 @@ export class DbEngine {
 		if (!this.db) return;
 		// 更新时间戳：只在 Indexed/Embedded 数量相对上次快照变化时前移
 		// （数量不变的高频 save 不再凭空刷新「更新时间」格）。
+		// save() 现被调度器逐笔记调用（用户拍板「只用 OPFS、实时存盘」）：
+		// 这里是每笔唯一的工作，3 条小 SQL，毫秒级。
 		this.syncActivityStamp();
 		if (this.dbMode === "wasm") {
-			// 页级落盘由 sahpool 事务提交承担；这里做两件事：
+			// 页级落盘由 sahpool 事务提交承担。重的维护按 ≥10min 节流集中
+			// 到一轮，不随逐笔记的高频 save 放大：
 			// 1) PRAGMA optimize（查询规划维护）
-			// 2) 耐久快照（≥10 分钟节流 + 空库保险丝——空库绝不覆盖好快照）。
+			// 2) 耐久快照（空库保险丝——空库绝不覆盖好快照）。
 			//    快照落 shim 命名空间，下次 init 的迁移通道自动导回。
-			this.db.save();
 			const now = Date.now();
 			if (now - this.lastSnapshotAt < 600_000) return;
+			// 失败也推进节流戳：writeLegacySnapshot 失败是静默的，若不推进，
+			// 每次进来的 save 都会重试 400MB 导出。
+			this.lastSnapshotAt = now;
+			this.db.save();
 			const r = this.db.exec("SELECT COUNT(*) FROM chunks");
 			const chunks = Number(r[0]?.values?.[0]?.[0] ?? 0);
-			if (chunks <= 0) return;
-			const wasm = this.db as SqliteWasmDb;
-			// 失败也推进节流戳：writeLegacySnapshot 失败是静默的，若不推进，
-			// 每次进来的 save（~20s 一次）都会重试 400MB 导出。
-			this.lastSnapshotAt = now;
-			if (wasm.writeLegacySnapshot()) {
-				console.error(`[Semlink] durable snapshot written (chunks=${chunks})`);
+			if (chunks > 0) {
+				const wasm = this.db as SqliteWasmDb;
+				if (wasm.writeLegacySnapshot()) {
+					console.error(`[Semlink] durable snapshot written (chunks=${chunks})`);
+				}
 			}
 			return;
 		}

@@ -2966,10 +2966,20 @@ export default class SmartVaultPlugin extends Plugin {
 		void this.scheduler.run();
 	}
 
-	/** 设置页"重新索引"：清空全部索引（含分块），从 0 开始重新分块。
+	/** 设置页"Rebuild"：随时可用（用户拍板「保持 Rebuild 随时可用」）——
+	 *  索引运行中也能重建：先 abort 中止当前循环，等其退出（在途批次秒级
+	 *  收敛，finally 落盘后 isRunning 才翻转）再清库，从 0 开始重跑。
 	 *  未配置嵌入模型时也允许——调度器会退化为只做分块索引。 */
 	async reindexAll() {
-		if (this.scheduler.isRunning) return;
+		this.scheduler.abort();
+		// 30s 兜底后照常继续：旧循环已带 abort 标记，最迟在当前批结束后
+		// 退出，不会与新 run 长期并存；卡满 30s 属异常，留下告警线索。
+		for (let i = 0; i < 300 && this.scheduler.isRunning; i++) {
+			await new Promise((r) => setTimeout(r, 100));
+		}
+		if (this.scheduler.isRunning) {
+			console.warn("[Semlink] reindexAll: previous run still exiting after 30s — proceeding anyway");
+		}
 		new Notice(`Semlink: ${t("noticeRebuildStarted")}`);
 		await this.store.clearAll();
 		this.progress.reset();
@@ -3069,7 +3079,6 @@ export default class SmartVaultPlugin extends Plugin {
 		if (!this.statusBarEl) return;
 
 		const dot = this.statusBarEl.querySelector(".status-dot");
-		const count = this.statusBarEl.querySelector(".status-count");
 
 		if (dot) {
 			switch (p.phase) {
@@ -3091,16 +3100,30 @@ export default class SmartVaultPlugin extends Plugin {
 			}
 		}
 
-		if (count) {
-			// 状态栏显示已索引数量（用户拍板"右下角应该显示已索引的数量"）：
-			// processedNotes 在调度器 incremental 启动时已从 DB 重同步
-			// （旧的跨轮累计乱涨问题已修），运行中实时爬升、完成后=总数。
-			// 复用现成 i18n 键 statusIndexed（"980 notes"/"980 篇笔记"——用户
-			// 拍板去掉 indexed 字样，只留数量+名词）。
-			// 钳制：处理数不得超过总数（迁移过渡曾把重处理重复计入，
-			// 状态栏一度显示 1372 > 总数 1142 的"越索引越多"）
-			const shown = p.totalNotes > 0 ? Math.min(p.processedNotes, p.totalNotes) : p.processedNotes;
-			count.textContent = `${shown} ${t("statusIndexed")}`;
+		// 数量 = 覆盖率分子（Embedded + Skipped，DB 直读）——与设置页
+		// Indexed 格、进度弹窗分子同源同口径（用户拍板「三处值保持同步」）。
+		// 旧 processedNotes 是内存计数器，与 DB 直读天然差一笔在途笔记，
+		// 三处必然漂移（真机 2026-11-12：129/129/128）。
+		void this.refreshStatusBarCount();
+	}
+
+	/** 状态栏数量直读（防重入：500ms 节流间隔内回包 busy 请求直接丢弃，
+	 *  等下一个节流点）。查询失败保持旧值——索引运行中 worker 会忙几秒。 */
+	private statusBarCountBusy = false;
+	private async refreshStatusBarCount(): Promise<void> {
+		if (this.statusBarCountBusy || !this.statusBarEl) return;
+		this.statusBarCountBusy = true;
+		try {
+			const [embedded, skipped] = await Promise.all([
+				this.store.getEmbeddedNoteCount(),
+				this.store.getEmbedSkippedNoteCount(),
+			]);
+			const count = this.statusBarEl?.querySelector(".status-count");
+			if (count) count.textContent = `${embedded + skipped} ${t("statusIndexed")}`;
+		} catch {
+			/* 保持旧值，下一个节流点再试 */
+		} finally {
+			this.statusBarCountBusy = false;
 		}
 	}
 
@@ -3110,8 +3133,14 @@ export default class SmartVaultPlugin extends Plugin {
 			if (dot) dot.className = "status-dot idle";
 			const count = this.statusBarEl.querySelector(".status-count");
 			if (count) {
-				const stats = await this.store.getStats();
-				count.textContent = `${stats.indexedNotes} ${t("statusIndexed")}`;
+				// 三查并行：状态栏数量（覆盖率口径，用户拍板「三处值同步」）
+				// + 进度追踪器权威播种 + RAG 快照写透，一趟拿全。
+				const [stats, embedded, skipped] = await Promise.all([
+					this.store.getStats(),
+					this.store.getEmbeddedNoteCount(),
+					this.store.getEmbedSkippedNoteCount(),
+				]);
+				count.textContent = `${embedded + skipped} ${t("statusIndexed")}`;
 				// 用 DB 权威值播种进度追踪器：否则启动后任何一次进度事件
 				// （扫描枚举阶段 processedNotes=0）都会把状态栏覆盖成
 				// 「0 个文件」，直到打开面板/设置触发重播种才恢复。
@@ -3120,9 +3149,14 @@ export default class SmartVaultPlugin extends Plugin {
 					stats.activeChunks,
 					Math.max(this.progress.current.totalNotes, stats.indexedNotes),
 				);
-				// 同一趟顺路播种 RAG 统计快照（并行补 Embedded/Skipped 两查，
-				// 失败静默）：此后设置页 RAG tab 打开即有值，不等 DB 往返。
-				void this.refreshRagStatsCache();
+				// 同一趟顺路写透 RAG 统计快照（值已在手，省一轮往返）：
+				// 此后设置页 RAG tab 打开即有值，不等 DB 往返。
+				Object.assign(this.ragStatsCache, {
+					indexedNotes: stats.indexedNotes,
+					embeddedNotes: embedded,
+					skippedNotes: skipped,
+					ready: true,
+				});
 			}
 		}
 	}

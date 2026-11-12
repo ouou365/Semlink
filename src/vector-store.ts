@@ -1,36 +1,20 @@
 // ========================================
-// Semlink - Vector Store (async proxy + sync fallback)
+// Semlink - Vector Store (async OPFS proxy)
 // ========================================
 // Public API mirror of the old synchronous VectorStore, but every method is
-// now async. Behind the scenes it routes DB work to a worker_threads child so
-// the heavy operations (db.export of a ~397MB DB, writeFileSync, brute-force
-// cosine search) never touch Obsidian's main thread — which is what was
-// causing typing lag.
+// now async. All DB work routes to ONE channel: a browser Web Worker running
+// sqlite-wasm over OPFS (opfs-sahpool) — transactions persist page-level as
+// they commit, and the heavy operations never touch Obsidian's main thread.
 //
-// If worker_threads is unavailable in the host environment, it transparently
-// falls back to running the same DbEngine synchronously on the main thread
-// (the original behavior). So the plugin is never worse off than before.
+// 历史通道已全部移除（用户拍板「去掉 sqljs，只用 OPFS」）：node
+// worker_threads 在 Electron 渲染进程从来建不成（V8 平台无 worker 支持），
+// sqljs 主线程回退则把真故障掩盖成慢——现在 browser worker 起不来就大声
+// 失败，绝不静默降级。
 
 import { join } from "path";
 import { debugLog } from "./log";
-import type { Worker as NodeWorker } from "worker_threads";
 import type { NoteChunk, SearchResult, QueueAction, QueueItem } from "./types";
-import { DbEngine } from "./db-engine";
-import { chunkMarkdown, ChunkResult } from "./chunker";
-
-// Lazy require so that environments without worker_threads don't crash at
-// import time — we detect availability at runtime instead.
-let WorkerCtor: (new (path: string) => NodeWorker) | null = null;
-let workerAvailable = false;
-try {
-	// worker_threads is a Node built-in; Obsidian runs on Electron with full
-	// Node integration (the plugin already uses `fs`, `http`, etc.).
-	// eslint-disable-next-line @typescript-eslint/no-require-imports -- deliberately lazy: must not throw at import time in hosts without it
-	WorkerCtor = (require("worker_threads") as { Worker: typeof WorkerCtor }).Worker;
-	workerAvailable = !!WorkerCtor;
-} catch {
-	workerAvailable = false;
-}
+import type { ChunkResult } from "./chunker";
 
 /** Worker → main reply: { reqId, result } on success, { reqId, error } on failure. */
 interface WorkerResponse {
@@ -46,30 +30,23 @@ interface PendingRequest {
 
 export class VectorStore {
 	private dataDir: string;
-	private worker: NodeWorker | null = null;
 	private reqId = 0;
 	private pending = new Map<number, PendingRequest>();
-	private fallback = false;
 	private browserWorker: Worker | null = null;
-	/** node worker 初始化失败原因（诊断：「为什么掉进 browser-worker」。 */
+	/** 历史 node worker 通道已移除：永远 null（保留字段维持 stats 契约）。 */
 	lastNodeWorkerError: string | null = null;
-	/** browser worker 初始化失败原因（含栈头）——诊断「为什么掉进 sync
-	 *  fallback」。经 stats 调试响应透出。 */
+	/** browser worker 初始化失败原因（含栈头）——init 失败时随异常大声
+	 *  抛出，这里留档供 stats 调试响应透出。 */
 	lastBrowserWorkerError: string | null = null;
 
-	// Synchronous engine used only on the fallback path.
-	private engine: DbEngine | null = null;
-
-	/** Whether DB work is running in a worker thread (true) or on the main
-	 *  thread (false, degraded). Exposed for diagnostics/logging. */
+	/** Whether DB work is running off the main thread (browser worker up). */
 	get isWorkerMode(): boolean {
-		return !this.fallback && this.worker != null;
+		return this.browserWorker != null;
 	}
 
-	/** Where the DB engine runs: node worker, browser worker, or main. */
+	/** Where the DB engine runs: browser worker (OPFS) once initialized. */
 	get storageMode(): "worker" | "browser-worker" | "sync" {
-		if (this.fallback) return "sync";
-		return this.browserWorker ? "browser-worker" : this.worker ? "worker" : "sync";
+		return this.browserWorker ? "browser-worker" : "sync";
 	}
 
 	constructor(dataDir: string, private browserWorkerUrl?: string) {
@@ -77,58 +54,23 @@ export class VectorStore {
 	}
 
 	async init(): Promise<void> {
-		if (workerAvailable) {
-			try {
-				await this.initWorker();
-				return;
-			} catch (e) {
-				// 失败原因必须可见（真机 2026-11-11：node worker 静默回退到
-				// browser-worker/OPFS，索引"清零"半天查不到原因）。
-				console.error("[Semlink] node worker init failed — falling back to browser worker:", e);
-				this.lastNodeWorkerError = e instanceof Error ? e.message : String(e);
-			}
+		if (!this.browserWorkerUrl || typeof Worker === "undefined") {
+			throw new Error(
+				"[Semlink] browser worker unavailable (no db-worker.browser.js blob URL / no Worker) — OPFS-only build cannot start",
+			);
 		}
-		if (this.browserWorkerUrl && typeof Worker !== "undefined") {
-			try {
-				await this.initBrowserWorker(this.browserWorkerUrl);
-				return;
-			} catch (e) {
-				const msg = e instanceof Error ? e.message : String(e);
-				const stack = e instanceof Error ? (e.stack ?? "").slice(0, 600) : "";
-				this.lastBrowserWorkerError = msg + (stack ? " | " + stack.split("\n").slice(1, 4).join(" | ") : "");
-				console.error("[Semlink] browser worker init failed — using sync fallback. Reason:", e);
-			}
+		try {
+			await this.initBrowserWorker(this.browserWorkerUrl);
+		} catch (e) {
+			// 大声失败，绝不静默降级（用户拍板「去掉 sqljs」）：失败原因落
+			// lastBrowserWorkerError 供 stats 透出，异常继续抛——插件加载
+			// 失败比一个静默坏掉的存储层诚实得多。
+			const msg = e instanceof Error ? e.message : String(e);
+			const stack = e instanceof Error ? (e.stack ?? "").slice(0, 600) : "";
+			this.lastBrowserWorkerError = msg + (stack ? " | " + stack.split("\n").slice(1, 4).join(" | ") : "");
+			console.error("[Semlink] OPFS browser worker init failed:", e);
+			throw e;
 		}
-		// Fallback: run the engine synchronously on the main thread.
-		this.fallback = true;
-		this.engine = new DbEngine(this.dataDir);
-		await this.engine.init("sqljs");
-		console.warn("[Semlink] VectorStore running in sync (fallback) mode — animations may stutter during indexing");
-	}
-
-	private async initWorker(): Promise<void> {
-		const workerPath = join(__dirname, "db-worker.js");
-		this.worker = new (WorkerCtor as new (path: string) => NodeWorker)(workerPath);
-
-		// Wire up the response channel once.
-		this.worker.on("message", (msg: WorkerResponse) => {
-			const { reqId, result, error } = msg;
-			const pending = this.pending.get(reqId);
-			if (!pending) return;
-			this.pending.delete(reqId);
-			if (error) pending.reject(new Error(error));
-			else pending.resolve(result);
-		});
-		this.worker.on("error", (err: Error) => {
-			console.error("[Semlink] DB worker error:", err);
-			// Reject every pending request — the worker is likely dead.
-			for (const [, p] of this.pending) p.reject(err);
-			this.pending.clear();
-		});
-
-		// Send init. mode="sqljs"：sql.js 内存镜像 + 全量导出（历史形态）。
-		await this.call("init", [this.dataDir, "sqljs"]);
-		debugLog("[Semlink] VectorStore running in worker mode");
 	}
 
 	/** Browser Web Worker channel (used when worker_threads is missing). */
@@ -182,103 +124,51 @@ export class VectorStore {
 		// opfs-sahpool（事务即落盘；旧 sql.js 库由驱动自动迁移进 sahpool）。
 		await this.call("init", ["", "wasm"]);
 		debugLog("[Semlink] VectorStore running in browser worker mode — DB engine is off the main thread");
+
+		// 迁移收尾（用户拍板「迁移完成自动删除 data/vault.db 与 vault.db.bak-*」）：
+		// init 成功 = 驱动首开守卫已确认活槽；再验 indexedNotes>0——OPFS 真有
+		// 索引才删（防「0 行空壳槽」时误删唯一好副本，历史真实出现过）。磁盘
+		// 旧库/手工兜底副本（vault.db.bak-YYYYMMDD）自此退役：它们只被 seedDb
+		// 当迁移源，之后每次启动白读 335MB 还会被 worker 拒收。删除失败只
+		// warn 不影响启动；守卫不满足时保留并留告警，下次 init 再试。
+		try {
+			const fsMod = (window as unknown as { require?: (id: string) => typeof import("fs") }).require?.("fs");
+			const dbPath = join(this.dataDir, "vault.db");
+			if (fsMod && fsMod.existsSync(dbPath)) {
+				const stats = await this.getStats();
+				if (stats.indexedNotes > 0) {
+					fsMod.unlinkSync(dbPath);
+					console.error(
+						`[Semlink][migdbg] legacy disk vault.db deleted (OPFS holds ${stats.indexedNotes} indexed notes — disk copy retired)`,
+					);
+					const names = fsMod.readdirSync(this.dataDir) as string[];
+					for (const n of names) {
+						if (/^vault\.db\.bak-/.test(n)) {
+							fsMod.unlinkSync(join(this.dataDir, n));
+							console.error(`[Semlink][migdbg] legacy disk backup deleted: ${n}`);
+						}
+					}
+				} else {
+					console.warn(
+						"[Semlink][migdbg] legacy disk vault.db kept — OPFS slot has no indexed notes yet; will retry next init",
+					);
+				}
+			}
+		} catch (e) {
+			console.warn("[Semlink] legacy disk cleanup skipped:", e);
+		}
 	}
 
 	/** Send one op to the worker and await its reply. */
 	private call<T = unknown>(op: string, args: unknown[] = []): Promise<T> {
-		const t0 = performance.now();
-		if (this.fallback) {
-			// Synchronous fallback — wrap the engine call directly. The
-			// measure makes the main-thread cost of every engine op visible
-			// in the guide's debug readout.
-			return Promise.resolve(this.callEngineSync(op, args) as T).finally(() => {
-				performance.measure("semlink:sync-engine", { start: t0 });
-			});
+		if (!this.browserWorker) {
+			return Promise.reject(new Error(`[Semlink] VectorStore not initialized (op=${op})`));
 		}
-		if (this.browserWorker) {
-			return new Promise((resolve, reject) => {
-				const reqId = ++this.reqId;
-				this.pending.set(reqId, { resolve, reject });
-				this.browserWorker!.postMessage({ reqId, op, args });
-			});
-		}
-		return new Promise<T>((resolve, reject) => {
+		return new Promise((resolve, reject) => {
 			const reqId = ++this.reqId;
 			this.pending.set(reqId, { resolve, reject });
-			try {
-				this.worker!.postMessage({ reqId, op, args });
-			} catch (e) {
-				this.pending.delete(reqId);
-				reject(e instanceof Error ? e : new Error(String(e)));
-			}
-		}).finally(() => {
-			performance.measure("semlink:worker-call", { start: t0 });
+			this.browserWorker!.postMessage({ reqId, op, args });
 		});
-	}
-
-	/** Whether heavy engine work is off the main thread (worker mode). */
-	get runningInWorker(): boolean {
-		return !this.fallback && this.worker != null;
-	}
-
-	/** Invoke the same op against the synchronous engine (fallback path). */
-	private callEngineSync(op: string, args: unknown[]): unknown {
-		const e = this.engine!;
-		switch (op) {
-			case "chunk": return chunkMarkdown(args[0] as string, args[1] as string, args[2] as number, args[3] as number);
-			case "save": return e.save();
-			case "clearAll": return e.clearAll();
-			case "compact": return e.compact();
-			case "beginTransaction": return e.beginTransaction();
-			case "commitTransaction": return e.commitTransaction();
-			case "rollbackTransaction": return e.rollbackTransaction();
-			case "insertChunk": return e.insertChunk(args[0] as NoteChunk);
-			case "getChunksByNotePath": return e.getChunksByNotePath(args[0] as string);
-			case "getActiveChunks": return e.getActiveChunks();
-			case "getChunkById": return e.getChunkById(args[0] as string);
-			case "markChunksStale": return e.markChunksStale(args[0] as string);
-			case "deleteChunksByNotePath": return e.deleteChunksByNotePath(args[0] as string);
-			case "deleteStaleChunks": return e.deleteStaleChunks(args[0] as string);
-			case "renameNotePath": return e.renameNotePath(args[0] as string, args[1] as string);
-			case "getNoteMtime": return e.getNoteMtime(args[0] as string);
-			case "touchNoteMtime": return e.touchNoteMtime(args[0] as string, args[1] as number);
-			case "getAllIndexedPaths": return e.getAllIndexedPaths();
-			case "pruneOrphanedPaths": return e.pruneOrphanedPaths(args[0] as Set<string>);
-			case "getStats": return e.getStats();
-			case "getEmbeddedNoteCount": return e.getEmbeddedNoteCount();
-			case "getEmbedSkippedNoteCount": return e.getEmbedSkippedNoteCount();
-			case "listVectorlessNotes": return e.listVectorlessNotes(args[0] as number | undefined);
-			case "countVectorlessNotes": return e.countVectorlessNotes();
-			case "queueDiagnostics": return e.queueDiagnostics();
-			case "listIndexedNotePaths": return e.listIndexedNotePaths();
-			case "markEmbedSkip": return e.markEmbedSkip(args[0] as string, args[1] as boolean);
-			case "backfillEmbedSkips": return e.backfillEmbedSkips();
-			case "saveEmbeddings": return e.saveEmbeddings(args[0] as string[], args[1] as number[][]);
-			case "saveDocEmbedding": return e.saveDocEmbedding(args[0] as string, args[1] as number[], args[2] as number, args[3] as string);
-			case "getDocVectorNotePaths": return e.getDocVectorNotePaths();
-			case "prepareDocVectorBackfill": return e.prepareDocVectorBackfill(args[0] as number);
-			case "loadVectorCache": return e.loadVectorCache();
-			case "search": return e.search(args[0] as number[] | Float32Array, args[1] as number, args[2] as number, args[3] as string | undefined, args[4] as string[] | undefined);
-			case "searchRelatedNotes": return e.searchRelatedNotes(args[0] as string, args[1] as number, args[2] as number, args[3] as number);
-			case "textSearch": return e.textSearch(args[0] as string, args[1] as number, args[2] as string | undefined, args[3] as string[] | undefined);
-			case "enqueue": return e.enqueue(args[0] as string, args[1] as QueueAction, args[2] as number);
-			case "enqueueMany": return e.enqueueMany(args[0] as Array<{ notePath: string; action: QueueAction; priority?: number }>);
-			case "dequeue": return e.dequeue(args[0] as number);
-			case "complete": return e.complete(args[0] as number);
-			case "fail": return e.fail(args[0] as number, args[1] as string);
-			case "retryFailed": return e.retryFailed();
-			case "getPendingCount": return e.getPendingCount();
-			case "getCounts": return e.getCounts();
-			case "cleanup": return e.cleanup(args[0] as number);
-			case "cleanupQueue": return e.cleanupQueue();
-			case "reviveProcessing": return e.reviveProcessing();
-			case "purgeGhostQueue": return e.purgeGhostQueue(args[0] as Set<string>);
-			case "clearQueue": return e.clearQueue();
-			case "getPendingPaths": return e.getPendingPaths();
-			case "durability": return e.durabilityInfo();
-			case "snapshotNow": return e.writeSnapshotNow();
-			default: throw new Error(`Unknown op: ${op}`);
-		}
 	}
 
 	// ──── Public API (all async now) ────
@@ -295,27 +185,30 @@ export class VectorStore {
 	async snapshotNow(): Promise<unknown> { return await this.call("snapshotNow"); }
 
 	/**
-	 * Close + flush. In worker mode this sends a synchronous `close` op: the
-	 * child performs save() then db.close() in its own thread and exits, so
-	 * data lands on disk even though the host's onunload() is not awaited.
-	 * Returns a promise that resolves when the close message has been posted
-	 * (and, in fallback mode, after the sync close completes).
+	 * Close + flush + terminate. Sends a `close` op (worker performs save()
+	 * then db.close(), so data lands in OPFS even though the host's
+	 * onunload() is not awaited), then ALWAYS terminates the worker: its
+	 * death is what releases the OPFS sync access handles. 真机 2026-11-12：
+	 * 只发 close 不 terminate，禁用/重载插件后旧 worker 活着拖住全部句柄，
+	 * 下次 init 的 createSyncAccessHandle 直接 NoModificationAllowedError
+	 * ——插件加载失败。给落盘至多 3s，超时也照样 terminate。
 	 */
 	async close(): Promise<void> {
-		if (this.fallback) {
-			this.engine?.close();
-			return;
+		const w = this.browserWorker;
+		if (!w) return;
+		try {
+			await Promise.race([
+				this.call("close", []),
+				new Promise((r) => setTimeout(r, 3000)),
+			]);
+		} catch {
+			/* worker already gone */
 		}
-		if (this.worker) {
-			try {
-				// Best-effort await; if the host tears down before the reply,
-				// the worker still saved synchronously on receiving "close".
-				await this.call("close", []);
-			} catch {
-				/* worker already gone */
-			}
-			try { void this.worker.terminate(); } catch { /* already gone */ }
-			this.worker = null;
+		this.browserWorker = null;
+		try {
+			w.terminate();
+		} catch {
+			/* already gone */
 		}
 	}
 
@@ -493,58 +386,14 @@ export class VectorStore {
 
 	async search(queryEmbedding: number[], limit = 10, threshold = 0.3, pathFilter?: string, excludePaths?: string[]): Promise<SearchResult[]> {
 		if (!this.searchGate()) return [];
-		if (this.fallback) {
-			// Sync mode: time-slice the scan so the main thread (and the UI's
-			// elapsed counter / dots) keeps breathing between slices.
-			return await this.searchSyncSliced(queryEmbedding, limit, threshold, pathFilter, excludePaths);
-		}
 		return await this.call<SearchResult[]>("search", [queryEmbedding, limit, threshold, pathFilter, excludePaths]);
 	}
 
 	/** Note→note "related notes" via max-pooling over the source note's chunks
-	 *  (see DbEngine.searchRelatedNotes). Runs in the worker; in sync-fallback
-	 *  mode it runs synchronously without time-slicing (rare, degraded path). */
+	 *  (see DbEngine.searchRelatedNotes). Runs in the worker. */
 	async searchRelatedNotes(notePath: string, limit = 10, threshold = 0.2, maxProbes = 6): Promise<SearchResult[]> {
 		if (!this.searchGate()) return [];
 		return await this.call<SearchResult[]>("searchRelatedNotes", [notePath, limit, threshold, maxProbes]);
-	}
-
-	/** Sync-fallback search: scan in slices, yielding between them. */
-	private async searchSyncSliced(
-		queryEmbedding: number[],
-		limit: number,
-		threshold: number,
-		pathFilter?: string,
-		excludePaths?: string[],
-	): Promise<SearchResult[]> {
-		const engine = this.engine!;
-		// ~4096 vectors × 300 dims ≈ 1.2M dot products per slice (~50-150ms).
-		const SLICE = 4096;
-		const hits: Array<{ chunkId: string; score: number }> = [];
-		const count = engine.vectorCount();
-		for (let start = 0; start < count; start += SLICE) {
-			hits.push(...engine.searchSlice(queryEmbedding, start, Math.min(start + SLICE, count), threshold, pathFilter, excludePaths));
-			// Yield to the main thread so timers/render stay responsive.
-			await new Promise((r) => window.setTimeout(r, 0));
-		}
-
-		hits.sort((a, b) => b.score - a.score);
-		const topK = hits.slice(0, limit);
-
-		const results: SearchResult[] = [];
-		for (const h of topK) {
-			const chunk = engine.getChunkById(h.chunkId);
-			if (chunk) {
-				results.push({
-					chunkId: chunk.id,
-					notePath: chunk.notePath,
-					heading: chunk.heading,
-					contentPreview: chunk.contentPreview,
-					score: Math.round(h.score * 10000) / 10000,
-				});
-			}
-		}
-		return results;
 	}
 
 	/** Fast substring search over indexed chunk content (for the grep tool). */

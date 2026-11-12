@@ -34,10 +34,6 @@ export class Scheduler {
 	private get concurrency(): number {
 		return Math.max(1, this.settings.embedConcurrency ?? 2);
 	}
-	private saveInterval = 40; // 每处理 N 个笔记存盘一次（sync 模式下 save 是全量导出，代价很高）
-	private lastSaveAt = 0; // 上次存盘时刻 — sync 模式下两次全量导出之间至少隔 20s
-	private saveGapMs = 20000; // 当前两次存盘的最小间隔（慢导出自适应退避，见 maybeSaveAsync）
-	private processedSinceSave = 0;
 	/** Guards backfillDocVectors against concurrent runs (onload + manual index). */
 	private backfilling = false;
 	/** Serializes the per-note DB transaction section. Concurrent notes interleave
@@ -333,7 +329,7 @@ export class Scheduler {
 				// Dequeue next batch
 				const batch = await this.queue.dequeue(this.settings.batchSize);
 				if (batch.length === 0) {
-					// Queue empty — flush any remaining unsaved notes (tail < saveInterval)
+					// Queue empty — 收尾存盘 + 顺带刷新进度弹窗的库体积
 					await this.flushSave();
 					break;
 				}
@@ -663,7 +659,7 @@ export class Scheduler {
 				if (action === "add" || this.incrementalBase === 0) {
 					this.progress.incrementProcessed();
 				}
-				// Periodic async save — counted per note, not per batch
+				// 逐笔记实时存盘（OPFS：save = 打点，毫秒级）
 				await this.maybeSaveAsync();
 			}
 		} catch (error) {
@@ -707,40 +703,24 @@ export class Scheduler {
 		this.progress.setNetworkStatus("paused");
 	}
 
-	/** Periodic save with yield: yields before the sync save to let the browser breathe */
+	/** 逐笔记实时存盘（用户拍板「只用 OPFS、实时存盘」）：OPFS 下数据本就
+	 *  事务级落盘，save() 只剩打点（3 条小 SQL）——每笔记一次，Updated 格
+	 *  随数字逐笔刷新。PRAGMA optimize/耐久快照在引擎内部 ≥10min 节流成一
+	 *  轮维护，不随高频调用放大。存盘前先让出事件循环，UI 保持跟手。
+	 *  （sqljs 时代的「全量导出 + 节奏/退避」机制随该模式一并移除。） */
 	private async maybeSaveAsync(): Promise<void> {
-		this.processedSinceSave++;
-		// A full-DB export blocks the main thread for seconds in sync mode —
-		// space saves out in time as well as note count.
-		if (Date.now() - this.lastSaveAt < this.saveGapMs) return;
-		if (this.processedSinceSave >= this.saveInterval) {
-			await this.yieldControl();
-			const t0 = Date.now();
-			await this.store.save();
-			const durMs = Date.now() - t0;
-			this.lastSaveAt = Date.now();
-			// 慢导出自适应退避：sql.js save = 全库导出，库到几百 MB 后一次
-			// 导出可达分钟级（真机实测：vault.db 自 10/17 起从未写成、worker
-			// 3.5 核持续空转、索引器整体楔死）。导出越慢下次间隔越长，
-			// 20s → 80s → 320s → 封顶 30min；导出恢复快则回到 20s。
-			if (durMs > 15000) {
-				this.saveGapMs = Math.min(this.saveGapMs * 4, 30 * 60000);
-				debugLog(`[Semlink] save took ${(durMs / 1000).toFixed(1)}s — backing off to ${(this.saveGapMs / 1000).toFixed(0)}s gap`);
-			} else {
-				this.saveGapMs = 20000;
-			}
-			const stats = await this.store.getStats();
-			this.progress.setDbSizeMb(stats.dbSizeMb);
-			this.processedSinceSave = 0;
-		}
+		await this.yieldControl();
+		await this.store.save();
 	}
 
-	/** Flush any remaining unsaved notes to disk (called when queue is empty) */
+	/** 收尾存盘（队列清空时兜底一次；逐笔记存盘下通常已是幂等空转），
+	 *  顺带刷新进度弹窗的库体积（原挂在高频存盘里，现只在收尾查一次）。 */
 	private async flushSave(): Promise<void> {
-		if (this.processedSinceSave > 0) {
-			await this.store.save();
-			this.processedSinceSave = 0;
-		}
+		await this.store.save();
+		try {
+			const stats = await this.store.getStats();
+			this.progress.setDbSizeMb(stats.dbSizeMb);
+		} catch { /* worker 繁忙：体积显示保持旧值 */ }
 	}
 
 	/** Enqueue a single file for indexing (from watcher) */

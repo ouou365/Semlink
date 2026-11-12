@@ -6247,6 +6247,13 @@ body .semlink-msg-user::selection {
 	animation: none;
 	color: var(--color-green);
 }
+/* 暂停 ⏸ 徽章（用户拍板"暂停的话这个图标也变成暂停"）：pause 图标静态
+   灰——与运行中的旋转 accent、完成 ✅ 的绿色区分开。 */
+.semlink-rag-block.is-paused .semlink-rag-hero-spin {
+	display: flex;
+	animation: none;
+	color: var(--text-muted);
+}
 .semlink-rag-hero-value {
 	font-size: 22px;
 	font-weight: 650;

@@ -20,10 +20,6 @@ import { debugLog } from "./log";
 type SettingsTab = "general" | "model" | "mcp" | "embedding" | "share" | "bot";
 export type { SettingsTab };
 
-/** 索引「进行中」的判定口径：RAG 状态块的 is-running 高亮与重新索引
- *  按钮的「索引中…」运行态共用（idle/completed 之外的写阶段）。 */
-const RAG_RUNNING_PHASES: ReadonlySet<string> = new Set(["scanning", "chunking", "embedding", "building_index"]);
-
 /** 折叠体展开后把新增内容滚进可视区：头行刚被点击必然可见，用户看到
  *  「没反应」往往是因为内容全在折叠线以下——只补滚溢出滚动容器底缘的
  *  部分（内容不足一屏时贴合底缘，远超一屏时钉住头行露出首屏）。
@@ -595,10 +591,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 	/** RAG 页组「状态」：单张卡（hero 大数字 + 总数副行 + 进度条 +
 	 *  横排统计条 Indexed/Embedded/Skipped + Auto Index 开关）。
 	 *  数据由进度事件与数据库统计双路刷新。reindexRef 由调用方传入：
-	 *  重新索引按钮在「维护」组创建后回填引用，进度订阅据此把按钮切成
-	 *  运行态三态（暂停索引/继续索引，用户拍板"索引中应该显示暂停索引
-	 *  按钮"），空闲时恢复「重新索引」。 */
-	private renderIndexCard(containerEl: HTMLElement, reindexRef?: { btn?: HTMLButtonElement; running?: boolean; apply?: () => void }): void {
+	 *  Rebuild 按钮在「维护」组创建后回填引用，渲染时补一次文案应用。 */
+	private renderIndexCard(containerEl: HTMLElement, reindexRef?: { btn?: HTMLButtonElement; apply?: () => void }): void {
 		const totalNotes = (): number => Math.max(0, this.plugin.progress.current.totalNotes);
 		// 活总数：refreshStats 时同步一次 vault 实际可索引数（countIndexable
 		// Notes 与调度器扫描同口径：md + 非空 + 排除规则）——拷文件期间
@@ -678,13 +672,24 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 运行中 = loader-2 旋转；完成（非运行且 100%）= check-circle 圆形✅；
 		// 全新空库（从未索引）= 无图标。heroDone 由 setHero 按分子==总数更新。
 		let heroDone = false;
-		let runningNow = RAG_RUNNING_PHASES.has(this.plugin.progress.current.phase);
+		let runningNow = this.plugin.scheduler.isRunning;
 		const updateBadge = (): void => {
+			// 暂停徽章（用户拍板"暂停的话这个图标也变成暂停"）：手动暂停
+			// （状态栏/进度弹窗/Auto Index 开关）→ pause 图标静态灰。自动
+			// 让路（用户操作中/网络退避，isAuto）不在此列——循环仍活着会
+			// 自动续跑，若显示暂停会随用户每次点击闪烁。
+			const manualPaused = !runningNow && !heroDone
+				&& this.plugin.progress.current.isPaused === true
+				&& this.plugin.progress.current.isAutoPaused !== true;
 			indexBlock.block.toggleClass("is-running", runningNow);
 			indexBlock.block.toggleClass("is-done", !runningNow && heroDone);
+			indexBlock.block.toggleClass("is-paused", manualPaused);
 			// spinEl 在 makeBlock 闭包里，本作用域不可见（拉取代码引用裸名
 			// spinEl → ReferenceError，RAG 页整页崩）——用 indexBlock 徽章。
-			setIcon(indexBlock.spinEl, runningNow || !heroDone ? "loader-2" : "check-circle");
+			setIcon(
+				indexBlock.spinEl,
+				runningNow || !heroDone ? (manualPaused ? "pause" : "loader-2") : "check-circle",
+			);
 		};
 		const setHero = (b: RagBlock, num: number): void => {
 			const total = liveTotal;
@@ -703,21 +708,40 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			heroDone = num >= total;
 			updateBadge();
 		};
-		// Re-index 按钮回归专职（用户拍板"暂停和开始另外再加一行"）：本钮
-		// 只负责破坏性的重新索引——运行中禁用（暂停/继续走独立行），空闲
-		// 才可点，红字危险态恒定。
+		// Rebuild 按钮恒可用（用户拍板「不要 Indexing，保持 Rebuild 随时
+		// 可用」）：任何状态都显示 Rebuild、都可点——确认后中止当前索引、
+		// 清库从头开始（reindexAll 内部先 abort 并等循环退出）。
 		const applyReindexBtn = (): void => {
 			const btn = reindexRef?.btn;
 			if (!btn) return;
-			if (reindexRef?.running) btn.setAttribute("disabled", "true");
-			else btn.removeAttribute("disabled");
-			btn.setText(t("reindexAll"));
+			btn.removeAttribute("disabled");
+			btn.setText(t("rebuildBtn"));
+		};
+		// 运行态判定口径 = scheduler.isRunning（真实循环标志），不读 phase：
+		// 手动暂停后 phase 冻结在运行相位且事件流停止、complete() 又不发
+		// 事件——按 phase 判定徽章会永久卡死（真机 2026-11-12：暂停后
+		// 0% 也转圈）。此状态只供 hero 徽章（旋转/暂停⏸/✅）使用，Rebuild
+		// 按钮恒可用与此无关。暂停后循环要等当前批次走完才退出（isRunning
+		// 滞后翻转）且此后再无事件，轮询主动收敛。
+		let runningPollTimer: number | null = null;
+		const stopRunningPoll = (): void => {
+			if (runningPollTimer != null) {
+				window.clearInterval(runningPollTimer);
+				runningPollTimer = null;
+			}
+		};
+		const startRunningPoll = (): void => {
+			if (runningPollTimer != null) return;
+			runningPollTimer = window.setInterval(() => {
+				if (!this.plugin.scheduler.isRunning) setRunning(false);
+			}, 500);
 		};
 		const setRunning = (running: boolean): void => {
 			runningNow = running;
 			updateBadge();
+			if (running) startRunningPoll();
+			else stopRunningPoll();
 			if (reindexRef) {
-				reindexRef.running = running;
 				reindexRef.apply = applyReindexBtn;
 			}
 			applyReindexBtn();
@@ -747,7 +771,10 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 					this.plugin.store.getEmbeddedNoteCount(),
 					this.plugin.store.getEmbedSkippedNoteCount(),
 				]);
-				chunkedEl.setText(s.indexedNotes.toLocaleString());
+				// Indexed 格 = Embedded + Skipped（用户拍板「三处值保持同步」
+				// ：设置页 Indexed、进度弹窗分子、状态栏数量同口径同源——
+				// 覆盖率分子）。DB 直读，零漂移。
+				chunkedEl.setText((embeddedNotes + skippedNotes).toLocaleString());
 				vectorizedEl.setText(embeddedNotes.toLocaleString());
 				embedSkippedEl.setText(skippedNotes.toLocaleString());
 				const idxTime = await this.plugin.store.lastIndexTime();
@@ -783,13 +810,14 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				statsRetryTimer = window.setTimeout(() => void refreshStats(attempt + 1), 1000 * (attempt + 1));
 			}
 		};
-		setRunning(RAG_RUNNING_PHASES.has(this.plugin.progress.current.phase));
+		setRunning(this.plugin.scheduler.isRunning);
 		updateHeroSub();
 		// 首帧先用快照直出（plugin 启动播种/上次查询写透的 ragStatsCache）：
 		// 打开 RAG tab 不再空「—」等 DB 往返；下方 refreshStats 照跑纠偏。
 		const seed = this.plugin.ragStatsCache;
 		if (seed.ready) {
-			chunkedEl.setText(seed.indexedNotes.toLocaleString());
+			// 首帧同口径（用户拍板「三处值保持同步」）：Indexed = Embedded + Skipped
+			chunkedEl.setText((seed.embeddedNotes + seed.skippedNotes).toLocaleString());
 			vectorizedEl.setText(seed.embeddedNotes.toLocaleString());
 			embedSkippedEl.setText(seed.skippedNotes.toLocaleString());
 			setHero(indexBlock, seed.embeddedNotes + seed.skippedNotes);
@@ -800,7 +828,7 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		let lastEmbedRefresh = 0;
 		const unIndex = this.plugin.progress.onProgress((e) => {
 			if (e.type === "progress") {
-				setRunning(RAG_RUNNING_PHASES.has(e.progress.phase));
+				setRunning(this.plugin.scheduler.isRunning);
 				const now = Date.now();
 				if (now - lastEmbedRefresh >= 1000) {
 					lastEmbedRefresh = now;
@@ -809,22 +837,22 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				}
 				return;
 			}
-			// 暂停/恢复：phase 不变（仍处运行相位），按钮要在这两个事件瞬间
-			// 翻转——等下一个 progress 事件会卡在旧文案（暂停后循环退出，
-			// 事件流也停了）。
+			// 暂停/恢复：按钮在这两个事件瞬间翻转（resume → run() 同步置位
+			// isRunning；pause 后循环退出滞后，由上面的轮询收敛到 Rebuild）。
 			if (e.type === "pause" || e.type === "resume") {
-				setRunning(RAG_RUNNING_PHASES.has(this.plugin.progress.current.phase));
+				setRunning(this.plugin.scheduler.isRunning);
 			}
 		});
 		this.indexCardUnsub = () => {
 			unIndex();
+			stopRunningPoll();
 			if (statsRetryTimer != null) window.clearTimeout(statsRetryTimer);
 		};
 	}
 
 	private renderEmbeddingTab(containerEl: HTMLElement): void {
 		// reindex 按钮引用前传给状态组的进度订阅（状态组先渲染，维护组后创建）
-		const reindexRef: { btn?: HTMLButtonElement; running?: boolean; apply?: () => void } = {};
+		const reindexRef: { btn?: HTMLButtonElement; apply?: () => void } = {};
 		this.renderIndexCard(containerEl, reindexRef);
 
 		// ── 组「配置」：嵌入模型 + 排除路径（组标题已去，用户拍板） ──
@@ -885,14 +913,13 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		reindexLabel.createDiv({ cls: "semlink-row-desc", text: t("reindexAllDesc") });
 		const reindexBtn = reindexRow.createDiv({ cls: "semlink-row-control" }).createEl("button", {
 			cls: "semlink-btn-ghost mod-danger",
-			text: t("reindexAll"),
+			text: t("rebuildBtn"),
 		});
 		// 数据文件夹行已撤（用户拍板"去掉 Data folder"）：OPFS 位置对普通
 		// 用户不可达，文件名+体积无操作价值。
 		reindexBtn.addEventListener("click", () => {
-			// 运行中禁用（暂停/继续走上一行）；空闲才走重索引确认流。
-			if (reindexRef.running) return;
-			new ConfirmModal(this.app, t("reindexAll"), t("reindexConfirm"), () => {
+			// 随时可点（用户拍板）：确认后中止当前索引、清库从头开始。
+			new ConfirmModal(this.app, t("rebuildBtn"), t("reindexConfirm"), () => {
 				void this.plugin.reindexAll();
 			}).open();
 		});
