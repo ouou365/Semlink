@@ -6818,7 +6818,21 @@ body .semlink-msg-user::selection {
 	background: var(--text-error);
 	color: var(--text-on-accent);
 }/* ╕═ 契约 §4 无障碍强制 ╕ */
+}/* 流式打字机尾段（纯文本节点逐字追加，段落完成并入稳定 markdown）：
+   追加期显示闪烁光标，reduced-motion 下光标常亮不闪 */
+.semlink-msg-answer-tail {
+    white-space: pre-wrap;
+}
+.semlink-msg-answer-tail::after {
+    /* 与思考预览同款光标（用户拍板 2026-11-13「参考思考过程实现」） */
+    content: "\258D";
+    color: var(--text-faint);
+    animation: semlink-reason-blink 1s steps(2, start) infinite;
+}
 @media (prefers-reduced-motion: reduce) {
+    .semlink-msg-answer-tail::after {
+        animation: none;
+    }
     .smart-vault-settings :is(.semlink-btn-primary, .semlink-btn-secondary, .semlink-btn-ghost):active {
         transform: none;
     }

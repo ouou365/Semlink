@@ -1018,17 +1018,29 @@ export class SemanticSearchView extends ItemView {
 				const streamInner = streamEl.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
 				let streamText = "";
 				let shownText = "";
-				let typeTimer: number | null = null;
-				// The window the typewriter interval lives on. The view may sit in
+				let typeRafId: number | null = null;
+				// The window the typewriter rAF loop lives on. The view may sit in
 				// a POPOUT window while `window` stays the main window — timers on
 				// an occluded main window are throttled to ~1 Hz by Chromium,
 				// which freezes the typewriter (the popout bug: body text not
 				// streaming). Always create/clear on the captured window, and
 				// re-anchor to the current viewWin on every start so a mid-stream
 				// popout→sidebar migration self-heals on the next delta.
-				let typeTimerWin: Window | null = null;
-				let typeRendering = false;
-				let typeTicks = 0;
+				let typeRafWin: Window | null = null;
+				let typeLastFrameAt = 0;
+				// rAF 帧锁定的上一帧时刻（reveal 速率按真实帧间隔缩放，高刷
+				// 屏不加速、掉帧按 miss 补量）。
+				// 两层打字机（用户拍板 2026-11-12「一顿一顿出一大段」「不够
+				// 丝滑」）：全量 MarkdownRenderer 每 120ms 重渲一遍、耗时随
+				// 正文变长（几百 ms），画一次蹦一大段；重渲期间逐字更新被
+				// typeRendering 守卫冻结 = 卡顿。改为三层节点：稳定区
+				// markdown（块边界推进时才重渲，单飞+pending 合并）与打字尾
+				// （纯文本节点每 tick 更新）互为兄弟——重渲绝不冻结逐字。
+				let renderedUpTo = 0;
+				let streamStableEl: HTMLElement | null = null;
+				let streamTailEl: HTMLElement | null = null;
+				let stableRendering = false;
+				let stablePending = false;
 				// Set when any streamed text reached the UI. A round's interim
 				// flash (live-forwarded pre-tool text) collapses the thinking
 				// preview — startDots restores it when the flag is still set
@@ -1043,43 +1055,65 @@ export class SemanticSearchView extends ItemView {
 				let liveReasonPending = "";
 				let liveReasonScheduled = false;
 					const stopTypewriter = (): void => {
-						if (typeTimer !== null) {
-							// Clear on the window that CREATED the interval — timer
+						if (typeRafId !== null) {
+							// Cancel on the window that CREATED the frame request —
 							// ids are per-window; a stale id after a popout close
 							// is a harmless no-op there. A DESTROYED popout window
 							// may refuse property access — swallow that too.
 							try {
-								typeTimerWin?.clearInterval(typeTimer);
+								typeRafWin?.cancelAnimationFrame(typeRafId);
 							} catch {
-								/* destroyed window — timer died with it */
+								/* destroyed window — rAF died with it */
 							}
-							typeTimer = null;
-							typeTimerWin = null;
+							typeRafId = null;
+							typeRafWin = null;
 						}
 					};
-				const renderShown = async (): Promise<void> => {
-					if (typeRendering) return;
-					typeRendering = true;
-					try {
-						if (streamEl.isConnected) {
-							// Sticky scroll, sampled BEFORE the re-render: the render
-							// itself grows the content, so a tall block landing on an
-							// at-bottom viewport would otherwise read as "user
-							// scrolled up" and permanently break following. 120px
-							// matches the wasNearBottom sampling used on the final
-							// swap (the auto-expanded thinking preview can jump
-							// taller than 80px between two renders).
-							const m = this.messagesEl;
-							const nearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 120;
-							streamInner.empty();
-							await MarkdownRenderer.render(this.app, protectHyphens(shownText), streamInner, "", this);
-							if (nearBottom) this.scrollToBottom();
-						}
-					} finally {
-						typeRendering = false;
+				// 两层节点：稳定区（markdown，块边界推进时才重渲）与打字尾
+				// （纯文本节点，每 tick 更新）互为兄弟——重渲绝不触碰尾段，
+				// 逐字更新不再被渲染冻结（「一顿一顿」的根因）。
+				const ensureStreamNodes = (): void => {
+					if (!streamStableEl || !streamStableEl.isConnected) {
+						streamInner.empty();
+						streamStableEl = streamInner.createDiv({ cls: "semlink-msg-answer-stable" });
+						streamTailEl = streamInner.createDiv({ cls: "semlink-msg-answer-tail" });
+						renderedUpTo = 0;
+					}
+					if (!streamTailEl || !streamTailEl.isConnected) {
+						streamTailEl = streamInner.createDiv({ cls: "semlink-msg-answer-tail" });
 					}
 				};
-				const typeTick = (): void => {
+				/** 每 tick 调用：纯 textNode 更新，近零成本，永不阻塞。 */
+				const updateTail = (): void => {
+					ensureStreamNodes();
+					streamTailEl!.setText(shownText.slice(renderedUpTo));
+				};
+				/** 单飞稳定区渲染：块边界推进时把已完成段落渲成 markdown。
+				 *  MarkdownRenderer 内部虽是异步步进，仍会占用主线程——但尾段
+				 *  是兄弟节点，期间逐字更新照常（这是与旧实现的本质区别）。 */
+				const renderStable = (): void => {
+					if (stableRendering) { stablePending = true; return; }
+					const boundary = Math.max(renderedUpTo, shownText.lastIndexOf("\n\n") + 2);
+					if (boundary <= renderedUpTo) return;
+					stableRendering = true;
+					const stableMd = protectHyphens(shownText.slice(0, boundary));
+					const m = this.messagesEl;
+					const nearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 120;
+					void (async () => {
+						try {
+							streamStableEl!.empty();
+							await MarkdownRenderer.render(this.app, stableMd, streamStableEl!, "", this);
+							renderedUpTo = boundary;
+							updateTail();
+						} catch { /* 渲染失败保持纯文本尾，不中断流式 */ }
+						finally {
+							stableRendering = false;
+							if (nearBottom) this.scrollToBottom();
+							if (stablePending) { stablePending = false; renderStable(); }
+						}
+					})();
+				};
+				const typeFrame = (): void => {
 					if (!streamEl.isConnected) {
 						stopTypewriter();
 						return;
@@ -1090,19 +1124,25 @@ export class SemanticSearchView extends ItemView {
 						stopTypewriter();
 						return;
 					}
-					// Adaptive reveal（用户拍板 2026-11-12「要有打字机效果」）：
-					// 旧参数 max 80 字/tick（≈2600 字/秒）+ 4 tick 才画一次 =
-					// 每次 painted 300+ 字，DeepSeek 把 submit_answer 参数整块
-					// 一次发到时 221 字 180ms 内播完——视觉上等于没有打字机。
-					// 新参数 max 10 字/tick（≈333 字/秒 追平上限，min 3 兜底）：
-					// 逐字可见、又能追平正常流速率（流式速率 <333字/s 时始终
-					// 颈贴颈，不积压）。
-					const step = Math.min(10, Math.max(3, Math.ceil(remaining / 12)));
+					// 参考 thinking 预览的丝滑感（用户拍板 2026-11-13「参考思考
+					// 过程实现」）：rAF 帧锁定 + 每帧 2-3 字小步进 = 光标扫过感；
+					// 积压 >240 字（模型整块下发/快速流）提速到 6-12 字/帧追赶。
+					// 帧间隔缩放：高刷屏不加速、掉帧按 miss 补量。
+					const now = performance.now();
+					const dt = typeLastFrameAt > 0 ? Math.min(150, now - typeLastFrameAt) : 16.7;
+					typeLastFrameAt = now;
+					const scale = dt / 16.7;
+					const step = remaining > 240
+						? Math.ceil(Math.min(12, Math.max(6, remaining / 16)) * scale)
+						: Math.ceil(Math.max(2, 3 * scale));
 					shownText = streamText.slice(0, shownText.length + step);
-					typeTicks++;
-					// Markdown re-render paced (~every 4th tick ≈ 120ms)，追平
-					// 时必画——尾部不滞后。
-					if (typeTicks % 4 === 0 || shownText.length >= streamText.length) void renderShown();
+					// 每帧：纯文本逐字（近零成本）+ 稳定区按需渲染（单飞，
+					// 不阻塞逐字）。贴底跟随采样跟随写。
+					updateTail();
+					renderStable();
+					const m = this.messagesEl;
+					if (m.scrollHeight - m.scrollTop - m.clientHeight < 120) this.scrollToBottom();
+					typeRafId = this.viewWin.requestAnimationFrame(typeFrame);
 				};
 				/** 等 reveal 追平 streamText（完成路径在最终替换前调用——
 				 *  DeepSeek 整块下发答案时，最终替换若不等这里，221 字会
@@ -1122,14 +1162,15 @@ export class SemanticSearchView extends ItemView {
 				});
 					const startTypewriter = (): void => {
 						// Always stop + recreate on the CURRENT view window (never
-						// reuse a timer anchored to a previous window): while the
-						// view lives in a popout, a main-window interval is throttled
-						// to ~1 Hz once the main window is occluded — the reveal
-						// would crawl at a few chars/second and the answer would
-						// effectively pop in only when the final render swaps in.
+						// reuse a frame request anchored to a previous window): while
+						// the view lives in a popout, a main-window rAF loop is
+						// throttled to ~1 Hz once the main window is occluded — the
+						// reveal would crawl at a few chars/second and the answer
+						// would effectively pop in only when the final render swaps in.
 						stopTypewriter();
-						typeTimerWin = this.viewWin;
-						typeTimer = typeTimerWin.setInterval(typeTick, 30);
+						typeRafWin = this.viewWin;
+						typeLastFrameAt = 0;
+						typeRafId = typeRafWin.requestAnimationFrame(typeFrame);
 					};
 
 				// Status indicator: the elapsed-seconds counter ticks along once
@@ -1157,6 +1198,8 @@ export class SemanticSearchView extends ItemView {
 					streamEl.addClass("semlink-hidden");
 					streamText = "";
 					shownText = "";
+					renderedUpTo = 0;
+					streamTailEl = null;
 					stopTypewriter();
 					streamInner.empty();
 					// New round — drop the previous round's live reasoning text
