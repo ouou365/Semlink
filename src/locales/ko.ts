@@ -270,7 +270,7 @@ const t: Record<keyof typeof en, string> = {
 	shareFontPlus: "글자 크게",
 	shareAsk: "Semlink 에 질문",
 	ragSemantic: "임베딩 모델",
-	ragSemanticHint: "꺼짐 — 켜서 임베딩 모델을 선택하세요",
+	ragSemanticHint: "미설정 — 모델을 선택해 시작",
 	ragSetupBtn: "설정 시작",
 	guideEmbedIntroTitle: "🔍 의미 검색",
 	guideEmbedIntroSub: "볼트가 당신을 이해하도록",

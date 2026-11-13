@@ -270,7 +270,7 @@ const t: Record<keyof typeof en, string> = {
 	shareFontPlus: "Größerer Text",
 	shareAsk: "Semlink fragen",
 	ragSemantic: "Embedding-Modell",
-	ragSemanticHint: "Aus — einschalten, um ein Embedding-Modell zu wählen",
+	ragSemanticHint: "Nicht gesetzt — Modell wählen, um zu starten",
 	ragSetupBtn: "Einrichten",
 	guideEmbedIntroTitle: "🔍 Semantische Suche",
 	guideEmbedIntroSub: "Lass deinen Vault dich verstehen",

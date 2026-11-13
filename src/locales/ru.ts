@@ -271,7 +271,7 @@ const t: Record<keyof typeof en, string> = {
 	shareFontPlus: "Больше текст",
 	shareAsk: "Спросить Semlink",
 	ragSemantic: "Модель эмбеддингов",
-	ragSemanticHint: "Выключено — включите, чтобы выбрать модель эмбеддингов",
+	ragSemanticHint: "Не задано — выберите модель, чтобы начать",
 	ragSetupBtn: "Настроить",
 	guideEmbedIntroTitle: "🔍 Семантический поиск",
 	guideEmbedIntroSub: "Позвольте хранилищу понять вас",

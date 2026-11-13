@@ -270,7 +270,7 @@ const t: Record<keyof typeof en, string> = {
 	shareFontPlus: "Texte plus grand",
 	shareAsk: "Demander à Semlink",
 	ragSemantic: "Modèle d'embedding",
-	ragSemanticHint: "Désactivée — activez pour choisir un modèle d’embedding",
+	ragSemanticHint: "Non défini — choisissez un modèle pour commencer",
 	ragSetupBtn: "Configurer",
 	guideEmbedIntroTitle: "🔍 Recherche sémantique",
 	guideEmbedIntroSub: "Laissez votre coffre vous comprendre",

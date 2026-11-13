@@ -275,7 +275,7 @@ const en = {
 	shareFontPlus: "Larger text",
 	shareAsk: "Get Semlink",
 	ragSemantic: "Embedding Model",
-	ragSemanticHint: "Not set — pick a model to start building the semantic index",
+	ragSemanticHint: "Not set — pick a model to start indexing",
 	ragSetupBtn: "Set Up",
 	ragGroupStatus: "Status",
 	ragGroupConfig: "Setup",

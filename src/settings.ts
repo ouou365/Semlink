@@ -6,6 +6,7 @@ import { App, DropdownComponent, Modal, Notice, PluginSettingTab, Setting, Slide
 import * as QRCode from "qrcode";
 import type SmartVaultPlugin from "../main";
 import type { IndexProgress, McpClientServer, SmartVaultSettings } from "./types";
+import { activeEmbeddingProvider } from "./types";
 import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
 import { EMPTY_MODELS_TAB_STATE, renderModelsTab, type ModelsTabState } from "./settings-models";
@@ -812,6 +813,19 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 在途去重：轮询与进度事件都会调 refreshStats——上一轮没回来时不叠
 		// 加新查询，防止 worker 忙时请求堆积（2026-11-11 饿死事故的教训）。
 		let statsRefreshInFlight = false;
+		// 嵌入未配置（用户拍板 2026-11-13「没配嵌入模型这边都是 0」）：
+		// 四格全 0 + 更新时间「—」。纯分块索引（无向量）对语义检索不可用，
+		// 显示 Indexed 1139 会误导「索引能用」。
+		const embeddingConfigured = (): boolean =>
+			!!this.plugin.settings.embeddingModelKey
+			&& activeEmbeddingProvider(this.plugin.settings).apiKey.trim() !== "";
+		const paintNotConfigured = (): void => {
+			chunkedEl.setText("0");
+			vectorizedEl.setText("0");
+			embedSkippedEl.setText("0");
+			updatedEl.setText("—");
+			setHero(indexBlock, 0);
+		};
 		// 总数副行独立刷新：不依赖 DB 往返——重索引期间 worker 繁忙，
 		// getStats 可能连续失败走退避重试，总数若挂在它后面会冻结在旧值
 		// （真机复现：状态栏 1016 而副行恒 980）。vault 文件遍历轻量
@@ -826,6 +840,12 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			if (statsRefreshInFlight) return;
 			statsRefreshInFlight = true;
 			try {
+				// 嵌入未配置 → 四格全 0 + 更新时间「—」（用户拍板 2026-11-13），
+				// 连查询都省——纯分块索引显示 Indexed 有误导性。
+				if (!embeddingConfigured()) {
+					paintNotConfigured();
+					return;
+				}
 				const [s, embeddedNotes, skippedNotes] = await Promise.all([
 					this.plugin.store.getStats(),
 					this.plugin.store.getEmbeddedNoteCount(),
@@ -890,7 +910,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		// 首帧先用快照直出（plugin 启动播种/上次查询写透的 ragStatsCache）：
 		// 打开 RAG tab 不再空「—」等 DB 往返；下方 refreshStats 照跑纠偏。
 		const seed = this.plugin.ragStatsCache;
-		if (seed.ready) {
+		if (!embeddingConfigured()) {
+			paintNotConfigured();
+		} else if (seed.ready) {
 			// 首帧同口径（用户拍板「三处值保持同步」）：Indexed = Embedded + Skipped
 			chunkedEl.setText((seed.embeddedNotes + seed.skippedNotes).toLocaleString());
 			vectorizedEl.setText(seed.embeddedNotes.toLocaleString());

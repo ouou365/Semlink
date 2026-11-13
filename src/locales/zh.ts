@@ -277,7 +277,7 @@ const zh: Record<keyof typeof en, string> = {
 	shareFontPlus: "放大字号",
 	shareAsk: "向 Semlink 提问",
 	ragSemantic: "嵌入模型",
-	ragSemanticHint: "未配置，选择后开始构建语义索引",
+	ragSemanticHint: "未设置——选择模型后开始索引",
 	ragSetupBtn: "配置",
 	ragGroupStatus: "状态",
 	ragGroupConfig: "配置",

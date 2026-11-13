@@ -1310,12 +1310,92 @@ function v1Base(base: string): string {
 	return /\/v\d+$/.test(base) ? base : `${base}/v1`;
 }
 
-/** /models 缺失端点的连通性回退（Z.AI/GLM coding 计划实测：GET /v4/models
- *  → 404，chat 路由却正常）：POST 一个空 JSON 到 chat 路由——不消耗
- *  token。状态码判读：400/422 = 路由存在、请求体非法（探测性错误请求，
- *  鉴权已过）→ 连通；401/403 = 密钥无效；404 = 路由确实不存在；5xx =
- *  服务端问题。返回 null 表示网络层失败（无法判定）。 */
+/** Key 可用性裁决（用户报障 2026-11-13：Save&Test 通过但真聊 401——
+ *  旧探测把「空 body POST 得到 400/422」当鉴权已过，可很多网关先校验
+ *  请求体后校验 key，空 body 直接 400 根本没碰鉴权；公开 /models 不做
+ *  鉴权同理不能作数）。发一个**最小合法 chat 请求**（max_tokens=1，
+ *  成本 ≈ 几个 token）——200 = key 真可用；401/403 = 鉴权失败（definitive，
+ *  带 provider 原始错误信息如「Authentication Fails …」）；其它状态
+ *  （400/404/「Model disabled.」——候选模型本身不可用，用户报障同日）
+ *  = 不定，由调用方换候选重试。返回 null 表示网络层失败（无法判定）。 */
 async function probeChatRoute(
+	base: string,
+	apiKey: string,
+	apiFormat: ChatApiFormat,
+	modelId: string,
+): Promise<{ ok: boolean; definitive: boolean; message: string } | null> {
+	const suffix = apiFormat === "anthropic" ? "/v1/messages" : "/chat/completions";
+	const url = `${base}${suffix}`;
+	const headers: Record<string, string> = apiFormat === "anthropic"
+		? { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" }
+		: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" };
+	const body = JSON.stringify({
+		model: modelId,
+		max_tokens: 1,
+		messages: [{ role: "user", content: "hi" }],
+	});
+	try {
+		const resp = await raceTimeout(requestUrl({ url, method: "POST", headers, body, throw: false }));
+		const status = resp?.status ?? 0;
+		let detail = "";
+		try {
+			const j = (resp?.json ?? {}) as { error?: { message?: string } | string; message?: string };
+			detail = (typeof j.error === "string" ? j.error : j.error?.message) || j.message || "";
+		} catch { /* 非 JSON 错误体 */ }
+		const suffixMsg = detail ? ` · ${detail}` : ` · HTTP ${status}`;
+		if (status === 200) {
+			return { ok: true, definitive: true, message: t("mtDetectOkNoList") };
+		}
+		if (status === 401 || status === 403) {
+			return { ok: false, definitive: true, message: `${t("mtDetectFail")}${suffixMsg}`.trim() };
+		}
+		return { ok: false, definitive: false, message: `${t("mtDetectFail")}${suffixMsg}`.trim() };
+	} catch {
+		return null;
+	}
+}
+
+/** 纯嵌入供应商的 Key 探测（用户报障 2026-11-13：嵌入供应商没有 chat
+ *  模型，chat 探测会打到随机/禁用模型上报「Model disabled.」）：对
+ *  /embeddings 发最小请求（input 一个短串，成本 ≈ 几个 token）。判读
+ *  与 probeChatRoute 相同：200 / 401·403 definitive / 其余不定。 */
+async function probeEmbeddingsRoute(
+	base: string,
+	apiKey: string,
+	modelId: string,
+): Promise<{ ok: boolean; definitive: boolean; message: string } | null> {
+	const url = `${base.replace(/\/+$/, "")}/embeddings`;
+	try {
+		const resp = await raceTimeout(requestUrl({
+			url,
+			method: "POST",
+			headers: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+			body: JSON.stringify({ model: modelId, input: "hi" }),
+			throw: false,
+		}));
+		const status = resp?.status ?? 0;
+		let detail = "";
+		try {
+			const j = (resp?.json ?? {}) as { error?: { message?: string } | string; message?: string };
+			detail = (typeof j.error === "string" ? j.error : j.error?.message) || j.message || "";
+		} catch { /* 非 JSON 错误体 */ }
+		const suffixMsg = detail ? ` · ${detail}` : ` · HTTP ${status}`;
+		if (status === 200) {
+			return { ok: true, definitive: true, message: t("mtDetectOkNoList") };
+		}
+		if (status === 401 || status === 403) {
+			return { ok: false, definitive: true, message: `${t("mtDetectFail")}${suffixMsg}`.trim() };
+		}
+		return { ok: false, definitive: false, message: `${t("mtDetectFail")}${suffixMsg}`.trim() };
+	} catch {
+		return null;
+	}
+}
+
+/** 无模型候选时的退路（空 body 探测）：只证明路由存在，**鉴权未验证**——
+ *  「先 body 后鉴权」的网关 400 会假阳性，所以仅限没有探测模型的场合，
+ *  且历史行为保留。 */
+async function probeChatRouteNoModel(
 	base: string,
 	apiKey: string,
 	apiFormat: ChatApiFormat,
@@ -1332,7 +1412,7 @@ async function probeChatRoute(
 			return { ok: false, message: `${t("mtDetectFail")} · HTTP ${status}` };
 		}
 		if (status >= 200 && status < 500 && status !== 404) {
-			return { ok: true, message: t("mtDetectOkNoList") };
+			return { ok: true, message: `${t("mtDetectOkNoList")}（未验证鉴权）` };
 		}
 		return { ok: false, message: `${t("mtDetectFail")} · HTTP ${status}` };
 	} catch {
@@ -3298,29 +3378,51 @@ export function renderModelsTab(
 			): Promise<{ ok: boolean; message: string }> => {
 				const base = live.apiBase.trim().replace(/\/+$/, "");
 				const format = (live.apiFormat ?? "openai") as ChatApiFormat;
-				let fetchErr: unknown = null;
+				// 在线模型列表：只作 chat 探测候选（公开 /models 不做鉴权，
+				// 不能作为通过依据——「Save&Test 通过但真聊 401」第一通道）。
+				let fetchedIds: string[] = [];
 				try {
-					const entries = await raceTimeout(fetchModelIds(base, key, format));
-					if (entries && entries.length > 0) {
-						return { ok: true, message: t("mtDetectOk").replace("{n}", String(entries.length)) };
+					fetchedIds = (await raceTimeout(fetchModelIds(base, key, format)) ?? []).map((m) => m.id);
+				} catch { /* /models 缺失或 401——交给探测裁决 */ }
+				const chatCurated = live.models.filter((m) => (m.kind ?? "chat") === "chat").map((m) => m.id);
+				const embedCurated = live.models.filter((m) => m.kind === "embedding").map((m) => m.id);
+				// 纯嵌入供应商（用户报障 2026-11-13：探测打到 SiliconFlow 随机
+				// 禁用模型上报「Model disabled.」）→ 走 /embeddings 探测。
+				// 不看 fetchedIds——有效 key 能拉到全量列表，但该供应商的用途
+				// 是嵌入，chat 探测只会打到随机模型。
+				if (chatCurated.length === 0 && embedCurated.length > 0) {
+					for (const modelId of embedCurated.slice(0, 3)) {
+						const probe = await probeEmbeddingsRoute(base, key, modelId);
+						if (!probe) return { ok: false, message: `${t("mtDetectFail")} · 0` };
+						if (probe.definitive) return probe;
+						// 不定（模型不可用等）→ 试下一个嵌入模型
 					}
-					// HTTP 200 但列表空/缺省（Z.AI Coding CN 实测：/models 200、
-					// data 缺省 → fetchModelIds 返回 []，用户报障「连接失败 · 0」
-					// 而端点明明活着）≠ 端点死——与下方 /models 抛错一样回退
-					// chat 路由探测。原代码只给抛错分支回退，漏了空列表这支。
-				} catch (err) {
-					fetchErr = err;
+					return { ok: false, message: `${t("mtDetectFail")} · 嵌入模型不可用` };
 				}
-				// /models 拉取失败不直接判死：一部分端点只声明了 chat 路由、
-				// 没有 /models（Z.AI/GLM coding 计划实测 GET /v4/models →
-				// 404，chat/completions 却正常）。回退用探测性请求打 chat
-				// 路由判定连通性（不消耗 token）。
-				const probe = await probeChatRoute(base, key, format);
-				if (probe) return probe;
-				if (fetchErr instanceof Error) {
-					return { ok: false, message: `${t("mtDetectFail")} · ${fetchErr.message}`.trim() };
+				// chat 候选：配置的 chat 模型优先（端点+用途都保证），在线列表
+				// 补充（禁用/不适用模型由 definitive 标记跳过、换下一个）。
+				const candidates = [...new Set([...chatCurated, ...fetchedIds])].slice(0, 5);
+				if (candidates.length === 0) {
+					const probe = await probeChatRouteNoModel(base, key, format);
+					return probe ?? { ok: false, message: `${t("mtDetectFail")} · 0` };
 				}
-				return { ok: false, message: `${t("mtDetectFail")} · 0` };
+				let last = "";
+				for (const modelId of candidates) {
+					const probe = await probeChatRoute(base, key, format, modelId);
+					if (!probe) return { ok: false, message: `${t("mtDetectFail")} · 0` };
+					if (probe.ok) {
+						return {
+							ok: true,
+							message: fetchedIds.length > 0
+								? t("mtDetectOk").replace("{n}", String(fetchedIds.length))
+								: probe.message,
+						};
+					}
+					last = probe.message;
+					if (probe.definitive) return probe; // 401/403 = key 问题，无需换候选
+					// 不定（该候选禁用/不存在）→ 换下一个候选
+				}
+				return { ok: false, message: last || `${t("mtDetectFail")} · 0` };
 			};
 			// 配置弹窗（用户拍板参考 Cherry Configuration 流程）：空态 ghost
 			// 钮与已配置态铅笔都进本弹窗；Test & Save = 落盘 + 检测反馈

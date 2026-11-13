@@ -53,6 +53,7 @@ export function createDispatcher(): Dispatcher {
 			case "rollbackTransaction": return engine.rollbackTransaction();
 			case "insertChunk": return engine.insertChunk(args[0] as NoteChunk);
 			case "getChunksByNotePath": return engine.getChunksByNotePath(args[0] as string);
+			case "noteHasVectors": return engine.noteHasVectors(args[0] as string);
 			case "getActiveChunks": return engine.getActiveChunks();
 			case "getChunkById": return engine.getChunkById(args[0] as string);
 			case "markChunksStale": return engine.markChunksStale(args[0] as string);

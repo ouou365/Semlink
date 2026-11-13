@@ -860,7 +860,20 @@ export default class SmartVaultPlugin extends Plugin {
 				return { op, error: e instanceof Error ? e.message : String(e) };
 			}
 		}
-		if (op) return { error: `unknown op "${op}" (save | compact | resetOpfsDb | repairFromBak | seedFromDisk | auditLog | durability | snapshot | dumpslot)` };
+		if (op === "clearvectors") {
+			// 补救通道（用户报障 2026-11-13：换嵌入模型后重嵌永不发生，全库
+			// 0 向量卡死）：clearVectors（现含 mtime 归零——清向量不清 mtime
+			// 的旧缺陷会让全部笔记被当「未变更」跳过）+ 立即触发全量对账重嵌。
+			try {
+				await this.store.clearVectors();
+				if (this.scheduler.isRunning) return { op, done: false, note: "scheduler busy — scan will pick up cleared mtimes on next reconcile" };
+				this.startFullIndex();
+				return { op, done: true, note: "vectors cleared + chunk mtime reset + full scan kicked" };
+			} catch (e) {
+				return { op, error: e instanceof Error ? e.message : String(e) };
+			}
+		}
+		if (op) return { error: `unknown op "${op}" (save | compact | resetOpfsDb | repairFromBak | seedFromDisk | auditLog | durability | snapshot | dumpslot | clearvectors)` };
 		const stats = await this.store.getStats();
 		// 存储模式诊断：空索引 + 大磁盘库 = 上游加载失败（worker 初始化
 		// 失败掉进 browser-worker/sync 空库、或加载抛错）——定位「索引清零」。
@@ -1174,6 +1187,23 @@ export default class SmartVaultPlugin extends Plugin {
 				lastFinal: finals.at(-1) ?? null,
 			},
 		};
+	}
+
+	/** 设置嵌入模型选择（引导/设置统一入口）：键变化（换模型，含首次从
+	 *  无到有）即 clearVectors——向量空间不兼容 + mtime 归零让全量重嵌。
+	 *  键未变但「有块零向量」（历史受困态：先无供应商 Rebuild 纯分块、
+	 *  后配嵌入，用户复现 2026-11-13：7/1139 就 ready、永不嵌入）同样清
+	 *  ——mtime 归零是让增量扫描重新入队的唯一开关。 */
+	async applyEmbeddingModelKey(key: string): Promise<void> {
+		const changed = this.settings.embeddingModelKey !== key;
+		this.settings.embeddingModelKey = key;
+		if (changed) {
+			this.store.clearVectors();
+		} else {
+			const s = await this.store.getStats();
+			if (s.totalChunks > 0 && s.embeddedChunks === 0) this.store.clearVectors();
+		}
+		await this.saveSettings();
 	}
 
 	async stopDebugMcpServer() {

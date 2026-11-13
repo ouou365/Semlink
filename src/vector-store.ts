@@ -433,6 +433,8 @@ export class VectorStore {
 		return await this.call<SearchResult[]>("searchRelatedNotes", [notePath, limit, threshold, maxProbes]);
 	}
 
+	/** 该笔记是否已有至少一个向量（同内容短路跳过的裁决，见 scheduler）。 */
+	async noteHasVectors(notePath: string): Promise<boolean> { return await this.call<boolean>("noteHasVectors", [notePath]); }
 	/** Fast substring search over indexed chunk content (for the grep tool). */
 	async textSearch(pattern: string, limit = 200, pathFilter?: string, excludePaths?: string[]): Promise<Array<{ path: string; matchCount: number; preview: string }>> {
 		return await this.call<Array<{ path: string; matchCount: number; preview: string }>>("textSearch", [pattern, limit, pathFilter, excludePaths]);

@@ -273,7 +273,7 @@ const t: Record<keyof typeof en, string> = {
 	shareFontPlus: "文字を大きく",
 	shareAsk: "Semlink に質問",
 	ragSemantic: "埋め込みモデル",
-	ragSemanticHint: "オフ — オンにして埋め込みモデルを選択",
+	ragSemanticHint: "未設定——モデルを選択して開始",
 	ragSetupBtn: "セットアップ",
 	guideEmbedIntroTitle: "🔍 セマンティック検索",
 	guideEmbedIntroSub: "Vault があなたを理解するように",

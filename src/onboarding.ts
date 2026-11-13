@@ -447,28 +447,30 @@ export function renderOnboarding(
 							});
 						}
 						// 重新配置且换了模型（新键 ≠ 快照键）→ 向量空间不兼容，
-						// 触发全量重新索引；首次配置或模型未变 → 普通增量索引。
+						// 触发全量重新索引；首次配置或模型未变 → 统一入口
+						// applyEmbeddingModelKey（键变化/「有块零向量」受困态
+						// 都会 clearVectors 归零 mtime，见 main.ts——否则「先
+						// 纯分块后配嵌入」时增量扫描无变更可入队，7 篇即完成、
+						// 永不嵌入，用户复现 2026-11-13）。
 						const newKey = `${p.id}::${mid}`;
 						const modelChanged = reconfigFromKey !== null && newKey !== reconfigFromKey;
 						reconfigFromKey = null;
-						plugin.settings.embeddingModelKey = newKey;
 						plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), embedReady: true, embedModelPicked: true };
-						void plugin.saveSettings();
-						if (modelChanged) {
-							// reindexAll 在调度器运行中会静默跳过——重新配置时已
-							// pause，这里等运行真正收尾后再发起全量重建。
-							const kick = (): void => {
-								if (plugin.scheduler.isRunning) {
-									window.setTimeout(kick, 500);
-									return;
-								}
+						const kick = (): void => {
+							if (plugin.scheduler.isRunning) {
+								window.setTimeout(kick, 500);
+								return;
+							}
+							if (modelChanged) {
+								// reindexAll 在调度器运行中会静默跳过——重新配置时已
+								// pause，这里等运行真正收尾后再发起全量重建。
 								void plugin.reindexAll();
-							};
-							kick();
-						} else {
-							// 配置完成即可开始语义搜索：触发一次增量索引
-							plugin.startFullIndex();
-						}
+							} else {
+								// 配置完成即可开始语义搜索：触发一次增量索引
+								plugin.startFullIndex();
+							}
+						};
+						void plugin.applyEmbeddingModelKey(newKey).then(kick);
 						rerender();
 						return;
 					}
@@ -484,12 +486,16 @@ export function renderOnboarding(
 						if ((m.kind ?? "chat") !== "embedding") continue;
 						m.enabled = pickedIds.has(m.id);
 					}
-					plugin.settings.embeddingModelKey = `${p.id}::${models[0].id}`;
-					// 不置 done：进入咖啡杯步骤；进入即自动开始嵌入
+					// 不置 done：进入咖啡杯步骤；进入即自动开始嵌入。
+					// 统一入口 applyEmbeddingModelKey：键变化或「有块零向量」
+					// 受困态都会 clearVectors 归零 mtime（用户复现 2026-11-13：
+					// 先纯分块后配嵌入 → 增量扫描无变更 → 7 篇即 ready、永不
+					// 嵌入），完成后再触发全量索引。
 					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), embedModelPicked: true };
-					void plugin.saveSettings();
-					plugin.startFullIndex();
-					rerender();
+					void plugin.applyEmbeddingModelKey(`${p.id}::${models[0].id}`).then(() => {
+						plugin.startFullIndex();
+						rerender();
+					});
 				},
 				onBackToKey: () => {
 					plugin.settings.onboarding = { ...(plugin.settings.onboarding ?? {}), embedReady: false };

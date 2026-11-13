@@ -450,8 +450,8 @@ export class DbEngine {
 	}
 
 	/** 持久化诊断（reload/杀进程丢数据取证）：journal/synchronous 实际
-	 *  生效值、flushed 槽字节数 vs 引擎整库字节数——差值 = 未落盘窗口。 */
-	durabilityInfo(): { mode: string; journalMode: string; synchronous: string; slotBytes: number; bytesTotal: number } | { error: string } {
+	 *  生效值、引擎整库字节数。 */
+	durabilityInfo(): { mode: string; journalMode: string; synchronous: string; bytesTotal: number } | { error: string } {
 		if (!this.db) return { error: "no db" };
 		if (this.dbMode !== "wasm") return { error: `durabilityInfo only in wasm mode (current: ${this.dbMode})` };
 		const w = this.db as SqliteWasmDb;
@@ -592,10 +592,16 @@ export class DbEngine {
 
 	/** 嵌入模型变更：只清向量与文档向量（保留 chunks），并把存储的 mtime
 	 *  一并清空——扫描会将全部笔记视为新文件重走 add 流程，从而用新模型
-	 *  完成全量重嵌（"保留块 + 标记待嵌入"的落地）。 */
+	 *  完成全量重嵌（"保留块 + 标记待嵌入"的落地）。
+	 *  mtime 归零（用户报障 2026-11-13：换嵌入模型后全库 0 向量、重嵌永不
+	 *  发生——向量清了但 chunk.mtime 还是新的，扫描/冗余清理把全部笔记当
+	 *  「未变更」跳过：modal.skippedChunks=1139、秒级跑完、引导页 1% 就
+	 *  显示 brew ready）。mtime=0 → file.mtime 恒大于它 → 全量重走 add。
+	 *  注释历史上一直声称「mtime 一并清空」，代码里其实从来没有。 */
 	clearVectors(): void {
 		if (!this.db) return;
 		this.db.run("UPDATE chunks SET status = 'pending_embed', vector = NULL WHERE vector IS NOT NULL OR status = 'active'");
+		this.db.run("UPDATE chunks SET mtime = 0");
 		this.db.run("DELETE FROM note_doc_vectors");
 		this.db.run("DELETE FROM meta");
 		this.touchIndexActivity();
@@ -689,6 +695,17 @@ export class DbEngine {
 			[notePath]
 		);
 		return this.mapChunks(results);
+	}
+
+	/** 该笔记是否已有至少一个向量（同内容短路跳过的裁决依据——用户复现
+	 *  2026-11-13：先无供应商 Rebuild 只分块、后配嵌入模型，重分块与库存
+	 *  逐字相同 → 全部短路跳过 → 7 篇即「完成」、永不嵌入）。 */
+	noteHasVectors(notePath: string): boolean {
+		const r = this.db!.exec(
+			"SELECT 1 FROM chunks WHERE note_path = ? AND vector IS NOT NULL LIMIT 1",
+			[notePath]
+		);
+		return r.length > 0 && r[0].values.length > 0;
 	}
 
 	getActiveChunks(): NoteChunk[] {

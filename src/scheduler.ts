@@ -419,13 +419,22 @@ export class Scheduler {
 		// 工具/系统批量摸文件（真机实测单次启动 902/1142 篇被判「已修改」）
 		// 会把全部笔记送进重嵌管线。重分块后与库存块逐块比对，完全相同
 		// 则只推 mtime 让扫描恢复 unchanged 判定，零 API 调用。
+		// 向量裁决（用户复现 2026-11-13）：先无嵌入供应商 Rebuild（纯分块，
+		// chunk.mtime 全新）→ 再配置嵌入模型 → 增量扫描无变更可入队 → 仅
+		// 7 篇（期间碰过的文件）即「完成」；且入队的笔记重分块与库存逐字
+		// 相同 → 全部被本短路跳过 → 永不嵌入。因此**库存无向量时不得短路**
+		// （嵌入已启用 = 该补嵌；纯稀疏块走下方 markEmbedSkip 正常归档）。
 		if (action === "update" && chunks.length > 0) {
 			const existing = await this.store.getChunksByNotePath(notePath);
 			const identical = existing.length === chunks.length &&
 				existing.every((c, i) => c.content === chunks[i].content);
 			if (identical) {
-				await this.store.touchNoteMtime(notePath, mtime);
-				return false;
+				const hasVectors = await this.store.noteHasVectors(notePath);
+				if (hasVectors || !this.embedActive) {
+					await this.store.touchNoteMtime(notePath, mtime);
+					return false;
+				}
+				// 无向量 + 嵌入已启用：不短路，落到下方正常流程补嵌
 			}
 		}
 
