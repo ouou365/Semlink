@@ -12,7 +12,7 @@ import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
 	import { inferAgentDepth } from "./chat-client";
-import { buildCitedCards } from "./cite-cards";
+import { buildCitedCards, normalizeCiteMarkers } from "./cite-cards";
 import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
 import { ChatHistoryStore } from "./chat-history";
 import { brandLogoOf, formatContextWindow } from "./settings-models";
@@ -245,6 +245,9 @@ export class SemanticSearchView extends ItemView {
 		// pages from it too, so every surface sees the same sessions.
 		this.history = history;
 		this.plugin = plugin;
+		// 引用标记显隐初始值 = Base 设置行的全局默认（单条回答的 [n] 按钮
+		// 仍是会话内临时翻转，见 setCitationsVisible）。
+		this.showCitations = plugin.settings.showCiteMarkers;
 	}
 
 	getViewType(): string {
@@ -264,6 +267,8 @@ export class SemanticSearchView extends ItemView {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass("semlink-search-view");
+		// 引用标记显隐初始值（Base 设置行的全局默认，2026-11-13）
+		contentEl.toggleClass("semlink-show-citations", this.showCitations);
 
 		// ── Header (top, fixed) — left icons | centered brand | right icons ──
 		const header = contentEl.createDiv({ cls: "semlink-search-header" });
@@ -1097,8 +1102,6 @@ export class SemanticSearchView extends ItemView {
 					if (boundary <= renderedUpTo) return;
 					stableRendering = true;
 					const stableMd = protectHyphens(shownText.slice(0, boundary));
-					const m = this.messagesEl;
-					const nearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 120;
 					void (async () => {
 						try {
 							streamStableEl!.empty();
@@ -1108,7 +1111,9 @@ export class SemanticSearchView extends ItemView {
 						} catch { /* 渲染失败保持纯文本尾，不中断流式 */ }
 						finally {
 							stableRendering = false;
-							if (nearBottom) this.scrollToBottom();
+							// 正文更新不跟随滚动（用户拍板「为了方便人类阅读」
+							// 2026-11-13）：原 nearBottom<120 即拉底，用户停在
+							// 底部附近阅读时会被持续拽走——滚动自主权还给用户。
 							if (stablePending) { stablePending = false; renderStable(); }
 						}
 					})();
@@ -1137,11 +1142,10 @@ export class SemanticSearchView extends ItemView {
 						: Math.ceil(Math.max(2, 3 * scale));
 					shownText = streamText.slice(0, shownText.length + step);
 					// 每帧：纯文本逐字（近零成本）+ 稳定区按需渲染（单飞，
-					// 不阻塞逐字）。贴底跟随采样跟随写。
+					// 不阻塞逐字）。正文更新不跟随滚动（用户拍板「为了方便
+					// 人类阅读」2026-11-13）——每帧贴底拉拽已删。
 					updateTail();
 					renderStable();
-					const m = this.messagesEl;
-					if (m.scrollHeight - m.scrollTop - m.clientHeight < 120) this.scrollToBottom();
 					typeRafId = this.viewWin.requestAnimationFrame(typeFrame);
 				};
 				/** 等 reveal 追平 streamText（完成路径在最终替换前调用——
@@ -1452,7 +1456,9 @@ export class SemanticSearchView extends ItemView {
 					// client strips to "" when a substantial thought exists.
 					// Promoting the LONGEST thought keeps the content in the
 					// answer body instead of trapping it under 💭.
-					let answer = result.answer;
+					// [引用标记归一化] 模型变体（范围第二段丢 L / 非断行连字符）
+				// 统一成规范形，正文卡片/来源卡/历史持久化（分享页）一致解析。
+				let answer = normalizeCiteMarkers(result.answer);
 					let thinking: ThinkingStep[] = result.thinking;
 					if (answer.trim().length < 30 && thinking.length > 0) {
 						let best = -1;
@@ -1743,8 +1749,8 @@ export class SemanticSearchView extends ItemView {
 		while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
 		for (const node of textNodes) {
 			const text = node.textContent ?? "";
-			if (!/\[\d{1,3}(?::L\d{1,5}(?:[-\u2011]L\d{1,5})?)?\]/.test(text)) continue;
-			const re = /\[(\d{1,3})(?::L(\d{1,5})(?:[-\u2011]L\d{1,5})?)?\]/g;
+			if (!/\[\d{1,3}(?::L\d{1,5}(?:[\u2010\u2011-]L?\d{1,5})?)?\]/.test(text)) continue;
+			const re = /\[(\d{1,3})(?::L(\d{1,5})(?:[\u2010\u2011-]L?\d{1,5})?)?\]/g;
 			const parts: Array<{ text?: string; n?: number; line?: number; idx?: number; len?: number }> = [];
 			let last = 0;
 			let m: RegExpExecArray | null;
@@ -2002,6 +2008,17 @@ export class SemanticSearchView extends ItemView {
 			btn.toggleClass("is-active", visible);
 			btn.setAttr("aria-pressed", String(visible));
 		}
+	}
+
+	/** Base 设置行推送（2026-11-13）：全局默认变更时由宿主对全部已开视图
+	 *  调用——翻转根类并同步每条回答的 [n] 按钮态（否则按钮与实际显隐
+	 *  脱节，下一次点击从错误状态起翻）。 */
+	applyCiteMarkersSetting(visible: boolean): void {
+		this.setCitationsVisible(visible);
+		this.contentEl.querySelectorAll(".semlink-cite-toggle").forEach((b) => {
+			b.toggleClass("is-active", visible);
+			b.setAttr("aria-pressed", String(visible));
+		});
 	}
 
 	/** Share the CURRENT conversation to the LAN: render the whole session

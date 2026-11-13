@@ -335,6 +335,10 @@ export interface SmartVaultSettings {
 	chunkOverlap: number;
 	excludePaths: string;
 	autoIndex: boolean;
+	/** 回答正文里 [n] 引用标记的显示（Base 开关行，2026-11-13）：全局默认
+	 *  状态，推送到全部已开搜索视图；单条回答的 [n] 按钮仍是会话内临时
+	 *  翻转。false = 隐藏（历史默认）。 */
+	showCiteMarkers: boolean;
 	/** 新建标签页显示 Semlink 主页：Obsidian 的空白标签页（empty 视图，
 	 *  含 +/Ctrl+T 新建、关闭最后标签后的空态）自动替换成侧栏同款主页。 */
 	/** 自动嵌入开关（RAG 页嵌入面板标题右侧）：关闭后索引只做分块、不再调
@@ -435,6 +439,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	chunkOverlap: 100,
 	excludePaths: "templates/\n.git/\nnode_modules/",
 	autoIndex: true,
+	showCiteMarkers: false,
 	autoEmbed: true,
 	maxRetries: 3,
 	batchSize: 64,

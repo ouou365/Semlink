@@ -58,11 +58,22 @@ export function createCiteRegistry(): CiteRegistry {
  * (readNotes) keep their real numbers and stay visible, matching the old
  * "opened notes are shown" behavior.
  */
+/** 归一化模型输出的引用标记变体（2026-11-13 [4:L567‑568] 未转换根因）：
+ *  范围第二段常丢 L（[4:L567-568]），PDF 复制常带非断行/变体连字符
+ *  （U+2010 ‐ / U+2011 ‑）——统一改写为规范形 [n:Ls-Le]（ASCII -），
+ *  正文卡片/来源卡/分享页的所有下游正则一致解析。裸 [n] 不动。 */
+export function normalizeCiteMarkers(answer: string): string {
+	return answer.replace(
+		/\[(\d{1,3}):L(\d{1,5})(?:[\u2010\u2011-]L?(\d{1,5}))?\]/g,
+		(m, n: string, s: string, e?: string) => (e === undefined ? m : `[${n}:L${s}-L${e}]`),
+	);
+}
+
 export function buildCitedCards(answer: string, citeRegistry: string[], readNotes: string[], citeLines?: Array<number | undefined>): CiteEntry[] {
 	const entries: CiteEntry[] = [];
 	if (citeRegistry.length === 0) return entries;
 	const seen = new Set<number>();
-	for (const m of answer.matchAll(/\[(\d{1,3})(?::L\d{1,5}(?:[-\u2011]L\d{1,5})?)?\]/g)) {
+	for (const m of answer.matchAll(/\[(\d{1,3})(?::L\d{1,5}(?:[\u2010\u2011-]L?\d{1,5})?)?\]/g)) {
 		const n = Number(m[1]);
 		if (seen.has(n)) continue;
 		seen.add(n);

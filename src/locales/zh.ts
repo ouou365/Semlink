@@ -252,6 +252,7 @@ const zh: Record<keyof typeof en, string> = {
 	shareTitle: "局域网分享",
 	generalPrefs: "偏好设置",
 	settingsLanguage: "语言",
+	citeMarkersRow: "引用标记",
 	shareHint: "在同一网络的任意浏览器打开下方链接。链接为只读。",
 	shareCopy: "复制地址",
 	shareCopied: "地址已复制",

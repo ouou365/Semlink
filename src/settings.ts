@@ -303,6 +303,25 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		});
 		guideRow.addEventListener("click", openGuideHub);
 		this.renderLicenseSection(panelEl);
+		// Citation 行（用户拍板 2026-11-13「简化为 Citation，放 License 后面
+		// 独立一行」）：回答正文 [n] 引用标记的全局显隐，变更即时推送到全部
+		// 已开搜索视图（含 popout）；单条回答的 [n] 按钮仍是会话内临时翻转。
+		const citeCard = panelEl.createDiv({ cls: "semlink-card semlink-guide-row-card" });
+		const citeRow = citeCard.createDiv({ cls: "semlink-row" });
+		const citeGlyph = citeRow.createSpan({ cls: "semlink-row-glyph" });
+		setIcon(citeGlyph, "quote");
+		citeRow.createDiv({ cls: "semlink-row-label" }).createSpan({
+			cls: "semlink-row-title",
+			text: t("citeMarkersRow"),
+		});
+		const citeCtl = citeRow.createDiv({ cls: "semlink-row-control" });
+		new ToggleComponent(citeCtl)
+			.setValue(this.plugin.settings.showCiteMarkers)
+			.onChange(async (v) => {
+				this.plugin.settings.showCiteMarkers = v;
+				await this.plugin.saveSettings();
+				this.plugin.applyCiteMarkersToViews(v);
+			});
 	}
 
 	/** General 偏好组：语言切换。saveSettings 重跑 setLang 刷新语言相关

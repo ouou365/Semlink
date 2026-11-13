@@ -34,14 +34,14 @@
 }.smart-vault-status-bar .status-dot.idle {
     background-color: var(--text-faint);
 }.smart-vault-status-bar .status-dot.running {
-    background-color: var(--color-green);
+    background-color: var(--color-yellow);
     animation: pulse 2s ease-in-out infinite;
 }.smart-vault-status-bar .status-dot.completed {
     background-color: var(--color-green);
 }.smart-vault-status-bar .status-dot.degraded {
-    background-color: var(--color-yellow);
-}.smart-vault-status-bar .status-dot.paused {
     background-color: var(--color-red);
+}.smart-vault-status-bar .status-dot.paused {
+    background-color: var(--text-faint);
 }@keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
@@ -6993,6 +6993,15 @@ body .semlink-msg-user::selection {
 }/* 内嵌设置屏 / 弹窗宿主统一分组底色 */
 .semlink-search-welcome.semlink-settings-screen {
     background: var(--sl-bg-grouped);
+}/* [内容宽度上限 800] 横向拉宽侧栏/独立弹窗时，设置内容区居中封顶
+   （用户拍板 2026-11-13）：全宽下两栏/行卡片拉到不可读。返回条与
+   内嵌设置根是兄弟节点，分别封顶；窄容器下 max-width 不触发、原布局
+   不变，margin auto 居中只在超宽时生效。 */
+.semlink-search-welcome.semlink-settings-screen,
+.semlink-settings-root {
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
 }/* 卡：无边框白卡、10px 圆角（iOS inset grouped 精确值） */
 .semlink-settings-root .semlink-card {
     background: var(--sl-card);

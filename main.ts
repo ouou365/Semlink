@@ -3245,6 +3245,14 @@ export default class SmartVaultPlugin extends Plugin {
 		modal.open();
 	}
 
+	/** Base 设置行变更：推送引用标记显隐到全部已开搜索视图（含 popout）。
+	 *  单条回答的 [n] 按钮仍是会话内临时翻转。 */
+	applyCiteMarkersToViews(visible: boolean): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)) {
+			(leaf.view as SemanticSearchView).applyCiteMarkersSetting(visible);
+		}
+	}
+
 	/** Reveal (or create) the semantic-search view in the right sidebar.
 	 *  主区域标签页里可能也存在一个同类型实例（新标签页主页）：已有侧栏
 	 *  实例时优先聚焦侧栏，两者皆无才在右栏新建；返回实际聚焦的 leaf。 */

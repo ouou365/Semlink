@@ -250,6 +250,7 @@ const en = {
 	shareTitle: "Share to LAN",
 	generalPrefs: "Preferences",
 	settingsLanguage: "Language",
+	citeMarkersRow: "Citation",
 	shareHint: "Open a link below in any browser on the same network. Links are read-only.",
 	shareCopy: "Copy address",
 	shareCopied: "Address copied",

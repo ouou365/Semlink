@@ -35,9 +35,10 @@ export type ShareTheme = "light" | "dark";
  *  is unambiguous plugin output and always goes. */
 function stripCitationMarkers(wrap: HTMLElement, stripPlain: boolean): void {
 	// `[n]` and `[n:Lline]` / `[n:Lline-Lline]` (ranges; the model sometimes
-	// cites a span, with or without the second "L"). `(?:-L?\d+)*` absorbs
-	// every span shape seen so far.
-	const re = stripPlain ? /\[\d{1,3}(?::L\d+(?:-L?\d+)*)?\]/ : /\[\d{1,3}:L\d+(?:-L?\d+)*\]/;
+	// cites a span, with or without the second "L"). `(?:[\u2010\u2011-]L?\d+)*`
+	// absorbs every span shape seen so far, incl. missing second "L" and
+	// PDF-copy hyphens (U+2010/U+2011) — 2026-11-13.
+	const re = stripPlain ? /\[\d{1,3}(?::L\d+(?:[\u2010\u2011-]L?\d+)*)?\]/ : /\[\d{1,3}:L\d+(?:[\u2010\u2011-]L?\d+)*\]/;
 	const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT, {
 		acceptNode: (node) => {
 			const parent = node.parentElement;

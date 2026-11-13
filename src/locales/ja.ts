@@ -253,6 +253,7 @@ const t: Record<keyof typeof en, string> = {
 	shareTitle: "LAN 共有",
 	generalPrefs: "環境設定",
 	settingsLanguage: "言語",
+	citeMarkersRow: "引用マーカー",
 	shareHint: "下のリンクを同じネットワークのブラウザで開いてください。リンクは読み取り専用です。",
 	shareCopy: "アドレスをコピー",
 	shareCopied: "アドレスをコピーしました",
