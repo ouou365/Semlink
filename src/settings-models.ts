@@ -1854,7 +1854,7 @@ class KeyModal extends Modal {
 		setIcon(saveIcon, "check");
 		saveBtn.createSpan({ text: t("mtKeyTestSave") });
 		let busy = false;
-		saveBtn.addEventListener("click", async () => {
+		const onSave = async (): Promise<void> => {
 			const key = keyInput.value.trim();
 			if (!key || busy) return;
 			// 先测后存（用户拍板"如果提示不过不应该保存"）：失败时状态行
@@ -1882,7 +1882,8 @@ class KeyModal extends Modal {
 			closeBtn.disabled = false;
 			status.className = "semlink-mt-config-status is-err";
 			status.setText(res.message);
-		});
+		};
+		saveBtn.addEventListener("click", () => void onSave());
 		const closeBtn = footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("close") });
 		closeBtn.addEventListener("click", () => this.close());
 		// 空输入：只有 Close（Cherry 同款）；有内容：Cancel + Test & Save
@@ -2791,7 +2792,7 @@ export function renderModelsTab(
 	const rowEndpoint = (r: Row): string => {
 		if (r.live) {
 			const base = (r.live.apiBase ?? "").trim().replace(/\/+$/, "");
-			const f = (r.live.apiFormat ?? "openai") as ChatApiFormat;
+			const f = r.live.apiFormat ?? "openai";
 			const wire = r.live.wirePath?.trim();
 			if (wire === "/") return base;
 			if (wire) return `${base}${wire.startsWith("/") ? "" : "/"}${wire}`;
@@ -2874,7 +2875,7 @@ export function renderModelsTab(
 	// ≤480 放不下两栏：单列 + 钻入（is-drilled），‹ 供应商 返回行回列表。
 	// drilled 残留状态在两栏进入时清除。
 	const isNarrow = (): boolean => {
-		const root = containerEl.closest(".semlink-settings-root") as HTMLElement | null;
+		const root = containerEl.closest<HTMLElement>(".semlink-settings-root");
 		return (root?.offsetWidth ?? 0) <= 480;
 	};
 	if (!isNarrow() && st.drilled) st.drilled = false;
@@ -3273,7 +3274,7 @@ export function renderModelsTab(
 		// + /v1/messages，已经官方文档检索核实）。
 		const catalogEntry = CHAT_CATALOG.find((e) => e.name === sel.name);
 		const curApiFormat = (): ChatApiFormat =>
-			((sel.live?.apiFormat ?? catalogEntry?.apiFormat ?? "openai") as ChatApiFormat);
+			(sel.live?.apiFormat ?? catalogEntry?.apiFormat ?? "openai");
 		const curApiBase = (): string =>
 			(sel.live?.apiBase ?? catalogEntry?.baseUrl ?? "").trim().replace(/\/+$/, "");
 		// 完整 Endpoint = base + 协议默认路径（或 wirePath 覆盖）；显示与
@@ -3377,7 +3378,7 @@ export function renderModelsTab(
 				key: string,
 			): Promise<{ ok: boolean; message: string }> => {
 				const base = live.apiBase.trim().replace(/\/+$/, "");
-				const format = (live.apiFormat ?? "openai") as ChatApiFormat;
+				const format = live.apiFormat ?? "openai";
 				// 在线模型列表：只作 chat 探测候选（公开 /models 不做鉴权，
 				// 不能作为通过依据——「Save&Test 通过但真聊 401」第一通道）。
 				let fetchedIds: string[] = [];
@@ -3431,7 +3432,7 @@ export function renderModelsTab(
 				const live = ensureLive(sel);
 				if (!live) return;
 				const trimmed = raw.trim().replace(/\/+$/, "");
-				const d = chatDefaultPath((live.apiFormat ?? "openai") as ChatApiFormat);
+				const d = chatDefaultPath(live.apiFormat ?? "openai");
 				if (!trimmed) {
 					live.apiBase = "";
 					delete live.wirePath;

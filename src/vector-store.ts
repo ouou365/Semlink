@@ -146,7 +146,7 @@ export class VectorStore {
 					console.error(
 						`[Semlink][migdbg] legacy disk vault.db deleted (OPFS holds ${stats.indexedNotes} indexed notes — disk copy retired)`,
 					);
-					const names = fsMod.readdirSync(this.dataDir) as string[];
+					const names = fsMod.readdirSync(this.dataDir);
 					for (const n of names) {
 						if (/^vault\.db\.bak-/.test(n)) {
 							fsMod.unlinkSync(join(this.dataDir, n));

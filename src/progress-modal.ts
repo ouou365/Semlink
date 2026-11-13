@@ -182,7 +182,7 @@ export class ProgressModal extends Modal {
 		}
 		this.detachDrag?.();
 		this.dragOffset = { x: 0, y: 0 };
-		this.modalEl.style.transform = "";
+		this.modalEl.style.removeProperty("transform");
 		this.unsubscribe?.();
 		this.contentEl.empty();
 	}

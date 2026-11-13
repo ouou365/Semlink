@@ -161,7 +161,7 @@ export async function listFiles(): Promise<Array<{ name: string; size: number }>
 		}
 		let size = 0;
 		try {
-			size = (await (handle as unknown as FileHandleLike).createSyncAccessHandle()).getSize();
+			size = (await handle.createSyncAccessHandle()).getSize();
 		} catch { /* 句柄被占：只报名字 */ }
 		out.push({ name, size });
 	}

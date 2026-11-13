@@ -96,8 +96,6 @@ export function createDispatcher(): Dispatcher {
 			case "reviveProcessing": return engine.reviveProcessing();
 			case "purgeGhostQueue": return engine.purgeGhostQueue(args[0] as Set<string>);
 			case "purgeRedundantQueue": return engine.purgeRedundantQueue(args[0] as Array<{ path: string; mtime: number }>);
-			case "exportDb": return engine.exportDb();
-			case "lastIndexTime": return engine.lastIndexTime();
 			case "noteProbe": return engine.noteProbe(args[0] as string);
 			case "invalidateStats": return engine.invalidateStats();
 			case "clearQueue": return engine.clearQueue();

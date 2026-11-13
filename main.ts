@@ -722,7 +722,7 @@ export default class SmartVaultPlugin extends Plugin {
 			(opts) => this.runDebugStats(opts),
 			(opts) => this.runDebugUi(opts),
 			(opts) => this.runDebugOpfs(opts),
-			() => ({ ...this.store.rpcDiag(), arrival: this.watcher?.lastArrivalDiag ?? null }),
+			() => ({ ...(this.store.rpcDiag() as Record<string, unknown>), arrival: this.watcher?.lastArrivalDiag ?? null }),
 			(opts) => this.runDebugModel(opts),
 			() => this.runDebugChatView(),
 		);
@@ -836,9 +836,10 @@ export default class SmartVaultPlugin extends Plugin {
 				const opaque = await root.getDirectoryHandle(".opfs-sahpool").then((d) => d.getDirectoryHandle(".opaque"));
 				let target: { name: string; size: number } | null = null;
 				const slots: Array<{ name: string; path: string; size: number }> = [];
-				for await (const [name, handle] of opaque.entries()) {
+				const opaqueEntries = (opaque as unknown as { entries(): AsyncIterableIterator<[string, FileSystemFileHandle | FileSystemDirectoryHandle]> }).entries();
+				for await (const [name, handle] of opaqueEntries) {
 					if (handle.kind !== "file") continue;
-					const f = await (handle as FileSystemFileHandle).getFile();
+					const f = await handle.getFile();
 					const head = new Uint8Array(await f.slice(0, 520).arrayBuffer());
 					let path = "";
 					for (let i = 0; i < 512 && head[i]; i++) path += String.fromCharCode(head[i]);
@@ -1024,7 +1025,7 @@ export default class SmartVaultPlugin extends Plugin {
 					if (handle.kind === "directory") {
 						dirs++;
 						const node: OpfsNode = { name, kind: "directory" };
-						if (depth < maxDepth) node.children = await walk(handle as OpfsDirHandle, depth + 1, childNs);
+						if (depth < maxDepth) node.children = await walk(handle, depth + 1, childNs);
 						else truncated = true;
 						out.push(node);
 						continue;
@@ -1035,7 +1036,7 @@ export default class SmartVaultPlugin extends Plugin {
 					namespaces.set(childNs, agg);
 					const node: OpfsNode = { name, kind: "file" };
 					try {
-						const f = await (handle as OpfsFileHandle).getFile();
+						const f = await (handle).getFile();
 						node.size = f.size;
 						node.lastModified = f.lastModified;
 						readableBytes += f.size;
@@ -1198,10 +1199,10 @@ export default class SmartVaultPlugin extends Plugin {
 		const changed = this.settings.embeddingModelKey !== key;
 		this.settings.embeddingModelKey = key;
 		if (changed) {
-			this.store.clearVectors();
+			void this.store.clearVectors();
 		} else {
 			const s = await this.store.getStats();
-			if (s.totalChunks > 0 && s.embeddedChunks === 0) this.store.clearVectors();
+			if (s.totalChunks > 0 && s.embeddedChunks === 0) void this.store.clearVectors();
 		}
 		await this.saveSettings();
 	}
@@ -1287,7 +1288,7 @@ export default class SmartVaultPlugin extends Plugin {
 			if (leaf) {
 				const w = typeof opts.width === "number" ? opts.width : opts.popout === true ? 420 : 780;
 				const h = typeof opts.height === "number" ? opts.height : opts.popout === true ? 800 : 720;
-				await this.app.workspace.moveLeafToPopout(leaf, { size: { width: w, height: h } });
+				await Promise.resolve(this.app.workspace.moveLeafToPopout(leaf, { size: { width: w, height: h } }));
 				await new Promise((r) => window.setTimeout(r, 800));
 			}
 		}
@@ -1349,7 +1350,7 @@ export default class SmartVaultPlugin extends Plugin {
 						// 选中段计算样式：取证白拇指被 blanket 按钮规则压掉与否
 						const activeItem = doc0?.querySelector<HTMLElement>(".semlink-settings-menu-item.is-active");
 						if (activeItem) {
-							const cs = doc0!.defaultView!.getComputedStyle(activeItem);
+							const cs = doc0.defaultView!.getComputedStyle(activeItem);
 							navDbg.activeStyle = {
 								backgroundColor: cs.backgroundColor,
 								boxShadow: cs.boxShadow.slice(0, 60),
@@ -1374,7 +1375,7 @@ export default class SmartVaultPlugin extends Plugin {
 				(navDbg ??= {}).panelCount = panels.length;
 				for (const p of Array.from(panels)) {
 					p.scrollTop = opts.scrollPanel < 0 ? p.scrollHeight : opts.scrollPanel;
-					(navDbg as Record<string, unknown>).scrollTopAfter = Math.round(p.scrollTop);
+					(navDbg).scrollTopAfter = Math.round(p.scrollTop);
 				}
 				await new Promise((r) => window.setTimeout(r, 250));
 			}
@@ -1501,7 +1502,7 @@ export default class SmartVaultPlugin extends Plugin {
 									clientX: sbR.left + sbR.width / 2,
 									clientY: sbR.top + sbR.height / 2,
 									view: w2 ?? undefined,
-								}) as MouseEvent);
+								}));
 								w2?.removeEventListener("error", onErr);
 								// 菜单容器可能挂在本窗 body 也可能挂到主窗（程序化
 								// click 的 activeWindow 归属），两处都找
@@ -1526,7 +1527,7 @@ export default class SmartVaultPlugin extends Plugin {
 										clientX: kbR.left + kbR.width / 2,
 										clientY: kbR.top + kbR.height / 2,
 										view: w2 ?? undefined,
-									}) as MouseEvent);
+									}));
 									fp.kebabMenus = readMenus();
 								}
 								const pickFrom = (want: string): HTMLElement | null => {
@@ -1644,7 +1645,7 @@ export default class SmartVaultPlugin extends Plugin {
 				})();
 				// 异步复检：500ms 后再读一次（捉同步块之后才发生的重渲染）
 				await new Promise((r) => window.setTimeout(r, 500));
-				for (const p of Array.from((navDbg as Record<string, unknown>).advProbe as Array<Record<string, unknown>>)) {
+				for (const p of Array.from((navDbg).advProbe as Array<Record<string, unknown>>)) {
 					const wDoc = (p as { __doc?: Document }).__doc ?? window.document;
 					const h2 = wDoc.querySelector<HTMLElement>(".semlink-mt-config-advhead");
 					const b2 = wDoc.querySelector<HTMLElement>(".semlink-mt-config-advbody");
@@ -1933,14 +1934,14 @@ export default class SmartVaultPlugin extends Plugin {
 						labelLeft: lr ? Math.round(lr.left - hr.left) : null,
 					};
 				}
-				dbg.ragDom = dump(body.children[0] as Element, 0);
+				dbg.ragDom = dump(body.children[0], 0);
 				dbg.rows = Array.from(body.querySelectorAll(".setting-item")).map((row) => ({
 					text: (row.querySelector(".setting-item-name")?.textContent ?? "").slice(0, 24),
 					bg: bgOf(row),
 				}));
 				// 从第一条行向上回溯：把每层有底色的祖先列出来（定位染灰层）
 				const chain: Array<Record<string, unknown>> = [];
-				let el: HTMLElement | null = body.querySelectorAll(".setting-item")[0] ?? null;
+				let el: HTMLElement | null = (body.querySelectorAll(".setting-item")[0] as HTMLElement) ?? null;
 				while (el && chain.length < 14) {
 					const bg = bgOf(el);
 					if (bg !== "rgba(0, 0, 0, 0)") {
@@ -2282,7 +2283,7 @@ export default class SmartVaultPlugin extends Plugin {
 				if (c?.win?.document) wins.push(c.win.document);
 			}
 			for (const doc of wins) {
-				const c = doc.querySelector(".semlink-guide-index-cupcanvas") as HTMLCanvasElement | null;
+				const c = doc.querySelector<HTMLCanvasElement>(".semlink-guide-index-cupcanvas");
 				let painted = -1;
 				if (c) {
 					try {
@@ -2354,7 +2355,7 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 		type WinLike = { document: Document; innerWidth: number; innerHeight: number; devicePixelRatio: number; getComputedStyle(el: Element): CSSStyleDeclaration; CSSStyleRule: typeof CSSStyleRule };
 		// 主窗 + 全部弹窗（floatingSplit 子树各持自己的 window）
-		const wins: WinLike[] = [window as unknown as WinLike];
+		const wins: WinLike[] = [window];
 		const floats = (this.app.workspace as unknown as { floatingSplit?: { children?: Array<{ win?: WinLike }> } }).floatingSplit;
 		for (const c of floats?.children ?? []) {
 			if (c?.win) wins.push(c.win);
@@ -2364,7 +2365,7 @@ export default class SmartVaultPlugin extends Plugin {
 			const view = w.document.querySelector(".semlink-search-view");
 			if (!view) continue;
 			const pick = (sel: string) => {
-				const el = w.document.querySelector(sel) as HTMLElement | null;
+				const el = w.document.querySelector<HTMLElement>(sel);
 				if (!el) return null;
 				const r = el.getBoundingClientRect();
 				const cs = w.getComputedStyle(el);
@@ -2377,7 +2378,7 @@ export default class SmartVaultPlugin extends Plugin {
 				};
 			};
 			// 头部左右按钮组的垂直中心对比（对齐诊断）＋横向坐标（左右对称性诊断）
-			const sides = Array.from(w.document.querySelectorAll(".semlink-search-header-side")) as HTMLElement[];
+			const sides = Array.from(w.document.querySelectorAll<HTMLElement>(".semlink-search-header-side"));
 			const headerSides = sides.map((side) => {
 				const r = side.getBoundingClientRect();
 				const btns = Array.from(side.querySelectorAll("button")) as HTMLElement[];
@@ -2394,7 +2395,7 @@ export default class SmartVaultPlugin extends Plugin {
 			});
 			// 找出给视图设置 padding 的样式表规则（含来源 href）——
 			// 12/12/32 的来源在插件样式表之外，需要定位是哪条规则。
-			const probeView = w.document.querySelector(".semlink-search-view") as HTMLElement | null;
+			const probeView = w.document.querySelector<HTMLElement>(".semlink-search-view");
 			const padRules: Array<{ href: string; selector: string; padding: string; important: boolean }> = [];
 			if (probeView) {
 				const inline = probeView.getAttribute("style") ?? "";
@@ -2428,7 +2429,7 @@ export default class SmartVaultPlugin extends Plugin {
 				} | null)
 				.find((v) => v?.contentEl?.ownerDocument === w.document) ?? null;
 			const rectOf = (sel: string): { x: number; y: number; w: number; h: number } | null => {
-				const el = w.document.querySelector(sel) as HTMLElement | null;
+				const el = w.document.querySelector<HTMLElement>(sel);
 				if (!el) return null;
 				const r = el.getBoundingClientRect();
 				return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
@@ -2464,9 +2465,9 @@ export default class SmartVaultPlugin extends Plugin {
 				semView.messagesEl.empty();
 				semView.renderWelcome();
 				await new Promise((r2) => setTimeout(r2, 600));
-					const cs = w.document.querySelector(".semlink-guide-corners") as HTMLElement | null;
+					const cs = w.document.querySelector<HTMLElement>(".semlink-guide-corners");
 					const csStyle = cs ? w.getComputedStyle(cs) : null;
-					const msgs = w.document.querySelector(".semlink-search-messages") as HTMLElement | null;
+					const msgs = w.document.querySelector<HTMLElement>(".semlink-search-messages");
 					const msgsStyle = msgs ? w.getComputedStyle(msgs) : null;
 					const guide = {
 						cornersBox: cs && csStyle ? { margin: `${csStyle.marginTop} ${csStyle.marginRight} ${csStyle.marginBottom} ${csStyle.marginLeft}`, width: csStyle.width, parentCls: cs.parentElement?.className } : null,
@@ -2512,7 +2513,7 @@ export default class SmartVaultPlugin extends Plugin {
 				} catch { /* 诊断尽力而为 */ }
 			}
 			const msgsBox = (() => {
-				const m = w.document.querySelector(".semlink-search-messages") as HTMLElement | null;
+				const m = w.document.querySelector<HTMLElement>(".semlink-search-messages");
 				if (!m) return null;
 				const r = m.getBoundingClientRect();
 				const cs = w.getComputedStyle(m);
@@ -2525,7 +2526,7 @@ export default class SmartVaultPlugin extends Plugin {
 				headerSides,
 				// 咖啡杯 canvas 探针：是否在本文档、尺寸、以及是否有非透明像素
 				cupProbe: (() => {
-					const c = w.document.querySelector(".semlink-guide-index-cupcanvas") as HTMLCanvasElement | null;
+					const c = w.document.querySelector<HTMLCanvasElement>(".semlink-guide-index-cupcanvas");
 					const r0 = c?.getBoundingClientRect();
 					let painted = -1;
 					try {
@@ -2564,17 +2565,17 @@ export default class SmartVaultPlugin extends Plugin {
 				// 设置菜单卡宽度诊断：遍历文档内全部设置根实例（侧栏/主区 tab
 				// 可能并存，querySelector 首个会被隐藏实例污染）
 				settingsCard: (() => {
-					const roots = Array.from(w.document.querySelectorAll(".semlink-settings-root")) as HTMLElement[];
+					const roots = Array.from(w.document.querySelectorAll<HTMLElement>(".semlink-settings-root"));
 					return roots.map((root) => {
-						const col = root.querySelector(":scope > .semlink-settings-layout > .semlink-settings-menu-col") as HTMLElement | null;
-						const menu = root.querySelector(".semlink-settings-menu") as HTMLElement | null;
-						const panel = root.querySelector(".semlink-settings-panel") as HTMLElement | null;
-						const mt = root.querySelector(".semlink-mt") as HTMLElement | null;
-							const prov = root.querySelector(".semlink-mt-providers") as HTMLElement | null;
-							const models = root.querySelector(".semlink-mt-config") as HTMLElement | null;
+						const col = root.querySelector<HTMLElement>(":scope > .semlink-settings-layout > .semlink-settings-menu-col");
+						const menu = root.querySelector<HTMLElement>(".semlink-settings-menu");
+						const panel = root.querySelector<HTMLElement>(".semlink-settings-panel");
+						const mt = root.querySelector<HTMLElement>(".semlink-mt");
+							const prov = root.querySelector<HTMLElement>(".semlink-mt-providers");
+							const models = root.querySelector<HTMLElement>(".semlink-mt-config");
 						const rect = (el: HTMLElement | null) => { const r = el?.getBoundingClientRect(); return r ? Math.round(r.width) : -1; };
-						const hint = root.querySelector(".semlink-settings-menu-hint") as HTMLElement | null;
-						const chev = root.querySelector(".semlink-settings-menu-chevron") as HTMLElement | null;
+						const hint = root.querySelector<HTMLElement>(".semlink-settings-menu-hint");
+						const chev = root.querySelector<HTMLElement>(".semlink-settings-menu-chevron");
 						return {
 							rootW: root.offsetWidth,
 							colW: col?.offsetWidth ?? -1,
@@ -2627,9 +2628,9 @@ export default class SmartVaultPlugin extends Plugin {
 							// 总开关实测：容器与 ::after 圆钮的渲染尺寸/位移——
 							// 51×31+27 规格被哪条规则改写一测便知。
 							mtToggle: (() => {
-								const tgl = root.querySelector(
+								const tgl = root.querySelector<HTMLElement>(
 									".semlink-mt-config-master .checkbox-container",
-								) as HTMLElement | null;
+								);
 								if (!tgl) return null;
 								const cs = getComputedStyle(tgl);
 								const after = getComputedStyle(tgl, "::after");
@@ -2656,9 +2657,9 @@ export default class SmartVaultPlugin extends Plugin {
 							})(),
 							// 模型行开关同规格取证（51×31 Cupertino 基线）
 							rowToggle: (() => {
-								const tgl = root.querySelector(
+								const tgl = root.querySelector<HTMLElement>(
 									".semlink-mt-rows .checkbox-container, .semlink-mt-config .checkbox-container:not(.semlink-mt-config-master *)",
-								) as HTMLElement | null;
+								);
 								if (!tgl) return null;
 								const after = getComputedStyle(tgl, "::after");
 								const tr = tgl.getBoundingClientRect();
@@ -2704,7 +2705,7 @@ export default class SmartVaultPlugin extends Plugin {
 									provSt: prov ? prov.scrollTop : -1,
 									mtTrace: ((root.querySelector(".semlink-settings-panel") as unknown as { __mtTrace?: string[] } | null)?.__mtTrace ?? []).slice(-10),
 									models: h(models),
-									rows: h((root.querySelector(".semlink-mt-rows") as HTMLElement | null)),
+									rows: h((root.querySelector<HTMLElement>(".semlink-mt-rows"))),
 								chain,
 								};
 							})(),
@@ -2712,10 +2713,10 @@ export default class SmartVaultPlugin extends Plugin {
 							// 占位取证（margin/padding/gutter/滚动条宽度）——"行比
 							// 搜索框窄"类问题一测便知差在哪个缘。
 							provBox: (() => {
-								const card = root.querySelector(".semlink-mt-providers") as HTMLElement | null;
-								const search = root.querySelector(".semlink-mt-prov-search") as HTMLElement | null;
-								const list = root.querySelector(".semlink-mt-provider-list") as HTMLElement | null;
-								const row = root.querySelector(".semlink-mt-provider") as HTMLElement | null;
+								const card = root.querySelector<HTMLElement>(".semlink-mt-providers");
+								const search = root.querySelector<HTMLElement>(".semlink-mt-prov-search");
+								const list = root.querySelector<HTMLElement>(".semlink-mt-provider-list");
+								const row = root.querySelector<HTMLElement>(".semlink-mt-provider");
 								if (!card || !search || !list || !row) return null;
 								const box = (el: HTMLElement) => {
 									const r = el.getBoundingClientRect();
@@ -2726,11 +2727,11 @@ export default class SmartVaultPlugin extends Plugin {
 								const sbRules: Array<Record<string, unknown>> = [];
 								for (const sheet of Array.from(w.document.styleSheets)) {
 									let rules: CSSRuleList | undefined;
-									try { rules = (sheet as CSSStyleSheet).cssRules as CSSRuleList; } catch { continue; }
+									try { rules = (sheet).cssRules; } catch { continue; }
 									if (!rules) continue;
 									const walkRules = (rs: CSSRuleList): void => {
 										for (let i = 0; i < rs.length; i++) {
-											const r = rs[i] as CSSRule;
+											const r = rs[i];
 											const grp = r as CSSGroupingRule;
 											if (grp.cssRules && grp.cssRules.length > 0) {
 												walkRules(grp.cssRules);
@@ -2765,7 +2766,7 @@ export default class SmartVaultPlugin extends Plugin {
 									sbRules,
 									// 选中行 computed 背景：淡紫→灰改动的落点取证
 									activeRowBg: (() => {
-										const act = root.querySelector(".semlink-mt-provider.is-active") as HTMLElement | null;
+										const act = root.querySelector<HTMLElement>(".semlink-mt-provider.is-active");
 										if (!act) return null;
 										const acs = w.getComputedStyle(act);
 										return {
@@ -2778,11 +2779,11 @@ export default class SmartVaultPlugin extends Plugin {
 										})(),
 										// 选中行子元素宽度表：行内竖点加入后名称是否被挤截断
 										rowKids: (() => {
-											const act = root.querySelector(".semlink-mt-provider.is-active") as HTMLElement | null;
+											const act = root.querySelector<HTMLElement>(".semlink-mt-provider.is-active");
 											if (!act) return null;
 											return {
 												rowW: Math.round(act.getBoundingClientRect().width),
-												nameTruncated: (act.querySelector(".semlink-mt-provider-name") as HTMLElement | null)
+												nameTruncated: (act.querySelector<HTMLElement>(".semlink-mt-provider-name"))
 													? (act.querySelector(".semlink-mt-provider-name") as HTMLElement).scrollWidth > (act.querySelector(".semlink-mt-provider-name") as HTMLElement).clientWidth
 													: null,
 												kids: Array.from(act.children).map((c) => ({
@@ -2799,11 +2800,11 @@ export default class SmartVaultPlugin extends Plugin {
 				msgsBox,
 				// 横向溢出诊断：scrollWidth 超过 clientWidth 说明卡片真的被裁
 				clipProbe: (() => {
-					const m = w.document.querySelector(".semlink-search-messages") as HTMLElement | null;
+					const m = w.document.querySelector<HTMLElement>(".semlink-search-messages");
 					if (!m) return null;
-					const bubble = m.querySelector(".semlink-msg-turn:not(.semlink-msg-user-turn) .semlink-msg-bubble") as HTMLElement | null;
+					const bubble = m.querySelector<HTMLElement>(".semlink-msg-turn:not(.semlink-msg-user-turn) .semlink-msg-bubble");
 					const br = bubble?.getBoundingClientRect();
-					const turn = m.querySelector(".semlink-msg-turn:not(.semlink-msg-user-turn)") as HTMLElement | null;
+					const turn = m.querySelector<HTMLElement>(".semlink-msg-turn:not(.semlink-msg-user-turn)");
 					const tr = turn?.getBoundingClientRect();
 					return {
 						scrollW: m.scrollWidth,
@@ -3046,8 +3047,8 @@ export default class SmartVaultPlugin extends Plugin {
 		const tag = el.tagName;
 		if (tag === "INPUT" || tag === "TEXTAREA") {
 			const proto = tag === "TEXTAREA" ? win.HTMLTextAreaElement?.prototype : win.HTMLInputElement?.prototype;
-			const setter = proto ? Object.getOwnPropertyDescriptor(proto, "value")?.set : null;
-			if (setter) setter.call(el, value);
+			const desc = proto ? Object.getOwnPropertyDescriptor(proto, "value") : null;
+			if (desc?.set) desc.set.call(el, value);
 			else (el as HTMLInputElement).value = value;
 			el.dispatchEvent(new Event("input", { bubbles: true }));
 			el.dispatchEvent(new Event("change", { bubbles: true }));

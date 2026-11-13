@@ -2695,7 +2695,7 @@ export class SemanticSearchView extends ItemView {
 			// ——flat 风格轻盈）；未收录的 emoji 回退系统字形
 			const badge = welcome.createDiv({ cls: "semlink-search-welcome-emoji" });
 			const flat = fluentEmojiSvg(emoji);
-			if (flat) badge.innerHTML = flat;
+			if (flat) setSvgIcon(badge, flat);
 			else badge.setText(emoji);
 		}
 		welcome.createDiv({ cls: "semlink-search-welcome-greeting", text: greetingText });
@@ -2764,7 +2764,7 @@ export class SemanticSearchView extends ItemView {
 				messages: snap.messages,
 				createdAt: Date.now(),
 				updatedAt: Date.now(),
-			} as ChatSession);
+			});
 			return;
 		}
 		this.renderWelcome();
@@ -3378,8 +3378,7 @@ export class SemanticSearchView extends ItemView {
 					if (editingPath === n.path) {
 						// Inline rename: [icon][input][✓][✕] — name, count and
 						// the action buttons are all hidden while editing.
-						const editRow = container.createDiv({ cls: "semlink-history-folder semlink-history-folder-edit" });
-						editRow.style.paddingLeft = "0.35rem";
+						const editRow = container.createDiv({ cls: "semlink-history-folder semlink-history-folder-edit semlink-history-folder-pl" });
 						const icon = editRow.createSpan({ cls: "semlink-history-folder-chev" });
 						setIcon(icon, isCollapsed ? "chevron-right" : "chevron-down");
 						const input = editRow.createEl("input", {
@@ -3425,9 +3424,8 @@ export class SemanticSearchView extends ItemView {
 						return;
 					}
 					const row = container.createDiv({
-						cls: "semlink-history-folder" + (isCollapsed ? " is-collapsed" : ""),
+						cls: "semlink-history-folder semlink-history-folder-pl" + (isCollapsed ? " is-collapsed" : ""),
 					});
-					row.style.paddingLeft = "0.35rem";
 					const chev = row.createSpan({ cls: "semlink-history-folder-chev" });
 					setIcon(chev, isCollapsed ? "chevron-right" : "chevron-down");
 					row.createSpan({ cls: "semlink-history-folder-name", text: n.name });
@@ -4288,14 +4286,14 @@ export class SemanticSearchView extends ItemView {
 		const vh = this.viewWin.innerHeight;
 		const vw = this.viewWin.innerWidth;
 		popup.style.left = rect.left + "px";
-		popup.style.top = "";
+					popup.style.removeProperty("top");
 		popup.style.bottom = (vh - rect.top + 4) + "px";
 		popup.removeClass("semlink-hidden");
 
 		// 实测校验：弹层顶部越出视口、或压住触发器 → 改用 top 锚定在触发器上方。
 		const pr = popup.getBoundingClientRect();
 		if (pr.top < 8 || pr.bottom > rect.top - 2) {
-			popup.style.bottom = "auto";
+			popup.style.removeProperty("bottom");
 			popup.style.top = Math.max(8, Math.min(rect.top - pr.height - 4, vh - pr.height - 8)) + "px";
 		}
 		// 水平夹紧视口。

@@ -123,7 +123,7 @@ selfAsAny.onmessage = async (e: MessageEvent) => {
 			let readLen = -1;
 			let readErr = "";
 			try { size = exists ? statSyncShim(bakPath).size : -1; } catch (e) { sizeErr = String(e instanceof Error ? e.message : e); }
-			let bytes = new Uint8Array(0);
+			let bytes: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
 			try { bytes = readFileSync(bakPath); readLen = bytes.byteLength; } catch (e) { readErr = String(e instanceof Error ? e.message : e); }
 			if (!exists || size <= 0 || readLen <= 0) {
 				selfAsAny.postMessage({

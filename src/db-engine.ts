@@ -441,14 +441,6 @@ export class DbEngine {
 		}
 	}
 
-	/** 整库字节（Data folder「Open」导出用）：wasm 走 capi export，
-	 *  sqljs 走内置 export。热路径不调用（~400MB）。 */
-	exportDb(): Uint8Array {
-		if (!this.db) return new Uint8Array(0);
-		if (this.dbMode === "wasm") return (this.db as SqliteWasmDb).export();
-		return this.db.export();
-	}
-
 	/** 持久化诊断（reload/杀进程丢数据取证）：journal/synchronous 实际
 	 *  生效值、引擎整库字节数。 */
 	durabilityInfo(): { mode: string; journalMode: string; synchronous: string; bytesTotal: number } | { error: string } {
@@ -935,8 +927,8 @@ export class DbEngine {
 		}
 		// [审计] prune 本该只删幽灵路径；一次删掉 >10% 即异常（空集合传入
 		// 会把全部索引当幽灵清掉——「索引归零」的第二嫌疑路径）
-		if (indexed.length > 0 && removed > indexed.length * 0.1) {
-			console.error(`[Semlink][audit] pruneOrphanedPaths removed ${removed}/${indexed.length} paths — existingPaths.size=${existingPaths.size}`);
+		if (indexed.size > 0 && removed > indexed.size * 0.1) {
+			console.error(`[Semlink][audit] pruneOrphanedPaths removed ${removed}/${indexed.size} paths — existingPaths.size=${existingPaths.size}`);
 		}
 		if (removed > 0) {
 			this.touchIndexActivity();
@@ -1150,7 +1142,6 @@ export class DbEngine {
 	 * Each embedding = EMBEDDING_DIM × Float32 = 4096 bytes.
 	 */
 	saveEmbeddings(chunkIds: string[], embeddings: number[][]): void {
-		this.skipCountCache = null; // 向量落库改变"零向量笔记"集合 → 精确跳过计数失效重算
 		for (let i = 0; i < chunkIds.length; i++) {
 			const embedding = embeddings[i];
 			if (!embedding) continue; // 无向量（纯文本索引）→ 保持 vector 为 NULL

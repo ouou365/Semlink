@@ -7376,3 +7376,7 @@ body .semlink-msg-user::selection {
 }/* ── （旧 HIG v2.2 左列容器规则已删：竖排菜单卡改为横向分段控件，
        menu-col 基线即整行宽，见 390 区。品牌头/菜单值提示的历史清理
        注释一并移除。） ── */
+
+/* ── 历史文件夹行左内边距（原 JS 内联样式收编为类；0,2,0 特异性稳压
+   基础规则 .semlink-history-folder 的 padding，与嵌套 body 规则同值） ── */
+.semlink-history-folder.semlink-history-folder-pl { padding-left: 0.35rem; }

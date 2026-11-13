@@ -228,7 +228,7 @@ export class Scheduler {
 			const f = this.vault.getAbstractFileByPath(p);
 			const vaultMtime = f instanceof TFile ? f.stat.mtime : null;
 			const storedMtime = await this.store.getNoteMtime(p);
-			const row: out[number] = {
+			const row: (typeof out)[number] = {
 				path: p,
 				vaultMtime,
 				storedMtime,
@@ -365,7 +365,7 @@ export class Scheduler {
 				// ragStatsCache 回写/状态栏/弹窗覆盖率，全部拿到真实终值。
 				// 每次运行仅此一次重算（单趟 GROUP BY 1-2s，运行完成频率低，
 				// 可承受；运行中数值按 8s 步进不变）。
-				this.store.invalidateStats();
+				void this.store.invalidateStats();
 				// For incremental runs (no scan), processedNotes was incremented per
 				// file on top of a stale baseline — it no longer reflects the real
 				// note count. Re-sync from the DB so the status bar shows the true

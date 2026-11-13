@@ -626,7 +626,7 @@ function renderIntro(root: HTMLElement, mode: "chat" | "embed" = "chat"): void {
 		// Fluent flat SVG 优先（同欢迎语徽章），未收录回退系统字形
 		const badge = intro.createDiv({ cls: "semlink-search-welcome-emoji" });
 		const flat = fluentEmojiSvg(emoji);
-		if (flat) badge.innerHTML = flat;
+		if (flat) setSvgIcon(badge, flat);
 		else badge.setText(emoji);
 	}
 	intro.createDiv({ cls: "semlink-search-welcome-greeting", text: greeting });
@@ -1573,7 +1573,7 @@ export function renderGuideHub(
 		// Fluent flat SVG（同上）；回退系统字形
 		const hubEmoji = brand.createDiv({ cls: "semlink-guide-hub-emoji" });
 		const flat = fluentEmojiSvg("🥳");
-		if (flat) hubEmoji.innerHTML = flat;
+		if (flat) setSvgIcon(hubEmoji, flat);
 		else hubEmoji.setText("🥳");
 	}
 	brand.createDiv({ cls: "semlink-guide-hub-name", text: t("hubWelcome") });

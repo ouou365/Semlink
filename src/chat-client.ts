@@ -1619,7 +1619,7 @@ export class ChatClient {
 				} else if (b.type === "thinking" && typeof b.thinking === "string") {
 					contentBlocks.push({ type: "thinking", thinking: b.thinking });
 				} else if (b.type === "tool_use" && typeof b.name === "string") {
-					const input = (b.input ?? {}) as Record<string, unknown>;
+					const input = b.input ?? {};
 					const raw = JSON.stringify(input);
 					const id = b.id ?? `toolu_${toolUses.length}`;
 					contentBlocks.push({ type: "tool_use", id, name: b.name, input: raw });

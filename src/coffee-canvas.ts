@@ -132,7 +132,7 @@ export function mountCoffeeCanvas(
 	canvas.style.height = `${h}px`;
 	const ctx = canvas.getContext("2d");
 	if (!ctx) {
-		return { setLevel() {}, setBrewing() {}, pour() {}, stream() {}, celebrate() {}, destroy() {}, getStats: () => null };
+		return { setLevel() {}, setBrewing() {}, pour() {}, stream() {}, celebrate() {}, setDone() {}, destroy() {}, getStats: () => null };
 	}
 	ctx.scale(dpr, dpr);
 

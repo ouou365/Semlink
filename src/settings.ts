@@ -744,7 +744,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 			if (total === 0) {
 				b.valueEl.setText("—");
 				b.valueEl.addClass("is-empty");
-				b.fillEl.style.transform = "scaleX(0)";
+				// 空态 scaleX(0) 即 .semlink-rag-bar-fill 基础规则——清掉残留
+				// 内联 transform（上一轮 num>0 时写入）即回到初始形态。
+				b.fillEl.style.removeProperty("transform");
 				heroDone = false;
 				updateBadge();
 				return;

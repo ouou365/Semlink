@@ -111,7 +111,7 @@ export class SqlJsSemDb implements SemDb {
 	constructor(private db: SqlJsDatabase) {}
 
 	exec(sql: string): QueryResult[] {
-		return this.db.exec(sql) as unknown as QueryResult[];
+		return this.db.exec(sql);
 	}
 
 	run(sql: string, params?: unknown[]): { changes: number } {
@@ -154,7 +154,7 @@ export class SqliteWasmDb {
 	 *  opfs-sahpool 将要打开的 OPFS 根路径文件——必须在 sahpool 拿独占
 	 *  句柄之前完成。之后事务即持久，save() 退化为周期维护。 */
 	static async open(): Promise<SqliteWasmDb> {
-		const wasmBinary = decodeBase64(sqlite3WasmBase64 as string).buffer;
+		const wasmBinary = decodeBase64(sqlite3WasmBase64).buffer;
 		// 关掉 'opfs'/'opfs-vfs' 的自动安装：它们要按相对 URL 起 proxy worker，
 		// 在 esbuild 打包后的 Blob-URL Worker 里 new URL 会 Invalid URL（真机
 		// 2026-11-11：browser worker init 因此整体失败 → 掉进 sync fallback）。
@@ -162,7 +162,9 @@ export class SqliteWasmDb {
 		(globalThis as unknown as { sqlite3ApiConfig?: unknown }).sqlite3ApiConfig = {
 			disable: { vfs: { opfs: true, "opfs-vfs": true } },
 		};
-		const initFn = initSqlJsOfficial as unknown as (opts: Record<string, unknown>) => Promise<OfficialModule>;
+		// d.ts 只声明 init(): Promise<Sqlite3Static>（无参），运行时 glue
+		// 实际接收 wasmBinary/locateFile——按真实签名收窄（选项透传不变）。
+		const initFn = initSqlJsOfficial as (opts?: Record<string, unknown>) => Promise<unknown>;
 		const mod = (await initFn({
 			wasmBinary,
 			// Blob-URL Worker 里 import.meta.url 被 esbuild 换成空对象属性，
@@ -170,7 +172,7 @@ export class SqliteWasmDb {
 			// （wasm 加载器 uj 的无条件路径计算，真机+本地复现）。
 			// locateFile 恒定返回文件名 + wasmBinary 已提供 → 永不走 URL fetch。
 			locateFile: (f: string) => f,
-		})) as unknown as OfficialModule;
+		})) as OfficialModule;
 
 		// 显式安装 opfs-sahpool VFS（不会自动注册；返回的 PoolUtil 提供
 		// importDb——官方文档推荐的 DB 字节导入通道，正好承接 sql.js 旧库迁移）。
@@ -362,8 +364,11 @@ export class SqliteWasmDb {
 	 *  数（page_count×page_size）。reload/杀进程丢数据时先看这里：配置被
 	 *  改成 non-durable 会直接暴露。 */
 	durabilityInfo(): { journalMode: string; synchronous: string; bytesTotal: number } {
-		const jm = this.exec("PRAGMA journal_mode")[0]?.values?.[0]?.[0];
-		const sync = this.exec("PRAGMA synchronous")[0]?.values?.[0]?.[0];
+		// PRAGMA journal_mode 返回文本（wal/delete/…）、synchronous 返回整数
+		// ——单元格按 string | number 收窄（类型层面收窄，运行时 String()
+		// 行为不变）。
+		const jm = this.exec("PRAGMA journal_mode")[0]?.values?.[0]?.[0] as string | number | undefined;
+		const sync = this.exec("PRAGMA synchronous")[0]?.values?.[0]?.[0] as string | number | undefined;
 		return {
 			journalMode: String(jm ?? "?"),
 			synchronous: String(sync ?? "?"),

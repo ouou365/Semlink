@@ -169,7 +169,7 @@ export class VaultWatcher {
 	 *  建 TFile 并对外发 create 事件 → 既有管道（debounce/enqueue/scheduler）
 	 *  原样工作，零新索引逻辑。点目录（.zcode-tmp/.opencode 等）Obsidian
 	 *  本就不导入，跳过；write 过仍未登记的路径不再重试（获焦对账兜底）。 */
-	private arrivalTimer: ReturnType<typeof setInterval> | null = null;
+	private arrivalTimer: number | null = null;
 	private registrationTried = new Set<string>();
 	/** 上一轮轮询结果（rpcdiag 透出——生产无 console 时唯一取证口）。 */
 	lastArrivalDiag: unknown = { ran: false };
