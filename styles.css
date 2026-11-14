@@ -6818,7 +6818,7 @@ body .semlink-msg-user::selection {
 	background: var(--text-error);
 	color: var(--text-on-accent);
 }/* ╕═ 契约 §4 无障碍强制 ╕ */
-}/* 流式打字机尾段（纯文本节点逐字追加，段落完成并入稳定 markdown）：
+/* 流式打字机尾段（纯文本节点逐字追加，段落完成并入稳定 markdown）：
    追加期显示闪烁光标，reduced-motion 下光标常亮不闪 */
 .semlink-msg-answer-tail {
     white-space: pre-wrap;
@@ -7380,3 +7380,11 @@ body .semlink-msg-user::selection {
 /* ── 历史文件夹行左内边距（原 JS 内联样式收编为类；0,2,0 特异性稳压
    基础规则 .semlink-history-folder 的 padding，与嵌套 body 规则同值） ── */
 .semlink-history-folder.semlink-history-folder-pl { padding-left: 0.35rem; }
+
+/* ── 诊断专用：跑马灯禁动对照组（main.ts 性能探针 addClass/removeClass 挂类） ──
+   孪生选择器（0,6,0）压过上方 0,5,0 的 hover 跑马灯规则——不用 !important
+   （社区审查器 CSS lint 禁之，坑 #13），也不用 <style> 注入（检查器
+   no-forbidden-elements 禁建 style 元素）。改跑马灯规则选择器时需同步这里。 */
+.smart-vault-settings .semlink-mt-model-name.is-overflow:hover .semlink-mt-model-name-track.semlink-diag-no-anim {
+    animation: none;
+}

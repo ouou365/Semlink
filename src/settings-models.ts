@@ -7,9 +7,9 @@
 // provider" (catalog) and "Add a custom provider" flows. Providers support
 // fetching the model list from their own endpoint.
 
-import { App, Menu, Modal, Notice, Setting, ToggleComponent, requestUrl, setIcon } from "obsidian";
+import { App, Modal, Setting, ToggleComponent, requestUrl, setIcon } from "obsidian";
 import type SmartVaultPlugin from "../main";
-import type { ChatApiFormat, ChatModel, ChatModelKind, EmbeddingProvider, ModelProvider, SmartVaultSettings } from "./types";
+import type { ChatApiFormat, ChatModel, EmbeddingProvider, ModelProvider, SmartVaultSettings } from "./types";
 import { t } from "./i18n";
 import { markDestructive } from "./ui-compat";
 
@@ -1606,18 +1606,6 @@ export async function fetchAvailableModels(
 	return results;
 }
 
-/** The persisted model list for an endpoint (id + kind from the kind cache,
- *  no network) — used to show candidates instantly while a live refresh runs. */
-function getCachedModels(plugin: SmartVaultPlugin, base: string): FetchedModel[] {
-	const saved = plugin.settings.modelKindCache?.[base];
-	if (!saved) return [];
-	const out: FetchedModel[] = [];
-	for (const [id, kind] of Object.entries(saved)) {
-		out.push({ id, kind: kind as ModelKind });
-	}
-	return out;
-}
-
 /** Modal hosting the "Add provider" (catalog) or "Add a custom provider"
  *  create card. Closes on cancel or after a provider is created. */
 export class AddProviderModal extends Modal {
@@ -2858,8 +2846,6 @@ export function renderModelsTab(
 		st.selected = rows[0]?.key ?? "";
 	}
 
-	const enabledCount = (models: ChatModel[]): number =>
-		models.filter((m) => m.enabled === true).length;
 	// 状态胶囊：只显示 ON（用户拍板新语义"配置了 Key + 至少开启一个模型"
 	// 才算 On——头部总开关已撤，模型全关即供应商关）。未配置一律无徽标
 	// （用户拍板"不要显示OFF"）。
@@ -3365,7 +3351,7 @@ export function renderModelsTab(
 			const keyRow = keySection.createDiv({ cls: "semlink-mt-config-keyrow" });
 			// 检测状态行：绿=连通（附在线模型数），红=失败（附原因）；不弹
 			// Notice。建在行外——行内容按态重建时状态行保持不动。
-			const status = keySection.createDiv({ cls: "semlink-mt-config-status" });
+			keySection.createDiv({ cls: "semlink-mt-config-status" });
 			// 只读态掩码：尾号 4 位明文，其余 *（8-24 个，够辨识不泄长度）
 			const maskKey = (k: string): string => {
 				const tail = k.length > 4 ? k.slice(-4) : "";
@@ -3840,11 +3826,9 @@ export function renderModelsTab(
 					const probe = name.createSpan({ cls: "semlink-mt-model-name-text", text });
 					probes.push({ name, probe, text, boxW: name.clientWidth, textW: probe.getBoundingClientRect().width });
 				}
-				let marked = 0;
 				for (const { name, probe, text, boxW, textW } of probes) {
 					probe.remove();
 					if (boxW <= 0 || textW <= boxW + 2) continue;
-					marked++;
 					name.addClass("is-overflow");
 					name.setText("");
 					const track = name.createSpan({ cls: "semlink-mt-model-name-track" });

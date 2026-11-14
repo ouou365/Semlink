@@ -25,7 +25,7 @@ import { SaveNoteModal } from "./save-note-modal";
 import { ShareQrModal } from "./share-modal";
 import { renderSharePage } from "./share-page";
 import { ConfirmModal } from "./confirm-modal";
-import { getLang, t, LANGUAGES, type Lang } from "./i18n";
+import { getLang, t, LANGUAGES } from "./i18n";
 import logoSvg from "./semlink-logo.svg";
 import llmIconSvg from "./network-icon.svg";
 import expandIconSvg from "./expand-icon.svg";
@@ -1760,7 +1760,7 @@ export class SemanticSearchView extends ItemView {
 				last = m.index + m[0].length;
 			}
 			if (last < text.length) parts.push({ text: text.slice(last) });
-			const frag = this.viewDoc.createDocumentFragment();
+			const frag = createFragment();
 			for (const part of parts) {
 				if (part.text !== undefined) {
 					frag.appendChild(this.viewDoc.createTextNode(part.text));
@@ -1770,7 +1770,7 @@ export class SemanticSearchView extends ItemView {
 				// revealed by the "show sources" toggle (CSS on the view root).
 				// Resolvable ones additionally become clickable links.
 				const target = part.n !== undefined ? pathByNumber.get(part.n) : undefined;
-				const ref = this.viewDoc.createElement("span");
+				const ref = frag.createSpan();
 				ref.className = target ? "semlink-cite-ref semlink-cite-link" : "semlink-cite-ref";
 				ref.setText(`[${part.n}]`);
 				if (target) {
@@ -1784,14 +1784,13 @@ export class SemanticSearchView extends ItemView {
 					ref.addEventListener("click", () => {
 						void this.openNote(target, "", line);
 					});
+					}
 				}
-				frag.appendChild(ref);
+				node.replaceWith(frag);
 			}
-			node.replaceWith(frag);
 		}
-	}
 
-	/** 提取标记周边的文本探针（前 80 字符为主，不足则取后 40），并把连字符
+		/** 提取标记周边的文本探针（前 80 字符为主，不足则取后 40），并把连字符
 	 *  变体统一，供在原文答案串中定位更宽的上下文窗口。 */
 	private markerProbe(nodeText: string, idx: number, len: number, answer: string): string | null {
 		const norm = (x: string): string => x.replace(/\u2011/g, "-");
@@ -1881,19 +1880,18 @@ export class SemanticSearchView extends ItemView {
 			global.lastIndex = 0;
 			if (parts.length === 0) continue;
 			if (last < text.length) parts.push({ text: text.slice(last) });
-			const frag = this.viewDoc.createDocumentFragment();
+			const frag = createFragment();
 			for (const part of parts) {
 				if (part.text !== undefined) {
 					frag.appendChild(this.viewDoc.createTextNode(part.text));
 					continue;
 				}
-				const link = this.viewDoc.createElement("span");
+				const link = frag.createSpan();
 				link.className = "semlink-cite-link";
 				link.setText(part.path!);
 				link.addEventListener("click", () => {
 					void this.openNote(part.path!, "");
 				});
-				frag.appendChild(link);
 			}
 			node.replaceWith(frag);
 		}

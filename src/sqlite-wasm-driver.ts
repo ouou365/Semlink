@@ -159,7 +159,7 @@ export class SqliteWasmDb {
 		// 在 esbuild 打包后的 Blob-URL Worker 里 new URL 会 Invalid URL（真机
 		// 2026-11-11：browser worker init 因此整体失败 → 掉进 sync fallback）。
 		// bootstrap 从 globalThis.sqlite3ApiConfig 读配置；sahpool 不受影响。
-		(globalThis as unknown as { sqlite3ApiConfig?: unknown }).sqlite3ApiConfig = {
+		(self as unknown as { sqlite3ApiConfig?: unknown }).sqlite3ApiConfig = {
 			disable: { vfs: { opfs: true, "opfs-vfs": true } },
 		};
 		// d.ts 只声明 init(): Promise<Sqlite3Static>（无参），运行时 glue

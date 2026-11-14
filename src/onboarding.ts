@@ -13,7 +13,7 @@
 
 import { Modal, ToggleComponent, setIcon } from "obsidian";
 import { AddModelModal, AddProviderModal, brandLogoOf, buildGuideProviderGroups, catalogEndpoint, CHAT_CATALOG, EMBEDDING_CATALOG, fetchAvailableModels, fetchModelIds, formatContextWindow, mergeEmbeddingCatalogModels, modelBrandOf, SeriesPickModal, setSvgIcon } from "./settings-models";
-import type { FetchedModel, CatalogEntry } from "./settings-models";
+import type { FetchedModel } from "./settings-models";
 import { fluentEmojiSvg } from "./fluent-emoji";
 import { mountCoffeeCanvas } from "./coffee-canvas";
 import { t } from "./i18n";

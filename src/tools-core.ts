@@ -10,7 +10,7 @@
 // vault-relative path, grep emits line numbers that `read` consumes via
 // offset/limit, and pagination is always limit/offset.
 
-import type { Vault, TFile } from "obsidian";
+import { Vault, TFile } from "obsidian";
 import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import type { IndexProgress } from "./types";
@@ -22,7 +22,6 @@ export interface ToolSpec {
 	parameters: Record<string, unknown>;
 }
 
-const FALLBACK_CONTEXT = 128000;
 const RRF_K = 60;
 
 /** 12 个工具的统一声明：MCP tools/list 与聊天 Agent 共用。 */
@@ -626,8 +625,8 @@ export class ToolCore {
 	): Promise<string> {
 		if (!path) return "Error: missing path";
 		const file = this.deps.vault.getAbstractFileByPath(path);
-		if (!file) return `Error: file not found: ${path}`;
-		const content = await this.deps.vault.read(file as TFile);
+		if (!(file instanceof TFile)) return `Error: file not found: ${path}`;
+		const content = await this.deps.vault.read(file);
 		const lines = content.split("\n");
 		const totalLines = lines.length;
 
@@ -852,8 +851,8 @@ export class ToolCore {
 	async headings(path: string): Promise<string> {
 		if (!path) return "Error: missing path";
 		const file = this.deps.vault.getAbstractFileByPath(path);
-		if (!file) return `Error: file not found: ${path}`;
-		const content = await this.deps.vault.cachedRead(file as TFile);
+		if (!(file instanceof TFile)) return `Error: file not found: ${path}`;
+		const content = await this.deps.vault.cachedRead(file);
 		const out: Array<{ level: number; text: string; line: number }> = [];
 		content.split("\n").forEach((line, i) => {
 			const m = line.match(/^(#{1,6})\s+(.*)$/);
@@ -867,7 +866,7 @@ export class ToolCore {
 	async links(path: string): Promise<string> {
 		if (!path) return "Error: missing path";
 		const file = this.deps.vault.getAbstractFileByPath(path);
-		if (!file) return `Error: file not found: ${path}`;
+		if (!(file instanceof TFile)) return `Error: file not found: ${path}`;
 
 		// basename → path 索引（一次构建，解析 [[...]] 与 markdown 链接）
 		const byName = new Map<string, string>();
@@ -893,7 +892,7 @@ export class ToolCore {
 			return out;
 		};
 
-		const ownContent = await this.deps.vault.cachedRead(file as TFile);
+		const ownContent = await this.deps.vault.cachedRead(file);
 		const outlinks = [...new Set(extract(ownContent))].filter((p) => p !== path);
 
 		// 反链：扫描全部 md（有界并发），收集链接到 path 的文件

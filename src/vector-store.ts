@@ -220,7 +220,7 @@ export class VectorStore {
 		try {
 			await Promise.race([
 				this.call("close", []),
-				new Promise((r) => setTimeout(r, 3000)),
+				new Promise((r) => window.setTimeout(r, 3000)),
 			]);
 		} catch {
 			/* worker already gone */

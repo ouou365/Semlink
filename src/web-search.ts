@@ -100,7 +100,7 @@ export class WebSearchService {
 			// requestUrl cannot time out — race a watchdog so a hung
 			// connection can't stall a chat round forever.
 			const timer = new Promise<never>((_, reject) =>
-				setTimeout(() => reject(new Error(`web search timed out after ${SEARCH_TIMEOUT_MS / 1000}s`)), SEARCH_TIMEOUT_MS),
+				window.setTimeout(() => reject(new Error(`web search timed out after ${SEARCH_TIMEOUT_MS / 1000}s`)), SEARCH_TIMEOUT_MS),
 			);
 			const r = await Promise.race([resp, timer]);
 			status = r.status;

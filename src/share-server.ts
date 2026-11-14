@@ -170,7 +170,10 @@ export class ShareServer {
 			this.sessions.set(token, sessionId);
 			this.sharedAts.set(token, sharedAt);
 			while (this.tokens.size > MAX_SHARES) {
-				const oldest = this.tokens.keys().next().value as string | undefined;
+				// Array.from 取首键：本机 TS lib 的 IteratorResult.value 是 any
+				//（直接解构会触发 no-unsafe-*），检查器 lib 已类型化——两种写法下
+				// 这里都无告警。
+				const oldest = Array.from(this.tokens.keys())[0];
 				if (oldest === undefined) break;
 				const oldToken = this.tokens.get(oldest);
 				this.tokens.delete(oldest);

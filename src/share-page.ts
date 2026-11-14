@@ -88,7 +88,7 @@ export async function renderMarkdownChunked(
 			onProgress?.(i + 1, chunks.length);
 			// Let the editor breathe between chunks (time-slice, same pattern
 			// as the sync-fallback vector scan).
-			if (i < chunks.length - 1) await new Promise((r) => setTimeout(r, 0));
+			if (i < chunks.length - 1) await new Promise((r) => window.setTimeout(r, 0));
 		}
 	} finally {
 		holder.remove();

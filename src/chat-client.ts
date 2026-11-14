@@ -25,11 +25,6 @@ const MAX_TOOL_ITERATIONS = 20;
  *  的枚举型任务）。到顶即强制收尾，与进度无关——这是成本与延迟的绝对
  *  上界，不是为了「答完」而是为了「烧得起」。 */
 const EXTENDED_TOOL_ITERATIONS = 40;
-/** Consecutive no-information rounds (zero-hit searches, all calls skipped,
- *  errors) after which the turn is force-closed. 3 gives the model room to
- *  act on the zero-hit grep hint (retry with a broader pattern) before the
- *  door closes. */
-const IDLE_FORCE_AFTER = 3;
 /** Explicit per-round output budget. DeepSeek-style OpenAI-compatible APIs
  *  default to ~4K output tokens, which silently truncates long answers
  *  mid-sentence (finish_reason "length"); always ask for more. Providers
@@ -642,9 +637,6 @@ export class ChatClient {
 
 		const thinking: ThinkingStep[] = [];
 		const usedNotes: string[] = [];
-		// Notes actually OPENED via get_note/get_section — a stronger "used"
-		// signal than search hits, exposed separately for source cards.
-		const readNotes: string[] = [];
 
 		// Native message array: system + history (verbatim) + the current
 		// question. History is truncated early (sliding window) so the prompt
@@ -1120,8 +1112,8 @@ export class ChatClient {
 		// forced premature answer. Two strikes mean the model is spinning.
 		let repeatStrikes = 0;
 		// Consecutive rounds that yielded NO new information (all calls
-		// skipped, zero-hit searches, errors). IDLE_FORCE_AFTER in a row
-		// force-closes the turn — the progress-aware budget's idle brake.
+		// skipped, zero-hit searches, errors) — an idle streak shrinks the
+		// round budget (progress-aware idle brake) until the turn force-closes.
 		let idleStreak = 0;
 		// Set when the model repeats itself — tools are removed from the next
 		// round so it must produce a real answer (not loop or echo a thought).
@@ -1493,8 +1485,8 @@ export class ChatClient {
 			// 有缺口就继续调用工具，确已完备才作答。没有这条，弱模型常把
 			// 一轮工具后的「看起来够用」当「真的够用」直接收工（单轮即答）。
 			messages.push({ role: "user", content: t("promptContinueRound") });
-			// Budget idle brake: consecutive no-information rounds close the
-			// turn (see IDLE_FORCE_AFTER); productive rounds reset the streak.
+			// Budget idle brake: consecutive no-information rounds shrink the
+			// round budget and close the turn; productive rounds reset the streak.
 			if (roundProgressed) idleStreak = 0;
 			else idleStreak++;
 		}

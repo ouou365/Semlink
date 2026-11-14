@@ -1008,6 +1008,8 @@ export default class SmartVaultPlugin extends Plugin {
 
 		let root: OpfsDirHandle;
 		try {
+			// 本仓库 tsconfig lib 无 DOM.AsyncIterable：FileSystemDirectoryHandle
+			// 缺 entries()，此断言在本地是必需的（检查器 lib 较新才会判其冗余）。
 			root = (await navigator.storage.getDirectory()) as unknown as OpfsDirHandle;
 		} catch (e) {
 			return { available: false, error: `OPFS unavailable: ${e instanceof Error ? e.message : String(e)}` };
@@ -1267,7 +1269,6 @@ export default class SmartVaultPlugin extends Plugin {
 		const v = leaf?.view as MarkdownView | null;
 		if (!v) return { mode: "none", expectedLine: line, resolved };
 		const totalLines = (await this.app.vault.cachedRead(v.file!)).split("\n").length;
-		const viewFileCodes = v.file ? Array.from(v.file.path.slice(0, 24)).map((c) => c.codePointAt(0)!.toString(16)).join(",") : null;
 		const mode = v.getMode();
 		if (mode === "source") {
 			const cur = v.editor.getCursor();
@@ -2037,7 +2038,7 @@ export default class SmartVaultPlugin extends Plugin {
 						height: cs.height,
 						lineHeight: cs.lineHeight,
 						fontSize: cs.fontSize,
-						appearance: (cs as CSSStyleDeclaration & { webkitAppearance?: string }).webkitAppearance ?? cs.appearance,
+						appearance: cs.appearance,
 						overflow: cs.overflow,
 					};
 				};
@@ -2053,7 +2054,7 @@ export default class SmartVaultPlugin extends Plugin {
 						height: cs.height,
 						lineHeight: cs.lineHeight,
 						fontSize: cs.fontSize,
-						appearance: (cs as CSSStyleDeclaration & { webkitAppearance?: string }).webkitAppearance ?? cs.appearance,
+						appearance: cs.appearance,
 					};
 				});
 				dbg.input = pick("input.semlink-editor-input");
@@ -2135,7 +2136,7 @@ export default class SmartVaultPlugin extends Plugin {
 						});
 					// 窗口被遮挡时 rAF 暂停，驱动循环永不结束——8s 兜底返回
 					const stall = new Promise<Record<string, unknown>>((resolve) =>
-						setTimeout(() => resolve({ stalled: "rAF paused (window occluded?)" }), 8000),
+						window.setTimeout(() => resolve({ stalled: "rAF paused (window occluded?)" }), 8000),
 					);
 					return Promise.race([run(), stall]);
 				};
@@ -2146,15 +2147,16 @@ export default class SmartVaultPlugin extends Plugin {
 				// 循环）——超大目录里可能是常驻动画把滚动拖卡的主因
 				dbg.marquees = rows.querySelectorAll(".semlink-mt-model-name-track").length;
 				dbg.innerDrive = await drive(rows);
-				// 对照组：禁掉跑马灯动画再量同一容器（先回滚到顶恢复量程）
+				// 对照组：禁掉跑马灯动画再量同一容器（先回滚到顶恢复量程）。
+				// 诊断类 .semlink-diag-no-anim 定义在 styles.css 末尾（孪生选择器压
+				// 过 hover 跑马灯规则，不用 !important——社区 CSS lint 禁之；也不用
+				// <style> 注入——检查器 no-forbidden-elements 禁建 style 元素）。
 				rows.scrollTop = 0;
 				await new Promise((r) => doc.defaultView!.requestAnimationFrame(r));
-				const styleEl = doc.createElement("style");
-				styleEl.textContent =
-					".semlink-mt-model-name-track, .semlink-mt-model-name-text { animation: none !important; }";
-				doc.head.appendChild(styleEl);
+				const noAnimEls = Array.from(rows.querySelectorAll<HTMLElement>(".semlink-mt-model-name-track"));
+				noAnimEls.forEach((el) => el.addClass("semlink-diag-no-anim"));
 				dbg.innerDriveNoMarquee = await drive(rows);
-				styleEl.remove();
+				noAnimEls.forEach((el) => el.removeClass("semlink-diag-no-anim"));
 				if (outer) dbg.outerDrive = await drive(outer);
 				dbg.docs = diag;
 				break;
@@ -2437,7 +2439,7 @@ export default class SmartVaultPlugin extends Plugin {
 			if (semView?.messagesEl && semView.renderWelcome && !w.document.querySelector(".semlink-search-welcome")) {
 				// 停在会话里 → 先回到主页（会话已持久化，可从历史恢复）
 				semView.newChatFromUi?.();
-				await new Promise((r2) => setTimeout(r2, 400));
+				await new Promise((r2) => window.setTimeout(r2, 400));
 			}
 			const dbg = {
 				hasSemView: !!semView,
@@ -2464,7 +2466,7 @@ export default class SmartVaultPlugin extends Plugin {
 				semView.guideRequested = true;
 				semView.messagesEl.empty();
 				semView.renderWelcome();
-				await new Promise((r2) => setTimeout(r2, 600));
+				await new Promise((r2) => window.setTimeout(r2, 600));
 					const cs = w.document.querySelector<HTMLElement>(".semlink-guide-corners");
 					const csStyle = cs ? w.getComputedStyle(cs) : null;
 					const msgs = w.document.querySelector<HTMLElement>(".semlink-search-messages");
@@ -2482,7 +2484,7 @@ export default class SmartVaultPlugin extends Plugin {
 				semView.guideRequested = false;
 				semView.messagesEl.empty();
 				semView.renderWelcome();
-				await new Promise((r2) => setTimeout(r2, 600));
+				await new Promise((r2) => window.setTimeout(r2, 600));
 				const d = (a: { x: number; y: number } | null, b: { x: number; y: number } | null) =>
 					a && b ? { dx: b.x - a.x, dy: b.y - a.y } : null;
 				jitter = {
@@ -2508,7 +2510,7 @@ export default class SmartVaultPlugin extends Plugin {
 					const pick = sessions?.[opts?.sessionIdx ?? 0];
 					if (pick) {
 						await sv.loadSession?.(pick);
-						await new Promise((r2) => setTimeout(r2, 600));
+						await new Promise((r2) => window.setTimeout(r2, 600));
 					}
 				} catch { /* 诊断尽力而为 */ }
 			}
@@ -3226,7 +3228,7 @@ export default class SmartVaultPlugin extends Plugin {
 		// 30s 兜底后照常继续：旧循环已带 abort 标记，最迟在当前批结束后
 		// 退出，不会与新 run 长期并存；卡满 30s 属异常，留下告警线索。
 		for (let i = 0; i < 300 && this.scheduler.isRunning; i++) {
-			await new Promise((r) => setTimeout(r, 100));
+			await new Promise((r) => window.setTimeout(r, 100));
 		}
 		if (this.scheduler.isRunning) {
 			console.warn("[Semlink] reindexAll: previous run still exiting after 30s — proceeding anyway");

@@ -2,14 +2,12 @@
 // Semlink - Vault File Watcher
 // ========================================
 
-import { App, Vault, TFile, TAbstractFile, FileSystemAdapter, Notice } from "obsidian";
+import { App, Vault, TFile, TAbstractFile, FileSystemAdapter } from "obsidian";
 import { readdir, readFile } from "fs/promises";
 import { join } from "path";
 import { debugLog } from "./log";
 import type { Scheduler } from "./scheduler";
 import type { SmartVaultSettings } from "./types";
-import { activeEmbeddingProvider } from "./types";
-import { t } from "./i18n";
 
 /** Grace period (ms) after startup during which events are ignored */
 const STARTUP_GRACE_MS = 5000;

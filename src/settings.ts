@@ -2,10 +2,10 @@
 // Semlink - Settings Tab
 // ========================================
 
-import { App, DropdownComponent, Modal, Notice, PluginSettingTab, Setting, SliderComponent, ToggleComponent, moment, setIcon } from "obsidian";
+import { App, DropdownComponent, Modal, Notice, PluginSettingTab, Setting, ToggleComponent, moment, setIcon } from "obsidian";
 import * as QRCode from "qrcode";
 import type SmartVaultPlugin from "../main";
-import type { IndexProgress, McpClientServer, SmartVaultSettings } from "./types";
+import type { McpClientServer, SmartVaultSettings } from "./types";
 import { activeEmbeddingProvider } from "./types";
 import { AddFeishuBotModal } from "./feishu-bot-modal";
 import { startFeishuRegister, type FeishuScanHandle } from "./feishu-auth";
@@ -1308,6 +1308,9 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 		const server = this.plugin.shareServer;
 		// 按共享时间倒序（最新的在最上面）。
 		const shares = [...server.listShares()].sort((a, b) => b.sharedAt - a.sharedAt);
+		// moment 的 obsidian 重导出在类型层为 any（仓库未装 moment 类型包）——
+		// 收窄到本处用到的两个方法。纯类型层修复，运行时是同一实例。
+		const fmtMoment = moment as unknown as (t: number) => { format(fmt: string): string; fromNow(): string };
 
 		if (shares.length === 0) {
 			// 空状态（契约 §3.6）：图标 + 一句话，纵向居中于卡内。
@@ -1382,8 +1385,8 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				main.createSpan({
 					cls: "semlink-share-url",
 					text: Date.now() - entry.sharedAt > 30 * 24 * 60 * 60 * 1000
-						? moment(entry.sharedAt).format("YYYY-MM-DD")
-						: moment(entry.sharedAt).fromNow(),
+						? fmtMoment(entry.sharedAt).format("YYYY-MM-DD")
+						: fmtMoment(entry.sharedAt).fromNow(),
 				});
 
 				// 行尾不再放按钮（用户拍板"去掉这个图标"）：行尾转发钮与整行
@@ -1508,161 +1511,6 @@ export class SmartVaultSettingTab extends PluginSettingTab {
 				const msg = e instanceof Error ? e.message : String(e);
 				statusEl.setText(`${t("botScanError")}: ${msg}`);
 			});
-	}
-}
-
-
-/** "Edit MCP server" 配置弹窗（参照 Cherry Studio）：Form/JSON 双视图。
- *  Form 视图可编辑端口与访问 Key；JSON 视图为生成的客户端接入配置。
- *  保存后若服务正在运行则自动重启使新配置生效。 */
-class EditMcpServerModal extends Modal {
-	constructor(
-		app: App,
-		private plugin: SmartVaultPlugin,
-		private onSaved: () => void,
-	) {
-		super(app);
-		this.modalEl.addClass("semlink-mcp-edit-modal");
-		this.modalEl.addClass("smart-vault-settings");
-	}
-
-	onOpen(): void {
-		this.titleEl.setText(t("editMcpServer"));
-		const { contentEl } = this;
-		contentEl.createDiv({ cls: "semlink-mcp-edit-desc", text: t("editMcpServerDesc") });
-
-		let port = this.plugin.settings.mcpPort;
-		let apiKey = this.plugin.settings.mcpApiKey;
-		const buildJson = (): string => {
-			const url = `http://127.0.0.1:${port}/mcp`;
-			return JSON.stringify(
-				{
-					semlink: {
-						type: "http",
-						url,
-						...(apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : {}),
-					},
-				},
-				null,
-				2,
-			);
-		};
-
-		// ── Form / JSON 切换（分段控件居左，按钮自带按压缩放） ──
-		const segRow = contentEl.createDiv({ cls: "semlink-mcp-edit-segrow" });
-		const seg = segRow.createDiv({ cls: "semlink-mcp-edit-seg" });
-		const formBtn = seg.createEl("button", { cls: "is-active", text: "Form" });
-		const jsonBtn = seg.createEl("button", { text: "JSON" });
-
-		const formView = contentEl.createDiv({ cls: "semlink-mcp-edit-form" });
-		const jsonView = contentEl.createDiv({ cls: "semlink-mcp-edit-json semlink-hidden" });
-		const jsonArea = jsonView.createEl("textarea", { cls: "semlink-monospace" });
-		jsonArea.rows = 12;
-		jsonArea.readOnly = true;
-		jsonArea.value = buildJson();
-		// JSON 视图是生成的接入配置：一键复制，粘进客户端即可。
-		const jsonCopyBtn = jsonView.createEl("button", {
-			cls: "semlink-btn-secondary semlink-mcp-json-copy",
-			text: t("mcpJsonCopy"),
-		});
-		jsonCopyBtn.addEventListener("click", () => {
-			void navigator.clipboard.writeText(jsonArea.value)
-				.then(() => new Notice(t("mcpCopied")))
-				.catch(() => new Notice(t("mcpCopyFailed")));
-		});
-
-		const syncJson = (): void => {
-			jsonArea.value = buildJson();
-		};
-
-		// ── 行内校验的表单字段包：label + input + 错误行（12.5px 红），
-		//    blur 展示校验、input 即时宽恕/复查；保存时聚焦第一个错误字段。 ──
-		const attachError = (field: HTMLElement): ((msg: string) => void) => {
-			const errorEl = field.createDiv({ cls: "semlink-mcp-field-error" });
-			return (msg: string): void => {
-				field.toggleClass("has-error", !!msg);
-				errorEl.setText(msg);
-			};
-		};
-		const focusField = (input: HTMLElement): void => {
-			input.scrollIntoView({ block: "center", behavior: "smooth" });
-			input.focus();
-		};
-
-		// 端口字段：必填 1-65535（非法不再静默回退，保存被行内错误拦下）。
-		const portField = formView.createDiv({ cls: "semlink-mcp-field" });
-		portField.createDiv({ cls: "semlink-editor-field-label", text: t("mcpPort") });
-		const portInput = portField.createEl("input", {
-			cls: "semlink-editor-input",
-			attr: { type: "text", placeholder: "3001", spellcheck: "false", inputmode: "numeric" },
-		});
-		portInput.value = String(port);
-		const setPortError = attachError(portField);
-		const portMsg = (): string => {
-			const n = Number(portInput.value.trim());
-			return Number.isInteger(n) && n >= 1 && n <= 65535 ? "" : t("mcpPortInvalid");
-		};
-		portInput.addEventListener("input", () => {
-			const msg = portMsg();
-			setPortError(msg);
-			if (!msg) {
-				port = Number(portInput.value.trim());
-				syncJson();
-			}
-		});
-		portInput.addEventListener("blur", () => setPortError(portMsg()));
-
-		// 访问 Key：可空，无校验。
-		const keyField = formView.createDiv({ cls: "semlink-mcp-field" });
-		keyField.createDiv({ cls: "semlink-editor-field-label", text: t("mcpAccessKey") });
-		const keyInput = keyField.createEl("input", {
-			cls: "semlink-editor-input",
-			attr: { type: "text", spellcheck: "false", autocomplete: "off" },
-		});
-		keyInput.value = apiKey;
-		keyInput.addEventListener("input", () => {
-			apiKey = keyInput.value;
-			syncJson();
-		});
-
-		const setView = (json: boolean): void => {
-			formView.toggleClass("semlink-hidden", json);
-			jsonView.toggleClass("semlink-hidden", !json);
-			formBtn.toggleClass("is-active", !json);
-			jsonBtn.toggleClass("is-active", json);
-		};
-		formBtn.addEventListener("click", () => setView(false));
-		jsonBtn.addEventListener("click", () => setView(true));
-
-		// ── Footer：右侧 Save / Cancel ──
-		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
-		const cancelBtn = footer.createEl("button", { cls: "semlink-editor-cancel-btn", text: t("cancel") });
-		cancelBtn.addEventListener("click", () => this.close());
-		const saveBtn = footer.createEl("button", { cls: "semlink-editor-save-btn", text: t("editorSave") });
-
-		saveBtn.addEventListener("click", () => {
-			const msg = portMsg();
-			if (msg) {
-				// 有错不提交：行内报错 + 滚动聚焦第一个错误字段。
-				setPortError(msg);
-				focusField(portInput);
-				return;
-			}
-			const persist = async (): Promise<void> => {
-				this.plugin.settings.mcpPort = port;
-				this.plugin.settings.mcpApiKey = keyInput.value;
-				await this.plugin.saveSettings();
-				// 端口/Key 变更需要重启才生效；没在运行则不主动拉起
-				if (this.plugin.mcpServer) await this.plugin.restartMcpServer();
-				this.close();
-				this.onSaved();
-			};
-			void persist();
-		});
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
 	}
 }
 
