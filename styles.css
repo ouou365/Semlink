@@ -3351,20 +3351,20 @@
     flex: 1 1 0;
     min-width: 128px;
     max-width: 168px;
-}/* 重新配置：降级为文本链接（次行动让位给主按钮「完成」）。!important
-   压过核心 app.css 的按钮默认底色/边框/阴影——任何层级的 button 规则
-   都不能把这条变回按钮脸。 */
+}/* 重新配置：降级为文本链接（次行动让位给主按钮「完成」）。元素已从
+   <button> 换成 <a>（onboarding.ts）：锚点没有核心按钮样式包袱，
+   以下声明不再需要 !important 对抗（社区审查器 CSS lint 逐条点名）。 */
 .semlink-search-welcome .semlink-guide-index-reconfig-link,
 .semlink-guide-index-reconfig-link {
-    display: block !important;
+    display: block;
     margin: 12px auto 0;
-    padding: 0 !important;
-    border: none !important;
-    background: none !important;
-    box-shadow: none !important;
-    height: auto !important;
-    min-height: 0 !important;
-    font-size: 12px !important;
+    padding: 0;
+    border: none;
+    background: none;
+    box-shadow: none;
+    height: auto;
+    min-height: 0;
+    font-size: 12px;
     color: var(--text-muted);
     cursor: pointer;
     text-decoration: underline transparent;

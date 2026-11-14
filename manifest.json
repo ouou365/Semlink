@@ -1,7 +1,7 @@
 {
 	"id": "semlink",
 	"name": "Semlink",
-	"version": "2.2.1",
+	"version": "2.2.2",
 	"minAppVersion": "1.6.0",
 	"description": "Semlink is an AI assistant for your Vault, an agentic knowledge workspace that thinks, collaborates and acts. Semantic search, reasoning, citations, sharing and MCP, all in one plugin.",
 	"author": "Ouzhongyuan",

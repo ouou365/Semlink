@@ -198,12 +198,17 @@ export function renderOnboarding(
 		});
 		// 重新配置：快照当前嵌入模型键，停掉进行中的索引（换模型后旧嵌入
 		// 没有意义，且 reindexAll 需要调度器空闲），回到第一步（选模型）。
-		// 降级为文本链接：主行动让位给「完成」。
-		const reconfigBtn = hero.createEl("button", {
+		// 降级为文本链接：主行动让位给「完成」。用 <a> 而非 <button>——
+		// 锚点没有核心 app.css 的按钮底色/边框/阴影包袱，样式层无需
+		// !important 与之对抗（社区审查器 CSS lint 逐条点名）；href 保持
+		// 键盘可达，click 里 preventDefault 掉锚点导航。
+		const reconfigBtn = hero.createEl("a", {
 			cls: "semlink-guide-index-reconfig-link",
 			text: t("guideReconfig"),
+			href: "#",
 		});
-		reconfigBtn.addEventListener("click", () => {
+		reconfigBtn.addEventListener("click", (e) => {
+			e.preventDefault();
 			reconfigFromKey = plugin.settings.embeddingModelKey || "";
 			plugin.scheduler.pause();
 			plugin.settings.onboarding = {
