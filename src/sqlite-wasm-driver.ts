@@ -28,7 +28,7 @@ import type { Database as SqlJsDatabase } from "sql.js";
 // 直接相对路径引入 OPFS shim（不要走 "fs" 别名：驱动同时被打进 Node 构建，
 // 那里 "fs" 是真 fs，没有 ensureFileSync 这类 shim 导出）。旧库迁移（读
 // sql.js 时代的命名空间文件）需要它；shim 顶层无副作用，打进 main.js 无害。
-import { existsSync as shimExists, readFileSync as shimRead, statSync as shimStat, renameSync as shimRename, ensureFileSync as shimEnsure, writeFileSync as shimWrite } from "./browser-fs";
+import { existsSync as shimExists, readFileSync as shimRead, statSync as shimStat, renameSync as shimRename, ensureFileSync as shimEnsure, writeFileSync as shimWrite, unlinkSync as shimUnlink, realLastModifiedSync } from "./browser-fs";
 
 /** sql.js 形态的查询结果（与 DbEngine 现有消费方式逐字节兼容）。 */
 type QueryResult = { columns: string[]; values: unknown[][] };
@@ -86,6 +86,10 @@ const DB_FILE = "vault.db";
  *  落在无斜杠槽，open("vault.db") 解析成 "/vault.db" 另开空槽 → 迁移数据
  *  全部不可见 → 全量重扫。所有 API 统一用 DB_PATH。 */
 const DB_PATH = "/vault.db";
+/** 迁移备份（vault.db.pre-wasm.bak）保留宽限期：迁移完成后备份是唯一
+ *  能整体回滚到 sql.js 时代的手段，留 3 天给潜在迁移缺陷暴露；到期且
+ *  活槽健康开库后自动删除（见 open 内清理块）。 */
+const PRE_WASM_BAK_GRACE_MS = 3 * 86_400_000;
 
 /** 把 base64 的 wasm 解码成字节（browser worker 无 Buffer）。 */
 function decodeBase64(b64: string): Uint8Array {
@@ -231,6 +235,7 @@ export class SqliteWasmDb {
 		let db: OfficialDb | null = null;
 		let pageCount = -1;
 		let openErr: unknown = null;
+		let recovered = false; // 本轮走了恢复/修复分支 → bak 刚被刷新，不参与清理
 		try {
 			db = openDb();
 			pageCount = pageCountOf(db);
@@ -245,10 +250,12 @@ export class SqliteWasmDb {
 			await importLegacy("slot-empty recovery");
 			db = openDb();
 			pageCount = pageCountOf(db);
+			recovered = true;
 		} else if (!db && legacySize > 0) {
 			await importLegacy("slot-corrupt repair");
 			db = openDb();
 			pageCount = pageCountOf(db);
+			recovered = true;
 		} else if (db && pageCount > 0 && legacySize > 0) {
 			// 活槽 ≥ 快照：清零 shim 快照（writeFileSync 截零，句柄保留），
 			// 否则这份过期镜像会一直躺在命名空间里等下一次 reload 误导回。
@@ -259,6 +266,24 @@ export class SqliteWasmDb {
 		}
 
 		if (!db) throw new Error("[wasm-driver] unreachable: db not opened");
+		// 迁移备份自动清理：pre-wasm.bak 是迁移瞬间的一次性回滚安全网——
+		// 活槽健康开库（recovered=false：恢复/修复分支刚刷新 bak，其回滚
+		// 使命未终结）+ .migrated 标记在场 + bak 真实落笔年龄 ≥ 宽限期
+		// → 删（unlinkSync：关 sync handle + removeEntry）。年龄必须用
+		// initBrowserFs 开 handle 前 getFile 捕获的真实 lastModified——
+		// statSync.mtimeMs 是 Date.now() 假值，sync handle 无 mtime 可读；
+		// 捕获值 0（getFile 被拒/文件缺席）一律不动，下轮启动重试。
+		// removeEntry 失败同样静默（文件已缺席）；删除后 migdbg 留痕。
+		const bakPath = `${DB_FILE}.pre-wasm.bak`;
+		if (!recovered && pageCount > 0 && shimExists(`${DB_FILE}.migrated`) && shimExists(bakPath)) {
+			const bakMtime = realLastModifiedSync(bakPath);
+			const bakAge = bakMtime > 0 ? Date.now() - bakMtime : 0;
+			if (bakAge >= PRE_WASM_BAK_GRACE_MS) {
+				const bakSize = shimStat(bakPath).size;
+				shimUnlink(bakPath);
+				console.error(`[Semlink][migdbg] pre-wasm.bak auto-cleaned (age=${Math.round(bakAge / 86_400_000)}d, size=${bakSize}B)`);
+			}
+		}
 		// 一次性开好 shim vault.db 的句柄：worker 生命周期内的 shim 写
 		// （writeLegacySnapshot 耐久快照、迁移标记等）全部落 OPFS 句柄，
 		// 跨 worker 重启存活——无句柄的 shimWrite 落 memoryFiles，进程死

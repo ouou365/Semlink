@@ -302,6 +302,8 @@
     width: 100%;
     min-width: 0;
     flex: 0 0 auto;
+    /* Tab 条与内容列同源同宽：panel 子项已统一全宽（Model 方案，见
+       panel > * 规则注释），Tab 条 100% 天然右缘对齐，无需按 tab 切换。 */
 }/* 分段控件轨道（iOS segmented control）：灰底胶囊条，白拇指表达选中 */
 .semlink-settings-menu {
     display: flex;
@@ -493,22 +495,17 @@
 /* 面板是 flex column：卡片等直接子项必须禁收缩——否则高度链紧张时卡片
    被按比例压扁，overflow:hidden 下内容直接裁切且无滚动可救（RAG 页宽档
    整块 Embedding 状态不可达的根因，评审 P0）。 */
-/* 内容列（用户拍板"左右空间充分利用"）：上限放宽到 720 并**靠左**——
-   居中构图在超宽窗口下左侧拖出大空白（弹窗 1080 限宽 + margin auto
-   叠加所致）。设置屏自身在 settings-active 时另行豁免 main-tab 的
-   1080 限宽（见 6281 规则的覆盖），布局完整吃满窗口宽。 */
+/* 内容列全宽（用户拍板 2026-11-15「其他弹窗都参照 Model 的宽度」）：
+   此前卡片列 720 靠左、Model 双栏独享全宽——两类 tab 的 Tab 条右缘
+   对不齐（宽弹窗差 ~60px）。现在全部 tab 统一 Model 方案：内容列吃满
+   root（800 居中上限仍在，可读性由 root 封顶），Tab 条 100% 与内容
+   天然同宽，无需按 tab 切换状态类。 */
 .semlink-settings-root .semlink-settings-panel > * {
     flex-shrink: 0;
     width: 100%;
-    max-width: 720px;
     /* content-box 下 width:100% 会把卡片自身 padding 加到容器宽之外
        （412+16×2=444，横向滚动条的来源）——显式 border-box。 */
     box-sizing: border-box;
-}
-/* Model 页三栏（中栏 300 + 右栏弹性）需要整个面板宽：720 上限会压住
-   三栏布局。其余 tab 保持 720 靠左不变。 */
-.semlink-settings-root .semlink-settings-panel > .semlink-mt {
-    max-width: none;
 }
 /* 组标题回归自身设计：4px 对齐边距 + 撑满（曾被子项居中规则的
    margin-inline:auto 改写成右缘超面板 8-16px 的隐形溢出源——探针

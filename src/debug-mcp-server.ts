@@ -17,10 +17,10 @@ export type DebugAskRunner = (question: string) => Promise<unknown>;
 export type DebugJumpRunner = (path: string, line: number) => Promise<unknown>;
 
 /** measure 工具执行器：由 main.ts 注入——回报输入区相关元素的实际布局。 */
-export type DebugMeasureRunner = (opts?: { popout?: boolean }) => Promise<unknown>;
+export type DebugMeasureRunner = (opts?: { popout?: boolean; sidebarWidth?: number }) => Promise<unknown>;
 
 /** shot 工具执行器：由 main.ts 注入——Electron capturePage 截取窗口 PNG。 */
-export type DebugShotRunner = (opts?: { target?: string | number; resize?: { index?: number; width: number; height: number } }) => Promise<unknown>;
+export type DebugShotRunner = (opts?: { target?: string | number; resize?: { index?: number; width?: number; height?: number; x?: number; y?: number }; zoom?: number }) => Promise<unknown>;
 
 /** stats 工具执行器：由 main.ts 注入——回报 RAG 卡四格（Indexed/Embedded/
  *  Skipped/Excluded）+ 块统计 + 运行状态；op 参数触发补救动作
@@ -28,8 +28,9 @@ export type DebugShotRunner = (opts?: { target?: string | number; resize?: { ind
 export type DebugStatsRunner = (opts?: { op?: string }) => Promise<unknown>;
 
 /** ui 工具执行器：由 main.ts 注入——在插件可见的各窗口文档（主窗 +
- *  popout）里按 CSS 选择器/可见文本查找元素并交互（query/click/type）。
- *  通用的界面交互入口：新走查不再需要给 measure 加一次性 boolean 开关。 */
+ *  popout）里按 CSS 选择器/可见文本查找元素并交互（query/click/type/
+ *  scroll/hover/key）。通用的界面交互入口：新走查不再需要给 measure
+ *  加一次性 boolean 开关。 */
 export type DebugUiRunner = (opts?: {
 	action?: string;
 	selector?: string;
@@ -37,6 +38,10 @@ export type DebugUiRunner = (opts?: {
 	value?: string;
 	index?: number;
 	doc?: string;
+	to?: string;
+	dy?: number;
+	key?: string;
+	includeHidden?: boolean;
 }) => Promise<unknown>;
 
 /** opfs 工具执行器：由 main.ts 注入——主线程直读 OPFS（配额/用量/
@@ -58,14 +63,20 @@ export type DebugModelRunner = (opts?: {
  *  （状态头/思考预览/流式正文/最终答案文本），供 agent 观察流式渲染。 */
 export type DebugChatViewRunner = () => Promise<unknown>;
 
-/** record 工具执行器：由 main.ts 注入——录制 Semlink 视图区域为 WebM
- * （capturePage 逐帧 + MediaRecorder），供产品宣传素材生产。 */
+/** record 工具执行器：由 main.ts 注入——录制任意 Obsidian 窗口为 WebM
+ * （capturePage 逐帧 + WebCodecs VP9），供产品宣传素材生产。 */
 export type DebugRecordRunner = (opts?: {
 	action?: string;
 	target?: number;
 	fps?: number;
 	crop?: string;
+	bitrate?: number;
+	zoom?: number;
 }) => Promise<unknown>;
+
+/** session 工具执行器：由 main.ts 注入——演示/E2E 的会话夹具管理
+ * （new/home 回干净首页、list 枚举、delete 清理演示会话）。 */
+export type DebugSessionRunner = (opts?: { op?: string; id?: string; index?: number; title?: string }) => Promise<unknown>;
 
 interface JsonRpcRequest {
 	jsonrpc: "2.0";
@@ -136,6 +147,7 @@ const MEASURE_TOOL = {
 			width: { type: "number", description: "Popout window width in CSS px (with popout:true; re-moves an already-popped-out leaf at the new size). Default 420 (popout:true) / 780 (popout:string)." },
 			height: { type: "number", description: "Popout window height in CSS px (with popout:true). Default 800 (popout:true) / 720 (popout:string)." },
 			dock: { type: "boolean", description: "Dock a popped-out instance back into the sidebar first (clicks the view's own dock-back button)." },
+			sidebarWidth: { type: "number", description: "Sidebar mode only: resize the sidebar split holding the view to this width in CSS px (200-900, collapses are expanded first, layout persists like a manual drag). Height follows the main window — for full control of both use popout:true + width/height." },
 			repro: { type: "boolean", description: "Reproduce the guide-to-popout coffee-cup loss: open embed guide in sidebar, click the real popout button, probe the canvas over time." },
 			nav: { description: "\"settings\" | number 0-5: open the settings screen / switch detail page before measuring.", type: ["string", "number"] },
 			scrollPanel: { description: "Scroll the settings panel to this scrollTop before measuring (-1 = scroll to bottom). The license card occupies the first screen; toggles/buttons below the fold need this.", type: "number" },
@@ -177,15 +189,40 @@ const SHOT_TOOL = {
 		properties: {
 			target: { description: "\"all\" (default) captures every window; a number captures that window index only.", type: ["string", "number"] },
 			resize: {
-				description: "Optional: resize a window before capturing (Electron setBounds — bypasses moveLeafToPopout's 600px min, for narrow-layout walkthroughs). index defaults to 0.",
+				description: "Optional: move/resize a window before capturing (Electron setBounds — bypasses moveLeafToPopout's 600px min, for narrow-layout walkthroughs). x/y default to the current position; width/height to the current size. index defaults to 0.",
 				type: "object",
 				properties: {
 					index: { type: "number" },
+					x: { type: "number" },
+					y: { type: "number" },
 					width: { type: "number" },
 					height: { type: "number" },
 				},
-				required: ["width", "height"],
+				required: [],
 			},
+			zoom: { description: "Page zoom factor during the capture, 0.5-3 (e.g. 1.25): text pixel density +56% on non-Retina screens. Restored after the capture.", type: "number" },
+		},
+		required: [],
+	},
+};
+
+const SESSION_TOOL = {
+	name: "session",
+	description:
+		"Manage Semlink chat sessions as demo/E2E fixtures: op=\"list\" " +
+		"enumerates sessions (index/id/title/message count/updatedAt), " +
+		"op=\"new\" (alias \"home\") resets the view to the clean home screen, " +
+		"op=\"delete\" removes a session by id, index or title substring and " +
+		"falls back to the home screen (persists like the in-app delete). " +
+		"Use it to reset between demo recordings and to clean up test " +
+		"sessions without touching chat history by hand.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			op: { type: "string", description: "\"list\" (default) | \"new\" | \"home\" | \"delete\"." },
+			id: { type: "string", description: "op=\"delete\": exact session id." },
+			index: { type: "number", description: "op=\"delete\": session index from op=\"list\"." },
+			title: { type: "string", description: "op=\"delete\": case-insensitive title substring match." },
 		},
 		required: [],
 	},
@@ -196,20 +233,25 @@ const UI_TOOL = {
 	description:
 		"Interact with the plugin UI directly at the DOM level (runs inside the " +
 		"Obsidian renderer, across the main window and popout windows): query " +
-		"elements by CSS selector or visible text, click them, or type into " +
-		"inputs. Returns every match with tag/classes/text/rect/visibility so " +
-		"you can pick an index. Prefer this over OS-level UI automation — " +
-		"selectors are the plugin's own class names (.semlink-*). Typical " +
-		"walkthrough: ui{action:\"click\",selector:...} then shot to inspect.",
+		"elements by CSS selector or visible text, click, type, scroll, hover " +
+		"(JS hover handlers/tooltips), or inject keyboard events (Enter/Escape). " +
+		"Returns every match with tag/classes/text/rect/visibility so you can " +
+		"pick an index. Prefer this over OS-level UI automation — selectors " +
+		"are the plugin's own class names (.semlink-*). Typical walkthrough: " +
+		"ui{action:\"click\",selector:...} then shot to inspect.",
 	inputSchema: {
 		type: "object",
 		properties: {
-			action: { type: "string", description: "\"query\" (default: report matches only) | \"click\" | \"type\"." },
-			selector: { type: "string", description: "CSS selector. Optional for click when `text` is given instead." },
+			action: { type: "string", description: "\"query\" (default: report matches only) | \"click\" | \"type\" | \"scroll\" | \"hover\" | \"key\"." },
+			selector: { type: "string", description: "CSS selector. Optional for click/hover when `text` is given; optional for key (defaults to the focused element)." },
 			text: { type: "string", description: "Visible-text match (substring, trimmed): clicked/queried element whose textContent contains this. Use alone (no selector) or as a filter on query results." },
 			value: { type: "string", description: "Value to set (action=\"type\"): input/textarea/select value or contenteditable text; dispatches input+change like real editing." },
 			index: { type: "number", description: "Which visible match to act on (0-based, default 0). query returns all matches; pick the index from its output." },
 			doc: { type: "string", description: "Restrict to one window document: \"main\" or \"popout\" — same-named buttons exist in both when a popout is open." },
+			to: { type: "string", description: "action=\"scroll\": \"bottom\" | \"top\" (scrolls the matched container to its limit)." },
+			dy: { type: "number", description: "action=\"scroll\": relative scroll delta in px (overrides to)." },
+			key: { type: "string", description: "action=\"key\": the key to inject, e.g. \"Enter\" | \"Escape\" | \"ArrowDown\". Dispatches keydown+keyup with legacy keyCode." },
+			includeHidden: { type: "boolean", description: "query: include zero-rect (hidden/inactive-tab) matches, flagged hidden:true — locate elements inside collapsed or inactive containers." },
 		},
 		required: [],
 	},
@@ -308,10 +350,16 @@ const RECORD_TOOL = {
 		"(default, clean promo framing); crop=window records the ENTIRE " +
 		"window incl. vault sidebar — use it to show the plugin in " +
 		"Obsidian context or to capture a Semlink popout's full frame. " +
-		"action=start begins capture (default 20fps, max 10 min auto-stop), " +
-		"action=stop writes the file to the plugin data dir and returns its " +
-		"absolute path + stats + a last-frame PNG thumb. The real mouse " +
-		"pointer is drawn onto every frame (arrow + click ripple), so " +
+		"Occlusion-proof: background throttling is disabled on target+main " +
+		"for the capture, the cadence runs on a Worker heartbeat (frames " +
+		"keep flowing when the window is hidden), and the target window is " +
+		"auto-raised. status reports actualFps (frames/elapsed — a big drop " +
+		"means throttling). action=start begins capture (default 20fps, " +
+		"VP9 8Mbps quality-latency, max 10 min auto-stop), action=stop " +
+		"writes the file to the plugin data dir and returns its absolute " +
+		"path + stats + a last-frame PNG thumb; zoom/bitrate are restored " +
+		"to their previous values. The real mouse pointer is drawn onto " +
+		"every frame (arrow with flight animation + click ripple), so " +
 		"viewers see where clicks happen — synthetic ui{click} events " +
 		"appear in the video too (ui{doc:\"popout\"} drives popout clicks " +
 		"for popout recordings). Drive ui{click/type} DURING the recording " +
@@ -323,6 +371,8 @@ const RECORD_TOOL = {
 			target: { type: "number", description: "Window index — see windows[] table in the start result (same ordering as shot)" },
 			fps: { type: "number", description: "Capture fps 5-30 (default 20)" },
 			crop: { type: "string", enum: ["view", "window"], description: "view = Semlink region only (default); window = entire window incl. vault UI / popout frame" },
+			bitrate: { type: "number", description: "VP9 bitrate in bits/s, 1-30M (default 8M). Text-heavy content: keep 6-10M or edges blur." },
+			zoom: { type: "number", description: "Page zoom factor during the recording, 0.5-3 (e.g. 1.25). Restored on stop. Sharpens text on non-Retina screens; folds into the same scale channel as DPR." },
 		},
 	},
 };
@@ -363,7 +413,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner, private runRecord?: DebugRecordRunner) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner, private runRecord?: DebugRecordRunner, private runSession?: DebugSessionRunner) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -456,7 +506,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL, RECORD_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL, RECORD_TOOL, SESSION_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -471,7 +521,7 @@ export class DebugMcpServer {
 						if (!jp || !(jl > 0)) throw new Error("jump needs path and a positive line");
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runJump?.(jp, jl)) ?? { error: "no jump runner" }, null, 2) }] };
 					} else if (params.name === "measure") {
-							result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean; forcePro?: boolean } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
+							result = { content: [{ type: "text", text: JSON.stringify((await this.runMeasure?.(params.arguments as { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; sidebarWidth?: number; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean; forcePro?: boolean } | undefined)) ?? { error: "no measure runner" }, null, 2) }] };
 					} else if (params.name === "stats") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runStats?.(params.arguments as { op?: string } | undefined)) ?? { error: "no stats runner" }, null, 2) }] };
 						} else if (params.name === "opfs") {
@@ -483,12 +533,14 @@ export class DebugMcpServer {
 					} else if (params.name === "chatview") {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runChatView?.()) ?? { error: "no chatview runner" }, null, 2) }] };
 					} else if (params.name === "record") {
-						result = { content: [{ type: "text", text: JSON.stringify((await this.runRecord?.(params.arguments as { action?: string; target?: number; fps?: number; crop?: string } | undefined)) ?? { error: "no record runner" }, null, 2) }] };
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runRecord?.(params.arguments as { action?: string; target?: number; fps?: number; crop?: string; bitrate?: number; zoom?: number } | undefined)) ?? { error: "no record runner" }, null, 2) }] };
+					} else if (params.name === "session") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runSession?.(params.arguments as { op?: string; id?: string; index?: number; title?: string } | undefined)) ?? { error: "no session runner" }, null, 2) }] };
 					} else if (params.name === "ui") {
-							result = { content: [{ type: "text", text: JSON.stringify((await this.runUi?.(params.arguments as { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string } | undefined)) ?? { error: "no ui runner" }, null, 2) }] };
-						} else if (params.name === "shot") {
-							result = { content: [{ type: "text", text: JSON.stringify((await this.runShot?.(params.arguments as { target?: string | number; resize?: { index?: number; width: number; height: number } } | undefined)) ?? { error: "no shot runner" }, null, 2) }] };
-						} else {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runUi?.(params.arguments as { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string; to?: string; dy?: number; key?: string; includeHidden?: boolean } | undefined)) ?? { error: "no ui runner" }, null, 2) }] };
+					} else if (params.name === "shot") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runShot?.(params.arguments as { target?: string | number; resize?: { index?: number; width?: number; height?: number; x?: number; y?: number }; zoom?: number } | undefined)) ?? { error: "no shot runner" }, null, 2) }] };
+					} else {
 						result = await this.handleAsk(params);
 					}
 					break;

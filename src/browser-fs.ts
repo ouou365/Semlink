@@ -24,6 +24,10 @@ interface SyncHandleLike {
 interface FileHandleLike {
 	kind: string;
 	createSyncAccessHandle(): Promise<SyncHandleLike>;
+	// Metadata channel: sync access handles expose NO mtime, and once a
+	// handle is open getFile() is refused — so the real lastModified must
+	// be captured in the init walk BEFORE handles are opened (see below).
+	getFile(): Promise<{ size: number; lastModified: number }>;
 }
 
 interface DirHandleLike {
@@ -36,6 +40,11 @@ let rootDir: DirHandleLike | null = null; // the OPFS sub-directory namespace
 let namespaceName = "semlink-db";
 const handles = new Map<string, SyncHandleLike>(); // normalized path → open sync handle
 const memoryFiles = new Map<string, Uint8Array>(); // paths with no OPFS handle yet
+// Real lastModified per file, captured from getFile() during the init walk —
+// the only truthful mtime source in this shim (statSync.mtimeMs is a fake
+// Date.now(), sync handles have no mtime accessor, and getFile() is refused
+// once a handle is open). Consumers: the migration-backup age check.
+const realMtimes = new Map<string, number>(); // normalized path → real lastModified ms (0 = unknown)
 
 const norm = (p: string): string => p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
 
@@ -49,12 +58,18 @@ export async function initBrowserFs(namespace = "semlink-db"): Promise<void> {
 	// The DOM lib lacks entries() on the handle — shape it locally.
 	const dir = (await root.getDirectoryHandle(namespaceName, { create: true })) as unknown as DirHandleLike;
 	rootDir = dir;
-	for await (const [name, handle] of dir.entries()) {
-		if (handle.kind === "file") {
-			// createSyncAccessHandle isn't in this project's DOM lib types yet.
-			handles.set(name, await handle.createSyncAccessHandle());
+		for await (const [name, handle] of dir.entries()) {
+			if (handle.kind === "file") {
+				// Real mtime first: getFile() is only legal before the sync
+				// access handle is opened (fresh worker → no handles yet).
+				try {
+					const f = await handle.getFile();
+					realMtimes.set(name, f.lastModified);
+				} catch { /* metadata missing → realLastModifiedSync returns 0 */ }
+				// createSyncAccessHandle isn't in this project's DOM lib types yet.
+				handles.set(name, await handle.createSyncAccessHandle());
+			}
 		}
-	}
 }
 
 const getHandle = (path: string): SyncHandleLike => {
@@ -135,7 +150,16 @@ export function unlinkSync(path: string): void {
 		try { h.close(); } catch { /* already closed */ }
 		handles.delete(key);
 	}
+	realMtimes.delete(key);
 	rootDir!.removeEntry(key).catch(() => { /* gone already */ });
+}
+
+/** Real OPFS lastModified captured at init (ms), or 0 when unknown — never
+ *  guess from this: the migration-backup cleanup treats 0 as "don't know,
+ *  don't delete". Updated values (post-init writes) are NOT tracked; every
+ *  consumer must treat the value as the init-time snapshot. */
+export function realLastModifiedSync(path: string): number {
+	return realMtimes.get(norm(path)) ?? 0;
 }
 
 export function statSync(path: string): { size: number; isFile: () => boolean; mtimeMs: number } {

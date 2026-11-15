@@ -739,6 +739,7 @@ export default class SmartVaultPlugin extends Plugin {
 			(opts) => this.runDebugModel(opts),
 			() => this.runDebugChatView(),
 			(opts) => this.runDebugRecord(opts),
+			(opts) => this.runDebugSession(opts),
 		);
 		try {
 			await server.start();
@@ -1203,6 +1204,13 @@ export default class SmartVaultPlugin extends Plugin {
 				lastFinalLen: finals.at(-1)?.length ?? 0,
 				lastFinal: finals.at(-1) ?? null,
 			},
+			// 最近一次 UI 会话的引用注册表（citeRegistry：路径按 n-1 对位，
+			// latestCiteLines 同位行号）——chatview 侧也能验证引用正确性，
+			// 并用 jump 走模型真正引用的那一行（ask 返回里已有同款数据）。
+			// 空 registry（无引用轮/纯闲聊）→ null，避免消费方误判空数组。
+			lastCitations: this.chatClient.latestCiteRegistry.length > 0
+				? this.chatClient.latestCiteRegistry.map((path, i) => ({ n: i + 1, path, line: this.chatClient.latestCiteLines[i] ?? null }))
+				: null,
 		};
 	}
 
@@ -1293,7 +1301,7 @@ export default class SmartVaultPlugin extends Plugin {
 		return { mode, resolved, scrollTop: Math.round(scroller?.scrollTop ?? -1), scrollHeight: scroller?.scrollHeight ?? -1, expectedLine: line, totalLines, file: v.file?.path };
 	}
 
-	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; ragDomProbe?: boolean; onboardOpen?: boolean; guideBackProbe?: boolean; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean; forcePro?: boolean; licenseProbe?: boolean }): Promise<unknown> {
+	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; sidebarWidth?: number; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; ragDomProbe?: boolean; onboardOpen?: boolean; guideBackProbe?: boolean; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean; forcePro?: boolean; licenseProbe?: boolean }): Promise<unknown> {
 		// 可选：先把搜索视图移入独立弹窗再量（弹窗实例的布局与主窗不同）。
 		// width/height 自定弹窗尺寸（≤480 可测窄幅断点）；不传用形态默认值。
 		// 对已在弹窗里的 leaf 再次 moveLeafToPopout = 按新尺寸重建弹窗，
@@ -1315,6 +1323,33 @@ export default class SmartVaultPlugin extends Plugin {
 			const svDock = (floatLeaf ?? leaves[0])?.view as unknown as { popoutBtnEl?: HTMLElement } | null;
 			svDock?.popoutBtnEl?.click();
 			await new Promise((r) => window.setTimeout(r, 1000));
+		}
+		// 可选：侧栏形态下调整分栏宽度（不弹窗、不动 OS 窗口）。走查窄布局
+		// /断点的第三条路：弹窗重建（popout:true）与 OS setBounds（shot
+		// resize）之外的最轻通道。高度跟随主窗不可独立调——弹窗形态才可
+		// 全宽高。运行时 API 是 WorkspaceSplit.setSize（this.size + 内联
+		// width，typings 未声明，走断言）；折叠时先展开。
+		let sidebarWidthApplied: Record<string, unknown> | null = null;
+		if (typeof opts?.sidebarWidth === "number") {
+			const wantW = Math.max(200, Math.min(1200, opts.sidebarWidth));
+			const leaf = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0];
+			const el = (leaf as unknown as { containerEl?: HTMLElement }).containerEl
+				?? (leaf?.view as unknown as { containerEl?: HTMLElement } | undefined)?.containerEl;
+			const side = el?.closest(".mod-left-split") ? "left" : el?.closest(".mod-right-split") ? "right" : null;
+			const ws = this.app.workspace as unknown as {
+				leftSplit?: { setSize?(w: number): void; collapsed?: boolean; expand?(): void };
+				rightSplit?: { setSize?(w: number): void; collapsed?: boolean; expand?(): void };
+			};
+			const split = side === "left" ? ws.leftSplit : side === "right" ? ws.rightSplit : null;
+			if (!side || !split || typeof split.setSize !== "function") {
+				sidebarWidthApplied = { applied: false, reason: side ? "split.setSize unavailable" : `view not in sidebar (${side ?? "main-area/popout"})` };
+			} else {
+				if (split.collapsed) split.expand?.();
+				split.setSize(wantW);
+				await new Promise((r) => window.setTimeout(r, 400));
+				const r2 = el!.getBoundingClientRect();
+				sidebarWidthApplied = { applied: true, side, requested: wantW, actual: Math.round(r2.width) };
+			}
 		}
 		// 导航注入：nav="settings" 打开内嵌设置屏；nav=数字 点击第 N 个
 		// 设置 tab（0=模型 1=RAG 2=MCP 3=分享 4=Pro）。供截图走查。
@@ -2880,6 +2915,7 @@ export default class SmartVaultPlugin extends Plugin {
 			};
 		}
 		if (navDbg) out.navDbg = navDbg;
+		if (sidebarWidthApplied) out.sidebarWidth = sidebarWidthApplied;
 		out.winState = this.collectDebugWinState();
 		if (reproLog.length > 0) out.reproLog = reproLog;
 		if (Object.keys(out).length === 0) {
@@ -2904,7 +2940,15 @@ export default class SmartVaultPlugin extends Plugin {
 	 *  编码 VP9 → webm-muxer 封装 WebM。MediaRecorder 在 Obsidian 渲染进程
 	 *  静默零输出（真机实测 track live/帧已绘制仍 0 字节），故弃用。 */
 	private debugRecordState: {
-		win: { getTitle(): string; webContents: { capturePage(): Promise<{ toPNG(): Uint8Array; getSize(): { width: number; height: number } }> } };
+		win: {
+			getTitle(): string;
+			webContents: {
+				capturePage(): Promise<{ toPNG(): Uint8Array; getSize(): { width: number; height: number } }>;
+				setBackgroundThrottling?(allowed: boolean): void;
+				getZoomFactor?(): number;
+				setZoomFactor?(factor: number): void;
+			};
+		};
 		crop: { x: number; y: number; width: number; height: number };
 		canvas: HTMLCanvasElement;
 		ctx: CanvasRenderingContext2D;
@@ -2918,6 +2962,10 @@ export default class SmartVaultPlugin extends Plugin {
 		outFile: string;
 		cropScale: number;
 		encError: string;
+		zoomOrig: number | null;
+		zoomApplied: number | null;
+		throttled: Array<{ wc: { setBackgroundThrottling?(allowed: boolean): void }; name: string }>;
+		heartbeat: { post(msg: unknown): void; terminate(): void } | null;
 		mouse: {
 			// pos：px/py 为上一次绘制位置（飞行动画起点），t 为事件时刻
 			pos: Map<string, { x: number; y: number; px: number; py: number; t: number; down: boolean }>;
@@ -2932,18 +2980,26 @@ export default class SmartVaultPlugin extends Plugin {
 	 （宣传视频干净：文件列表等其他 UI 不入画），target 选窗口，fps 5-30。
 	 *  自动 10 分钟兜底停止。capturePage 不含硬件光标——录制期把真实指针
 	 *  逐帧画回画布（箭头 + 点击涟漪），观看者能看到点了哪里。 */
-	private async runDebugRecord(opts?: { action?: string; target?: number; fps?: number; crop?: string }): Promise<unknown> {
+	private async runDebugRecord(opts?: { action?: string; target?: number; fps?: number; crop?: string; bitrate?: number; zoom?: number }): Promise<unknown> {
 		interface ElectronWindowLike {
 			isDestroyed(): boolean;
 			getTitle(): string;
 			getBounds(): { x: number; y: number; width: number; height: number };
-			webContents: { capturePage(): Promise<{ toPNG(): Uint8Array; getSize(): { width: number; height: number } }> };
+			moveTop?(): void;
+			focus?(): void;
+			isFocused?(): boolean;
+			webContents: {
+				capturePage(): Promise<{ toPNG(): Uint8Array; getSize(): { width: number; height: number } }>;
+				setBackgroundThrottling?(allowed: boolean): void;
+				getZoomFactor?(): number;
+				setZoomFactor?(factor: number): void;
+			};
 		}
 		const action = opts?.action ?? "status";
 		try {
 			const req = (window as unknown as { require?: (m: string) => unknown }).require;
 			if (!req) return { error: "renderer require unavailable" };
-			const electron = req("electron") as { remote?: { BrowserWindow: { getAllWindows(): ElectronWindowLike[] } } } | undefined;
+			const electron = req("electron") as { remote?: { BrowserWindow: { getAllWindows(): ElectronWindowLike[] }; getCurrentWindow?(): ElectronWindowLike } } | undefined;
 			const remote = electron?.remote;
 			if (!remote) return { error: "electron remote unavailable (Obsidian remote not initialized)" };
 			const fsMod = req("fs") as { mkdirSync(d: string, o?: { recursive?: boolean }): void; writeFileSync(f: string, d: Uint8Array): void };
@@ -2956,6 +3012,36 @@ export default class SmartVaultPlugin extends Plugin {
 				const idx = typeof opts?.target === "number" ? opts.target : 0;
 				const win = all[Math.min(Math.max(idx, 0), all.length - 1)];
 				if (!win) return { error: `window index ${idx} out of range (${all.length} windows)` };
+
+				// P0-1 后台节流第一层：遮挡时 Chromium 把隐藏页的定时器压到
+				// 1s/帧（真机实测 27s 只录 4 帧定格动画）。目标窗口与管线宿主
+				// （主窗，canvas+编码器所在）都关掉后台节流，stop 时恢复——
+				// capturePage 被遮挡也能出帧（shot 合成器路径已证明），被节流
+				// 的只是节拍定时器，所以关掉节流即根治。
+				const throttled: Array<{ wc: ElectronWindowLike["webContents"]; name: string }> = [];
+				if (typeof win.webContents.setBackgroundThrottling === "function") {
+					win.webContents.setBackgroundThrottling(false);
+					throttled.push({ wc: win.webContents, name: "target" });
+				}
+				const mainWin = (remote as { getCurrentWindow?: () => ElectronWindowLike }).getCurrentWindow?.();
+				if (mainWin && typeof mainWin.webContents.setBackgroundThrottling === "function" && mainWin.getTitle() !== win.getTitle()) {
+					mainWin.webContents.setBackgroundThrottling(false);
+					throttled.push({ wc: mainWin.webContents, name: "main" });
+				}
+				// 自动置前：遮挡是节流根源，录制前把目标窗口提到最上层。
+				win.moveTop?.();
+				win.focus?.();
+				// P1 zoom：拍摄期间临时放大页面缩放——1080p@1x 无 Retina 细节
+				// 可挖，zoom 1.25 让同一帧里的文字像素密度 +56%（治「糊」的
+				// 根本招）。capturePage 像素随 zoom 变大，probe 的 scale 自然
+				// 折入 cropScale 通道；zoom 生效是异步渲染，设完等一拍再探针。
+				// stop 恢复原值。
+				const zoomReq = typeof opts?.zoom === "number" ? Math.min(3, Math.max(0.5, opts.zoom)) : null;
+				const origZoom = typeof win.webContents.getZoomFactor === "function" ? win.webContents.getZoomFactor() : null;
+				if (zoomReq !== null && origZoom !== null && Math.abs(origZoom - zoomReq) >= 0.001 && typeof win.webContents.setZoomFactor === "function") {
+					win.webContents.setZoomFactor(zoomReq);
+					await new Promise((r) => window.setTimeout(r, 300));
+				}
 
 				// 裁剪区域：该窗口里 Semlink 视图的 rect（collectDebugWinState
 				// 按 docTitle 对号；找不到或 crop=window → 整窗入画）。
@@ -2992,7 +3078,7 @@ export default class SmartVaultPlugin extends Plugin {
 				});
 				const encWin = window as unknown as {
 					VideoEncoder?: new (init: { output: (chunk: unknown, meta?: unknown) => void; error: (e: Error) => void }) => {
-						configure(cfg: { codec: string; width: number; height: number; bitrate: number; framerate: number }): void;
+						configure(cfg: { codec: string; width: number; height: number; bitrate: number; framerate: number; latencyMode?: string }): void;
 						encode(frame: unknown, opts?: { keyFrame?: boolean }): void;
 						flush(): Promise<void>;
 						close(): void;
@@ -3009,7 +3095,11 @@ export default class SmartVaultPlugin extends Plugin {
 						if (this.debugRecordState) this.debugRecordState.encError = err.message;
 					},
 				});
-				encoder.configure({ codec: "vp09.00.10.08", width: cw, height: ch, bitrate: 8_000_000, framerate: fps });
+				// P0-2 码率：文字类内容默认 8Mbps（可 1-30Mbps 覆盖）+
+				// latencyMode "quality" 显式声明——实时档会让 VP9 为延迟牺牲
+				// 质量，文字边缘糊化的第一根源。
+				const bitrate = Math.max(1_000_000, Math.min(30_000_000, opts?.bitrate ?? 8_000_000));
+				encoder.configure({ codec: "vp09.00.10.08", width: cw, height: ch, bitrate, framerate: fps, latencyMode: "quality" });
 
 				// 鼠标轨迹追踪：capturePage 走合成器，硬件光标不入画——把真实
 				// 指针逐帧画回去（箭头 + 点击涟漪），观看者才知道点了哪里。
@@ -3091,10 +3181,17 @@ export default class SmartVaultPlugin extends Plugin {
 					win, crop, canvas, ctx, muxer, encoder,
 					startMs: Date.now(), frames: 1, timer: 0, inflight: false, fps, outFile,
 					cropScale: scale, encError: "", mouse,
+					zoomOrig: zoomReq !== null ? origZoom : null,
+					zoomApplied: zoomReq,
+					throttled,
+					heartbeat: null as { post(msg: unknown): void; terminate(): void } | null,
 				};
 				this.debugRecordState = rec;
-				// 采集循环：capturePage 单帧失败跳过；10 分钟兜底自动停止。
-				rec.timer = window.setInterval(() => {
+				// 采集节拍（P0-1 第二层保险）：Worker 心跳接管——页面可见性
+				// 节流作用于页面定时器，专用 Worker 自有事件循环；即便某层
+				// 节流开关失效（Electron 版本差异），心跳节拍依旧。心跳 →
+				// captureTick；capturePage 单帧失败跳过；10 分钟兜底自动停止。
+				const captureTick = (): void => {
 					const st = this.debugRecordState;
 					if (!st || st.inflight) return;
 					if (Date.now() - st.startMs > 600_000) {
@@ -3122,7 +3219,12 @@ export default class SmartVaultPlugin extends Plugin {
 							if (this.debugRecordState) this.debugRecordState.inflight = false;
 						}
 					})();
-				}, Math.round(1000 / fps));
+				};
+				const hbSrc = "let t=null;self.onmessage=(e)=>{const d=e.data;if(d==='stop'){if(t){clearInterval(t);t=null}}else if(d&&d.start){if(t)clearInterval(t);t=setInterval(()=>postMessage(0),d.ms);postMessage(0)}}";
+				const heartbeat = new Worker(URL.createObjectURL(new Blob([hbSrc], { type: "text/javascript" })));
+				heartbeat.onmessage = () => captureTick();
+				heartbeat.postMessage({ start: true, ms: Math.round(1000 / fps) });
+				rec.heartbeat = { post: (m: unknown) => heartbeat.postMessage(m), terminate: () => heartbeat.terminate() };
 
 				return {
 					recording: true,
@@ -3131,6 +3233,10 @@ export default class SmartVaultPlugin extends Plugin {
 					crop: cropMode,
 					canvas: { w: cw, h: ch },
 					outFile,
+					bitrate,
+					zoom: zoomReq !== null && origZoom !== null ? { from: origZoom, to: zoomReq } : null,
+					backgroundThrottlingDisabled: throttled.map((t) => t.name),
+					focused: win.isFocused?.() ?? null,
 					// 窗口枚举：target 序号与窗口的对应表（弹窗是独立 BrowserWindow，
 					// 与 shot 同序）。kind 取自 collectDebugWinState（popout /
 					// sidebar-left / sidebar-right / main-area），无 Semlink 视图
@@ -3151,7 +3257,17 @@ export default class SmartVaultPlugin extends Plugin {
 				const fps = st.fps;
 				this.debugRecordState = null;
 				window.clearInterval(st.timer);
+				st.heartbeat?.post("stop");
+				st.heartbeat?.terminate();
 				st.mouse.detach();
+				// 恢复录制期改掉的窗口状态（后台节流 / zoom）——必须执行：
+				// 宁可少录一帧也不能把用户的页面缩放和节流开关留在临时值。
+				for (const t of st.throttled) {
+					try { t.wc.setBackgroundThrottling?.(true); } catch { /* 已销毁 */ }
+				}
+				if (st.zoomOrig !== null && typeof st.win.webContents.setZoomFactor === "function") {
+					try { st.win.webContents.setZoomFactor(st.zoomOrig); } catch { /* 已销毁 */ }
+				}
 				// 末帧补录 + 收尾编码。
 				try {
 					const img = await st.win.webContents.capturePage();
@@ -3193,7 +3309,21 @@ export default class SmartVaultPlugin extends Plugin {
 			// status
 			const st = this.debugRecordState;
 			return st
-				? { recording: true, elapsedMs: Date.now() - st.startMs, frames: st.frames, encoderState: st.encoder.state, encoderError: st.encError || undefined, outFile: st.outFile, fps: st.fps, cursorTrackedDocs: st.mouse.pos.size }
+				? {
+					recording: true,
+					elapsedMs: Date.now() - st.startMs,
+					frames: st.frames,
+					fps: st.fps,
+					// actualFps：帧数/实际耗时——显著低于 fps = 目标窗口被节流/
+					// 遮挡（正常应 ≈ fps±10%），一眼看出录制健康度。
+					actualFps: Math.round((st.frames / Math.max(1, Date.now() - st.startMs)) * 1000 * 10) / 10,
+					zoom: st.zoomApplied ?? null,
+					throttlingDisabled: st.throttled.map((t) => t.name),
+					encoderState: st.encoder.state,
+					encoderError: st.encError || undefined,
+					outFile: st.outFile,
+					cursorTrackedDocs: st.mouse.pos.size,
+				}
 				: { recording: false };
 		} catch (e) {
 			return { error: e instanceof Error ? e.message : String(e) };
@@ -3326,7 +3456,7 @@ export default class SmartVaultPlugin extends Plugin {
 		return out;
 	}
 
-	private async runDebugShot(opts?: { target?: string | number; resize?: { index?: number; width: number; height: number } }): Promise<unknown> {
+	private async runDebugShot(opts?: { target?: string | number; resize?: { index?: number; width?: number; height?: number; x?: number; y?: number }; zoom?: number }): Promise<unknown> {
 		interface ElectronWindowLike {
 			isDestroyed(): boolean;
 			getTitle(): string;
@@ -3335,6 +3465,8 @@ export default class SmartVaultPlugin extends Plugin {
 			webContents: {
 				capturePage(): Promise<{ toPNG(): Uint8Array; getSize(): { width: number; height: number } }>;
 				getZoomFactor(): number;
+				setZoomFactor?(factor: number): void;
+				setBackgroundThrottling?(allowed: boolean): void;
 			};
 		}
 		try {
@@ -3353,34 +3485,108 @@ export default class SmartVaultPlugin extends Plugin {
 
 			const all = remote.BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && w.getBounds().width > 0);
 			if (all.length === 0) return { error: "no windows found" };
-			// 可选：截图前先改窗口尺寸（moveLeafToPopout 有 600px 最小宽，
-			// 窄幅 (<480 容器) 走查只能靠 Electron setBounds 绕过）。
+			// 可选：截图前先改窗口几何（x/y 缺省保留原位；width/height 缺省
+			// 保留原尺寸——移动窗位/改尺寸互不牵连）。moveLeafToPopout 有
+			// 600px 最小宽，窄幅 (<480 容器) 走查只能靠 Electron setBounds 绕过。
 			if (opts?.resize) {
 				const idx = typeof opts.resize.index === "number" ? opts.resize.index : 0;
 				const w = all[idx];
-				if (w?.setBounds) {
+				if (w?.setBounds && (opts.resize.width !== undefined || opts.resize.height !== undefined || opts.resize.x !== undefined || opts.resize.y !== undefined)) {
 					const b = w.getBounds();
-					w.setBounds({ x: b.x, y: b.y, width: opts.resize.width, height: opts.resize.height });
+					w.setBounds({
+						x: opts.resize.x ?? b.x,
+						y: opts.resize.y ?? b.y,
+						width: opts.resize.width ?? b.width,
+						height: opts.resize.height ?? b.height,
+					});
 					await new Promise((r) => window.setTimeout(r, 500));
+					// 侧栏联动钳制：resize 缩窄主窗后，Semlink 侧栏的固定宽度
+					// 是独立一层——窗 590 / 栏 900 时内容按 900 排版被窗缘裁掉
+					// （真机实测截图）。检测主窗文档里的侧栏视图右缘是否越出
+					// 窗口，越出则把分栏钳到「窗宽 − 另一侧栏宽 − 余量」，
+					// 视图恢复完整（record/zoom 的 scale 通道无需感知）。
+					const sidebarLeaf = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)
+						.find((l) => ((l as unknown as { containerEl?: HTMLElement }).containerEl
+							?? (l.view as unknown as { containerEl?: HTMLElement }).containerEl)?.ownerDocument === window.document);
+					const sel2 = (sidebarLeaf as unknown as { containerEl?: HTMLElement } | undefined)?.containerEl
+						?? (sidebarLeaf?.view as unknown as { containerEl?: HTMLElement } | undefined)?.containerEl;
+					if (sel2) {
+						const avail = window.innerWidth;
+						const r3 = sel2.getBoundingClientRect();
+						if (r3.right > avail + 2 || r3.width > avail) {
+							const side = sel2.closest(".mod-left-split") ? "left" : "right";
+							const ws2 = this.app.workspace as unknown as {
+								leftSplit?: { containerEl?: HTMLElement; setSize?(w: number): void; collapsed?: boolean; expand?(): void };
+								rightSplit?: { containerEl?: HTMLElement; setSize?(w: number): void; collapsed?: boolean; expand?(): void };
+							};
+							const own = side === "left" ? ws2.leftSplit : ws2.rightSplit;
+							const other = side === "left" ? ws2.rightSplit : ws2.leftSplit;
+							if (own && typeof own.setSize === "function") {
+								if (own.collapsed) own.expand?.();
+								const otherW = other && !other.collapsed ? other.containerEl?.offsetWidth ?? 0 : 0;
+								own.setSize(Math.max(300, avail - otherW - 8));
+								await new Promise((r) => window.setTimeout(r, 300));
+							}
+						}
+					}
 				}
 			}
-			let targets = all;
-			if (typeof opts?.target === "number") {
-				targets = [all[opts.target]].filter(Boolean);
-				if (targets.length === 0) return { error: `window index ${opts.target} out of range (${all.length} windows)` };
+			// zoom：拍摄期间临时放大目标窗口的页面缩放——1080p@1x 无 Retina
+			// 细节可挖，zoom 1.25 让同一帧里的文字像素密度 +56%（治「糊」）。
+			// capturePage 像素随 zoom 变大，文件分辨率即放大后尺寸；拍摄完
+			// 恢复原 zoom。zoom 生效是异步渲染——设完等一拍再截。
+			const zoomTargets = typeof opts?.target === "number" ? [all[opts.target]].filter(Boolean) : all;
+			const zoomApplied: Array<{ w: ElectronWindowLike; orig: number }> = [];
+			const zoom = typeof opts?.zoom === "number" ? Math.min(3, Math.max(0.5, opts.zoom)) : null;
+			// 后台窗口的 zoom 重合成会被节流冻结：capturePage 返回的是最近
+			// 一帧合成结果，被遮挡/失焦的窗口在 zoom 后不再合成 → 截到旧
+			// 帧（真机实测：zoom 1.5 applied 但像素不变）。拍摄窗口临时关
+			// 后台节流（record 同款），拍完恢复。
+			const throttleRestore: Array<{ wc: ElectronWindowLike["webContents"] }> = [];
+			for (const w of zoomTargets) {
+				if (typeof w.webContents.setBackgroundThrottling === "function") {
+					w.webContents.setBackgroundThrottling(false);
+					throttleRestore.push({ wc: w.webContents });
+				}
 			}
+			if (zoom !== null) {
+				for (const w of zoomTargets) {
+					if (typeof w.webContents.setZoomFactor !== "function") continue;
+					const orig = w.webContents.getZoomFactor();
+					if (Math.abs(orig - zoom) < 0.001) continue;
+					w.webContents.setZoomFactor(zoom);
+					zoomApplied.push({ w, orig });
+				}
+				if (zoomApplied.length > 0) await new Promise((r) => window.setTimeout(r, 300));
+			}
+			try {
+				let targets = all;
+				if (typeof opts?.target === "number") {
+					targets = [all[opts.target]].filter(Boolean);
+					if (targets.length === 0) return { error: `window index ${opts.target} out of range (${all.length} windows)` };
+				}
 
-			const shots: Array<{ file: string; title: string; bounds: { x: number; y: number; width: number; height: number }; pixels: { width: number; height: number } }> = [];
-			for (let i = 0; i < targets.length; i++) {
-				const w = targets[i];
-				const img = await w.webContents.capturePage();
-				const safe = (w.getTitle() || "window").replace(/[\\/:*?"<>|]/g, "_").slice(0, 24);
-				const file = pathMod.join(dir, `shot${i}_${safe}.png`);
-				fsMod.writeFileSync(file, img.toPNG());
-				const size = img.getSize();
-				shots.push({ file, title: w.getTitle(), bounds: w.getBounds(), pixels: size });
+				const shots: Array<{ file: string; title: string; bounds: { x: number; y: number; width: number; height: number }; pixels: { width: number; height: number } }> = [];
+				for (let i = 0; i < targets.length; i++) {
+					const w = targets[i];
+					const img = await w.webContents.capturePage();
+					const safe = (w.getTitle() || "window").replace(/[\\/:*?"<>|]/g, "_").slice(0, 24);
+					const file = pathMod.join(dir, `shot${i}_${safe}.png`);
+					fsMod.writeFileSync(file, img.toPNG());
+					const size = img.getSize();
+					shots.push({ file, title: w.getTitle(), bounds: w.getBounds(), pixels: size });
+				}
+				return { dir, count: shots.length, shots, zoom: zoom !== null ? { applied: zoomApplied.length, factor: zoom } : null };
+			} finally {
+				// zoom 恢复必须执行：宁可截图失败也不能把用户的页面缩放留在
+				// 临时值上（恢复失败静默——getZoomFactor 原值本就是恢复目标）。
+				for (const z of zoomApplied) {
+					try { z.w.webContents.setZoomFactor?.(z.orig); } catch { /* 已销毁 */ }
+				}
+				for (const t of throttleRestore) {
+					try { t.wc.setBackgroundThrottling?.(true); } catch { /* 已销毁 */ }
+				}
 			}
-			return { dir, count: shots.length, shots };
 		} catch (e) {
 			return { error: e instanceof Error ? e.message : String(e) };
 		}
@@ -3393,17 +3599,66 @@ export default class SmartVaultPlugin extends Plugin {
 	 *  外层行与内层按钮同时含文本时只留内层，点它才走真按钮处理器。
 	 *  跨 realm 注意：popout 元素不能 instanceof 主窗构造函数，一律用
 	 *  tagName / isContentEditable 判定，value setter 取元素自己 realm 的原型。 */
-	private async runDebugUi(opts?: { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string }): Promise<unknown> {
+	/** session 执行器：演示/E2E 的会话夹具管理——new/home 回到干净首页、
+	 *  list 枚举历史（id/title/条数）、delete 按 id|index|title 清理。
+	 *  录完的宣传演示会话不再需要手工去聊天历史里擦。 */
+	private async runDebugSession(opts?: { op?: string; id?: string; index?: number; title?: string }): Promise<unknown> {
+		const op = (opts?.op ?? "list").toLowerCase();
+		const sv = (this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0]?.view ?? null) as unknown as {
+			history?: { load(): Promise<Array<Record<string, unknown>>>; deleteSession(id: string): void };
+			newChatFromUi?: () => void;
+		} | null;
+		if (!sv) return { error: "no Semlink view" };
+		if (op === "list") {
+			const sessions = (await sv.history?.load?.()) ?? [];
+			return {
+				count: sessions.length,
+				sessions: sessions.map((s, i) => ({
+					index: i,
+					id: typeof s.id === "string" ? s.id : "",
+					title: typeof s.title === "string" ? s.title : null,
+					updatedAt: typeof s.updatedAt === "number" ? s.updatedAt : null,
+					messages: Array.isArray(s.messages) ? s.messages.length : 0,
+				})),
+			};
+		}
+		if (op === "new" || op === "home") {
+			if (typeof sv.newChatFromUi !== "function") return { error: "view has no newChatFromUi" };
+			sv.newChatFromUi();
+			return { op, ok: true };
+		}
+		if (op === "delete") {
+			const sessions = (await sv.history?.load?.()) ?? [];
+			let target = opts?.id ?? null;
+			if (!target && typeof opts?.index === "number") {
+				const picked = sessions[opts.index];
+				target = picked && typeof picked.id === "string" ? picked.id : null;
+			}
+			if (!target && opts?.title) {
+				const hit = sessions.find((s) => typeof s.title === "string" && s.title.toLowerCase().includes(opts.title!.toLowerCase()));
+				target = hit && typeof hit.id === "string" ? hit.id : null;
+			}
+			if (!target) return { error: "delete needs id | index | title substring match", count: sessions.length };
+			sv.history?.deleteSession?.(target);
+			if (typeof sv.newChatFromUi === "function") sv.newChatFromUi(); // 被删会话若在展示中 → 回干净首页（顺带触发持久化）
+			return { op, deleted: target };
+		}
+		return { error: `unknown op "${op}" (list | new | home | delete)` };
+	}
+
+	private async runDebugUi(opts?: { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string; to?: string; dy?: number; key?: string; includeHidden?: boolean }): Promise<unknown> {
 		const action = (opts?.action ?? "query").toLowerCase();
 		const sel = opts?.selector?.trim() ?? "";
 		const text = opts?.text?.trim() ?? "";
 		const idx = typeof opts?.index === "number" ? Math.max(0, Math.floor(opts.index)) : 0;
 		const docFilter = opts?.doc?.trim().toLowerCase() ?? "";
-		if (action !== "query" && action !== "click" && action !== "type") {
-			return { error: `unknown action "${action}" (query | click | type)` };
+		const includeHidden = opts?.includeHidden === true;
+		const ACTIONS = "query | click | type | scroll | hover | key";
+		if (!["query", "click", "type", "scroll", "hover", "key"].includes(action)) {
+			return { error: `unknown action "${action}" (${ACTIONS})` };
 		}
-		if (action === "type" && !sel) return { error: "type needs a selector (input target)" };
-		if (!sel && !text) return { error: "ui needs a selector and/or text" };
+		if ((action === "type" || action === "scroll") && !sel) return { error: `${action} needs a selector (target element)` };
+		if (!sel && !text && action !== "key") return { error: "ui needs a selector and/or text" };
 
 		const docs = new Set<Document>([window.document]);
 		this.app.workspace.iterateAllLeaves((leaf) => {
@@ -3432,7 +3687,10 @@ export default class SmartVaultPlugin extends Plugin {
 			for (const el of found) {
 				if (text && !(el.textContent ?? "").trim().toLowerCase().includes(lower)) continue;
 				const r = el.getBoundingClientRect();
-				if (r.width <= 0 || r.height <= 0) continue;
+				const hidden = r.width <= 0 || r.height <= 0;
+				// includeHidden：后台标签页/折叠容器里的元素也能定位（hidden
+				// 元素 rect 为 0，默认过滤；查询类 E2E 需要看到它们）。
+				if (hidden && !includeHidden) continue;
 				const docName = doc === window.document ? "main" : "popout";
 				// doc 过滤：同名按钮/文本在主窗与 popout 各有一份时精确定位
 				if (docFilter && docName !== docFilter) continue;
@@ -3458,7 +3716,7 @@ export default class SmartVaultPlugin extends Plugin {
 		if (action === "query") return { action, count: matches.length, matches: info };
 		const m = matches[idx];
 		if (!m) {
-			return { error: `visible match index ${idx} out of range (${matches.length} matches)`, matches: info };
+			return { error: `match index ${idx} out of range (${matches.length} matches${includeHidden ? ", includeHidden" : ""})`, matches: info };
 		}
 		if (action === "click") {
 			const el = m.el as HTMLElement;
@@ -3504,6 +3762,86 @@ export default class SmartVaultPlugin extends Plugin {
 				action,
 				clicked: info[idx],
 				dispatch: { seq: sequence.map(([t]) => t), rect: { x: Math.round(r3.x), y: Math.round(r3.y), w: Math.round(r3.width), h: Math.round(r3.height) } },
+			};
+		}
+		// hover：完整指针进入序列（over/move，无 down/up/click）——JS 驱动的
+		// tooltip/悬停菜单靠 mouseover 处理器触发。CSS :hover 伪类由真实
+		// 输入管线驱动，合成事件改变不了它（已知限制）。
+		if (action === "hover") {
+			const el = m.el as HTMLElement;
+			const doc = el.ownerDocument;
+			const win = doc.defaultView ?? window;
+			const r = el.getBoundingClientRect();
+			const cx = r.x + r.width / 2;
+			const cy = r.y + r.height / 2;
+			const W = win as unknown as { PointerEvent?: typeof PointerEvent; MouseEvent: typeof MouseEvent };
+			const PE = W.PointerEvent ?? W.MouseEvent;
+			const init = {
+				bubbles: true, cancelable: true, composed: true,
+				clientX: cx, clientY: cy, button: -1, isPrimary: true,
+				pointerId: 1, pointerType: "mouse", view: win,
+			} as PointerEventInit & MouseEventInit;
+			const seq: Array<[string, Event]> = [
+				["pointerover", new PE("pointerover", init)],
+				["mouseover", new MouseEvent("mouseover", init)],
+				["pointermove", new PE("pointermove", init)],
+				["mousemove", new MouseEvent("mousemove", init)],
+			];
+			for (const [, ev] of seq) el.dispatchEvent(ev);
+			await new Promise((r2) => win.setTimeout(r2, 220)); // tooltip 生成延迟
+			return {
+				action,
+				hovered: info[idx],
+				dispatch: { seq: seq.map(([t]) => t), rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } },
+			};
+		}
+		// scroll：先派发 WheelEvent（滚动联动逻辑——紧凑头部、引用折叠、
+		// scroll-bottom 显隐都能被回归到），再直接改 scrollTop（合成 wheel
+		// 不驱动真实滚动管线）。to=bottom/top 或 dy 相对滚动。
+		if (action === "scroll") {
+			const el = m.el as HTMLElement;
+			const doc = el.ownerDocument;
+			const win = doc.defaultView ?? window;
+			const to = (opts?.to ?? "").trim().toLowerCase();
+			const dy = typeof opts?.dy === "number" ? opts.dy : null;
+			const wheelDy = dy ?? (to === "bottom" ? 1200 : to === "top" ? -1200 : 600);
+			el.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, composed: true, deltaY: wheelDy, view: win }));
+			if (to === "bottom") el.scrollTop = el.scrollHeight;
+			else if (to === "top") el.scrollTop = 0;
+			else if (dy !== null) el.scrollTop += dy;
+			await new Promise((r2) => win.setTimeout(r2, 160)); // 滚动联动渲染
+			return {
+				action,
+				scrolled: info[idx],
+				scroll: { top: Math.round(el.scrollTop), height: el.scrollHeight, client: el.clientHeight, atBottom: el.scrollHeight - el.scrollTop - el.clientHeight < 4 },
+			};
+		}
+		// key：键盘事件注入——Enter 发送 / Escape 关弹窗等键盘驱动流程。
+		// 目标默认取主文档 activeElement（真实焦点位），selector 可指定。
+		// Chromium 的 KeyboardEventInit 支持遗留 keyCode 成员——Obsidian 的
+		// 快捷键匹配按 e.keyCode/e.key 双通道，缺 keyCode 会有匹配盲区。
+		if (action === "key") {
+			const key = opts?.key ?? "";
+			if (!key) return { error: "key needs opts.key (\"Enter\" | \"Escape\" | ...)" };
+			let el: Element | null = null;
+			let doc: Document = window.document;
+			if (sel) { el = m.el; doc = el.ownerDocument; }
+			else doc = docs.size > 0 ? window.document : doc;
+			const target = (el ?? doc.activeElement ?? doc.body) as HTMLElement;
+			const win = doc.defaultView ?? window;
+			const LEGACY: Record<string, number> = { Enter: 13, Escape: 27, Backspace: 8, Tab: 9, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, " ": 32 };
+			const keyCode = LEGACY[key] ?? (key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0);
+			const init = { key, bubbles: true, cancelable: true, composed: true, keyCode, which: keyCode, view: win } as KeyboardEventInit & { keyCode: number; which: number };
+			const down = new KeyboardEvent("keydown", init);
+			target.dispatchEvent(down);
+			target.dispatchEvent(new KeyboardEvent("keyup", init));
+			await new Promise((r2) => win.setTimeout(r2, 120));
+			return {
+				action,
+				key,
+				target: { tag: target.tagName?.toLowerCase() ?? "unknown", cls: target.getAttribute?.("class") ?? "", doc: doc === window.document ? "main" : "popout" },
+				dispatched: ["keydown", "keyup"],
+				defaultPrevented: down.defaultPrevented,
 			};
 		}
 		// type：input/textarea/select/contenteditable 统一入口。赋值走元素
