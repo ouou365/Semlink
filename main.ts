@@ -1023,9 +1023,11 @@ export default class SmartVaultPlugin extends Plugin {
 
 		let root: OpfsDirHandle;
 		try {
-			// 本仓库 tsconfig lib 无 DOM.AsyncIterable：FileSystemDirectoryHandle
-			// 缺 entries()，此断言在本地是必需的（检查器 lib 较新才会判其冗余）。
-			root = (await navigator.storage.getDirectory()) as unknown as OpfsDirHandle;
+			// TS lib 已含 FileSystemDirectoryHandle.entries()（DOM.AsyncIterable）：
+			// getDirectory() 返回类型直接满足 OpfsDirHandle，无需断言（2.3.0 起
+			// 本机 lib 与检查器口径一致——旧 lib 时代需要 as unknown as 中转，
+			// 见 2.2.1 提交的保留注释）。
+			root = await navigator.storage.getDirectory();
 		} catch (e) {
 			return { available: false, error: `OPFS unavailable: ${e instanceof Error ? e.message : String(e)}` };
 		}
@@ -3220,7 +3222,7 @@ export default class SmartVaultPlugin extends Plugin {
 						}
 					})();
 				};
-				const hbSrc = "let t=null;self.onmessage=(e)=>{const d=e.data;if(d==='stop'){if(t){clearInterval(t);t=null}}else if(d&&d.start){if(t)clearInterval(t);t=setInterval(()=>postMessage(0),d.ms);postMessage(0)}}";
+				const hbSrc = "let t=null;self.onmessage=(e)=>{const d=e.data;if(d==='stop'){if(t){clearInterval(t);t=null}}else if(d&&d.start){if(t)clearInterval(t);t=self.setInterval(()=>postMessage(0),d.ms);postMessage(0)}}";
 				const heartbeat = new Worker(URL.createObjectURL(new Blob([hbSrc], { type: "text/javascript" })));
 				heartbeat.onmessage = () => captureTick();
 				heartbeat.postMessage({ start: true, ms: Math.round(1000 / fps) });
