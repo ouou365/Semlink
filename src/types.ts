@@ -635,6 +635,13 @@ export interface HistoryMessage {
 	contextTokens?: number;
 	contextBreakdown?: ContextBreakdown;
 	cacheHitRate?: number | null;
+	/** Per-language translations of this answer, keyed by i18n lang code
+	 * ("en" | "zh" | …). Populated by the chat view's translate action;
+	 * absent for untranslated turns. */
+	translations?: Record<string, string>;
+	/** Which language the answer is currently DISPLAYED in（用户拍板：翻译
+	 *  完成后重进会话仍显示译文；点「原文」回 null）。null/缺省 = 原文。 */
+	displayLang?: string | null;
 	timestamp: number;
 }
 

@@ -92,6 +92,18 @@ export class ChatHistoryStore {
 		}
 	}
 
+	/** Drop session messages from `index` onward (edit-and-regenerate
+	 *  truncation), or `deleteCount` of them from `index` (per-turn delete).
+	 *  Message objects are shared with the view's currentMessages — the view
+	 *  splices its own array separately and edits fields on the shared refs. */
+	spliceMessages(sessionId: string, index: number, deleteCount?: number): void {
+		const session = this.sessions.find((s) => s.id === sessionId);
+		if (!session) return;
+		if (deleteCount === undefined) session.messages.splice(index);
+		else session.messages.splice(index, deleteCount);
+		session.updatedAt = Date.now();
+	}
+
 	/** Delete a session by id. */
 	deleteSession(id: string): void {
 		this.sessions = this.sessions.filter((s) => s.id !== id);

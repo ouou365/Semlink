@@ -58,6 +58,15 @@ export type DebugModelRunner = (opts?: {
  *  （状态头/思考预览/流式正文/最终答案文本），供 agent 观察流式渲染。 */
 export type DebugChatViewRunner = () => Promise<unknown>;
 
+/** record 工具执行器：由 main.ts 注入——录制 Semlink 视图区域为 WebM
+ * （capturePage 逐帧 + MediaRecorder），供产品宣传素材生产。 */
+export type DebugRecordRunner = (opts?: {
+	action?: string;
+	target?: number;
+	fps?: number;
+	crop?: string;
+}) => Promise<unknown>;
+
 interface JsonRpcRequest {
 	jsonrpc: "2.0";
 	id?: string | number | null;
@@ -289,6 +298,35 @@ const CHAT_TOOL = {
 	inputSchema: { type: "object", properties: {}, required: [] },
 };
 
+const RECORD_TOOL = {
+	name: "record",
+	description:
+		"Record as WebM video (product-promo capture). Records ANY Obsidian " +
+		"window: target=window index (see the windows[] table in the start " +
+		"result — index 0 is usually main, popouts are separate entries). " +
+		"crop=view records just the Semlink view region inside that window " +
+		"(default, clean promo framing); crop=window records the ENTIRE " +
+		"window incl. vault sidebar — use it to show the plugin in " +
+		"Obsidian context or to capture a Semlink popout's full frame. " +
+		"action=start begins capture (default 20fps, max 10 min auto-stop), " +
+		"action=stop writes the file to the plugin data dir and returns its " +
+		"absolute path + stats + a last-frame PNG thumb. The real mouse " +
+		"pointer is drawn onto every frame (arrow + click ripple), so " +
+		"viewers see where clicks happen — synthetic ui{click} events " +
+		"appear in the video too (ui{doc:\"popout\"} drives popout clicks " +
+		"for popout recordings). Drive ui{click/type} DURING the recording " +
+		"to demo features, then stop.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			action: { type: "string", enum: ["start", "stop", "status"], description: "start/stop/status" },
+			target: { type: "number", description: "Window index — see windows[] table in the start result (same ordering as shot)" },
+			fps: { type: "number", description: "Capture fps 5-30 (default 20)" },
+			crop: { type: "string", enum: ["view", "window"], description: "view = Semlink region only (default); window = entire window incl. vault UI / popout frame" },
+		},
+	},
+};
+
 const MODEL_TOOL = {
 	name: "model",
 	description:
@@ -325,7 +363,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner, private runRecord?: DebugRecordRunner) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -418,7 +456,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL, RECORD_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -444,6 +482,8 @@ export class DebugMcpServer {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runModel?.(params.arguments as { op?: string; provider?: string; model?: string; contextWindow?: number } | undefined)) ?? { error: "no model runner" }, null, 2) }] };
 					} else if (params.name === "chatview") {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runChatView?.()) ?? { error: "no chatview runner" }, null, 2) }] };
+					} else if (params.name === "record") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runRecord?.(params.arguments as { action?: string; target?: number; fps?: number; crop?: string } | undefined)) ?? { error: "no record runner" }, null, 2) }] };
 					} else if (params.name === "ui") {
 							result = { content: [{ type: "text", text: JSON.stringify((await this.runUi?.(params.arguments as { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string } | undefined)) ?? { error: "no ui runner" }, null, 2) }] };
 						} else if (params.name === "shot") {

@@ -2609,10 +2609,10 @@
     to { opacity: 1; }
 }/* The greeting emoji above the text (no background, no animation). */
 .semlink-search-welcome-emoji {
-    /* 与引导 hub 的 emoji 同规格（44px 字形、自适应盒） */
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    /* 与引导 hub 的 emoji 同盒模型（普通 div + text-align 居中，44px 字号
+       × 1.2 行盒）——flex 盒恰好 44px，会吃掉 emoji→问候语之间与引导页
+       一致的行盒余量（用户拍板：主页间距对齐引导页）。 */
+    text-align: center;
     font-size: 44px;
     line-height: 1.2;
 }
@@ -7387,4 +7387,199 @@ body .semlink-msg-user::selection {
    no-forbidden-elements 禁建 style 元素）。改跑马灯规则选择器时需同步这里。 */
 .smart-vault-settings .semlink-mt-model-name.is-overflow:hover .semlink-mt-model-name-track.semlink-diag-no-anim {
     animation: none;
+}
+
+/* ── 用户消息悬停操作（复制/编辑/删除）+ 编辑态（豆包式：气泡原地变身白底黑字） ── */
+.semlink-msg-user-actions {
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+.semlink-msg-user-turn.is-editing .semlink-msg-user-actions {
+    display: none;
+}
+.semlink-msg-user-turn .semlink-msg-user-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.12s ease, transform 0.1s ease;
+}
+.semlink-msg-user-turn .semlink-msg-user-action:hover {
+    color: var(--text-normal);
+}
+.semlink-msg-user-turn .semlink-msg-user-action:active {
+    color: var(--interactive-accent);
+    transform: scale(0.85);
+}
+.semlink-msg-user-action svg {
+    width: 14px;
+    height: 14px;
+}
+/* 编辑态：气泡原地变身——accent 紫底换白底黑字，占满整行 */
+.semlink-msg-bubble.semlink-msg-user.is-editing {
+    width: 100%;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    border: none;
+    box-shadow: none;
+    white-space: normal;
+}
+.semlink-msg-user-turn .semlink-msg-edit-input {
+    display: block;
+    width: 100%;
+    min-height: 40px;
+    resize: none;
+    border: none;
+    padding: 0;
+    background: transparent;
+    color: var(--text-normal);
+    font-family: inherit;
+    font-size: var(--font-ui-medium);
+    line-height: 1.5;
+    overflow: hidden;
+}
+.semlink-msg-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+}
+/* 0-2-0 提级：app.css 的 button:not(.clickable-icon)（0-1-1）会压过单类
+   规则，把 Cancel/Send 压回默认灰皮肤（同屏 user-action 按钮同款修法） */
+.semlink-msg-user-turn .semlink-msg-edit-cancel {
+    padding: 4px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: var(--font-ui-small);
+    cursor: pointer;
+}
+.semlink-msg-user-turn .semlink-msg-edit-cancel:hover {
+    color: var(--text-normal);
+    background: var(--background-modifier-hover);
+}
+.semlink-msg-user-turn .semlink-msg-edit-send {
+    height: 32px;
+    padding: 0 14px;
+    border: none;
+    border-radius: var(--sl-radius-inner);
+    background: var(--interactive-accent);
+    /* 主题的 --text-on-accent 未必是白色（用户气泡同款硬编码 #fff） */
+    color: #fff;
+    font-size: 13.5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.12s ease-out, background 0.1s ease-out;
+}
+.semlink-msg-user-turn .semlink-msg-edit-send:hover {
+    background: var(--interactive-accent-hover);
+}
+.semlink-msg-user-turn .semlink-msg-edit-send:active {
+    opacity: 0.4;
+}
+
+/* ── 回到底部浮动钮（Flova 式 ↓，骑跨输入 wrapper 上缘居中） ── */
+.semlink-scroll-bottom-btn {
+    position: absolute;
+    top: -16px;
+    left: 50%;
+    transform: translateX(-50%) translateY(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-muted);
+    box-shadow: var(--shadow-s);
+    cursor: pointer;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+    z-index: 60;
+}
+.semlink-scroll-bottom-btn.is-shown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+.semlink-scroll-bottom-btn:hover {
+    color: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+}
+.semlink-scroll-bottom-btn .semlink-scroll-bottom-icon {
+    display: inline-flex;
+}
+.semlink-scroll-bottom-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* 焦点环/边框全清除：focus ring 满宽贴卡片边缘，视觉上像卡片边框 */
+.semlink-msg-user-turn .semlink-msg-edit-input,
+.semlink-msg-user-turn .semlink-msg-edit-input:focus,
+.semlink-msg-user-turn .semlink-msg-edit-input:focus-visible {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+.semlink-msg-user-turn.is-editing .semlink-msg-bubble {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* 编辑态：白底上的拖拽选择恢复淡紫高亮（气泡的白色 ::selection
+   覆盖是为紫底阅读设计的，白底编辑态下选区不可见） */
+.semlink-msg-user-turn.is-editing .semlink-msg-user::selection,
+.semlink-msg-user-turn.is-editing .semlink-msg-user *::selection,
+.semlink-msg-user-turn.is-editing .semlink-msg-edit-input::selection {
+    background: hsla(var(--interactive-accent-hsl), 0.3);
+    color: var(--text-normal);
+}
+
+/* ── 翻译进行中：原文行尾加载圈（Obsidian 官网同款交互） ── */
+.semlink-line-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-left: 6px;
+    border: 2px solid var(--interactive-accent);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: semlink-line-spin 0.8s linear infinite;
+    vertical-align: -2px;
+    opacity: 0.75;
+}
+@keyframes semlink-line-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── 录制叠加画布（semlink-debug record 工具）：右下角 96px 半透明角标。
+   captureStream 的 canvas 必须挂 DOM 且在可视区（离屏/不可见不出帧）；
+   0.03 透明度不占版面。静态样式走类不走赋值（检查器坑 #12）。 ── */
+.semlink-record-canvas {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    width: 96px;
+    height: 54px;
+    opacity: 0.03;
+    pointer-events: none;
+    z-index: 9999;
 }

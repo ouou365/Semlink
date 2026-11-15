@@ -1,0 +1,47 @@
+<svg width="512" height="512" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Semlink">
+  <defs>
+    <!-- 参考配方第 1 层：底色 + soft-light 光泽（预烘焙：
+         白 0.18 soft-light → #9467F7，黑 0.18 soft-light → #8051F5） -->
+    <linearGradient id="semlink-gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9467F7"/>
+      <stop offset="1" stop-color="#8051F5"/>
+    </linearGradient>
+    <!-- 参考配方第 2 层：底部中心径向回光（radial at 50% 130%，同色不透明→90% 透明；
+         CSS r=90% 按最远角折算：√(512²+1331²)×0.9 ≈ 1283） -->
+    <radialGradient id="semlink-glow" gradientUnits="userSpaceOnUse"
+                    cx="512" cy="1331" r="1283">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="0.9" stop-color="#8B5CF6" stop-opacity="0"/>
+    </radialGradient>
+    <!-- 参考配方：图标投影（drop-shadow(0 1px 黑 20%) 等比放大并加柔边） -->
+    <filter id="semlink-ds" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- 底 + 光泽 + 回光（圆角 25% = rounded-xl/48px 等比） -->
+  <rect width="1024" height="1024" rx="256" fill="url(#semlink-gloss)"/>
+  <rect width="1024" height="1024" rx="256" fill="url(#semlink-glow)"/>
+
+  <!-- ring-1 ring-inset ring-white/10 等比（1px@48px → ≈10px，内缩贴边） -->
+  <rect x="5" y="5" width="1014" height="1014" rx="251"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.1" stroke-width="10"/>
+
+  <!-- 原图标：src/semlink-logo.svg 立方体线框（currentColor → 白，尺寸比参考 50% 略放大到 56%） -->
+  <g filter="url(#semlink-ds)" fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"
+     transform="translate(512 512) scale(0.56) translate(-512 -512)">
+   <g transform="translate(512 512) scale(1.125) translate(-512 -512)">
+    <path d="M512 72 L893 292 L893 732 L512 952 L131 732 L131 292 Z" stroke-width="48"/>
+    <g stroke-width="48">
+      <line x1="512" y1="72" x2="512" y2="288"/>
+      <line x1="893" y1="292" x2="706" y2="400"/>
+      <line x1="893" y1="732" x2="706" y2="624"/>
+      <line x1="512" y1="952" x2="512" y2="736"/>
+      <line x1="131" y1="732" x2="318" y2="624"/>
+      <line x1="131" y1="292" x2="318" y2="400"/>
+    </g>
+    <path d="M512 288 L706 400 L706 624 L512 736 L318 624 L318 400 Z" stroke-width="58"/>
+    <path d="M512 512 L512 736 M706 400 L512 512 M318 400 L512 512" stroke-width="58"/>
+   </g>
+  </g>
+</svg>

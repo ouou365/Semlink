@@ -690,6 +690,63 @@ export class ChatClient {
 		return status === 429 || status === 503 || /busy|rate ?limit/i.test(msg);
 	}
 
+		/** One-shot translation: send `content` to the active chat model with a
+	 *  translator system prompt and stream the translation back. Deliberately
+	 *  minimal — no tools, no pre-analysis round, no agent loop, single
+	 *  attempt (abort propagates immediately). Dispatched by provider format
+	 *  exactly like chat(); `onDelta` receives the ACCUMULATED translation
+	 *  text (same semantics as chat's onStream). */
+	async translate(
+		content: string,
+		targetLabel: string,
+		onDelta?: (text: string) => void,
+		signal?: AbortSignal,
+	): Promise<string> {
+		const active = this.getActiveModel();
+		if (!active) throw new Error("NO_MODEL:未配置可用的聊天模型，请先在设置中选择模型");
+		const { provider, model } = active;
+		const systemPrompt =
+			`You are a professional translator. Translate the user's content into ${targetLabel}. ` +
+			"Preserve the markdown structure (headings, lists, tables, links), inline code and fenced code blocks, " +
+			"citation markers like [1] or [1:L100-L120] verbatim, URLs and proper nouns. " +
+			"Translate faithfully and naturally; output ONLY the translation — no preamble, no notes.";
+		const onStream = onDelta
+			? (text: string) => {
+					onDelta(text);
+				}
+			: undefined;
+		if (provider.apiFormat === "anthropic") {
+			const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+			const url = chatEndpoint(baseUrl, provider.wirePath, "/v1/messages");
+			const body: AnthropicChatBody = {
+				model: model.id,
+				max_tokens: CHAT_MAX_OUTPUT_TOKENS,
+				system: systemPrompt,
+				messages: [{ role: "user", content }],
+				stream: true,
+			};
+			const result = await this.streamAnthropicWithBudget(url, provider, body, onStream, signal);
+			return result.contentBlocks
+				.filter((b) => b.type === "text")
+				.map((b) => (b as { text?: string }).text ?? "")
+				.join("");
+		}
+		const baseUrl = provider.baseUrl.replace(/\/+$/, "");
+		const url = chatEndpoint(baseUrl, provider.wirePath, "/v1/chat/completions");
+		const body: OpenAIChatBody = {
+			model: model.id,
+			messages: [
+				{ role: "system", content: systemPrompt },
+				{ role: "user", content },
+			],
+			stream: true,
+			stream_options: { include_usage: true },
+			max_tokens: CHAT_MAX_OUTPUT_TOKENS,
+		};
+		const result = await this.streamOpenAIChat(url, provider, body, onStream, signal);
+		return result.content;
+	}
+
 	// ──── Conversation assembly (ZCode-style history) ────
 
 	/**

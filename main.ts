@@ -20,6 +20,7 @@ import { Scheduler } from "./src/scheduler";
 import { ProgressTracker } from "./src/progress";
 import { McpServer } from "./src/mcp-server";
 import { DebugMcpServer } from "./src/debug-mcp-server";
+import { Muxer, ArrayBufferTarget } from "webm-muxer";
 import { ShareServer } from "./src/share-server";
 import { NoteShare, attachNoteShareAction } from "./src/note-share";
 import { ChatHistoryStore } from "./src/chat-history";
@@ -34,6 +35,18 @@ import { FeishuBot, type FeishuAskHandler } from "./src/feishu-bot";
 import { LicenseManager } from "./src/license";
 import { setLang, t } from "./src/i18n";
 import logoSvg from "./src/semlink-logo.svg";
+
+/** 录制光标飞行动画时长：合成点击（debug ui 工具）在一次事件里瞬移到
+ *  目标点，直接画会让视频里的箭头在点位间跳变——按此时长 ease-out
+ *  飞抵，观看者能看到移动路径。真实鼠标的连续 pointermove 天然平滑。 */
+const CURSOR_FLIGHT_MS = 160;
+
+/** 光标在 now 时刻的绘制位置：px/py→x/y 按 ease-out 插值飞抵。 */
+function drawPos(e: { px: number; py: number; x: number; y: number; t: number }, now: number): { x: number; y: number } {
+	const p = Math.min(1, (now - e.t) / CURSOR_FLIGHT_MS);
+	const q = 1 - Math.pow(1 - p, 3);
+	return { x: e.px + (e.x - e.px) * q, y: e.py + (e.y - e.py) * q };
+}
 
 export default class SmartVaultPlugin extends Plugin {
 	settings: SmartVaultSettings = { ...DEFAULT_SETTINGS };
@@ -257,7 +270,7 @@ export default class SmartVaultPlugin extends Plugin {
 		// Status bar
 		this.statusBarEl = this.addStatusBarItem();
 		this.statusBarEl.addClass("smart-vault-status-bar");
-		this.statusBarEl.createSpan({ text: "Semlink" });
+		// 品牌文字移除（用户拍板）：状态栏只保留状态点 + 数量
 		this.statusBarEl.createSpan({ cls: "status-dot" });
 		this.statusBarEl.createSpan({ cls: "status-count" });
 		// 数量首帧直出持久化快照（用户拍板「打开 Vault 很久才显数值」）：
@@ -725,6 +738,7 @@ export default class SmartVaultPlugin extends Plugin {
 			() => ({ ...(this.store.rpcDiag() as Record<string, unknown>), arrival: this.watcher?.lastArrivalDiag ?? null }),
 			(opts) => this.runDebugModel(opts),
 			() => this.runDebugChatView(),
+			(opts) => this.runDebugRecord(opts),
 		);
 		try {
 			await server.start();
@@ -1279,7 +1293,7 @@ export default class SmartVaultPlugin extends Plugin {
 		return { mode, resolved, scrollTop: Math.round(scroller?.scrollTop ?? -1), scrollHeight: scroller?.scrollHeight ?? -1, expectedLine: line, totalLines, file: v.file?.path };
 	}
 
-	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; ragDomProbe?: boolean; onboardOpen?: boolean; guideBackProbe?: boolean; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean; forcePro?: boolean }): Promise<unknown> {
+	private async runDebugMeasure(opts?: { popout?: boolean; repro?: boolean; sessionIdx?: number; nav?: number | string; width?: number; height?: number; dock?: boolean; scrollPanel?: number; scrollConfig?: number; advClick?: boolean; keyEditClick?: boolean; keyProbeFill?: boolean; keyProbeValue?: string; keyProbeCommit?: boolean; keyKebabClick?: boolean; keySaveClick?: boolean; fmtClick?: boolean; fmtPick?: string; pickProvider?: string; drillClick?: boolean; backClick?: boolean; keyModalProbe?: boolean; keyModalClose?: boolean; variantPick?: string; epClick?: boolean; epPick?: string; ragDomProbe?: boolean; onboardOpen?: boolean; guideBackProbe?: boolean; addProviderProbe?: boolean; scrollPerf?: boolean; countProbe?: boolean; forcePro?: boolean; licenseProbe?: boolean }): Promise<unknown> {
 		// 可选：先把搜索视图移入独立弹窗再量（弹窗实例的布局与主窗不同）。
 		// width/height 自定弹窗尺寸（≤480 可测窄幅断点）；不传用形态默认值。
 		// 对已在弹窗里的 leaf 再次 moveLeafToPopout = 按新尺寸重建弹窗，
@@ -2168,6 +2182,34 @@ export default class SmartVaultPlugin extends Plugin {
 		// countProbe：vault 可索引数取证——调度器口径（countIndexableNotes）
 		// 与 vault 原始清单、磁盘 walk 对不上时（用户报"共 980 篇不更新"），
 		// 分桶看差在哪：vault md 总数 / 非空 / 命中排除各多少。
+		// licenseProbe：isPro() 真实返回值取证（✨ 激活后仍显示的根因定位）。
+		if (opts?.licenseProbe) {
+			const lm = this.licenseManager as unknown as {
+				isPro?: () => boolean;
+				state?: { key?: string; token?: string; tokenExp?: number; lastValidatedAt?: number };
+			};
+			const st = lm.state ?? {};
+			return {
+				isPro: lm.isPro?.() ?? null,
+				hasKey: !!st.key,
+				hasToken: !!st.token,
+				tokenExp: st.tokenExp ?? null,
+				tokenExpired: st.tokenExp ? st.tokenExp < Date.now() : null,
+				lastValidatedAt: st.lastValidatedAt ?? null,
+				viewRefresh: await (async () => {
+					try {
+						const probeLeaf = await this.activateSearchView();
+						const sv = (probeLeaf ?? this.app.workspace.getLeavesOfType("semlink-search-view")[0])?.view as unknown as { refreshLicenseUI?: () => void; upgradeBtnEl?: HTMLElement } | null;
+						const before = sv?.upgradeBtnEl?.getAttribute("class") ?? null;
+						sv?.refreshLicenseUI?.();
+						const after = sv?.upgradeBtnEl?.getAttribute("class") ?? null;
+						return { hadBtn: !!sv?.upgradeBtnEl, before, after };
+					} catch (e) {
+						return { error: String(e) };
+					}
+				})(),
+			};
+		}
 		if (opts?.countProbe && opts?.forcePro) {
 			// 仅供样式目检的内存桩：isPro 强 true（不落盘、重载即消失）
 			const lmAny = this.licenseManager as unknown as { isPro?: () => boolean };
@@ -2858,6 +2900,392 @@ export default class SmartVaultPlugin extends Plugin {
 	 *  尺寸两级：viewport（布局/容器查询实际生效面）与 OS 窗口外框
 	 *  （outerWidth/Height，Electron 渲染进程原生支持）。断点口径与
 	 *  设置屏容器查询一致（480/720）。 */
+	/** 录制执行器状态：capturePage 逐帧 → 绘入画布 → WebCodecs VideoEncoder
+	 *  编码 VP9 → webm-muxer 封装 WebM。MediaRecorder 在 Obsidian 渲染进程
+	 *  静默零输出（真机实测 track live/帧已绘制仍 0 字节），故弃用。 */
+	private debugRecordState: {
+		win: { getTitle(): string; webContents: { capturePage(): Promise<{ toPNG(): Uint8Array; getSize(): { width: number; height: number } }> } };
+		crop: { x: number; y: number; width: number; height: number };
+		canvas: HTMLCanvasElement;
+		ctx: CanvasRenderingContext2D;
+		muxer: { addVideoChunk(chunk: unknown, meta?: unknown): void; finalize(): void; target: { buffer: ArrayBuffer } };
+		encoder: { encode(frame: unknown, opts?: { keyFrame?: boolean }): void; flush(): Promise<void>; close(): void; state: string };
+		startMs: number;
+		frames: number;
+		timer: number;
+		inflight: boolean;
+		fps: number;
+		outFile: string;
+		cropScale: number;
+		encError: string;
+		mouse: {
+			// pos：px/py 为上一次绘制位置（飞行动画起点），t 为事件时刻
+			pos: Map<string, { x: number; y: number; px: number; py: number; t: number; down: boolean }>;
+			// ripple：shown/t0 —— 光标飞抵点击点后才锚定扩散起点
+			ripples: Array<{ title: string; x: number; y: number; t: number; shown?: boolean; t0?: number }>;
+			accent: string;
+			detach: () => void;
+		};
+	} | null = null;
+
+	/** 录制工具：action=start/stop/status。start 默认裁剪 Semlink 视图区域
+	 （宣传视频干净：文件列表等其他 UI 不入画），target 选窗口，fps 5-30。
+	 *  自动 10 分钟兜底停止。capturePage 不含硬件光标——录制期把真实指针
+	 *  逐帧画回画布（箭头 + 点击涟漪），观看者能看到点了哪里。 */
+	private async runDebugRecord(opts?: { action?: string; target?: number; fps?: number; crop?: string }): Promise<unknown> {
+		interface ElectronWindowLike {
+			isDestroyed(): boolean;
+			getTitle(): string;
+			getBounds(): { x: number; y: number; width: number; height: number };
+			webContents: { capturePage(): Promise<{ toPNG(): Uint8Array; getSize(): { width: number; height: number } }> };
+		}
+		const action = opts?.action ?? "status";
+		try {
+			const req = (window as unknown as { require?: (m: string) => unknown }).require;
+			if (!req) return { error: "renderer require unavailable" };
+			const electron = req("electron") as { remote?: { BrowserWindow: { getAllWindows(): ElectronWindowLike[] } } } | undefined;
+			const remote = electron?.remote;
+			if (!remote) return { error: "electron remote unavailable (Obsidian remote not initialized)" };
+			const fsMod = req("fs") as { mkdirSync(d: string, o?: { recursive?: boolean }): void; writeFileSync(f: string, d: Uint8Array): void };
+			const pathMod = req("path") as { join(...p: string[]): string };
+
+			if (action === "start") {
+				if (this.debugRecordState) return { error: "recording already in progress", startedAt: this.debugRecordState.startMs };
+				const all = remote.BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && w.getBounds().width > 0);
+				if (all.length === 0) return { error: "no windows found" };
+				const idx = typeof opts?.target === "number" ? opts.target : 0;
+				const win = all[Math.min(Math.max(idx, 0), all.length - 1)];
+				if (!win) return { error: `window index ${idx} out of range (${all.length} windows)` };
+
+				// 裁剪区域：该窗口里 Semlink 视图的 rect（collectDebugWinState
+				// 按 docTitle 对号；找不到或 crop=window → 整窗入画）。
+				const states = this.collectDebugWinState();
+				const entry = (states.find((st) => st.docTitle === win.getTitle()) ?? null) as { docTitle: string; viewport: { w: number; h: number }; viewRect: { x: number; y: number; w: number; h: number } } | null;
+				const fps = Math.max(5, Math.min(30, opts?.fps ?? 20));
+				const cropMode = opts?.crop === "window" ? "window" : "view";
+				const vpW = entry?.viewport.w ?? win.getBounds().width;
+
+				// 探针帧：确定 capture 像素 / CSS 像素的缩放（zoom+dpr 一次算清）。
+				const probe = await win.webContents.capturePage();
+				const probeSize = probe.getSize();
+				const scale = vpW > 0 ? probeSize.width / vpW : 1;
+				const crop = cropMode === "view" && entry
+					? { x: entry.viewRect.x * scale, y: entry.viewRect.y * scale, width: entry.viewRect.w * scale, height: entry.viewRect.h * scale }
+					: { x: 0, y: 0, width: probeSize.width, height: probeSize.height };
+				const cw = Math.max(2, Math.round(crop.width / 2) * 2);
+				const ch = Math.max(2, Math.round(crop.height / 2) * 2);
+
+				// 画布：必须挂入 DOM 且在可视区（detached/离屏 canvas 的
+				// captureStream 不出帧）——右下角 96px 半透明角标，不占版面。
+				// 定位样式走 CSS 类 .semlink-record-canvas（静态样式赋值是
+				// 检查器 Error，坑 #12）。
+				const canvas = document.body.createEl("canvas", { cls: "semlink-record-canvas", attr: { "data-semlink-rec": "1" } });
+				canvas.width = cw;
+				canvas.height = ch;
+				const ctx = canvas.getContext("2d");
+				if (!ctx) return { error: "canvas 2d context unavailable" };
+
+				// WebCodecs 编码器 + WebM 封装（MediaRecorder 静默零输出，弃用）。
+				const muxer = new Muxer({
+					target: new ArrayBufferTarget(),
+					video: { codec: "V_VP9", width: cw, height: ch, frameRate: fps },
+				});
+				const encWin = window as unknown as {
+					VideoEncoder?: new (init: { output: (chunk: unknown, meta?: unknown) => void; error: (e: Error) => void }) => {
+						configure(cfg: { codec: string; width: number; height: number; bitrate: number; framerate: number }): void;
+						encode(frame: unknown, opts?: { keyFrame?: boolean }): void;
+						flush(): Promise<void>;
+						close(): void;
+						state: string;
+					};
+					VideoFrame?: new (image: HTMLCanvasElement, init?: { timestamp?: number; duration?: number }) => unknown;
+				};
+				if (!encWin.VideoEncoder || !encWin.VideoFrame) return { error: "WebCodecs unavailable in this renderer" };
+				const encoder = new encWin.VideoEncoder({
+					output: (chunk: unknown, meta?: unknown) => {
+						(muxer as unknown as { addVideoChunk: (c: unknown, m?: unknown) => void }).addVideoChunk(chunk, meta);
+					},
+					error: (err: Error) => {
+						if (this.debugRecordState) this.debugRecordState.encError = err.message;
+					},
+				});
+				encoder.configure({ codec: "vp09.00.10.08", width: cw, height: ch, bitrate: 8_000_000, framerate: fps });
+
+				// 鼠标轨迹追踪：capturePage 走合成器，硬件光标不入画——把真实
+				// 指针逐帧画回去（箭头 + 点击涟漪），观看者才知道点了哪里。
+				// 监听挂候选文档（主窗 + Semlink 弹窗）capture 阶段，只读坐标
+				// 零干扰；位置按 docTitle 存，绘制时对号目标窗口。合成点击
+				// （debug ui 工具）同样产生 pointer 事件，宣传视频可复现点击。
+				const mousePos = new Map<string, { x: number; y: number; px: number; py: number; t: number; down: boolean }>();
+				const mouseRipples: Array<{ title: string; x: number; y: number; t: number; shown?: boolean; t0?: number }> = [];
+				const mouseDocs = new Set<Document>([document]);
+				for (const leaf of this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)) {
+					const d = ((leaf as unknown as { containerEl?: HTMLElement }).containerEl
+						?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl)?.ownerDocument;
+					if (d) mouseDocs.add(d);
+				}
+				const mouseListeners: Array<[Document, EventListener, EventListener, EventListener]> = [];
+				for (const d of mouseDocs) {
+					const key = d.title || "window";
+					const track = (e: PointerEvent, down?: boolean) => {
+						const prev = mousePos.get(key);
+						const now = Date.now();
+						// 飞行动画起点 = 事件时刻光标的实际绘制位置（上一段飞行
+						// 未完成时从中途接续——真实快速移动也平滑）。
+						const src = prev ? drawPos(prev, now) : { x: e.clientX, y: e.clientY };
+						mousePos.set(key, {
+							x: e.clientX,
+							y: e.clientY,
+							px: src.x,
+							py: src.y,
+							t: now,
+							down: down ?? prev?.down ?? false,
+						});
+					};
+					const mv = (e: Event) => track(e as PointerEvent);
+					const dn = (e: Event) => {
+						track(e as PointerEvent, true);
+						mouseRipples.push({ title: key, x: (e as PointerEvent).clientX, y: (e as PointerEvent).clientY, t: Date.now() });
+					};
+					const up = (e: Event) => track(e as PointerEvent, false);
+					d.addEventListener("pointermove", mv, { capture: true, passive: true });
+					d.addEventListener("pointerdown", dn, { capture: true, passive: true });
+					d.addEventListener("pointerup", up, { capture: true, passive: true });
+					mouseListeners.push([d, mv, dn, up]);
+				}
+				const mouse = {
+					pos: mousePos,
+					ripples: mouseRipples,
+					// 画布不能用 CSS 变量——探针元素读出 accent 的 rgb() 字面量。
+					accent: (() => {
+						const sp = document.body.createSpan();
+						sp.setCssProps({ position: "fixed", top: "-100px", visibility: "hidden", color: "var(--interactive-accent)" });
+						const c = getComputedStyle(sp).color || "rgb(124,58,237)";
+						sp.remove();
+						return c;
+					})(),
+					detach: () => {
+						for (const [d2, mv2, dn2, up2] of mouseListeners) {
+							d2.removeEventListener("pointermove", mv2, true);
+							d2.removeEventListener("pointerdown", dn2, true);
+							d2.removeEventListener("pointerup", up2, true);
+						}
+					},
+				};
+
+				// 首帧：探针位图先绘入画布并编码（t=0 即有帧）。
+				const probeBlob = new Blob([probe.toPNG() as BlobPart], { type: "image/png" });
+				const probeBmp = await createImageBitmap(probeBlob);
+				ctx.drawImage(probeBmp, crop.x, crop.y, crop.width, crop.height, 0, 0, cw, ch);
+				this.drawRecordCursor(ctx, scale, crop, mouse, win.getTitle());
+				probeBmp.close();
+				const frame0 = new encWin.VideoFrame(canvas, { timestamp: 0, duration: Math.round(1e6 / fps) }) as { close(): void };
+				(encoder as { encode: (f: unknown, o?: { keyFrame?: boolean }) => void }).encode(frame0, { keyFrame: true });
+				frame0.close();
+
+				const dir = pathMod.join(String((this.app.vault.adapter as unknown as { getBasePath(): string }).getBasePath()), String(this.manifest.dir), "data", "recordings");
+				fsMod.mkdirSync(dir, { recursive: true });
+				const outFile = pathMod.join(dir, `semlink-rec-${Date.now()}.webm`);
+
+				const rec = {
+					win, crop, canvas, ctx, muxer, encoder,
+					startMs: Date.now(), frames: 1, timer: 0, inflight: false, fps, outFile,
+					cropScale: scale, encError: "", mouse,
+				};
+				this.debugRecordState = rec;
+				// 采集循环：capturePage 单帧失败跳过；10 分钟兜底自动停止。
+				rec.timer = window.setInterval(() => {
+					const st = this.debugRecordState;
+					if (!st || st.inflight) return;
+					if (Date.now() - st.startMs > 600_000) {
+						void this.runDebugRecord({ action: "stop" });
+						return;
+					}
+					st.inflight = true;
+					void (async () => {
+						try {
+							const cur = this.debugRecordState;
+							if (!cur) return;
+							const img = await cur.win.webContents.capturePage();
+							const blob = new Blob([img.toPNG() as BlobPart], { type: "image/png" });
+							const bmp = await createImageBitmap(blob);
+							cur.ctx.drawImage(bmp, cur.crop.x, cur.crop.y, cur.crop.width, cur.crop.height, 0, 0, cur.canvas.width, cur.canvas.height);
+							this.drawRecordCursor(cur.ctx, cur.cropScale, cur.crop, cur.mouse, cur.win.getTitle());
+							bmp.close();
+							const vf = new (window as unknown as { VideoFrame?: new (image: HTMLCanvasElement, init?: { timestamp?: number; duration?: number }) => unknown }).VideoFrame!(cur.canvas, { timestamp: Math.round((Date.now() - cur.startMs) * 1000), duration: Math.round(1e6 / cur.fps) });
+							(cur.encoder as { encode: (f: unknown, o?: { keyFrame?: boolean }) => void }).encode(vf, { keyFrame: cur.frames % (cur.fps * 2) === 0 });
+							(vf as { close(): void }).close();
+							cur.frames++;
+						} catch (err) {
+							console.warn("[Semlink][record] frame skipped:", err instanceof Error ? err.message : String(err));
+						} finally {
+							if (this.debugRecordState) this.debugRecordState.inflight = false;
+						}
+					})();
+				}, Math.round(1000 / fps));
+
+				return {
+					recording: true,
+					fps,
+					target: idx,
+					crop: cropMode,
+					canvas: { w: cw, h: ch },
+					outFile,
+					// 窗口枚举：target 序号与窗口的对应表（弹窗是独立 BrowserWindow，
+					// 与 shot 同序）。kind 取自 collectDebugWinState（popout /
+					// sidebar-left / sidebar-right / main-area），无 Semlink 视图
+					// 的窗口标 main。再次 start 时先看这里选 target。
+					windows: all.map((w2, i2) => {
+						const st2 = (states.find((s2) => s2.docTitle === w2.getTitle()) ?? null) as { kind?: string } | null;
+						return { index: i2, title: w2.getTitle(), kind: st2?.kind ?? "main", semlinkView: !!st2 };
+					}),
+					maxDurationMs: 600_000,
+				};
+			}
+
+			if (action === "stop") {
+				const st = this.debugRecordState;
+				if (!st) return { error: "no recording in progress" };
+				const startedAt = st.startMs;
+				const outFile = st.outFile;
+				const fps = st.fps;
+				this.debugRecordState = null;
+				window.clearInterval(st.timer);
+				st.mouse.detach();
+				// 末帧补录 + 收尾编码。
+				try {
+					const img = await st.win.webContents.capturePage();
+					const blob = new Blob([img.toPNG() as BlobPart], { type: "image/png" });
+					const bmp = await createImageBitmap(blob);
+					st.ctx.drawImage(bmp, st.crop.x, st.crop.y, st.crop.width, st.crop.height, 0, 0, st.canvas.width, st.canvas.height);
+					this.drawRecordCursor(st.ctx, st.cropScale, st.crop, st.mouse, st.win.getTitle());
+					bmp.close();
+					const vf = new (window as unknown as { VideoFrame?: new (image: HTMLCanvasElement, init?: { timestamp?: number; duration?: number }) => unknown }).VideoFrame!(st.canvas, { timestamp: Math.round((Date.now() - st.startMs) * 1000), duration: Math.round(1e6 / st.fps) });
+					(st.encoder as { encode: (f: unknown, o?: { keyFrame?: boolean }) => void }).encode(vf, { keyFrame: true });
+					(vf as { close(): void }).close();
+				} catch { /* 末帧失败可接受 */ }
+				await st.encoder.flush();
+				st.encoder.close();
+				st.muxer.finalize();
+				const buf = new Uint8Array(st.muxer.target.buffer);
+				fsMod.writeFileSync(outFile, buf);
+				// 末帧缩略图：录制后一眼核对画面内容（光标叠加/裁剪区域），省去解码 WebM。
+				const thumbFile = outFile.replace(/\.webm$/, "-last.png");
+				try {
+					const dataUrl = st.canvas.toDataURL("image/png");
+					const bin = atob(dataUrl.slice(dataUrl.indexOf(",") + 1));
+					const bytes = new Uint8Array(bin.length);
+					for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+					fsMod.writeFileSync(thumbFile, bytes);
+				} catch { /* 缩略图失败可接受 */ }
+				document.querySelectorAll("canvas[data-semlink-rec]").forEach((c) => c.remove());
+				return {
+					stopped: true,
+					file: outFile,
+					thumb: thumbFile,
+					durationMs: Date.now() - startedAt,
+					sizeBytes: buf.length,
+					fps,
+					encoderError: st.encError || undefined,
+				};
+			}
+
+			// status
+			const st = this.debugRecordState;
+			return st
+				? { recording: true, elapsedMs: Date.now() - st.startMs, frames: st.frames, encoderState: st.encoder.state, encoderError: st.encError || undefined, outFile: st.outFile, fps: st.fps, cursorTrackedDocs: st.mouse.pos.size }
+				: { recording: false };
+		} catch (e) {
+			return { error: e instanceof Error ? e.message : String(e) };
+		}
+	}
+
+	/** 录制帧叠加：真实指针箭头 + 点击涟漪（capturePage 不含硬件光标）。
+	 *  坐标系：clientX/Y 是布局 CSS px，画布坐标 = clientX×scale − crop.x
+	 *  （scale 对齐采集像素，crop 原点换算回 CSS px 即 crop/scale）；
+	 *  crop=window 时原点为 0，同一公式通吃。箭头尺寸按 CSS px 经 ctx.scale
+	 *  放大，与画面元素同尺度。光标位置走 drawPos 飞行动画（合成点击
+	 *  瞬移 → ease-out 飞抵），涟漪/按住光晕等光标落到点击点才触发。 */
+	private drawRecordCursor(
+		ctx: CanvasRenderingContext2D,
+		scale: number,
+		crop: { x: number; y: number },
+		mouse: { pos: Map<string, { x: number; y: number; px: number; py: number; t: number; down: boolean }>; ripples: Array<{ title: string; x: number; y: number; t: number; shown?: boolean; t0?: number }>; accent: string },
+		title: string,
+	): void {
+		const m = mouse.pos.get(title);
+		const now = Date.now();
+		const candidates = mouse.ripples.filter((r) => r.title === title);
+		if (!m && candidates.length === 0) return;
+		ctx.save();
+		ctx.scale(scale, scale);
+		// 光标绘制位置：px/py→x/y 飞行插值（crop 原点换算回 CSS px）。
+		const dp = m
+			? (() => {
+				const p = drawPos(m, now);
+				return { x: p.x - crop.x / scale, y: p.y - crop.y / scale };
+			})()
+			: null;
+		// 光标已落到目标点？（距离 <5px 即视为到达；超时兜底防丢涟漪）
+		const arrived = !!dp && !!m && (Math.abs(dp.x - (m.x - crop.x / scale)) < 5 && Math.abs(dp.y - (m.y - crop.y / scale)) < 5 || now - m.t >= CURSOR_FLIGHT_MS);
+		// 点击涟漪：光标飞抵点击点才扩散（合成点击的飞行 ~160ms），
+		// 扩散 450ms 淡出。真实点击距离≈0 即时触发，无感延迟。
+		const live: typeof candidates = [];
+		for (const r of candidates) {
+			if (!r.shown) {
+				if (now - r.t > 1500) continue; // 兜底丢弃（光标追踪缺失时）
+				if (now - r.t > CURSOR_FLIGHT_MS + 80 || (dp && Math.abs(dp.x - (r.x - crop.x / scale)) < 5 && Math.abs(dp.y - (r.y - crop.y / scale)) < 5)) {
+					r.shown = true;
+					r.t0 = now;
+				} else {
+					live.push(r); // 等待光标飞抵
+					continue;
+				}
+			}
+			const age = now - (r.t0 ?? r.t);
+			if (age <= 450) live.push(r);
+		}
+		for (const r of live) {
+			const p = Math.min(1, (now - (r.t0 ?? r.t)) / 450);
+			ctx.globalAlpha = (1 - p) * 0.9;
+			ctx.strokeStyle = mouse.accent;
+			ctx.lineWidth = 2;
+			ctx.beginPath();
+			ctx.arc(r.x - crop.x / scale, r.y - crop.y / scale, 5 + p * 20, 0, Math.PI * 2);
+			ctx.stroke();
+		}
+		if (m && dp) {
+			const mx = dp.x;
+			const my = dp.y;
+			// 按住期间的光标底部光晕：观看者一眼看出「正在按下」。
+			// 同样等光标落到点击点再显示（飞行动画中途不显示）。
+			if (m.down && (arrived || Math.abs(m.x - m.px) + Math.abs(m.y - m.py) < 2)) {
+				ctx.globalAlpha = 0.22;
+				ctx.fillStyle = mouse.accent;
+				ctx.beginPath();
+				ctx.arc(mx + 5, my + 7, 14, 0, Math.PI * 2);
+				ctx.fill();
+			}
+			// 经典箭头：白描边保暗色主题可见，深填充保亮色主题可见。
+			ctx.globalAlpha = 1;
+			ctx.translate(mx, my);
+			ctx.beginPath();
+			const pts = [
+				[0, 0], [0, 14.4], [4.3, 10.9], [7.2, 16.4], [9.9, 15], [7.1, 9.6], [11.3, 9.6],
+			];
+			ctx.moveTo(pts[0][0], pts[0][1]);
+			for (const [px, py] of pts.slice(1)) ctx.lineTo(px, py);
+			ctx.closePath();
+			ctx.lineJoin = "round";
+			ctx.strokeStyle = "#ffffff";
+			ctx.lineWidth = 2.6;
+			ctx.stroke();
+			ctx.fillStyle = "#1e1e1e";
+			ctx.fill();
+		}
+		ctx.restore();
+	}
+
 	private collectDebugWinState(): Array<Record<string, unknown>> {
 		const out: Array<Record<string, unknown>> = [];
 		const leaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
@@ -2885,7 +3313,8 @@ export default class SmartVaultPlugin extends Plugin {
 				outer: { w: dv.outerWidth, h: dv.outerHeight },
 				dpr: dv.devicePixelRatio,
 				docTitle: doc.title,
-				viewRect: { w: Math.round(r.width), h: Math.round(r.height) },
+				// x/y：视口相对坐标（录制裁剪 Semlink 视图区域用）
+				viewRect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
 				settingsRootW: Math.round(rootW),
 				breakpoint: bp,
 				settingsScreenActive: !!doc.querySelector(".semlink-search-view.semlink-settings-active"),
@@ -3033,9 +3462,49 @@ export default class SmartVaultPlugin extends Plugin {
 		}
 		if (action === "click") {
 			const el = m.el as HTMLElement;
-			if (typeof el.click === "function") el.click();
-			else el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-			return { action, clicked: info[idx] };
+			// 完整真实指针序列（pointerover/move/down/up + click，带视口坐标）：
+			// el.click() 只发裸 click——坐标敏感的处理器（菜单定位、hover 态、
+			// pointerdown 关闭检测）与 Obsidian 菜单的 outside-close 语义都会
+			// 失真（实测：合成 click 打不开翻译语言菜单）。目标在视口外时先
+			// scrollIntoView 居中，再按新 rect 派发。
+			const doc = el.ownerDocument;
+			const win = doc.defaultView ?? window;
+			if (typeof el.scrollIntoView === "function") {
+				const before = el.getBoundingClientRect();
+				const vh = win.innerHeight ?? 960;
+				if (before.top < 0 || before.bottom > vh) {
+					el.scrollIntoView({ block: "center" });
+					await new Promise((r) => win.setTimeout(r, 120));
+				}
+			}
+			const r2 = el.getBoundingClientRect();
+			const cx = r2.x + r2.width / 2;
+			const cy = r2.y + r2.height / 2;
+			const W = win as unknown as { PointerEvent?: typeof PointerEvent; MouseEvent: typeof MouseEvent };
+			const PE = W.PointerEvent ?? W.MouseEvent;
+			const init = {
+				bubbles: true, cancelable: true, composed: true,
+				clientX: cx, clientY: cy, button: 0, isPrimary: true,
+				pointerId: 1, pointerType: "mouse", view: win,
+			} as PointerEventInit & MouseEventInit;
+			const sequence: Array<[string, Event]> = [
+				["pointerover", new PE("pointerover", init)],
+				["mouseover", new MouseEvent("mouseover", init)],
+				["pointermove", new PE("pointermove", init)],
+				["mousemove", new MouseEvent("mousemove", init)],
+				["pointerdown", new PE("pointerdown", init)],
+				["mousedown", new MouseEvent("mousedown", init)],
+				["pointerup", new PE("pointerup", init)],
+				["mouseup", new MouseEvent("mouseup", init)],
+				["click", new MouseEvent("click", init)],
+			];
+			for (const [, ev] of sequence) el.dispatchEvent(ev);
+			const r3 = el.getBoundingClientRect();
+			return {
+				action,
+				clicked: info[idx],
+				dispatch: { seq: sequence.map(([t]) => t), rect: { x: Math.round(r3.x), y: Math.round(r3.y), w: Math.round(r3.width), h: Math.round(r3.height) } },
+			};
 		}
 		// type：input/textarea/select/contenteditable 统一入口。赋值走元素
 		// 自己 realm 的原型 setter（兼容 value-tracker 类框架），再补

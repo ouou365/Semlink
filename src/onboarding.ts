@@ -1645,7 +1645,7 @@ export function renderGuideHub(
 		t("hubDiscordDesc"),
 		t("hubJoin"),
 		false,
-		() => window.open("https://discord.gg/4HQRqJj92", "_blank"),
+		() => window.open("https://discord.gg/GchHjVW7yC", "_blank"),
 	);
 	row(
 		"globe",

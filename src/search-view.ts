@@ -25,7 +25,7 @@ import { SaveNoteModal } from "./save-note-modal";
 import { ShareQrModal } from "./share-modal";
 import { renderSharePage } from "./share-page";
 import { ConfirmModal } from "./confirm-modal";
-import { getLang, t, LANGUAGES } from "./i18n";
+import { getLang, t, LANGUAGES, type Lang } from "./i18n";
 import logoSvg from "./semlink-logo.svg";
 import llmIconSvg from "./network-icon.svg";
 import expandIconSvg from "./expand-icon.svg";
@@ -217,6 +217,18 @@ export class SemanticSearchView extends ItemView {
 	// Current conversation state
 	private currentSessionId: string | null = null;
 	private currentMessages: HistoryMessage[] = [];
+	/** In-flight answer translation (translate action). A new translation or
+	 *  a dismiss aborts the previous one — one at a time per view. */
+	private activeTranslateController: AbortController | null = null;
+	/** 用户消息编辑态（豆包式：气泡原地变身）。暂存原子节点，关闭时精确恢复。 */
+	private editingState: {
+		turn: HTMLElement;
+		bubble: HTMLElement;
+		saved: Node[];
+		ts: number;
+	} | null = null;
+	/** Floating scroll-to-bottom button (footer wrapper top edge). */
+	private scrollBottomBtn: HTMLElement | null = null;
 
 	// Dropped note attachments (vault-relative paths) rendered as inline chips
 	// mixed with the input text.
@@ -513,6 +525,17 @@ export class SemanticSearchView extends ItemView {
 		);
 		// 排队跟进指令卡片容器（生成中发送的消息在此排队，卡片贴在输入行上方）
 		this.queueEl = wrapper.createDiv({ cls: "semlink-queue semlink-hidden" });
+		// 回到底部浮动钮（Flova 式 ↓）：长对话上滚离开底部时出现，骑跨
+		// wrapper 上缘居中；点击平滑回底。显隐由 updateCompactHeader 驱动。
+		const scrollBottomBtn = wrapper.createDiv({
+			cls: "semlink-scroll-bottom-btn semlink-hidden",
+			attr: { "aria-label": t("scrollBottom") },
+		});
+		setIcon(scrollBottomBtn.createSpan({ cls: "semlink-scroll-bottom-icon" }), "arrow-down");
+		scrollBottomBtn.addEventListener("click", () => {
+			this.messagesEl.scrollTo({ top: this.messagesEl.scrollHeight, behavior: "smooth" });
+		});
+		this.scrollBottomBtn = scrollBottomBtn;
 		const inputRow = wrapper.createDiv({ cls: "semlink-search-input-row" });
 		// Keyboard hint (Ctrl+Enter newline / Enter send) — visible only while
 		// the input is expanded to the tall editor.
@@ -880,12 +903,16 @@ export class SemanticSearchView extends ItemView {
 		btn.setAttr("aria-label", label);
 	}
 
-	private async runSearch(): Promise<void> {
-		const query = this.extractInputText().trim();
+	private async runSearch(queryOverride?: string): Promise<void> {
+		// queryOverride: edit-and-regenerate path — the edited question becomes
+		// the new conversation tail (caller has already truncated history/DOM).
+		const override = queryOverride !== undefined;
+		const query = override ? queryOverride : this.extractInputText().trim();
 		if (!query) return;
 		// 生成中发送 = 排队跟进指令：快照输入区（文字+chips），渲染成
 		// 待执行卡片，本轮结束后自动依次执行。
 		if (this.isGenerating) {
+			if (override) return; // edit/delete actions are idle-only
 			const userContent = this.inputEl.cloneNode(true) as HTMLElement;
 			const segments = this.snapshotSegments(userContent);
 			this.queuedFollowUps.push({ text: query, content: userContent, segments });
@@ -916,17 +943,27 @@ export class SemanticSearchView extends ItemView {
 		// user composed — then clear the input. The snapshot is taken BEFORE
 		// clearing so the interleaved chips survive into the rendered bubble
 		// and into the persisted chat history (as ordered segments).
-		const userContent = this.inputEl.cloneNode(true) as HTMLElement;
-		const segments = this.snapshotSegments(userContent);
-		this.appendUserMessage(query, userContent);
-		await this.recordUserMessage(query, segments);
+		const userContent = override ? null : (this.inputEl.cloneNode(true) as HTMLElement);
+		const segments = override ? undefined : this.snapshotSegments(userContent!);
+		const userTurn = this.appendUserMessage(query, userContent ?? undefined);
+		const userMsg = await this.recordUserMessage(query, segments);
+		if (userTurn && userMsg) {
+			// Stamp the turn with the message timestamp + attach the hover
+			// edit/delete actions (they locate history via data-msg-ts).
+			userTurn.dataset.msgTs = String(userMsg.timestamp);
+			this.attachUserTurnActions(userTurn, userMsg.timestamp);
+		}
+		// 新消息成为最后一条提问：上一条的编辑钮随之隐藏。
+		this.refreshUserEditAvailability();
 		// First message sent → the context-usage ring becomes relevant.
 		if (this.contextUsageEl) this.contextUsageEl.removeClass("semlink-hidden");
-		this.clearInputText();
-		// Sending restores the input to its compact height (expand icon back).
-		if (this.inputExpanded) {
-			this.inputExpanded = false;
-			this.applyInputExpanded();
+		if (!override) {
+			this.clearInputText();
+			// Sending restores the input to its compact height (expand icon back).
+			if (this.inputExpanded) {
+				this.inputExpanded = false;
+				this.applyInputExpanded();
+			}
 		}
 
 		// Snapshot the dropped notes for THIS turn — the attachments array is
@@ -1356,11 +1393,11 @@ export class SemanticSearchView extends ItemView {
 				// viewing AND how to use it — phrased as an explicit instruction,
 				// because a bare name line reads like more retrieved content and
 				// the model ends up feeding the question verbatim to search.
-				const activeFile = this.app.workspace.getActiveFile();
-				const currentNoteLine = activeFile
-					? `\n\n用户当前正在浏览的笔记：《${activeFile.basename}》（路径：${activeFile.path}）。当问题涉及"当前笔记""这篇笔记""正在看的笔记"等指代时，直接调用 read 读取上述路径来回答，需要语义检索时用 search，精确检索用 grep。`
-					: "";
-				const fullContext = context + currentNoteLine;
+		const activeFile = this.app.workspace.getActiveFile();
+		const currentNoteLine = activeFile
+				? `\n\n用户当前正在浏览的笔记：《${activeFile.basename}》（路径：${activeFile.path}）。当问题涉及"当前笔记""这篇笔记""正在看的笔记"等指代时，直接调用 read 读取上述路径来回答，需要语义检索时用 search，精确检索用 grep。`
+				: "";
+			const fullContext = context + currentNoteLine;
 					try {
 					// Prior turns go as a native message array (ZCode-style —
 					// chat-client expands them into the messages list and
@@ -1536,7 +1573,7 @@ export class SemanticSearchView extends ItemView {
 
 					// Persist this turn into chat history (incl. context usage so
 					// the ring + tooltip can be restored when re-opening).
-					await this.recordAssistantMessage(
+					const recordedMsg = await this.recordAssistantMessage(
 						answer,
 						firstStep ? [firstStep, ...thinking] : thinking,
 						sourcePaths,
@@ -1547,8 +1584,9 @@ export class SemanticSearchView extends ItemView {
 						result.cacheHitRate,
 					);
 
-						// Action buttons (icons) below the sources: copy / save.
-						this.appendActions(loadingEl, answer, query);
+						// Action buttons (icons) below the sources: copy / save /
+						// translate (translate persists onto the recorded message).
+						this.appendActions(loadingEl, answer, query, recordedMsg ?? undefined);
 						if (wasNearBottom) this.scrollToBottom();
 				} catch (e) {
 					// User aborted — keep whatever streamed so far and show a
@@ -1959,7 +1997,7 @@ export class SemanticSearchView extends ItemView {
 	 * Append copy / save action buttons to an assistant bubble.
 	 * Used for both live answers and restored history messages.
 	 */
-	private appendActions(container: HTMLElement, content: string, questionForSave: string): void {
+	private appendActions(container: HTMLElement, content: string, questionForSave: string, msg?: HistoryMessage): void {
 		// Actions sit below the merged thinking+answer bubble — append to the
 		// turn container.
 		const turn = container.closest(".semlink-msg-turn") || container;
@@ -1994,6 +2032,128 @@ export class SemanticSearchView extends ItemView {
 		});
 		setIcon(shareBtn, "share");
 		shareBtn.addEventListener("click", () => void this.shareSession());
+		const translateBtn = actionsEl.createEl("button", {
+			cls: "semlink-msg-action",
+			attr: { "aria-label": t("translateAction") },
+		});
+		setIcon(translateBtn, "languages");
+		translateBtn.addEventListener("click", () => {
+			this.openTranslateMenu(translateBtn, turn, content, msg);
+		});
+	}
+
+	/** Translate action: language picker (same Menu pattern as the UI language
+	 *  menu) listing every supported language; picking one streams the
+	 *  translation into a per-turn block below the answer. */
+	private openTranslateMenu(anchor: HTMLElement, turn: Element, content: string, msg?: HistoryMessage): void {
+		const menu = new Menu();
+		// 原文：切回未翻译的原始回答（displayLang 回 null——重进会话显示原文）。
+		menu.addItem((item) => {
+			item.setTitle(t("translateOriginal")).onClick(() => {
+				this.restoreOriginalAnswer(turn, content, msg);
+			});
+		});
+		menu.addSeparator();
+		for (const l of LANGUAGES) {
+			menu.addItem((item) => {
+				item.setTitle(l.label).onClick(() => {
+					void this.translateInto(turn, content, l, msg);
+				});
+			});
+		}
+		const rect = anchor.getBoundingClientRect();
+		menu.showAtPosition({ x: rect.left, y: rect.bottom + 4 });
+		const menuEl = (menu as unknown as { menuEl?: HTMLElement }).menuEl;
+		if (menuEl) {
+			// 视口夹紧：底部放不下 → 翻到按钮上方；水平方向不越界
+			//（先例：showModelPopup 的 bottom 锚定夹紧 + openLanguageMenu
+			// 的 menuEl 后调整；viewWin 兼容弹窗实例）。
+			const vh = this.viewWin.innerHeight;
+			const vw = this.viewWin.innerWidth;
+			const mh = menuEl.offsetHeight;
+			const mw = menuEl.offsetWidth;
+			if (rect.bottom + 4 + mh > vh - 8) {
+				menuEl.style.top = `${Math.max(8, rect.top - mh - 4)}px`;
+			}
+			if (rect.left + mw > vw - 8) {
+				menuEl.style.left = `${Math.max(8, vw - mw - 8)}px`;
+			}
+		}
+	}
+
+	/** Translate `content` into `lang`（Obsidian 官网同款交互，用户拍板）：
+	 *  原文保持显示，每个块级元素行尾挂加载圈；翻译完成整体替换为译文
+	 *  markdown。已存译文秒显；失败摘除加载圈恢复原文 + Notice。 */
+	private async translateInto(turn: Element, content: string, lang: { value: Lang; label: string }, msg?: HistoryMessage): Promise<void> {
+		this.activeTranslateController?.abort();
+		const controller = new AbortController();
+		this.activeTranslateController = controller;
+
+		const answerEl = turn.querySelector(".semlink-msg-answer");
+		if (!answerEl) return;
+		const stored = msg?.translations?.[lang.value];
+
+		if (stored !== undefined) {
+			// 已翻译过——整体替换为存储译文（秒切，不调模型）。
+			answerEl.empty();
+			const rendered = answerEl.createDiv({ cls: "markdown-rendered" });
+			await MarkdownRenderer.render(this.app, protectHyphens(stored), rendered, "", this);
+			this.makeVaultPathsClickable(rendered);
+			return;
+		}
+
+		// 原文保持显示：每个块级元素行尾挂加载圈（先清旧圈防重复注入）。
+		this.injectTranslationSpinners(answerEl);
+
+		try {
+			const text = await this.chatClient.translate(content, lang.label, undefined, controller.signal);
+			if (controller.signal.aborted) return;
+			// 完成：整体替换为译文（加载圈随之清空）。
+			answerEl.empty();
+			const rendered = answerEl.createDiv({ cls: "markdown-rendered" });
+			await MarkdownRenderer.render(this.app, protectHyphens(text), rendered, "", this);
+			this.makeVaultPathsClickable(rendered);
+			if (msg) {
+				msg.translations = { ...(msg.translations ?? {}), [lang.value]: text };
+				msg.displayLang = lang.value;
+				await this.history.save();
+			}
+		} catch (e) {
+			if (controller.signal.aborted || (e as { name?: string } | undefined)?.name === "AbortError") return;
+			// 失败：摘除加载圈，原文保持不动 + Notice。
+			answerEl.querySelectorAll(".semlink-line-spinner").forEach((el) => el.remove());
+			new Notice(t("translateFailed"));
+		}
+	}
+
+	/** 翻译进行中：原文每个块级元素行尾挂加载圈（ul/ol 逐 li；hr 跳过）。
+	 *  先清旧圈防重复注入。 */
+	private injectTranslationSpinners(answerEl: Element): void {
+		answerEl.querySelectorAll(".semlink-line-spinner").forEach((el) => el.remove());
+		for (const block of Array.from(answerEl.children)) {
+			if (block.tagName === "HR") continue;
+			const targets = block.tagName === "UL" || block.tagName === "OL"
+				? Array.from(block.children).filter((c) => c.tagName === "LI")
+				: [block];
+			for (const t of targets) {
+				t.createEl("span", { cls: "semlink-line-spinner" });
+			}
+		}
+	}
+
+	/** Re-render the original (untranslated) answer markdown, removing any
+	 *  translation spinners. displayLang 回 null——重进会话恢复显示原文。 */
+	private restoreOriginalAnswer(turn: Element, content: string, msg?: HistoryMessage): void {
+		const answerEl = turn.querySelector(".semlink-msg-answer");
+		if (!answerEl) return;
+		answerEl.empty();
+		const rendered = answerEl.createDiv({ cls: "markdown-rendered" });
+		void MarkdownRenderer.render(this.app, protectHyphens(content), rendered, "", this);
+		this.makeVaultPathsClickable(rendered);
+		if (msg) {
+			msg.displayLang = null;
+			void this.history.save();
+		}
 	}
 
 	/** Toggle citation-marker visibility for the WHOLE view: CSS class on the
@@ -2711,6 +2871,8 @@ export class SemanticSearchView extends ItemView {
 		void this.renderWelcomeStats(welcome);
 
 		this.updateHomeIconVisibility();
+		// Welcome screen: subtitle/scroll-button states re-evaluated.
+		this.updateCompactHeader();
 	}
 
 	/** Guide-mode chrome: while the first-run guide owns the welcome screen
@@ -3008,10 +3170,12 @@ export class SemanticSearchView extends ItemView {
 		this.firstQuestion = "";
 		// No conversation → hide the context-usage ring again.
 		if (this.contextUsageEl) this.contextUsageEl.addClass("semlink-hidden");
+		this.updateCompactHeader();
+		this.refreshUserEditAvailability();
 	}
 
 	/** Record a user question into the current session (creating one if needed). */
-	private async recordUserMessage(content: string, segments?: HistorySegment[]): Promise<void> {
+	private async recordUserMessage(content: string, segments?: HistorySegment[]): Promise<HistoryMessage | null> {
 		// CRITICAL: load() first — otherwise a fresh store (after a plugin
 		// reload) starts with an empty array and save() would overwrite all
 		// previously persisted sessions with just this one.
@@ -3034,6 +3198,7 @@ export class SemanticSearchView extends ItemView {
 		this.history.addMessage(this.currentSessionId, msg);
 		void this.history.save();
 		this.refreshPersistentMenu();
+		return msg;
 	}
 
 	/** Record an assistant answer into the current session. */
@@ -3046,8 +3211,8 @@ export class SemanticSearchView extends ItemView {
 		contextTokens?: number,
 		contextBreakdown?: ContextBreakdown,
 		cacheHitRate?: number | null,
-	): Promise<void> {
-		if (!this.currentSessionId) return;
+	): Promise<HistoryMessage | null> {
+		if (!this.currentSessionId) return null;
 		await this.history.load();
 		const msg: HistoryMessage = {
 			role: "assistant",
@@ -3071,6 +3236,7 @@ export class SemanticSearchView extends ItemView {
 		this.history.addMessage(this.currentSessionId, msg);
 		void this.history.save();
 		this.refreshPersistentMenu();
+		return msg;
 	}
 
 	/** Render a previously-saved session into the conversation area. */
@@ -3123,11 +3289,11 @@ export class SemanticSearchView extends ItemView {
 		for (const msg of session.messages) {
 			if (msg.role === "user") {
 				lastUserQuery = msg.content;
-				if (msg.segments && msg.segments.length > 0) {
-					this.appendUserMessageFromSegments(msg.segments);
-				} else {
-					this.appendUserMessage(msg.content);
-				}
+				const userTurn = (msg.segments && msg.segments.length > 0)
+					? this.appendUserMessageFromSegments(msg.segments)
+					: this.appendUserMessage(msg.content);
+				userTurn.dataset.msgTs = String(msg.timestamp);
+				this.attachUserTurnActions(userTurn, msg.timestamp);
 				} else {
 					const bubble = this.appendAssistantMessage("");
 					const thinking = (msg.thinking || []).map((s) => s as ThinkingStep);
@@ -3139,8 +3305,17 @@ export class SemanticSearchView extends ItemView {
 						this.makeCitationsClickable(answerEl, msg.sourceNumbers ?? [], usedSources as SearchResult[], msg.content, thinking);
 						this.makeVaultPathsClickable(answerEl);
 					}
-					// Copy / save actions for history answers too.
-					this.appendActions(bubble, msg.content, lastUserQuery);
+					// Copy / save / translate actions for history answers too.
+					this.appendActions(bubble, msg.content, lastUserQuery, msg);
+					// 翻译持久化：该消息上次查看的是译文 → 重载仍显示译文
+					// （用户拍板：翻译完成后再进历史，默认显示翻译后的文字）。
+					const showLang = msg.displayLang && msg.translations?.[msg.displayLang] ? msg.displayLang : null;
+					if (showLang) {
+						answerEl.empty();
+						const translated = answerEl.createDiv({ cls: "markdown-rendered" });
+						await MarkdownRenderer.render(this.app, protectHyphens(msg.translations![showLang]), translated, "", this);
+						this.makeVaultPathsClickable(translated);
+					}
 					// Restore this turn's context usage (ring + tooltip). Old
 					// sessions saved before these fields existed simply skip.
 					if (msg.contextTokens !== undefined || msg.contextBreakdown !== undefined || msg.cacheHitRate !== undefined) {
@@ -3160,6 +3335,8 @@ export class SemanticSearchView extends ItemView {
 		this.viewWin.requestAnimationFrame(() => this.scrollToBottom());
 		window.setTimeout(() => this.scrollToBottom(), 80);
 		this.scrollToBottom();
+		// 恢复会话后按"最后一条提问"规则重算编辑钮归属。
+		this.refreshUserEditAvailability();
 		// scrollToBottom may not fire a scroll event when the session is
 		// shorter than the viewport — re-check the subtitle row manually.
 		this.updateCompactHeader();
@@ -3936,7 +4113,193 @@ export class SemanticSearchView extends ItemView {
 	 * Append a right-aligned user bubble rebuilt from persisted segments
 	 * (used when loading a chat session from history).
 	 */
-	private appendUserMessageFromSegments(segments: HistorySegment[]): void {
+	/** Hover-revealed edit/delete actions for a user message turn. The turn
+	 *  is stamped with the message timestamp (data-msg-ts) so the handlers
+	 *  can locate the history entry. */
+	private attachUserTurnActions(turn: HTMLElement, ts: number): void {
+		const row = turn.createDiv({ cls: "semlink-msg-user-actions" });
+		const copyBtn = row.createEl("button", {
+			cls: "semlink-msg-user-action",
+			attr: { "aria-label": t("searchCopy") },
+		});
+		setIcon(copyBtn, "copy");
+		copyBtn.addEventListener("click", () => {
+			const msg = this.currentMessages.find((m) => m.role === "user" && m.timestamp === ts);
+			if (!msg) return;
+			void navigator.clipboard.writeText(msg.content);
+			new Notice(t("searchCopied"));
+		});
+		const editBtn = row.createEl("button", {
+			cls: "semlink-msg-user-action semlink-msg-user-edit",
+			attr: { "aria-label": t("editMsg") },
+		});
+		setIcon(editBtn, "pencil");
+		editBtn.addEventListener("click", () => {
+			if (this.isGenerating) return;
+			this.startEditUserTurn(turn, ts);
+		});
+		const delBtn = row.createEl("button", {
+			cls: "semlink-msg-user-action",
+			attr: { "aria-label": t("deleteMsg") },
+		});
+		setIcon(delBtn, "trash-2");
+		delBtn.addEventListener("click", () => {
+			if (this.isGenerating) return;
+			void this.deleteUserTurn(turn, ts);
+		});
+		this.refreshUserEditAvailability();
+	}
+
+	/** 用户拍板：只有最后一条提问可编辑——其余历史提问隐藏编辑钮
+	 * （复制/删除不受限）。删除/新增消息后重算归属。 */
+	private refreshUserEditAvailability(): void {
+		let lastTs: number | null = null;
+		for (const m of this.currentMessages) {
+			if (m.role === "user") lastTs = m.timestamp;
+		}
+		this.messagesEl.querySelectorAll(".semlink-msg-user-turn").forEach((turn) => {
+			const ts = Number(turn.getAttribute("data-msg-ts"));
+			const editBtn = turn.querySelector<HTMLElement>(".semlink-msg-user-edit");
+			if (!editBtn) return;
+			editBtn.toggleClass("semlink-hidden", !(lastTs !== null && ts === lastTs));
+		});
+	}
+
+	/** Edit state（豆包式）：气泡原地变身——accent 底换成白底黑字输入卡，
+	 *  取消/发送在气泡内右下；原内容子节点暂存、关闭时精确恢复。全局同时
+	 *  只允许一个编辑态；编辑中悬停的编辑/删除按钮被 CSS 隐藏。 */
+	private startEditUserTurn(turn: HTMLElement, ts: number): void {
+		if (this.isGenerating) return;
+		this.closeEditState();
+		const bubble = turn.querySelector<HTMLElement>(".semlink-msg-bubble.semlink-msg-user");
+		const msg = this.currentMessages.find((m) => m.role === "user" && m.timestamp === ts);
+		if (!bubble || !msg) return;
+		turn.classList.add("is-editing");
+		const saved = Array.from(bubble.childNodes);
+		bubble.empty();
+		bubble.addClass("is-editing");
+
+		const textarea = bubble.createEl("textarea", {
+			cls: "semlink-msg-edit-input",
+			attr: { "aria-label": t("editMsg"), rows: "1" },
+		});
+		textarea.value = msg.content;
+		const grow = (): void => {
+			// setCssProps: Obsidian 的动态样式正规通道（静态赋值/setProperty
+			// 都会被 no-static-styles-assignment 点名）。
+			textarea.setCssProps({ height: "auto" });
+			textarea.setCssProps({ height: `${textarea.scrollHeight}px` });
+		};
+		grow();
+		const actions = bubble.createDiv({ cls: "semlink-msg-edit-actions" });
+		const cancelBtn = actions.createEl("button", { cls: "semlink-msg-edit-cancel", text: t("msgCancel") });
+		const sendBtn = actions.createEl("button", { cls: "semlink-msg-edit-send", text: t("msgSend") });
+		cancelBtn.addEventListener("click", () => this.closeEditState());
+		textarea.addEventListener("keydown", (e) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				this.closeEditState();
+				return;
+			}
+			if (e.key === "Enter" && !e.shiftKey) {
+				e.preventDefault();
+				sendBtn.click();
+			}
+		});
+		textarea.addEventListener("input", grow);
+		sendBtn.addEventListener("click", () => {
+			const newText = textarea.value.trim();
+			if (!newText) return;
+			this.closeEditState();
+			void this.sendEditedUserTurn(turn, ts, newText);
+		});
+		this.editingState = { turn, bubble, saved, ts };
+		textarea.focus();
+	}
+
+	/** Restore the editing bubble's original children and clear the state. */
+	private closeEditState(): void {
+		const st = this.editingState;
+		if (!st) return;
+		st.bubble.empty();
+		st.bubble.removeClass("is-editing");
+		for (const n of st.saved) st.bubble.appendChild(n);
+		st.turn.classList.remove("is-editing");
+		this.editingState = null;
+	}
+
+	/** Send an edited user message: truncate everything after it (its
+	 *  assistant reply and any later turns), update the stored text, and
+	 *  regenerate — the edited question becomes the new conversation tail. */
+	private async sendEditedUserTurn(turn: HTMLElement, ts: number, newText: string): Promise<void> {
+		const idx = this.currentMessages.findIndex((m) => m.role === "user" && m.timestamp === ts);
+		if (idx < 0) return;
+		// 移除被编辑的 user 消息及其后全部——编辑后的新消息由 runSearch 的
+		// recordUserMessage 全新记录（若只改旧对象再 push 新对象，会出现
+		// 同文双份 user 消息，真机实测）。
+		this.currentMessages.splice(idx);
+		if (this.currentSessionId) {
+			this.history.spliceMessages(this.currentSessionId, idx);
+			if (idx === 0) {
+				// Edited first question → the session title follows it.
+				const session = this.history.get(this.currentSessionId);
+				if (session) session.title = newText.slice(0, 40) || "新对话";
+				this.firstQuestion = newText.replace(/\s+/g, " ").trim();
+				this.refreshPersistentMenu();
+			}
+			void this.history.save();
+		}
+		// DOM: remove this turn and everything after it.
+		let el: Element | null = turn;
+		while (el) {
+			const next: Element | null = el.nextElementSibling;
+			el.remove();
+			el = next;
+		}
+		await this.runSearch(newText);
+	}
+
+	/** Delete a user turn together with its assistant reply (the next message
+	 *  when it is an assistant one). Later turns are kept. */
+	/** 删除该轮（二次确认，用户拍板）；若删空整段会话 → 会话一并从历史删除，
+	 *  回欢迎页。 */
+	private deleteUserTurn(turn: HTMLElement, ts: number): void {
+		if (this.isGenerating) return;
+		const idx = this.currentMessages.findIndex((m) => m.role === "user" && m.timestamp === ts);
+		if (idx < 0) return;
+		const doDelete = (): void => {
+			// DOM 先清：按 data-msg-ts 现场重定位该轮（闭包里的 turn 引用可能
+			// 因重渲染失效——真机实测：删空分支 return 早于 DOM 清理，残留
+			// 回答卡片 + 欢迎页被追加到其下）。
+			const liveTurn = this.messagesEl.querySelector(`.semlink-msg-user-turn[data-msg-ts="${ts}"]`);
+			let el: Element | null = liveTurn;
+			while (el) {
+				const next: Element | null = el.nextElementSibling;
+				el.remove();
+				if (!next || next.classList.contains("semlink-msg-user-turn")) break;
+				el = next;
+			}
+			const removeCount = this.currentMessages[idx + 1]?.role === "assistant" ? 2 : 1;
+			this.currentMessages.splice(idx, removeCount);
+			if (this.currentSessionId) {
+				this.history.spliceMessages(this.currentSessionId, idx, removeCount);
+				// 删空整段会话 → 连会话一并删除（用户拍板：不留空壳会话）。
+				if (this.currentMessages.length === 0) {
+					this.history.deleteSession(this.currentSessionId);
+					this.refreshPersistentMenu();
+					void this.history.save();
+					this.startNewSession();
+					this.renderWelcome();
+					return;
+				}
+				void this.history.save();
+			}
+			this.refreshUserEditAvailability();
+		};
+		new ConfirmModal(this.app, t("deleteTurnTitle"), t("deleteTurnBody"), doDelete, t("deleteMsg")).open();
+	}
+
+	private appendUserMessageFromSegments(segments: HistorySegment[]): HTMLElement {
 		this.messagesEl.querySelector(".semlink-search-welcome")?.remove();
 		this.updateHomeIconVisibility();
 		const turn = this.messagesEl.createDiv({ cls: "semlink-msg-turn semlink-msg-user-turn" });
@@ -3948,6 +4311,7 @@ export class SemanticSearchView extends ItemView {
 				bubble.appendChild(this.createWikilink(seg.value));
 			}
 		}
+		return turn;
 	}
 
 	/**
@@ -3955,7 +4319,7 @@ export class SemanticSearchView extends ItemView {
 	 * of the input) is provided, the bubble reproduces the text + inline
 	 * wiki-link mix the user composed; otherwise it renders plain `text`.
 	 */
-	private appendUserMessage(text: string, content?: HTMLElement): void {
+	private appendUserMessage(text: string, content?: HTMLElement): HTMLElement {
 		// Remove the welcome placeholder once the first real message arrives.
 		this.messagesEl.querySelector(".semlink-search-welcome")?.remove();
 		this.updateHomeIconVisibility();
@@ -3969,6 +4333,7 @@ export class SemanticSearchView extends ItemView {
 			// (plain-text queries / history without segments).
 			this.appendTextWithWikilinks(bubble, text);
 		}
+		return turn;
 	}
 
 	/** Append text, resolving [[...]] tokens into clickable wikilink chips
@@ -4099,6 +4464,12 @@ export class SemanticSearchView extends ItemView {
 			if (this.firstQuestionTextEl?.textContent !== this.firstQuestion) {
 				this.firstQuestionTextEl?.replaceChildren(this.firstQuestion);
 			}
+		}
+		// 回到底部浮动钮：长对话上滚离开底部时出现（welcome/贴底时隐藏）。
+		if (this.scrollBottomBtn) {
+			const el = this.messagesEl;
+			const farFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight > 160;
+			this.scrollBottomBtn.toggleClass("is-shown", farFromBottom && this.currentMessages.length > 0);
 		}
 	}
 
