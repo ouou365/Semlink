@@ -33,7 +33,8 @@ import { runOpfsSpike } from "./src/opfs-spike";
 import { ActivityGate } from "./src/activity-gate";
 import { FeishuBot, type FeishuAskHandler } from "./src/feishu-bot";
 import { LicenseManager } from "./src/license";
-import { setLang, t } from "./src/i18n";
+import { getLang, setLang, t } from "./src/i18n";
+import { closeAllGuideModals } from "./src/onboarding";
 import logoSvg from "./src/semlink-logo.svg";
 
 /** 录制光标飞行动画时长：合成点击（debug ui 工具）在一次事件里瞬移到
@@ -740,6 +741,10 @@ export default class SmartVaultPlugin extends Plugin {
 			() => this.runDebugChatView(),
 			(opts) => this.runDebugRecord(opts),
 			(opts) => this.runDebugSession(opts),
+			(opts) => this.runDebugFixture(opts),
+			(opts) => this.runDebugBrowser(opts),
+			(opts) => this.runDebugSettings(opts),
+			(opts) => this.runDebugShare(opts),
 		);
 		try {
 			await server.start();
@@ -1191,6 +1196,10 @@ export default class SmartVaultPlugin extends Plugin {
 		const finals = Array.from(root.querySelectorAll(".semlink-msg-answer"))
 			.filter((el) => !el.closest(".semlink-msg-stream"))
 			.map((el) => el.textContent ?? "").filter((t) => t.trim().length > 0);
+		// runId/done：agent 轮询比对 runId 是否变化来确认「本轮已完成」——
+		// 只看 lastFinalLen 会把上一轮答案误判成本轮结果（真机踩坑）。
+		const generating = !!(view as unknown as { isGenerating?: boolean }).isGenerating;
+		const runId = (view as unknown as { currentRunId?: string }).currentRunId ?? "";
 		return {
 			viewFound: true,
 			model: this.chatClient.getActiveModelLabel(),
@@ -1206,6 +1215,10 @@ export default class SmartVaultPlugin extends Plugin {
 				lastFinalLen: finals.at(-1)?.length ?? 0,
 				lastFinal: finals.at(-1) ?? null,
 			},
+			runId,
+			// done：本轮 run 已启动且不再生成——与 runId 配合消费：
+			// runId 变化后等 done=true，此时 lastFinal 必是本轮结果。
+			done: runId !== "" && !generating && !streaming,
 			// 最近一次 UI 会话的引用注册表（citeRegistry：路径按 n-1 对位，
 			// latestCiteLines 同位行号）——chatview 侧也能验证引用正确性，
 			// 并用 jump 走模型真正引用的那一行（ask 返回里已有同款数据）。
@@ -1349,6 +1362,9 @@ export default class SmartVaultPlugin extends Plugin {
 				if (split.collapsed) split.expand?.();
 				split.setSize(wantW);
 				await new Promise((r) => window.setTimeout(r, 400));
+				// 分栏重排可能触发视图重渲染/重排——顺带清掉可能遗留的引导
+				// 弹窗（app 级 DOM 不随视图走；复活动作的收尾通道之一）。
+				closeAllGuideModals();
 				const r2 = el!.getBoundingClientRect();
 				sidebarWidthApplied = { applied: true, side, requested: wantW, actual: Math.round(r2.width) };
 			}
@@ -2944,6 +2960,9 @@ export default class SmartVaultPlugin extends Plugin {
 	private debugRecordState: {
 		win: {
 			getTitle(): string;
+			isFocused?(): boolean;
+			moveTop?(): void;
+			focus?(): void;
 			webContents: {
 				capturePage(): Promise<{ toPNG(): Uint8Array; getSize(): { width: number; height: number } }>;
 				setBackgroundThrottling?(allowed: boolean): void;
@@ -2966,6 +2985,11 @@ export default class SmartVaultPlugin extends Plugin {
 		encError: string;
 		zoomOrig: number | null;
 		zoomApplied: number | null;
+		paused: boolean;
+		pausedTotalMs: number;
+		lastPauseAt: number | null;
+		marks: Array<{ label: string; atMs: number }>;
+		stopping: boolean;
 		throttled: Array<{ wc: { setBackgroundThrottling?(allowed: boolean): void }; name: string }>;
 		heartbeat: { post(msg: unknown): void; terminate(): void } | null;
 		mouse: {
@@ -2982,7 +3006,7 @@ export default class SmartVaultPlugin extends Plugin {
 	 （宣传视频干净：文件列表等其他 UI 不入画），target 选窗口，fps 5-30。
 	 *  自动 10 分钟兜底停止。capturePage 不含硬件光标——录制期把真实指针
 	 *  逐帧画回画布（箭头 + 点击涟漪），观看者能看到点了哪里。 */
-	private async runDebugRecord(opts?: { action?: string; target?: number; fps?: number; crop?: string; bitrate?: number; zoom?: number }): Promise<unknown> {
+	private async runDebugRecord(opts?: { action?: string; target?: number; fps?: number; crop?: string; bitrate?: number; zoom?: number; name?: string; region?: { x: number; y: number; w: number; h: number } }): Promise<unknown> {
 		interface ElectronWindowLike {
 			isDestroyed(): boolean;
 			getTitle(): string;
@@ -3050,7 +3074,12 @@ export default class SmartVaultPlugin extends Plugin {
 				const states = this.collectDebugWinState();
 				const entry = (states.find((st) => st.docTitle === win.getTitle()) ?? null) as { docTitle: string; viewport: { w: number; h: number }; viewRect: { x: number; y: number; w: number; h: number } } | null;
 				const fps = Math.max(5, Math.min(30, opts?.fps ?? 20));
-				const cropMode = opts?.crop === "window" ? "window" : "view";
+				const cropMode = opts?.crop === "window" ? "window" : opts?.crop === "region" ? "region" : "view";
+				// region：任意矩形构图（CSS px，窗口视口坐标）——「侧栏+编辑器但
+				// 切掉 ribbon」这类 view/window 两档做不了的机位。
+				const region = opts?.crop === "region" && opts?.region
+					? { x: Math.max(0, opts.region.x), y: Math.max(0, opts.region.y), w: Math.max(2, opts.region.w), h: Math.max(2, opts.region.h) }
+					: null;
 				const vpW = entry?.viewport.w ?? win.getBounds().width;
 
 				// 探针帧：确定 capture 像素 / CSS 像素的缩放（zoom+dpr 一次算清）。
@@ -3059,7 +3088,9 @@ export default class SmartVaultPlugin extends Plugin {
 				const scale = vpW > 0 ? probeSize.width / vpW : 1;
 				const crop = cropMode === "view" && entry
 					? { x: entry.viewRect.x * scale, y: entry.viewRect.y * scale, width: entry.viewRect.w * scale, height: entry.viewRect.h * scale }
-					: { x: 0, y: 0, width: probeSize.width, height: probeSize.height };
+					: cropMode === "region" && region
+						? { x: region.x * scale, y: region.y * scale, width: region.w * scale, height: region.h * scale }
+						: { x: 0, y: 0, width: probeSize.width, height: probeSize.height };
 				const cw = Math.max(2, Math.round(crop.width / 2) * 2);
 				const ch = Math.max(2, Math.round(crop.height / 2) * 2);
 
@@ -3177,7 +3208,9 @@ export default class SmartVaultPlugin extends Plugin {
 
 				const dir = pathMod.join(String((this.app.vault.adapter as unknown as { getBasePath(): string }).getBasePath()), String(this.manifest.dir), "data", "recordings");
 				fsMod.mkdirSync(dir, { recursive: true });
-				const outFile = pathMod.join(dir, `semlink-rec-${Date.now()}.webm`);
+				// take 命名：semlink-rec-<name>-<ts>.webm——免每次手工 cp 重命名。
+				const takeName = opts?.name?.replace(/[^\w-]/g, "-") ?? "";
+				const outFile = pathMod.join(dir, `semlink-rec${takeName ? `-${takeName}` : ""}-${Date.now()}.webm`);
 
 				const rec = {
 					win, crop, canvas, ctx, muxer, encoder,
@@ -3187,6 +3220,11 @@ export default class SmartVaultPlugin extends Plugin {
 					zoomApplied: zoomReq,
 					throttled,
 					heartbeat: null as { post(msg: unknown): void; terminate(): void } | null,
+					paused: false,
+					pausedTotalMs: 0,
+					lastPauseAt: null,
+					marks: [] as Array<{ label: string; atMs: number }>,
+					stopping: false,
 				};
 				this.debugRecordState = rec;
 				// 采集节拍（P0-1 第二层保险）：Worker 心跳接管——页面可见性
@@ -3195,7 +3233,15 @@ export default class SmartVaultPlugin extends Plugin {
 				// captureTick；capturePage 单帧失败跳过；10 分钟兜底自动停止。
 				const captureTick = (): void => {
 					const st = this.debugRecordState;
-					if (!st || st.inflight) return;
+					if (!st || st.inflight || st.paused || st.stopping) return;
+					// 合成冻结防护：capturePage 拿的是合成器最近帧——窗口失焦/
+					// 被遮挡后 Chromium 可能完全停掉重合成（setBackgroundThrottling
+					// 只救定时器，救不了合成；真机实测录制中段画面冻结在旧帧，
+					// 光标叠加仍在跑）。每跳检查焦点，丢了就 moveTop+focus 拉回。
+					if (typeof st.win.isFocused === "function" && st.win.isFocused() === false) {
+						st.win.moveTop?.();
+						st.win.focus?.();
+					}
 					if (Date.now() - st.startMs > 600_000) {
 						void this.runDebugRecord({ action: "stop" });
 						return;
@@ -3211,7 +3257,7 @@ export default class SmartVaultPlugin extends Plugin {
 							cur.ctx.drawImage(bmp, cur.crop.x, cur.crop.y, cur.crop.width, cur.crop.height, 0, 0, cur.canvas.width, cur.canvas.height);
 							this.drawRecordCursor(cur.ctx, cur.cropScale, cur.crop, cur.mouse, cur.win.getTitle());
 							bmp.close();
-							const vf = new (window as unknown as { VideoFrame?: new (image: HTMLCanvasElement, init?: { timestamp?: number; duration?: number }) => unknown }).VideoFrame!(cur.canvas, { timestamp: Math.round((Date.now() - cur.startMs) * 1000), duration: Math.round(1e6 / cur.fps) });
+							const vf = new (window as unknown as { VideoFrame?: new (image: HTMLCanvasElement, init?: { timestamp?: number; duration?: number }) => unknown }).VideoFrame!(cur.canvas, { timestamp: Math.round((Date.now() - cur.startMs - cur.pausedTotalMs) * 1000), duration: Math.round(1e6 / cur.fps) });
 							(cur.encoder as { encode: (f: unknown, o?: { keyFrame?: boolean }) => void }).encode(vf, { keyFrame: cur.frames % (cur.fps * 2) === 0 });
 							(vf as { close(): void }).close();
 							cur.frames++;
@@ -3251,12 +3297,49 @@ export default class SmartVaultPlugin extends Plugin {
 				};
 			}
 
+			// pause/resume：暂停期间 captureTick 直接跳过（编码时间轴停走），
+			// 模型思考/长时间等待等死镜头不再进片，省掉后期剪掉大段静止。
+			if (action === "pause" || action === "resume") {
+				const st = this.debugRecordState;
+				if (!st) return { error: "no recording in progress" };
+				const now = Date.now();
+				if (action === "pause" && !st.paused) {
+					st.paused = true;
+					st.lastPauseAt = now;
+				} else if (action === "resume" && st.paused) {
+					// 时间轴整体平移：成片里 pause 段彻底消失（而不是定格帧），
+					// marks/timestamp 全部按压缩后的时间轴。
+					st.pausedTotalMs += now - (st.lastPauseAt ?? now);
+					st.lastPauseAt = null;
+					st.paused = false;
+				}
+				return { action, paused: st.paused, wallElapsedMs: now - st.startMs, videoElapsedMs: now - st.startMs - st.pausedTotalMs };
+			}
+			if (action === "mark") {
+				const st = this.debugRecordState;
+				if (!st) return { error: "no recording in progress" };
+				const label = opts?.name ?? "";
+				const atMs = Date.now() - st.startMs - st.pausedTotalMs;
+				st.marks.push({ label: label || `mark-${st.marks.length + 1}`, atMs });
+				return { action, label: st.marks[st.marks.length - 1].label, atMs, note: "atMs is the encode-timeline position (pauses excluded) — feed it to your -ss" };
+			}
+
 			if (action === "stop") {
 				const st = this.debugRecordState;
 				if (!st) return { error: "no recording in progress" };
+				// stop 加固（真机踩坑：首次 stop 静默失败录满 10 分钟）：① 若
+				// 采集循环正 inflight（capturePage 未返回），并发 capturePage
+				// 会挂/抛错——等它收敛 ≤2s；② stopping 标志挡住心跳重入与
+				// 10 分钟兜底自动停的竞争重入。
+				if (st.stopping) return { error: "stop already in progress", startedAt: st.startMs };
+				st.stopping = true;
+				for (let i = 0; i < 20 && st.inflight; i++) {
+					await new Promise((r) => window.setTimeout(r, 100));
+				}
 				const startedAt = st.startMs;
 				const outFile = st.outFile;
 				const fps = st.fps;
+				const marks = [...st.marks];
 				this.debugRecordState = null;
 				window.clearInterval(st.timer);
 				st.heartbeat?.post("stop");
@@ -3278,7 +3361,7 @@ export default class SmartVaultPlugin extends Plugin {
 					st.ctx.drawImage(bmp, st.crop.x, st.crop.y, st.crop.width, st.crop.height, 0, 0, st.canvas.width, st.canvas.height);
 					this.drawRecordCursor(st.ctx, st.cropScale, st.crop, st.mouse, st.win.getTitle());
 					bmp.close();
-					const vf = new (window as unknown as { VideoFrame?: new (image: HTMLCanvasElement, init?: { timestamp?: number; duration?: number }) => unknown }).VideoFrame!(st.canvas, { timestamp: Math.round((Date.now() - st.startMs) * 1000), duration: Math.round(1e6 / st.fps) });
+					const vf = new (window as unknown as { VideoFrame?: new (image: HTMLCanvasElement, init?: { timestamp?: number; duration?: number }) => unknown }).VideoFrame!(st.canvas, { timestamp: Math.round((Date.now() - st.startMs - st.pausedTotalMs) * 1000), duration: Math.round(1e6 / st.fps) });
 					(st.encoder as { encode: (f: unknown, o?: { keyFrame?: boolean }) => void }).encode(vf, { keyFrame: true });
 					(vf as { close(): void }).close();
 				} catch { /* 末帧失败可接受 */ }
@@ -3301,9 +3384,13 @@ export default class SmartVaultPlugin extends Plugin {
 					stopped: true,
 					file: outFile,
 					thumb: thumbFile,
-					durationMs: Date.now() - startedAt,
+					durationMs: Date.now() - startedAt - st.pausedTotalMs,
+					pausedMs: st.pausedTotalMs,
 					sizeBytes: buf.length,
 					fps,
+					// marks：mark(label) 记录的时间轴点位（pause 除外）——剪辑
+					// -ss 直接数据驱动，不用猜秒数。
+					marks,
 					encoderError: st.encError || undefined,
 				};
 			}
@@ -3648,16 +3735,408 @@ export default class SmartVaultPlugin extends Plugin {
 		return { error: `unknown op "${op}" (list | new | home | delete)` };
 	}
 
-	private async runDebugUi(opts?: { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string; to?: string; dy?: number; key?: string; includeHidden?: boolean }): Promise<unknown> {
+	/** 首次使用 demo 的夹具备份（fixture clean 时暂存，restore 时写回）。
+	 *  只存 plugin 实例内存——key 绝不经 MCP 传输/返回（凭据纪律）。 */
+	private debugFixtureBackup: {
+		providers: SmartVaultSettings["providers"];
+		embeddingModelKey: string;
+		activeChatModel: string;
+		onboarding: SmartVaultSettings["onboarding"];
+	} | null = null;
+
+	/** settings 白名单：semlink-debug 可读可写的配置键（凭据类 providers/
+	 *  license 一律不在此列——key 绝不经 MCP 传输）。set 走 saveSettings，
+	 *  sharePort 变更顺带把分享服务切到新端口。 */
+	private static readonly DEBUG_SETTINGS_KEYS = [
+		"excludePaths", "autoIndex", "chunkSize", "sharePort", "showCiteMarkers",
+		"debugLogging", "debugMcpPort", "lang", "maxSourcesPerAnswer",
+	] as const;
+
+	/** settings 执行器：get 返回白名单键的当前值；set 接受同键的 patch
+	 * （未知键/白名单外键逐个点名拒绝），写盘并热生效。excludePaths 是
+	 * 换行分隔的多行字符串（与设置页一致），autoIndex/showCiteMarkers
+	 * 是布尔，chunkSize/sharePort 是数字。 */
+	private async runDebugSettings(opts?: { op?: string; patch?: Record<string, unknown> }): Promise<unknown> {
+		const op = (opts?.op ?? "get").toLowerCase();
+		const KEYS = SmartVaultPlugin.DEBUG_SETTINGS_KEYS;
+		if (op === "get") {
+			const out: Record<string, unknown> = {};
+			for (const k of KEYS) out[k] = this.settings[k as keyof SmartVaultSettings];
+			return { op, settings: out };
+		}
+		if (op === "set") {
+			const patch = opts?.patch ?? {};
+			const unknown = Object.keys(patch).filter((k) => !KEYS.includes(k as (typeof KEYS)[number]));
+			if (unknown.length > 0) {
+				return { error: `keys outside whitelist: ${unknown.join(", ")}`, allowed: KEYS };
+			}
+			const applied: Record<string, { from: unknown; to: unknown }> = {};
+			for (const [k, v] of Object.entries(patch)) {
+				applied[k] = { from: this.settings[k as keyof SmartVaultSettings], to: v };
+				(this.settings as unknown as Record<string, unknown>)[k] = v;
+			}
+			await this.saveSettings();
+			// sharePort 变更：分享服务热切端口（ensureStarted 幂等）。
+			if (typeof patch.sharePort === "number") {
+				try { await this.shareServer.ensureStarted(patch.sharePort); } catch (e) {
+					return { op, applied, warning: `sharePort set but server restart failed: ${e instanceof Error ? e.message : String(e)}` };
+				}
+			}
+			return { op, applied, keys: Object.keys(applied) };
+		}
+		return { error: `unknown op "${op}" (get | set)` };
+	}
+
+	/** share 执行器：直接走分享管线（renderSharePage → register → urls），
+	 *  不弹二维码 modal——一次调用拿回 url + token。sessionId 缺省 = 当前
+	 *  视图的会话（与回答工具栏的分享按钮同源）。 */
+	private async runDebugShare(opts?: { op?: string; sessionId?: string }): Promise<unknown> {
+		const op = (opts?.op ?? "create").toLowerCase();
+		if (op !== "create") return { error: `unknown op "${op}" (create)` };
+		const sv = (this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0]?.view ?? null) as unknown as {
+			currentSessionId?: string;
+			firstQuestion?: string;
+			viewDoc?: { body?: { classList?: { contains(c: string): boolean } } };
+		} | null;
+		if (!sv) return { error: "no Semlink view" };
+		const sessionId = opts?.sessionId ?? sv.currentSessionId;
+		if (!sessionId) return { error: "no active session (send a message first, or pass opts.sessionId)" };
+		const session = this.historyStore.get(sessionId);
+		const msgs = session?.messages ?? [];
+		if (msgs.length === 0) return { error: `session ${sessionId} has no messages` };
+		const lang = getLang();
+		const theme = sv.viewDoc?.body?.classList?.contains("theme-dark") ? "dark" : "light";
+		const sharedAt = Date.now();
+		const html = await renderSharePage(this.app, msgs, sv.firstQuestion || t("shareTitle"), this, theme, sharedAt);
+		await this.shareServer.ensureStarted(this.settings.sharePort);
+		const token = this.shareServer.register(sessionId, html, sharedAt);
+		const url = this.shareServer.urls(token, `lang=${lang}&theme=${theme}`)[0];
+		return { op, url, token, port: this.settings.sharePort, sessionId, expiresIn: "until revoked" };
+	}
+
+	/** demo 命名快照（fixture snapshot 时写）：配置快照（内存）+ 聊天历史
+	 *  文件副本（插件 data/snapshots/<name>/）。索引库不进快照——419MB
+	 *  级复制与秒回诉求相悖，检索质量由全量索引决定（一旦建好即稳定），
+	 *  子树差异用 fixture op=rebuild path=… 秒级补齐。 */
+	private debugSnapshots = new Map<string, { settings: SmartVaultSettings; historyFile: string }>();
+
+	/** fixture 执行器：first-run demo / E2E 的插件状态夹具——clean 把模型
+	 *  配置恢复为「从未配置」态（key 清空、模型全部停用、onboarding 重置、
+	 *  嵌入模型键清空），配置快照只留本实例内存；restore-backup 原样写回；
+	 *  rebuild 直调 reindexAll（等价设置页 Rebuild，含确认语义）。 */
+	private async runDebugFixture(opts?: { op?: string; path?: string; name?: string; provider?: string; flow?: string }): Promise<unknown> {
+		const op = (opts?.op ?? "").toLowerCase();
+		// fs/path：snapshot/restore 的历史文件副本用（require 缺失时快照
+		// 分支会显式报错，clean/restore-backup 等 op 不依赖）。
+		let pathMod: { join(...p: string[]): string } | null = null;
+		let fsMod: {
+			mkdirSync(d: string, o?: { recursive?: boolean }): void;
+			writeFileSync(f: string, d: Uint8Array): void;
+			existsSync(f: string): boolean;
+			copyFileSync(f: string, t: string): void;
+		} | null = null;
+		try {
+			const req0 = (window as unknown as { require?: (m: string) => unknown }).require;
+			if (req0) {
+				pathMod = req0("path") as { join(...p: string[]): string };
+				fsMod = req0("fs") as {
+					mkdirSync(d: string, o?: { recursive?: boolean }): void;
+					writeFileSync(f: string, d: Uint8Array): void;
+					existsSync(f: string): boolean;
+					copyFileSync(f: string, t: string): void;
+				};
+			}
+		} catch { /* 渲染进程无 require（不应发生，Obsidian 恒有） */ }
+		if (op === "clean-first-run") {
+			if (this.debugFixtureBackup) return { error: "a backup is already held — restore it first (fixture op=restore-backup)" };
+			this.debugFixtureBackup = {
+				providers: JSON.parse(JSON.stringify(this.settings.providers)) as SmartVaultSettings["providers"],
+				embeddingModelKey: this.settings.embeddingModelKey,
+				activeChatModel: this.settings.activeChatModel,
+				onboarding: JSON.parse(JSON.stringify(this.settings.onboarding ?? {})) as SmartVaultSettings["onboarding"],
+			};
+			let keysCleared = 0;
+			let modelsDisabled = 0;
+			for (const p of this.settings.providers) {
+				if (p.apiKey) keysCleared++;
+				p.apiKey = "";
+				for (const m of p.models) {
+					if (m.enabled) modelsDisabled++;
+					m.enabled = false;
+				}
+			}
+			this.settings.embeddingModelKey = "";
+			this.settings.activeChatModel = "";
+			this.settings.onboarding = {};
+			await this.saveSettings();
+			const sv = (this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0]?.view ?? null) as unknown as { newChatFromUi?: () => void } | null;
+			sv?.newChatFromUi?.(); // 视图回到干净首页（首次态渲染）
+			return { op, cleaned: true, keysCleared, modelsDisabled, backupStored: true, note: "onboarding reset — next view open behaves like a first run" };
+		}
+		if (op === "restore-backup") {
+			const b = this.debugFixtureBackup;
+			if (!b) return { error: "no backup held" };
+			this.settings.providers = b.providers;
+			this.settings.embeddingModelKey = b.embeddingModelKey;
+			this.settings.activeChatModel = b.activeChatModel;
+			this.settings.onboarding = b.onboarding;
+			this.debugFixtureBackup = null;
+			await this.saveSettings();
+			const sv = (this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0]?.view ?? null) as unknown as { newChatFromUi?: () => void } | null;
+			sv?.newChatFromUi?.();
+			return { op, restored: true, providers: this.settings.providers.length };
+		}
+		if (op === "rebuild") {
+			await this.reindexAll();
+			return { op, rebuildStarted: true };
+		}
+		if (op === "rebuild-path") {
+			const prefix = opts?.path?.trim().replace(/\/+$/, "");
+			if (!prefix) return { error: "rebuild-path needs opts.path (vault prefix, e.g. \"demo/\")" };
+			// 分区重建：只清该子树的向量与队列，再只扫该子树。1,152 篇全库
+			// 重建 ~20 分钟，demo 子树通常几十篇（秒级）——重拍循环的核心。
+			this.scheduler.abort();
+			for (let i = 0; i < 300 && this.scheduler.isRunning; i++) {
+				await new Promise((r) => window.setTimeout(r, 100));
+			}
+			const files = this.app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(prefix + "/") || f.path === prefix);
+			let purged = 0;
+			for (const f of files) {
+				purged += await this.store.deleteChunksByNotePath(f.path);
+				await this.store.touchNoteMtime(f.path, 0);
+				await this.scheduler.enqueueFile(f.path, "update");
+			}
+			void this.scheduler.run();
+			return { op, rebuildPath: prefix, notes: files.length, chunksPurged: purged, started: true };
+		}
+		if (op === "snapshot") {
+			const name = opts?.name?.trim();
+			if (!name || !/^[\w-]+$/.test(name)) return { error: "snapshot needs opts.name ([\\w-]+)" };
+			if (!fsMod || !pathMod) return { error: "fs/path unavailable in renderer" };
+			const dir = pathMod.join(String((this.app.vault.adapter as unknown as { getBasePath(): string }).getBasePath()), String(this.manifest.dir), "data", "snapshots");
+			fsMod.mkdirSync(dir, { recursive: true });
+			const historyFile = pathMod.join(dir, `${name}-history.json`);
+			try {
+				const histPath = pathMod.join(String((this.app.vault.adapter as unknown as { getBasePath(): string }).getBasePath()), String(this.manifest.dir), "data", "chat-history.json");
+				if (fsMod.existsSync(histPath)) fsMod.copyFileSync(histPath, historyFile);
+			} catch { /* 历史文件缺位（空库）可接受 */ }
+			this.debugSnapshots.set(name, {
+				settings: JSON.parse(JSON.stringify(this.settings)) as SmartVaultSettings,
+				historyFile,
+			});
+			return { op, name, stored: true, note: "settings (in-plugin memory) + chat-history copy; index excluded by design" };
+		}
+		if (op === "restore") {
+			const name = opts?.name?.trim();
+			const snap = name ? this.debugSnapshots.get(name) : null;
+			if (!snap) return { error: `no snapshot "${name ?? "?"}" held (fixture op=snapshot first)`, held: [...this.debugSnapshots.keys()] };
+			if (!fsMod || !pathMod) return { error: "fs/path unavailable in renderer" };
+			this.settings = JSON.parse(JSON.stringify(snap.settings)) as SmartVaultSettings;
+			await this.saveSettings();
+			try {
+				const histPath = pathMod.join(String((this.app.vault.adapter as unknown as { getBasePath(): string }).getBasePath()), String(this.manifest.dir), "data", "chat-history.json");
+				if (fsMod.existsSync(snap.historyFile)) fsMod.copyFileSync(snap.historyFile, histPath);
+			} catch { /* 历史恢复尽力而为 */ }
+			const sv = (this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0]?.view ?? null) as unknown as { newChatFromUi?: () => void } | null;
+			sv?.newChatFromUi?.();
+			return { op, name, restored: true, note: "history file restored — reload the view or app to reload chat sessions" };
+		}
+		if (op === "snapshots") {
+			return { held: [...this.debugSnapshots.keys()] };
+		}
+		if (op === "seed-keys") {
+			const b = this.debugFixtureBackup;
+			if (!b) return { error: "no backup held (fixture op=clean-first-run first)" };
+			const provider = opts?.provider?.toLowerCase() ?? "";
+			const targets = b.providers.filter((p) => !provider || p.id.toLowerCase().includes(provider) || p.name.toLowerCase().includes(provider));
+			if (targets.length === 0) return { error: `no backed-up provider matches "${provider}"`, backedUp: b.providers.map((p) => p.name) };
+			let filled = 0;
+			const masked: Array<{ provider: string; keyLen: number }> = [];
+			for (const src of targets) {
+				const cur = this.settings.providers.find((p) => p.id === src.id);
+				if (cur && src.apiKey) {
+					cur.apiKey = src.apiKey;
+					filled++;
+					masked.push({ provider: src.name, keyLen: src.apiKey.length });
+				}
+			}
+			// 当前屏若有引导的 key 输入框，逐字注入（30ms/字）——录制画面
+			// 呈现真实打字节奏，key 本身不出 MCP 传输。
+			const root = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0]?.view as unknown as { contentEl?: HTMLElement } | null;
+			const keyInput = root?.contentEl?.querySelector<HTMLInputElement>(".semlink-guide-keyinput:not([disabled])") ?? null;
+			let typedInto = false;
+			if (keyInput && targets[0]?.apiKey) {
+				const secret = targets[0].apiKey;
+				keyInput.focus();
+				for (let i = 0; i < secret.length; i++) {
+					keyInput.value = secret.slice(0, i + 1);
+					keyInput.dispatchEvent(new Event("input", { bubbles: true }));
+					await new Promise((r) => window.setTimeout(r, 30));
+				}
+				keyInput.dispatchEvent(new Event("change", { bubbles: true }));
+				typedInto = true;
+			}
+			await this.saveSettings();
+			return { op, providersFilled: filled, masked, typedIntoInput: typedInto };
+		}
+		if (op === "guide-open") {
+			const flow = (opts?.flow ?? "hub").toLowerCase();
+			const mode = flow === "chat" ? "chat" : flow === "embed" ? "embed" : "hub";
+			const sv = (this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0]?.view ?? null) as unknown as { openGuide?: (mode?: "hub" | "chat" | "embed", from?: "home" | "settings") => void } | null;
+			if (typeof sv?.openGuide !== "function") return { error: "view has no openGuide" };
+			sv.openGuide(mode, "home");
+			return { op, flow: mode, opened: true };
+		}
+		if (op === "reset") {
+			// 单独重置引导（不动 providers/keys）：轻量版的 clean-first-run。
+			this.settings.onboarding = {};
+			await this.saveSettings();
+			const sv = (this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE)[0]?.view ?? null) as unknown as { newChatFromUi?: () => void } | null;
+			sv?.newChatFromUi?.();
+			return { op, reset: true };
+		}
+		return { error: `unknown op "${op}" (clean-first-run | restore-backup | rebuild | rebuild-path | snapshot | restore | snapshots | seed-keys | guide-open | reset)` };
+	}
+
+	/** demo 分享页预览窗（browser open 创建）。remote BrowserWindow 句柄
+	 *  留本实例；close 时销毁。窗口自动进入 getAllWindows 序列——record
+	 *  的 windows[] 表能看到它，target 可选中录制「浏览器查看分享页」。 */
+	private debugBrowserWin: { isDestroyed(): boolean; destroy(): void; getTitle(): string; loadURL(u: string): Promise<void>; webContents: { getURL(): string; executeJavaScript(code: string): Promise<unknown>; capturePage(): Promise<{ toPNG(): Uint8Array; getSize(): { width: number; height: number } }> } } | null = null;
+
+	/** browser 执行器：在 Electron 新窗口加载 URL（本地分享页预览）。
+	 *  系统默认浏览器无法被 record 工具捕捉——Electron 窗口在
+	 *  getAllWindows 里，可与其它窗口同等录制。op=scroll 驱动页面滚动
+	 *  （录制分享页浏览镜头），op=snapshot 把窗口截成 PNG（不占 record）。 */
+	private async runDebugBrowser(opts?: { op?: string; url?: string; width?: number; height?: number; dy?: number; to?: string }): Promise<unknown> {
+		const op = (opts?.op ?? "status").toLowerCase();
+		const req = (window as unknown as { require?: (m: string) => unknown }).require;
+		if (!req) return { error: "renderer require unavailable" };
+		const remote = (req("electron") as { remote?: { BrowserWindow: { getAllWindows(): Array<{ isDestroyed(): boolean; getTitle(): string }>; }; } } | undefined)?.remote as unknown as {
+			BrowserWindow: new (cfg: { width: number; height: number; title?: string; autoHideMenuBar?: boolean }) => { isDestroyed(): boolean; destroy(): void; getTitle(): string; loadURL(u: string): Promise<void>; webContents: { getURL(): string; executeJavaScript(code: string): Promise<unknown>; capturePage(): Promise<{ toPNG(): Uint8Array; getSize(): { width: number; height: number } }> } };
+			getAllWindows(): Array<{ isDestroyed(): boolean; getTitle(): string }>;
+		} | undefined;
+		if (!remote) return { error: "electron remote unavailable" };
+		if (op === "open") {
+			if (this.debugBrowserWin && !this.debugBrowserWin.isDestroyed()) this.debugBrowserWin.destroy();
+			const url = (opts?.url ?? "").trim();
+			if (!/^https?:\/\//.test(url)) return { error: "browser open needs opts.url (http/https)" };
+			const win = new remote.BrowserWindow({ width: Math.min(1600, Math.max(480, opts?.width ?? 1280)), height: Math.min(1200, Math.max(400, opts?.height ?? 860)), title: "Shared Chat Preview", autoHideMenuBar: true });
+			await win.loadURL(url);
+			this.debugBrowserWin = win;
+			return { op, opened: true, url, title: win.getTitle(), webContentsUrl: win.webContents.getURL() };
+		}
+		if (op === "scroll") {
+			const win = this.debugBrowserWin;
+			if (!win || win.isDestroyed()) return { error: "no preview window (browser op=open first)" };
+			const to = (opts?.to ?? "").trim().toLowerCase();
+			const dy = typeof opts?.dy === "number" ? opts.dy : to === "top" ? -999999 : 600;
+			await win.webContents.executeJavaScript(`window.scrollBy({ top: ${dy}, behavior: "smooth" }); 1;`);
+			const pos = await win.webContents.executeJavaScript("({ y: window.scrollY, h: document.body.scrollHeight })");
+			return { op, scrolled: pos };
+		}
+		if (op === "snapshot") {
+			const win = this.debugBrowserWin;
+			if (!win || win.isDestroyed()) return { error: "no preview window (browser op=open first)" };
+			const req2 = (window as unknown as { require?: (m: string) => unknown }).require;
+			const fs2 = req2?.("fs") as { mkdirSync(d: string, o?: { recursive?: boolean }): void; writeFileSync(f: string, d: Uint8Array): void };
+			const os2 = req2?.("os") as { tmpdir(): string };
+			const path2 = req2?.("path") as { join(...p: string[]): string };
+			const dir = path2.join(os2.tmpdir(), "semlink-debug-shots");
+			fs2.mkdirSync(dir, { recursive: true });
+			const img = await win.webContents.capturePage();
+			const file = path2.join(dir, `browser-${Date.now()}.png`);
+			fs2.writeFileSync(file, img.toPNG());
+			return { op, file, pixels: img.getSize() };
+		}
+		if (op === "close") {
+			if (!this.debugBrowserWin || this.debugBrowserWin.isDestroyed()) return { op, closed: false, reason: "no preview window" };
+			this.debugBrowserWin.destroy();
+			this.debugBrowserWin = null;
+			return { op, closed: true };
+		}
+		return this.debugBrowserWin && !this.debugBrowserWin.isDestroyed()
+			? { op: "status", open: true, url: this.debugBrowserWin.webContents.getURL(), title: this.debugBrowserWin.getTitle() }
+			: { op: "status", open: false };
+	}
+
+	private async runDebugUi(opts?: { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string; to?: string; dy?: number; key?: string; includeHidden?: boolean; timeout?: number; patterns?: string[] }): Promise<unknown> {
 		const action = (opts?.action ?? "query").toLowerCase();
 		const sel = opts?.selector?.trim() ?? "";
 		const text = opts?.text?.trim() ?? "";
 		const idx = typeof opts?.index === "number" ? Math.max(0, Math.floor(opts.index)) : 0;
 		const docFilter = opts?.doc?.trim().toLowerCase() ?? "";
 		const includeHidden = opts?.includeHidden === true;
-		const ACTIONS = "query | click | type | scroll | hover | key";
-		if (!["query", "click", "type", "scroll", "hover", "key"].includes(action)) {
+		const ACTIONS = "query | click | type | scroll | hover | key | wait | audit";
+		if (!["query", "click", "type", "scroll", "hover", "key", "wait", "audit"].includes(action)) {
 			return { error: `unknown action "${action}" (${ACTIONS})` };
+		}
+		// wait：selector 轮询直到可见/消失（timeout 秒，默认 30）——替代
+		// 调用方 sleep+轮询 chatview 的盲等（真机曾把上一轮答案误判本轮）。
+		if (action === "wait") {
+			if (!sel) return { error: "wait needs a selector" };
+			const timeoutMs = Math.min(300, Math.max(1, typeof opts?.timeout === "number" ? opts.timeout : 30)) * 1000;
+			const docs2 = new Set<Document>([window.document]);
+			this.app.workspace.iterateAllLeaves((leaf) => {
+				const el = (leaf as unknown as { containerEl?: HTMLElement }).containerEl
+					?? (leaf.view as unknown as { containerEl?: HTMLElement }).containerEl;
+				if (el?.ownerDocument) docs2.add(el.ownerDocument);
+			});
+			const deadline = Date.now() + timeoutMs;
+			let sawHidden = false;
+			while (Date.now() < deadline) {
+				let visible = false;
+				for (const doc of docs2) {
+					for (const el of Array.from(doc.querySelectorAll(sel))) {
+						if ((el.textContent ?? "").trim().toLowerCase().includes(text.toLowerCase())) {
+							const r = el.getBoundingClientRect();
+							if (r.width > 0 && r.height > 0) visible = true;
+							else sawHidden = true;
+						}
+					}
+				}
+				if (visible) return { action, waitedMs: timeoutMs - (deadline - Date.now()), state: "visible", selector: sel };
+				await new Promise((r) => window.setTimeout(r, 120));
+			}
+			return { action, waitedMs: timeoutMs, state: sawHidden ? "hidden" : "absent", selector: sel, timeout: true };
+		}
+		// audit：扫视口内可见文本命中隐私/敏感 patterns（正则）——demo 成片
+		// 的 QC 自动化：命中列表带元素类名/片段/rect，替代抽帧人眼。
+		if (action === "audit") {
+			const patterns = opts?.patterns ?? [];
+			if (patterns.length === 0) return { error: "audit needs opts.patterns (regex strings)" };
+			let regexes: RegExp[];
+			try {
+				regexes = patterns.map((p) => new RegExp(p));
+			} catch (e) {
+				return { error: `bad pattern: ${e instanceof Error ? e.message : String(e)}` };
+			}
+			const vh = window.innerHeight;
+			const vw = window.innerWidth;
+			const hits: Array<{ pattern: string; cls: string; snippet: string; rect: { x: number; y: number; w: number; h: number } }> = [];
+			const seen = new Set<Element>();
+			for (const el of Array.from(window.document.querySelectorAll("body *"))) {
+				const r = el.getBoundingClientRect();
+				if (r.width <= 0 || r.height <= 0 || r.bottom < 0 || r.top > vh || r.right < 0 || r.left > vw) continue;
+				const own = Array.from(el.childNodes).filter((n) => n.nodeType === 3).map((n) => n.textContent ?? "").join("");
+				if (!own.trim()) continue;
+				for (const re of regexes) {
+					const m = own.match(re);
+					if (m) {
+						if (!seen.has(el)) {
+							seen.add(el);
+							hits.push({
+								pattern: re.source,
+								cls: el.getAttribute("class") ?? "",
+								snippet: own.trim().slice(Math.max(0, (m.index ?? 0) - 20), (m.index ?? 0) + m[0].length + 20),
+								rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+							});
+						}
+						break;
+					}
+				}
+				if (hits.length >= 50) break;
+			}
+			return { action, scanned: "main viewport", patterns: patterns.length, hits, hitCount: hits.length, clean: hits.length === 0 };
 		}
 		if ((action === "type" || action === "scroll") && !sel) return { error: `${action} needs a selector (target element)` };
 		if (!sel && !text && action !== "key") return { error: "ui needs a selector and/or text" };
@@ -3721,7 +4200,21 @@ export default class SmartVaultPlugin extends Plugin {
 			return { error: `match index ${idx} out of range (${matches.length} matches${includeHidden ? ", includeHidden" : ""})`, matches: info };
 		}
 		if (action === "click") {
-			const el = m.el as HTMLElement;
+			const el = m.el as HTMLButtonElement;
+			// not_clickable 守卫：disabled/零矩形/pointer-events:none 一律拒绝
+			// 并带 error.code——调用方不再「以为点到了其实没点到」（真机
+			// demo 多次因静默无效点击浪费整条 take）。
+			const cr = el.getBoundingClientRect();
+			const cs = el.ownerDocument.defaultView?.getComputedStyle(el);
+			if (el.disabled === true) {
+				return { error: "not_clickable: element is disabled", code: "not_clickable", matched: info[idx] };
+			}
+			if (cr.width <= 0 || cr.height <= 0) {
+				return { error: "not_clickable: zero-size rect (hidden or not laid out) — locate with includeHidden first", code: "not_clickable", matched: info[idx] };
+			}
+			if (cs?.pointerEvents === "none") {
+				return { error: "not_clickable: pointer-events none (an overlay owns this point)", code: "not_clickable", matched: info[idx] };
+			}
 			// 完整真实指针序列（pointerover/move/down/up + click，带视口坐标）：
 			// el.click() 只发裸 click——坐标敏感的处理器（菜单定位、hover 态、
 			// pointerdown 关闭检测）与 Obsidian 菜单的 outside-close 语义都会

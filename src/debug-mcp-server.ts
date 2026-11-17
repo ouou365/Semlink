@@ -42,6 +42,8 @@ export type DebugUiRunner = (opts?: {
 	dy?: number;
 	key?: string;
 	includeHidden?: boolean;
+	timeout?: number;
+	patterns?: string[];
 }) => Promise<unknown>;
 
 /** opfs 工具执行器：由 main.ts 注入——主线程直读 OPFS（配额/用量/
@@ -72,11 +74,31 @@ export type DebugRecordRunner = (opts?: {
 	crop?: string;
 	bitrate?: number;
 	zoom?: number;
+	name?: string;
+	region?: { x: number; y: number; w: number; h: number };
 }) => Promise<unknown>;
 
 /** session 工具执行器：由 main.ts 注入——演示/E2E 的会话夹具管理
  * （new/home 回干净首页、list 枚举、delete 清理演示会话）。 */
 export type DebugSessionRunner = (opts?: { op?: string; id?: string; index?: number; title?: string }) => Promise<unknown>;
+
+/** fixture 工具执行器：由 main.ts 注入——first-run demo 的插件状态夹具
+ * （clean 恢复「从未配置」态、restore-backup 写回、rebuild 直调重建、
+ * rebuild-path 分区重建、snapshot/restore 命名快照、seed-keys 从备份
+ * 回填 key、guide-open/reset 引导导航）。 */
+export type DebugFixtureRunner = (opts?: { op?: string; path?: string; name?: string; provider?: string; flow?: string }) => Promise<unknown>;
+
+/** browser 工具执行器：由 main.ts 注入——Electron 新窗口加载 URL，
+ *  供录制「浏览器查看分享页」镜头（系统浏览器无法被 capturePage 捕捉）。 */
+export type DebugBrowserRunner = (opts?: { op?: string; url?: string; width?: number; height?: number; dy?: number; to?: string }) => Promise<unknown>;
+
+/** settings 工具执行器：由 main.ts 注入——白名单键的 get/set（写盘 +
+ *  热生效；凭据键不在白名单，绝不经 MCP 传输）。 */
+export type DebugSettingsRunner = (opts?: { op?: string; patch?: Record<string, unknown> }) => Promise<unknown>;
+
+/** share 工具执行器：由 main.ts 注入——直接创建 LAN 分享（不弹 UI），
+ *  一次调用返回 url + token。 */
+export type DebugShareRunner = (opts?: { op?: string; sessionId?: string }) => Promise<unknown>;
 
 interface JsonRpcRequest {
 	jsonrpc: "2.0";
@@ -223,6 +245,96 @@ const SESSION_TOOL = {
 			id: { type: "string", description: "op=\"delete\": exact session id." },
 			index: { type: "number", description: "op=\"delete\": session index from op=\"list\"." },
 			title: { type: "string", description: "op=\"delete\": case-insensitive title substring match." },
+		},
+		required: [],
+	},
+};
+
+const FIXTURE_TOOL = {
+	name: "fixture",
+	description:
+		"Plugin-state fixtures for first-run demos and E2E: op=\"clean-" +
+		"first-run\" snapshots the current model configuration in memory " +
+		"(API keys NEVER leave the plugin process) and restores the " +
+		"never-configured state — every provider API key cleared, all " +
+		"models disabled, embedding model key and active chat model reset, " +
+		"onboarding state cleared so the next view open behaves like a " +
+		"first run (guide reachable from the home screen). op=\"restore-" +
+		"backup\" writes the snapshot back and clears it. op=\"rebuild\" " +
+		"starts a full re-index (same as the settings Rebuild button: " +
+		"abort running index, clear the store, re-run from zero). " +
+		"Typical demo loop: clean-first-run → record (drive onboarding) → " +
+		"mid-recording restore-backup when real keys must work → stop → " +
+		"restore-backup if not yet done.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			op: { type: "string", enum: ["clean-first-run", "restore-backup", "rebuild"], description: "Fixture operation." },
+		},
+		required: [],
+	},
+};
+
+const BROWSER_TOOL = {
+	name: "browser",
+	description:
+		"Open a URL in a NEW Electron window (e.g. a Semlink share page at " +
+		"http://127.0.0.1:<port>/s/<token>) so the page can be RECORDED by " +
+		"the record tool — the OS default browser cannot be captured. The " +
+		"window appears in record start's windows[] table (usually as the " +
+		"last index) and in shot's window list. op=\"open\" loads the url " +
+		"(width/height optional), op=\"close\" destroys the preview window, " +
+		"default reports its status.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			op: { type: "string", enum: ["open", "close", "status"], description: "Default status." },
+			url: { type: "string", description: "op=\"open\": http(s) URL to load." },
+			width: { type: "number", description: "op=\"open\": window width (default 1280)." },
+			height: { type: "number", description: "op=\"open\": window height (default 860)." },
+			dy: { type: "number", description: "op=\"scroll\": scroll delta in px (default 600; -999999 for to=top)." },
+			to: { type: "string", description: "op=\"scroll\": \"top\" scrolls the page to the very top." },
+		},
+		required: [],
+	},
+};
+
+const SETTINGS_TOOL = {
+	name: "settings",
+	description:
+		"Read/write whitelisted plugin settings in one call (no UI clicks): " +
+		"op=\"get\" returns their current values, op=\"set\" applies a patch " +
+		"object and persists it (hot-effective; sharePort also restarts the " +
+		"LAN share server). Whitelist: excludePaths (newline-separated " +
+		"string, same as the settings page), autoIndex (bool), chunkSize " +
+		"(number), sharePort (number), showCiteMarkers (bool), debugLogging " +
+		"(bool), debugMcpPort (number), lang, maxSourcesPerAnswer. API keys " +
+		"and license state are NOT addressable — they never travel over MCP.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			op: { type: "string", enum: ["get", "set"], description: "Default get." },
+			patch: {
+				description: "op=\"set\": object of whitelisted keys → new values, e.g. {\"excludePaths\": \"templates/\\n.Raw/\\n规范标准/\", \"showCiteMarkers\": true}.",
+				type: "object",
+			},
+		},
+		required: [],
+	},
+};
+
+const SHARE_TOOL = {
+	name: "share",
+	description:
+		"Create a LAN share of a chat session directly (no UI clicks, no " +
+		"modal): returns url + token in one call. sessionId defaults to the " +
+		"active view session. Same pipeline as the in-app share button — " +
+		"pair with browser op=open to record the shared page.",
+	inputSchema: {
+		type: "object",
+		properties: {
+			op: { type: "string", description: "\"create\" (default)." },
+			sessionId: { type: "string", description: "Session id; defaults to the active view session." },
 		},
 		required: [],
 	},
@@ -413,7 +525,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner, private runRecord?: DebugRecordRunner, private runSession?: DebugSessionRunner) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner, private runRecord?: DebugRecordRunner, private runSession?: DebugSessionRunner, private runFixture?: DebugFixtureRunner, private runBrowser?: DebugBrowserRunner, private runSettings?: DebugSettingsRunner, private runShare?: DebugShareRunner) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -506,7 +618,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL, RECORD_TOOL, SESSION_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL, RECORD_TOOL, SESSION_TOOL, FIXTURE_TOOL, BROWSER_TOOL, SETTINGS_TOOL, SHARE_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -536,8 +648,16 @@ export class DebugMcpServer {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runRecord?.(params.arguments as { action?: string; target?: number; fps?: number; crop?: string; bitrate?: number; zoom?: number } | undefined)) ?? { error: "no record runner" }, null, 2) }] };
 					} else if (params.name === "session") {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runSession?.(params.arguments as { op?: string; id?: string; index?: number; title?: string } | undefined)) ?? { error: "no session runner" }, null, 2) }] };
+					} else if (params.name === "fixture") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runFixture?.(params.arguments)) ?? { error: "no fixture runner" }, null, 2) }] };
+					} else if (params.name === "browser") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runBrowser?.(params.arguments as { op?: string; url?: string; width?: number; height?: number; dy?: number; to?: string } | undefined)) ?? { error: "no browser runner" }, null, 2) }] };
+					} else if (params.name === "settings") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runSettings?.(params.arguments as { op?: string; patch?: Record<string, unknown> } | undefined)) ?? { error: "no settings runner" }, null, 2) }] };
+					} else if (params.name === "share") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runShare?.(params.arguments as { op?: string; sessionId?: string } | undefined)) ?? { error: "no share runner" }, null, 2) }] };
 					} else if (params.name === "ui") {
-						result = { content: [{ type: "text", text: JSON.stringify((await this.runUi?.(params.arguments as { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string; to?: string; dy?: number; key?: string; includeHidden?: boolean } | undefined)) ?? { error: "no ui runner" }, null, 2) }] };
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runUi?.(params.arguments as { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string; to?: string; dy?: number; key?: string; includeHidden?: boolean; timeout?: number; patterns?: string[] } | undefined)) ?? { error: "no ui runner" }, null, 2) }] };
 					} else if (params.name === "shot") {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runShot?.(params.arguments as { target?: string | number; resize?: { index?: number; width?: number; height?: number; x?: number; y?: number }; zoom?: number } | undefined)) ?? { error: "no shot runner" }, null, 2) }] };
 					} else {

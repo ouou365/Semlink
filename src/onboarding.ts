@@ -59,6 +59,40 @@ const PROVIDER_CONSOLE: Record<string, string> = {
  *  mirrors the settings page's generic default. */
 const FALLBACK_CONTEXT = 128000;
 
+/* ── 引导弹窗生命周期（重渲染复活 bug 的根治，2026-11-16）──
+   Obsidian Modal 是 app 级 DOM（挂 body，不在视图树内）：宿主视图重渲染/
+   leaf 关闭都不会动它。半途的嵌入选择弹窗（BAAI → endpoint → 模型）一旦
+   没走到 close，就一直挂在 body 上——视图重排后用户看到的就是「modal 复
+   活」。openGuideModal 在 open 时登记实例并包装 close（注销），视图的
+   渲染入口与 onClose 调 closeAllGuideModals 统一强杀。 */
+const liveGuideModals = new Set<Modal>();
+
+/** Register a guide modal, wrap its close() to deregister, then open it. */
+export function openGuideModal<T extends Modal>(m: T): T {
+	liveGuideModals.add(m);
+	m.close = () => {
+		liveGuideModals.delete(m);
+		// 原型调用而非 bind 捕获：实例 close 已被本包装覆写，bind 会递归；
+		// 且 obsidian d.ts 的 close 无显式签名（any），bind 链会触发
+		// no-unsafe-* 检查器 Error。
+		Modal.prototype.close.call(m);
+	};
+	m.open();
+	return m;
+}
+
+/** Force-close every live guide modal (view render entry / leaf close). */
+export function closeAllGuideModals(): void {
+	for (const m of [...liveGuideModals]) {
+		try {
+			m.close();
+		} catch {
+			/* already gone */
+		}
+	}
+	liveGuideModals.clear();
+}
+
 /** 嵌入模型列表的品牌组顺序（海外用户视角）：美系主流 → 专业嵌入厂商 →
  *  欧系/企业开源 → 多语言 API → 开源权重（bge/qwen 全球通用）→ 本地运行时
  *  品牌 → 低价/免费路由 → 大陆区域端点殿后。未列出的品牌按字母序殿后。 */
@@ -817,10 +851,10 @@ class EmbedModelPickModal extends Modal {
 							this.onPick(variants[0].id, providerName);
 							return;
 						}
-						new EmbedVariantPickModal(this.plugin, providerName, variants, (modelId) => {
+						openGuideModal(new EmbedVariantPickModal(this.plugin, providerName, variants, (modelId) => {
 							this.close();
 							this.onPick(modelId, providerName);
-						}).open();
+												}));
 					});
 				}
 			}
@@ -941,9 +975,9 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 						text: MODEL_BRAND_LABELS[brand] ?? brand,
 					});
 					card.addEventListener("click", () => {
-						new EmbedModelPickModal(plugin, brand, models, (modelId, providerName) => {
+						openGuideModal(new EmbedModelPickModal(plugin, brand, models, (modelId, providerName) => {
 							pick(modelId, providerName);
-						}).open();
+												}));
 					});
 				}
 				// 自定义供应商：没有预选模型，Key 验证后进模型选择（旧第三步）
@@ -953,7 +987,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 				customCard.createDiv({ cls: "semlink-guide-provider-fallback", text: "＋" });
 				customCard.createDiv({ cls: "semlink-guide-provider-name", text: t("customProvider") });
 				customCard.addEventListener("click", () => {
-					new AddProviderModal(plugin.app, plugin, "custom", (p) => {
+					openGuideModal(new AddProviderModal(plugin.app, plugin, "custom", (p) => {
 						// 表单里填了模型名称 → 直接作为选定的嵌入模型，
 						// Key 验证后跳过模型选择直进索引步骤
 						const m = p.models.find((x) => (x.kind ?? "chat") === "embedding");
@@ -962,7 +996,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 							void plugin.saveSettings();
 						}
 						opts.onPickProvider(p);
-					}, "embed").open();
+					}, "embed"));
 				});
 
 				// 联系入口（同对话流第一步）：品牌/模型目录缺的可以联系我们补充
@@ -1004,7 +1038,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 							const entry = CHAT_CATALOG.find((e) => e.name === m);
 							return { name: m, endpoint: entry ? catalogEndpoint(entry) : "" };
 						});
-						new SeriesPickModal(plugin.app, { title: item.name, variants, onPick: pick }).open();
+						openGuideModal(new SeriesPickModal(plugin.app, { title: item.name, variants, onPick: pick }));
 					} else {
 						pick(item.name);
 					}
@@ -1018,7 +1052,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 			customCard.createDiv({ cls: "semlink-guide-provider-fallback", text: "＋" });
 			customCard.createDiv({ cls: "semlink-guide-provider-name", text: t("customProvider") });
 			customCard.addEventListener("click", () => {
-				new AddProviderModal(plugin.app, plugin, "custom", (p) => opts.onPickProvider(p)).open();
+				openGuideModal(new AddProviderModal(plugin.app, plugin, "custom", (p) => opts.onPickProvider(p)));
 			});
 
 			// 联系链接：点"Contact me/请联系我"唤起邮件客户端
@@ -1285,7 +1319,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 		});
 		addBtn.addEventListener("click", () => {
 			// 复用设置页的添加模型弹窗（Model ID + Context Window）
-			new AddModelModal(plugin.app, {
+			openGuideModal(new AddModelModal(plugin.app, {
 				title: t("mtAddModel"),
 				onSubmit: (id, contextWindow) => {
 					let model = provider.models.find((x) => x.id === id);
@@ -1303,17 +1337,17 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 					void plugin.saveSettings();
 					renderList();
 				},
-			}).open();
+						}));
 		});
 		const fetchBtn = countBtns.createEl("button", {
 			cls: "semlink-guide-model-add",
 			text: "Fetch",
 		});
 		fetchBtn.addEventListener("click", () => {
-			new GuideFetchModelsModal(plugin, provider, kindWanted, () => {
+			openGuideModal(new GuideFetchModelsModal(plugin, provider, kindWanted, () => {
 				void plugin.saveSettings();
 				renderList();
-			}).open();
+						}));
 		});
 
 		const error = modelsHost.createDiv({ cls: "semlink-guide-error" });
@@ -1397,7 +1431,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 					if ((e.target as HTMLElement).closest(".semlink-guide-model-toggle")) return;
 					if ((e.target as HTMLElement).closest(".semlink-guide-model-grip")) return;
 					// 编辑弹窗复用设置页模型列表的（含删除）
-					new AddModelModal(plugin.app, {
+					openGuideModal(new AddModelModal(plugin.app, {
 						title: t("mtModelEdit"),
 						initial: { id: model.id, contextWindow: model.contextWindow },
 						onSubmit: (id, contextWindow) => {
@@ -1412,7 +1446,7 @@ function renderModelStep(root: HTMLElement, plugin: SmartVaultPlugin, opts: Mode
 							void plugin.saveSettings();
 							renderList();
 						},
-					}).open();
+										}));
 				});
 			}
 			if (models.length === 0) {

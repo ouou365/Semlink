@@ -18,7 +18,7 @@ import { ChatHistoryStore } from "./chat-history";
 import { brandLogoOf, formatContextWindow } from "./settings-models";
 import { LicenseModal, LicenseInfoModal } from "./license-modal";
 import { UsageModal } from "./usage-modal";
-import { guideInProgress, onboardingActive, renderGuideHub, renderOnboarding } from "./onboarding";
+import { closeAllGuideModals, guideInProgress, onboardingActive, renderGuideHub, renderOnboarding } from "./onboarding";
 import { renderSettingsTabInto, type SettingsTab, type SmartVaultSettingTab } from "./settings";
 import type SmartVaultPlugin from "../main";
 import { SaveNoteModal } from "./save-note-modal";
@@ -142,6 +142,10 @@ export class SemanticSearchView extends ItemView {
 	// Send-button state machine: idle(send) → loading(spin) → stop(abort).
 	private searchBtnEl!: HTMLButtonElement;
 	private isGenerating = false;
+	/** Debug runId（runSearch 入口自增）：chatview 的 done/runId 字段来源。
+	 *  static 序列号跨实例单调，popout/侧栏双实例也不会撞号。 */
+	static runSeq = 0;
+	currentRunId = "";
 	/** 排队跟进指令：生成中发送的消息先进队列，本轮结束后自动依次执行。
 	 *  content 是发送时输入区的克隆（文字+附件 chips 混排），dequeue 时
 	 *  原样回填输入区走正常 runSearch 路径。 */
@@ -832,6 +836,9 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	protected async onClose(): Promise<void> {
+		// 引导弹窗是 app 级 DOM（挂 body）——宿主视图关闭时它们不会跟着走，
+		// 留在 body 上就是「重渲染后 modal 复活」的残留源，强杀。
+		closeAllGuideModals();
 		if (this.tooltipEl) {
 			this.tooltipEl.remove();
 			this.tooltipEl = null;
@@ -909,6 +916,9 @@ export class SemanticSearchView extends ItemView {
 		const override = queryOverride !== undefined;
 		const query = override ? queryOverride : this.extractInputText().trim();
 		if (!query) return;
+		// Debug runId: semlink-debug 的 chatview 轮询用「runId 变了」来区分
+		// 本轮与上一轮的答案——只看 lastFinalLen 会把旧结果误判成新完成。
+		this.currentRunId = `run-${Date.now()}-${++SemanticSearchView.runSeq}`;
 		// 生成中发送 = 排队跟进指令：快照输入区（文字+chips），渲染成
 		// 待执行卡片，本轮结束后自动依次执行。
 		if (this.isGenerating) {
@@ -2688,6 +2698,11 @@ export class SemanticSearchView extends ItemView {
 	 * hidden (setGuideChrome).
 	 */
 	private renderWelcome(): void {
+		// 每次渲染先清掉遗留的引导弹窗（app 级 DOM 不随视图重排走——半途
+		// 的 BAAI endpoint 弹窗曾因此在重渲染后「复活」，见 onboarding.ts
+		// 引导弹窗生命周期注释）。设置页正常使用的共享 modal（AddProvider/
+		// AddModel）不经 openGuideModal 登记，不受影响。
+		closeAllGuideModals();
 		this.pushTrace(`renderWelcome mode=${this.settingsMode ? "settings" : this.guideModeActive() ? "guide" : "home"}`);
 		// Track the greeting slot + language in every mode so the 60s timer
 		// only reacts to real time-slot changes and refreshLanguage only
