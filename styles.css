@@ -2332,6 +2332,8 @@
     gap: 2px 8px;
     padding: 10px 12px 8px;
     flex-shrink: 0;
+    /* 项目徽章的定位锚（绝对定位挂头部底部条带，见徽章规则） */
+    position: relative;
 }/* Left/right icon groups take equal space so the brand sits centered. */
 .semlink-search-header-side {
     display: flex;
@@ -2400,7 +2402,9 @@
     display: none;
 }
 .semlink-search-header--compact .semlink-search-first-question {
-    /* flex 垂直居中：inline 布局会让文字贴着 logo 基线排、视觉偏下 */
+    /* flex 垂直居中：inline 布局会让文字贴着 logo 基线排、视觉偏下。
+       保持单行行高（标题与图标同行居中）；项目徽章不参与此行布局，
+       绝对定位挂在头部底部专属条带里（见 .semlink-project-badge）。 */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2417,6 +2421,7 @@
 .semlink-search-first-question-text {
     display: block;
     min-width: 0;
+    max-width: 100%;
     flex: 0 1 auto;
     overflow: hidden;
     white-space: nowrap;
@@ -4061,6 +4066,10 @@ body .semlink-msg-user::selection {
     background: var(--background-primary);
     padding: 6px;
     width: 100%;
+    /* 回到底部浮动钮的定位锚点：wrapper 无定位时按钮会一路锚到
+       .semlink-search-view 顶缘（top:-16px 落在 overflow:hidden 之外），
+       视觉上永远消失。 */
+    position: relative;
 }.semlink-search-input-wrapper:focus-within {
     border-color: var(--interactive-accent);
 }/* Drag highlight on the whole input wrapper (subtle border tint, no dashed
@@ -4420,6 +4429,17 @@ body .semlink-msg-user::selection {
     padding: 0;
     border: none;
     background: transparent;
+}/* 运行中的待完成行（onToolCall 即插入，结果回来被完整行接管）：
+   弱化+倾斜，与完成态的 details 行一眼区分。 */
+.semlink-tool-call.is-pending {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-faint);
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 2px 4px;
 }.semlink-tool-call-summary {
     cursor: pointer;
     font-size: 14px;
@@ -7491,7 +7511,9 @@ body .semlink-msg-user::selection {
 /* ── 回到底部浮动钮（Flova 式 ↓，骑跨输入 wrapper 上缘居中） ── */
 .semlink-scroll-bottom-btn {
     position: absolute;
-    top: -16px;
+    /* 完整悬浮在输入卡上缘之外（bottom 距卡边 4px）：-16px 半嵌卡内会
+       与占位文字「有问题尽管问」挤在一起，视觉上像输入框的一部分。 */
+    top: -36px;
     left: 50%;
     transform: translateX(-50%) translateY(6px);
     display: flex;
@@ -7514,6 +7536,9 @@ body .semlink-msg-user::selection {
     opacity: 1;
     visibility: visible;
     transform: translateX(-50%) translateY(0);
+    /* 创建时自带 .semlink-hidden（display:none !important，0-1-0）；显隐
+       只切 is-shown 不摘基类，这里同为 !important 靠特异性（0-2-0）反压。 */
+    display: flex !important;
 }
 .semlink-scroll-bottom-btn:hover {
     color: var(--interactive-accent);
@@ -7672,8 +7697,12 @@ body .semlink-msg-user::selection {
 }
 /* 会话头部徽章（firstQuestion 行尾） */
 .semlink-project-badge {
-    display: inline-block;
-    margin-left: 8px;
+    /* 独立条带：绝对定位挂头部底部居中，不参与标题行的布局/居中——
+       标题保持与图标同行的原始垂直居中，徽章占据头部额外让出的高度 */
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
     padding: 1px 8px;
     border-radius: 999px;
     background: var(--interactive-accent);
@@ -7681,7 +7710,11 @@ body .semlink-msg-user::selection {
     font-size: 11px;
     font-weight: var(--font-bold);
     white-space: nowrap;
-    vertical-align: middle;
+}
+/* compact 且徽章可见：头部底部追加一块专属高度放项目名（:has 探测，
+   无项目的会话不加高，仍是原单行头部） */
+.semlink-search-header--compact:has(.semlink-project-badge:not(.semlink-hidden)) {
+    padding-bottom: 20px;
 }
 .semlink-project-badge.is-dangling {
     background: var(--text-faint);

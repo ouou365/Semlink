@@ -417,6 +417,7 @@ const t: Record<keyof typeof en, string> = {
 	searchModelThinking: "モデルの思考",
 	searchReconnecting: "再接続中... {n}/{total}",
 	searchToolCalling: "{tool} を呼び出し中…",
+	searchToolRunning: "（実行中…）",
 	searchToolTrace: "ツール呼び出し",
 	searchThinkingProcess: "思考プロセス",
 	searchExpand: "展開",

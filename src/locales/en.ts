@@ -416,6 +416,7 @@ const en = {
 	searchModelThinking: "Model thinking",
 	searchReconnecting: "Reconnecting... {n}/{total}",
 	searchToolCalling: "Calling {tool}…",
+	searchToolRunning: " (running…)",
 	searchToolTrace: "Tool Calls",
 	searchThinkingProcess: "Thinking Process",
 	searchExpand: "Expand",

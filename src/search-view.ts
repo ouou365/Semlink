@@ -1129,6 +1129,15 @@ export class SemanticSearchView extends ItemView {
 				let liveReasonEl: HTMLElement | null = null;
 				let liveReasonPending = "";
 				let liveReasonScheduled = false;
+				// 正在运行的工具的待完成行（🔧 search — query（运行中…））：
+				// onToolCall 即插入思考体（结果未回也不滞后），步骤完成时
+				// 由 refreshLiveBody 移除并以完整行接管。同 startDots 一样是
+				// EPHEMERAL：不入 thinking steps / 历史，新阶段即丢弃。
+				let pendingToolEl: HTMLElement | null = null;
+				const clearPendingToolEl = (): void => {
+					pendingToolEl?.detach();
+					pendingToolEl = null;
+				};
 					const stopTypewriter = (): void => {
 						if (typeRafId !== null) {
 							// Cancel on the window that CREATED the frame request —
@@ -1282,6 +1291,9 @@ export class SemanticSearchView extends ItemView {
 						liveReasonEl.detach();
 						liveReasonEl = null;
 					}
+					// 新阶段（轮次切换/状态标签更换）——上一阶段的待完成工具行
+					// 已无意义，丢弃（步骤完成时 refreshLiveBody 也会清）。
+					clearPendingToolEl();
 					// The previous round's interim flash collapsed the thinking
 					// preview — restore it; the real answer re-collapses when
 					// its own text starts arriving.
@@ -1360,6 +1372,9 @@ export class SemanticSearchView extends ItemView {
 					// 对帧间爆发增长免疫——见 liveBody 创建处的注释。
 					const m = this.messagesEl;
 					const outerNearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 200;
+					// 有步骤完成 → 待完成行（运行中标记）被完整行接管：先摘除，
+					// 完整行随后由 while 循环渲染到同一位置（步骤序列末尾）。
+					clearPendingToolEl();
 					while (renderedSteps < liveSteps.length) {
 						this.renderThinkingSteps(liveBody, [liveSteps[renderedSteps]]);
 						renderedSteps++;
@@ -1440,12 +1455,30 @@ export class SemanticSearchView extends ItemView {
 						fullContext,
 						query,
 						this.currentMessages.slice(0, -1),
-						(toolName) => {
+						(toolName, args) => {
 							// A tool is running — animate its label so a slow
 							// tool (e.g. a full-vault grep) doesn't look frozen.
-						hasCalledTool = true;
-						startDots(t("searchToolCalling").replace("{tool}", toolName).replace(/…$/, ""));
-					},
+							// 主参数随行显示（grep 的 pattern / search 的 query /
+							// read 的 path），让「正在调用 grep」一眼可辨在查什么。
+							// args 由 chat 管线解析成对象后传来；超长截断防撑爆状态行。
+							const a = (args ?? {}) as Record<string, unknown>;
+							const raw = a.query ?? a.pattern ?? a.path ?? "";
+							const detail =
+								typeof raw === "string" && raw.trim()
+									? ` · ${raw.trim().length > 28 ? `${raw.trim().slice(0, 28)}…` : raw.trim()}`
+									: "";
+							hasCalledTool = true;
+							startDots(t("searchToolCalling").replace("{tool}", toolName).replace(/…$/, "") + detail);
+							// 思考体同步插一条待完成行（不滞后）：结果回来时
+							// refreshLiveBody 摘掉它、由完整行（含请求/响应
+							// details）接管——同一位置、同一视觉语言。
+							clearPendingToolEl();
+							pendingToolEl = liveBody.createDiv({
+								cls: "semlink-tool-call is-pending",
+								text: `🔧 ${toolName}${this.summarizeArgs(args)}${t("searchToolRunning")}`,
+							});
+							if (followThinking) liveBody.scrollTop = liveBody.scrollHeight;
+						},
 					// Analysis/overview-heavy prompts get deeper reading.
 					inferAgentDepth(query),
 					(text) => {
@@ -3474,6 +3507,8 @@ export class SemanticSearchView extends ItemView {
 			: null;
 		this.activeProject = sessionProj;
 		this.renderProjectChip();
+		// 徽章与 chip 同步刷新（漏掉会导致重启后恢复会话时徽章一直隐藏）
+		this.refreshProjectBadge();
 		// Header subtitle = the session's first question (same as live chats).
 		const firstUser = session.messages.find((m) => m.role === "user");
 		if (firstUser) {

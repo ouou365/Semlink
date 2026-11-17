@@ -417,6 +417,7 @@ const t: Record<keyof typeof en, string> = {
 	searchModelThinking: "Modell denkt nach",
 	searchReconnecting: "Neu verbinden... {n}/{total}",
 	searchToolCalling: "Rufe {tool} auf…",
+	searchToolRunning: " (läuft…)",
 	searchToolTrace: "Tool-Aufrufe",
 	searchThinkingProcess: "Denkprozess",
 	searchExpand: "Ausklappen",
