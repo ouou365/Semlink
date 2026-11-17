@@ -765,6 +765,26 @@ const t: Record<keyof typeof en, string> = {
 	historyLockedHint: "Free では最新 5 件のチャットのみ — Pro で全履歴が解放されます",
 
 	botProDesc: "Feishu ボットは Pro 機能です。Feishu から Vault 全体とチャットでき、ストリーミングカードで応答します。",
+
+// ──── Projects（检索范围限定，2026-11-16）────
+	promptProjectScope: "プロジェクト範囲：この会話はプロジェクト「{name}」に限定されています——あなたにとっては {folders} の各フォルダー配下のノートのみが存在します。ツール結果はこの範囲に制限済み。範囲外のノートは存在しないものとして扱い、他の場所を確認するよう提案しないでください。",
+	projectModalTitle: "プロジェクトを作成",
+	projectEditTitle: "プロジェクトを編集",
+	projectNameLabel: "プロジェクト名",
+	projectNamePlaceholder: "新しいプロジェクト",
+	projectSourceFolders: "知識範囲（フォルダー）",
+	projectChooseFolderHint: "回答はこれらのフォルダーからのみ検索されます",
+	projectCreate: "プロジェクトを作成",
+	projectSave: "保存",
+	projectCancel: "キャンセル",
+	projectNew: "新規プロジェクト",
+	projectAllNotes: "すべてのノート",
+	projectNewFolder: "新規フォルダー",
+	projectCreateFolder: "创建",
+	projectDeleted: "削除されたプロジェクト",
+	projectFilterAll: "すべて",
+	projectScopeLine: "範囲：{name}",
+	projectConfirmSwitch: "プロジェクトを切り替えると新しい範囲の会話を開始します。続行しますか？",
 };
 
 export default t;

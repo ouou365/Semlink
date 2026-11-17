@@ -520,7 +520,7 @@ export class ChatClient {
 	 *    insufficient, minimal tool use.
 	 *  - "proactive": verify-first — treat referenced docs as reading
 	 *    signals, actively read related notes before answering (default). */
-	private buildSystemPrompt(agentMode: AgentMode, depthHint: string, context: string): string {
+	private buildSystemPrompt(agentMode: AgentMode, depthHint: string, context: string, scope?: { name: string; folders: string[] }): string {
 		// Agentic turns start with NO preset snippets — omit the context block
 		// entirely instead of showing an empty "initially retrieved notes"
 		// header. The model gathers its own evidence via tools.
@@ -536,12 +536,18 @@ export class ChatClient {
 		const vectorLine = vectorAvailable
 			? "\n" + t("promptVectorAvailable")
 			: "\n" + t("promptVectorUnavailable");
+		// Project 范围行（2026-11-16）：工具层已硬过滤，这里告知模型边界
+		// ——防止它建议用户查阅范围外的笔记（那些对它不存在）。
+		const scopeLine = scope
+			? "\n" + t("promptProjectScope").replace("{name}", scope.name).replace("{folders}", scope.folders.map((f) => f.replace(/\/+$/, "")).join("、"))
+			: "";
 		const shared =
 			t("promptGrepGuide") +
 			t("promptPrimarySource") +
 			t("promptToolGuide") +
 			t("promptTableDiscipline") +
 			vectorLine +
+			scopeLine +
 			depthHint +
 			t("promptNoFabricate") +
 			t("promptVersionPrecedence") +
@@ -608,6 +614,9 @@ export class ChatClient {
 		 *  each time — the UI replaces what it shows, mirroring `onStream`.
 		 *  Ephemeral by design: never recorded into thinking steps or history. */
 		onThinkingDelta?: (text: string) => void,
+		/** Project 检索范围（2026-11-16）：per-call 透传到工具层（共享单例
+		 *  无实例态竞态），并写入系统提示词告知模型边界。 */
+		scope?: { name: string; folders: string[] },
 	): Promise<ChatResult> {
 		// Use the SELECTED model (and its owning provider) — the model switcher
 		// may pick any model from any configured provider.
@@ -616,7 +625,7 @@ export class ChatClient {
 		const { provider, model } = active;
 		const contextWindow = model.contextWindow || 0;
 		const depthHint = depth === "enhanced" ? t("promptDepthEnhanced") : t("promptDepthStandard");
-		const systemPrompt = this.buildSystemPrompt(agentMode, depthHint, context);
+		const systemPrompt = this.buildSystemPrompt(agentMode, depthHint, context, scope);
 
 		// Per-depth cap on a single tool result (enhanced reads full notes).
 		// Plus: inject this turn's citation numberer — search results carry
@@ -657,8 +666,8 @@ export class ChatClient {
 		};
 		const dispatch = (): Promise<ChatResult> =>
 			provider.apiFormat === "anthropic"
-				? this.chatAnthropic(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, citeRegistry, onStream, onRoundStart, onThinking, onRoundSuccess, signal, onThinkingDelta)
-				: this.chatOpenAI(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, citeRegistry, onStream, onRoundStart, onThinking, onRoundSuccess, signal, onThinkingDelta);
+				? this.chatAnthropic(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, citeRegistry, onStream, onRoundStart, onThinking, onRoundSuccess, signal, onThinkingDelta, scope)
+				: this.chatOpenAI(provider, model.id, contextWindow, systemPrompt, conversation, onToolCall, thinking, usedNotes, citeRegistry, onStream, onRoundStart, onThinking, onRoundSuccess, signal, onThinkingDelta, scope);
 
 		for (;;) {
 			totalAttempts++;
@@ -1144,6 +1153,7 @@ export class ChatClient {
 		onRoundSuccess?: () => void,
 		signal?: AbortSignal,
 		onThinkingDelta?: (text: string) => void,
+		scope?: { name: string; folders: string[] },
 	): Promise<ChatResult> {
 		const baseUrl = provider.baseUrl.replace(/\/+$/, "");
 		const openaiUrl = chatEndpoint(baseUrl, provider.wirePath, "/v1/chat/completions");
@@ -1520,7 +1530,7 @@ export class ChatClient {
 				if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 				onToolCall?.(name, args);
 				const result = this.tools
-					? await this.tools.execute(name, args)
+					? await this.tools.execute(name, args, scope?.folders)
 					: `Error: no tools available (unknown tool "${name}")`;
 				if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 				const step: ThinkingStep = { type: "tool", name, args, result };
@@ -2035,6 +2045,7 @@ export class ChatClient {
 		onRoundSuccess?: () => void,
 		signal?: AbortSignal,
 		onThinkingDelta?: (text: string) => void,
+		scope?: { name: string; folders: string[] },
 	): Promise<ChatResult> {
 		const baseUrl = provider.baseUrl.replace(/\/+$/, "");
 		const anthropicUrl = chatEndpoint(baseUrl, provider.wirePath, "/v1/messages");
@@ -2402,7 +2413,7 @@ export class ChatClient {
 				if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 				onToolCall?.(name, args);
 				const result = this.tools
-					? await this.tools.execute(name, args)
+					? await this.tools.execute(name, args, scope?.folders)
 					: `Error: no tools available (unknown tool "${name}")`;
 				if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 				const step: ThinkingStep = { type: "tool", name, args, result };

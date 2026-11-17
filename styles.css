@@ -7580,3 +7580,179 @@ body .semlink-msg-user::selection {
     pointer-events: none;
     z-index: 9999;
 }
+
+/* ── Project（检索范围限定，2026-11-16）── */
+/* 主页输入框上方的选择带 + chip */
+.semlink-project-band {
+    display: flex;
+    justify-content: flex-start;
+    padding: 0 4px 6px;
+}
+.semlink-project-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--background-modifier-hover);
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.semlink-project-chip.is-active {
+    color: var(--text-accent);
+}
+.semlink-project-chip-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.semlink-project-chip svg {
+    width: 12px;
+    height: 12px;
+    flex: none;
+}
+/* 项目弹层（仿模型弹层：body 懒创建 + 视口夹紧） */
+.semlink-project-popup {
+    position: fixed;
+    z-index: var(--layer-popover, 100);
+    min-width: 220px;
+    max-width: 320px;
+    max-height: 50vh;
+    overflow-y: auto;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    box-shadow: var(--shadow-s);
+    padding: 4px;
+}
+.semlink-project-popup-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+}
+.semlink-project-popup-row:hover {
+    background: var(--background-modifier-hover);
+}
+.semlink-project-popup-row.is-active {
+    color: var(--text-accent);
+    background: var(--background-modifier-hover);
+}
+.semlink-project-popup-row.is-new {
+    color: var(--text-muted);
+    border-top: 1px solid var(--background-modifier-border);
+    border-radius: 0;
+}
+.semlink-project-popup-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.semlink-project-popup-meta {
+    color: var(--text-faint);
+    font-size: 11px;
+}
+.semlink-project-popup-edit {
+    color: var(--text-faint);
+    display: inline-flex;
+}
+.semlink-project-popup-edit:hover {
+    color: var(--text-normal);
+}
+.semlink-project-popup-edit svg {
+    width: 13px;
+    height: 13px;
+}
+/* 会话头部徽章（firstQuestion 行尾） */
+.semlink-project-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    font-size: 11px;
+    font-weight: var(--font-bold);
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.semlink-project-badge.is-dangling {
+    background: var(--text-faint);
+    color: var(--text-normal);
+}
+/* 历史菜单 chips 筛选行 */
+.semlink-project-chips {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 4px 10px 8px;
+}
+.semlink-project-chips.semlink-hidden {
+    display: none;
+}
+.semlink-project-chip-item {
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--background-modifier-hover);
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex: none;
+}
+.semlink-project-chip-item.is-active {
+    color: var(--text-on-accent);
+    background: var(--interactive-accent);
+}
+/* 创建/编辑弹窗：文件夹多选列表 */
+.semlink-project-folders {
+    margin-top: 4px;
+}
+.semlink-project-folders-label {
+    font-weight: var(--font-semibold);
+    margin-bottom: 6px;
+}
+.semlink-project-folder-list {
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 4px 0;
+}
+.semlink-project-folder-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-size: 13px;
+}
+.semlink-project-folder-row:hover {
+    background: var(--background-modifier-hover);
+}
+.semlink-project-folder-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.semlink-project-folders-hint {
+    color: var(--text-faint);
+    font-size: 12px;
+    text-align: center;
+    padding: 14px 0 6px;
+}
+.semlink-project-newfolder-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+.semlink-project-newfolder-input {
+    flex: 1;
+}

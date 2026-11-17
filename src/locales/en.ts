@@ -764,6 +764,26 @@ const en = {
 	historyLockedHint: "Free keeps the latest 5 chats — Pro unlocks the full history",
 
 	botProDesc: "The Feishu bot is a Pro feature — chat with your vault from Feishu with streaming cards.",
+
+// ──── Projects（检索范围限定，2026-11-16）────
+	promptProjectScope: "PROJECT SCOPE: this conversation is limited to the project 「{name}」 — only notes under these folders exist for you: {folders}. Tool results are already restricted to this scope; notes outside it do not exist. Never suggest the user look elsewhere.",
+	projectModalTitle: "Create project",
+	projectEditTitle: "Edit project",
+	projectNameLabel: "Project name",
+	projectNamePlaceholder: "New project",
+	projectSourceFolders: "Source folders",
+	projectChooseFolderHint: "Answers retrieve only from these folders",
+	projectCreate: "Create project",
+	projectSave: "Save",
+	projectCancel: "Cancel",
+	projectNew: "New project",
+	projectAllNotes: "All notes",
+	projectNewFolder: "New folder",
+	projectCreateFolder: "Create",
+	projectDeleted: "deleted project",
+	projectFilterAll: "All",
+	projectScopeLine: "Scope: {name}",
+	projectConfirmSwitch: "Switching projects will start a new conversation in the new scope. Continue?",
 };
 
 export default en;

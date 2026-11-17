@@ -339,6 +339,10 @@ export interface SmartVaultSettings {
 	 *  状态，推送到全部已开搜索视图；单条回答的 [n] 按钮仍是会话内临时
 	 *  翻转。false = 隐藏（历史默认）。 */
 	showCiteMarkers: boolean;
+	/** Project（检索范围限定）：每个项目绑定一组知识库文件夹前缀（带尾
+	 *  斜杠，如 "插件规划/"），问答检索只命中白名单内的笔记。存储于
+	 *  data.json；会话通过 ChatSession.projectId 引用。 */
+	projects: ProjectDef[];
 	/** 新建标签页显示 Semlink 主页：Obsidian 的空白标签页（empty 视图，
 	 *  含 +/Ctrl+T 新建、关闭最后标签后的空态）自动替换成侧栏同款主页。 */
 	/** 自动嵌入开关（RAG 页嵌入面板标题右侧）：关闭后索引只做分块、不再调
@@ -440,6 +444,7 @@ export const DEFAULT_SETTINGS: SmartVaultSettings = {
 	excludePaths: "templates/\n.git/\nnode_modules/",
 	autoIndex: true,
 	showCiteMarkers: false,
+	projects: [],
 	autoEmbed: true,
 	maxRetries: 3,
 	batchSize: 64,
@@ -646,6 +651,16 @@ export interface HistoryMessage {
 }
 
 /** A full chat session (one "conversation thread"). */
+/** Project（检索范围限定，2026-11-16）：folders 为 vault 相对目录前缀
+ *  （规范化带尾斜杠，如 "插件规划/"），问答检索只命中白名单内的笔记。
+ *  id 用 `p-${Date.now()}`；会话经 ChatSession.projectId 引用（悬空 id =
+ *  回退全库）。 */
+export interface ProjectDef {
+	id: string;
+	name: string;
+	folders: string[];
+}
+
 export interface ChatSession {
 	id: string;
 	title: string;
@@ -660,4 +675,7 @@ export interface ChatSession {
 	/** Pro: pinned chats float above "Today" in the Time tab and are never
 	 *  evicted by the MAX_SESSIONS cap. */
 	pinned?: boolean;
+	/** Project 绑定（settings.projects[].id）：会话的检索范围限定。悬空 id
+	 *  （项目已删）= 检索回退全库，徽章显示灰态。 */
+	projectId?: string;
 }

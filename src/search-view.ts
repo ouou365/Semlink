@@ -13,6 +13,8 @@ import type { EmbeddingClient } from "./embedding-client";
 import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
 	import { inferAgentDepth } from "./chat-client";
 import { buildCitedCards, normalizeCiteMarkers } from "./cite-cards";
+import { ProjectModal } from "./project-modal";
+import type { ProjectDef } from "./types";
 import type { SearchResult, ChatSession, HistoryMessage, HistorySegment } from "./types";
 import { ChatHistoryStore } from "./chat-history";
 import { brandLogoOf, formatContextWindow } from "./settings-models";
@@ -150,6 +152,13 @@ export class SemanticSearchView extends ItemView {
 	/** Citation-marker visibility, toggled per view from the actions row.
 	 *  Default OFF — answers read clean; the toggle reveals [n] markers. */
 	private showCitations = false;
+	/** Project（检索范围限定，2026-11-16）：当前视图选中的项目。null =
+	 *  全库；不持久化（每个窗口/会话可各自聚焦）。会话创建时绑定进
+	 *  ChatSession.projectId；loadSession 时切回该会话的项目。 */
+	private activeProject: ProjectDef | null = null;
+	private projectChipEl: HTMLElement | null = null;
+	private projectPopupEl: HTMLElement | null = null;
+	private projectBadgeEl: HTMLElement | null = null;
 	/** Input tall mode (half-screen editor for long prompts). */
 	private inputExpanded = false;
 	private expandBtnEl: HTMLElement | null = null;
@@ -374,8 +383,10 @@ export class SemanticSearchView extends ItemView {
 		// Second header row: the first question in small text. It appears
 		// only while the first question is scrolled under the header (see
 		// updateCompactHeader) so the conversation topic stays visible.
+		// 尾部追加 Project 徽章（2026-11-16）：会话所属项目的常显标识。
 		const firstQ = header.createDiv({ cls: "semlink-search-first-question" });
 		this.firstQuestionTextEl = firstQ.createSpan({ cls: "semlink-search-first-question-text" });
+		this.projectBadgeEl = firstQ.createSpan({ cls: "semlink-project-badge semlink-hidden" });
 
 		// ── Conversation area (middle, scrollable) ──
 		this.statusEl = contentEl.createDiv({ cls: "semlink-search-status" });
@@ -407,6 +418,18 @@ export class SemanticSearchView extends ItemView {
 
 		// ── Input footer (bottom, fixed) ──
 		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
+
+		// ── Project 选择带（用户拍板 2026-11-16：输入框上方一条）──
+		// 当前项目 chip（无项目 = 全部笔记），点击弹层切换/新建/编辑。
+		// 弹层仿 modelPopup（body 懒创建 + repatriate 迁窗）。
+		const projectBand = footer.createDiv({ cls: "semlink-project-band" });
+		this.projectChipEl = projectBand.createDiv({ cls: "semlink-project-chip" });
+		this.projectChipEl.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.toggleProjectPopup();
+		});
+		this.renderProjectChip();
+		this.registerDomEvent(this.contentEl, "click", () => this.hideProjectPopup());
 
 		// 模型选择器（原独立工具栏行）：现在直接挂到输入卡底部行左端——
 		// 工具栏整行删除，把一行高度还给内容。创建于卡片之后移动过去。
@@ -1474,6 +1497,11 @@ export class SemanticSearchView extends ItemView {
 							// thinking_delta) — live into the thinking preview,
 							// ephemeral (cleared each round by startDots).
 							(text) => showLiveReasoning(text),
+							// Project 检索范围（2026-11-16）：会话绑定项目时透传
+							// 到工具层 + 系统提示词。
+							this.activeProject
+								? { name: this.activeProject.name, folders: this.activeProject.folders }
+								: undefined,
 						);
 						const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
 						stopAnswerAnim();
@@ -2178,6 +2206,162 @@ export class SemanticSearchView extends ItemView {
 			b.setAttr("aria-pressed", String(visible));
 		});
 	}
+
+	// ──── Project 选择器（检索范围限定，2026-11-16）────
+
+	/** 当前项目名解析（dangling → 灰态「已删除项目」）。 */
+	private projectNameById(id: string): string | null {
+		return this.plugin.settings.projects.find((p) => p.id === id)?.name ?? null;
+	}
+
+	/** chip 文本/态刷新（独立于 setProject：loadSession 切换时不重开会话）。 */
+	private renderProjectChip(): void {
+		if (!this.projectChipEl) return;
+		this.projectChipEl.empty();
+		const icon = this.projectChipEl.createSpan({ cls: "semlink-project-chip-icon" });
+		setIcon(icon, "folder");
+		this.projectChipEl.createSpan({
+			cls: "semlink-project-chip-text",
+			text: this.activeProject ? this.activeProject.name : t("projectAllNotes"),
+		});
+		const caret = this.projectChipEl.createSpan({ cls: "semlink-project-chip-caret" });
+		setIcon(caret, "chevron-down");
+		this.projectChipEl.toggleClass("is-active", this.activeProject !== null);
+	}
+
+	/** 头部徽章（firstQuestion 行旁）：优先当前会话的 projectId（历史会话
+	 *  可能与选择器不同步），新会话用 activeProject。悬空 id 显灰态。 */
+	private refreshProjectBadge(): void {
+		if (!this.projectBadgeEl) return;
+		let name: string | null = null;
+		let dangling = false;
+		const pid = this.currentSessionId ? this.history.get(this.currentSessionId)?.projectId : undefined;
+		if (pid) {
+			const p = this.plugin.settings.projects.find((x) => x.id === pid);
+			if (p) name = p.name;
+			else dangling = true;
+		} else if (this.activeProject) {
+			name = this.activeProject.name;
+		}
+		this.projectBadgeEl.toggleClass("semlink-hidden", !name && !dangling);
+		this.projectBadgeEl.empty();
+		if (dangling) {
+			this.projectBadgeEl.addClass("is-dangling");
+			this.projectBadgeEl.setText(t("projectDeleted"));
+		} else if (name) {
+			this.projectBadgeEl.removeClass("is-dangling");
+			this.projectBadgeEl.setText(name);
+		}
+	}
+
+	private toggleProjectPopup(): void {
+		if (this.projectPopupEl && !this.projectPopupEl.hasClass("semlink-hidden")) {
+			this.hideProjectPopup();
+			return;
+		}
+		this.showProjectPopup();
+	}
+
+	private hideProjectPopup(): void {
+		this.projectPopupEl?.addClass("semlink-hidden");
+	}
+
+	private showProjectPopup(): void {
+		if (!this.projectChipEl) return;
+		if (!this.projectPopupEl) {
+			this.projectPopupEl = this.viewDoc.body.createDiv({ cls: "semlink-search-depth-popup semlink-project-popup semlink-hidden" });
+		}
+		const popup = this.projectPopupEl;
+		this.repatriateToCurrentWindow(popup);
+		popup.empty();
+
+		// 全部笔记（无项目 = 全库检索）
+		const allRow = popup.createDiv({ cls: "semlink-project-popup-row" });
+		allRow.createSpan({ cls: "semlink-project-popup-name", text: t("projectAllNotes") });
+		allRow.toggleClass("is-active", this.activeProject === null);
+		allRow.addEventListener("click", () => {
+			this.hideProjectPopup();
+			this.switchProject(null);
+		});
+
+		// 已有项目行：名称 + 文件夹数 + 编辑钮
+		for (const p of this.plugin.settings.projects) {
+			const row = popup.createDiv({ cls: "semlink-project-popup-row" });
+			row.toggleClass("is-active", this.activeProject?.id === p.id);
+			row.createSpan({ cls: "semlink-project-popup-name", text: p.name });
+			row.createSpan({ cls: "semlink-project-popup-meta", text: `${p.folders.length}` });
+			row.addEventListener("click", () => {
+				this.hideProjectPopup();
+				this.switchProject(p);
+			});
+			const editBtn = row.createSpan({ cls: "semlink-project-popup-edit", attr: { "aria-label": t("projectEditTitle") } });
+			setIcon(editBtn, "pencil");
+			editBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.hideProjectPopup();
+				this.openProjectModal(p);
+			});
+		}
+
+		// 新建项目入口
+		const newRow = popup.createDiv({ cls: "semlink-project-popup-row is-new" });
+		newRow.createSpan({ cls: "semlink-project-popup-name", text: t("projectNew") });
+		newRow.addEventListener("click", () => {
+			this.hideProjectPopup();
+			this.openProjectModal(undefined);
+		});
+
+		// 定位：触发器上方（仿 showModelPopup 的先显示后夹紧）
+		const rect = this.projectChipEl.getBoundingClientRect();
+		const vh = this.viewWin.innerHeight;
+		const vw = this.viewWin.innerWidth;
+		popup.style.left = rect.left + "px";
+		popup.style.removeProperty("top");
+		popup.style.bottom = (vh - rect.top + 4) + "px";
+		popup.removeClass("semlink-hidden");
+		const pr = popup.getBoundingClientRect();
+		if (pr.top < 8 || pr.bottom > rect.top - 2) {
+			popup.style.removeProperty("bottom");
+			popup.style.top = Math.max(8, Math.min(rect.top - pr.height - 4, vh - pr.height - 8)) + "px";
+		}
+		if (pr.left + pr.width > vw - 8) {
+			popup.style.left = Math.max(8, vw - pr.width - 8) + "px";
+		}
+	}
+
+	/** 切换项目：新范围 = 新会话（有消息时先确认，与 doNewChat 同语义）。 */
+	private switchProject(p: ProjectDef | null): void {
+		this.activeProject = p;
+		this.renderProjectChip();
+		this.refreshProjectBadge();
+		if (this.currentMessages.length > 0 || this.isGenerating) {
+			// 生成中先确认中断；否则直接开新会话（干净进入新范围）。
+			if (this.isGenerating) {
+				new ConfirmModal(this.app, t("projectNew"), t("projectConfirmSwitch"), () => {
+					this.doNewChat();
+					this.refreshProjectBadge();
+				});
+				return;
+			}
+			this.doNewChat();
+		}
+		this.refreshProjectBadge();
+	}
+
+	/** 创建/编辑弹窗入口：保存 → 落 settings.projects + 推送全部视图 +
+	 *  当前视图切到该项目（新建场景）。 */
+	private openProjectModal(project: ProjectDef | undefined): void {
+		new ProjectModal(this.app, project, (saved) => {
+			const list = this.plugin.settings.projects;
+			const at = list.findIndex((p) => p.id === saved.id);
+			if (at >= 0) list[at] = saved;
+			else list.push(saved);
+			void this.plugin.saveSettings();
+			if (!project) this.switchProject(saved);
+			this.renderProjectChip();
+		}).open();
+	}
+
 
 	/** Share the CURRENT conversation to the LAN: render the whole session
 	 *  into a standalone HTML page and register it with the share server,
@@ -3182,6 +3366,10 @@ export class SemanticSearchView extends ItemView {
 		await this.history.load();
 		if (!this.currentSessionId) {
 			this.currentSessionId = this.history.createSession(content);
+			// Project 绑定（2026-11-16）：新会话继承当前选择器里的项目。
+			if (this.activeProject) {
+				this.history.updateSession(this.currentSessionId, { projectId: this.activeProject.id });
+			}
 		}
 		// The FIRST question becomes the header's subtitle row.
 		if (!this.firstQuestion) {
@@ -3264,6 +3452,13 @@ export class SemanticSearchView extends ItemView {
 		}
 		this.currentSessionId = session.id;
 		this.currentMessages = [...session.messages];
+		// Project 同步（2026-11-16）：继续旧会话 = 回到它的检索范围；
+		// 选择器 chip 与头部徽章随之刷新。悬空项目回退全库。
+		const sessionProj = session.projectId
+			? this.plugin.settings.projects.find((p) => p.id === session.projectId) ?? null
+			: null;
+		this.activeProject = sessionProj;
+		this.renderProjectChip();
 		// Header subtitle = the session's first question (same as live chats).
 		const firstUser = session.messages.find((m) => m.role === "user");
 		if (firstUser) {
@@ -3400,10 +3595,43 @@ export class SemanticSearchView extends ItemView {
 		const tools = drawer.createDiv({ cls: "semlink-history-tools" });
 		let query = "";
 		let composing = false;
+		// Project 筛选（用户拍板「Menu 增加 Project」2026-11-16）：顶部
+		// chips 行（全部 ｜ 各项目），与搜索过滤叠加。
+		let projectFilter: string | null = null;
 		const searchInput = tools.createEl("input", {
 			cls: "semlink-history-search",
 			attr: { type: "text", placeholder: t("historySearch"), "aria-label": t("historySearch") },
 		});
+		// Project chips（创建一次，render 里只刷激活态——与搜索框同款
+		// 生命周期，避免重建打断交互）。
+		const chipsRow = tools.createDiv({ cls: "semlink-project-chips" });
+		const refreshChips = (): void => {
+			chipsRow.empty();
+			const projects = this.plugin.settings.projects;
+			if (projects.length === 0) {
+				chipsRow.addClass("semlink-hidden");
+				return;
+			}
+			chipsRow.removeClass("semlink-hidden");
+			const chip = (label: string, active: boolean, set: () => void): void => {
+				const c = chipsRow.createSpan({ cls: "semlink-project-chip-item", text: label });
+				c.toggleClass("is-active", active);
+				c.addEventListener("click", () => {
+					set();
+					refreshChips();
+					render();
+				});
+			};
+			chip(t("projectFilterAll"), projectFilter === null, () => {
+				projectFilter = null;
+			});
+			for (const p of projects) {
+				chip(p.name, projectFilter === p.id, () => {
+					projectFilter = p.id;
+				});
+			}
+		};
+		refreshChips();
 		const applySearch = (): void => {
 			query = searchInput.value.trim().toLowerCase();
 			if (view !== "main") view = "main";
@@ -3446,6 +3674,7 @@ export class SemanticSearchView extends ItemView {
 			const all = allSessions.filter((x) => !x.archived); // active, newest first
 			const manuallyArchived = allSessions.filter((x) => x.archived);
 			list.empty();
+			refreshChips();
 			// NOTE: tools (the search input) is never emptied — it is created
 			// once and only shown/hidden, or CJK IME composition breaks.
 			// Header chrome per view.
@@ -3479,6 +3708,11 @@ export class SemanticSearchView extends ItemView {
 
 			// ── Main view ──
 			let pool = all;
+			// Project 筛选（chips 行，2026-11-16）：与搜索过滤叠加；已删
+			// 项目的会话归入「全部」。
+			if (projectFilter !== null) {
+				pool = pool.filter((s) => s.projectId === projectFilter);
+			}
 			if (pro && query) {
 				pool = pool.filter((s) =>
 					s.title.toLowerCase().includes(query) ||
@@ -3840,8 +4074,14 @@ export class SemanticSearchView extends ItemView {
 			info.createDiv({ cls: "semlink-history-item-title", text: session.title });
 			const date = new Date(session.updatedAt);
 			const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+			// Project 名并入 meta（用户拍板「对话记录中显示对话来自哪个
+			// Project」2026-11-16）；无项目的会话不显示。
+			const projName = session.projectId
+				? this.plugin.settings.projects.find((p) => p.id === session.projectId)?.name ?? null
+				: null;
+			const metaText = projName ? `${timeStr} · ${projName}` : timeStr;
 			if (!compact) {
-				info.createDiv({ cls: "semlink-history-item-meta", text: timeStr });
+				info.createDiv({ cls: "semlink-history-item-meta", text: metaText });
 			}
 			// Pin icon: visible to everyone on hover; for free users clicking
 			// it is a friction point (activation modal), like Folders/search.

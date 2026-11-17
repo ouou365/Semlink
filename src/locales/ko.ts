@@ -765,6 +765,26 @@ const t: Record<keyof typeof en, string> = {
 	historyLockedHint: "Free는 최근 5개 채팅만 유지합니다 — Pro가 전체 기록을 잠금 해제합니다",
 
 	botProDesc: "Feishu 봇은 Pro 기능입니다 — Feishu에서 스트리밍 카드로 Vault와 채팅하세요.",
+
+// ──── Projects（检索范围限定，2026-11-16）────
+	promptProjectScope: "PROJECT SCOPE: this conversation is limited to the project 「{name}」 — only notes under these folders exist for you: {folders}. Tool results are already restricted to this scope; notes outside it do not exist. Never suggest the user look elsewhere.",
+	projectModalTitle: "Create project",
+	projectEditTitle: "Edit project",
+	projectNameLabel: "Project name",
+	projectNamePlaceholder: "New project",
+	projectSourceFolders: "Source folders",
+	projectChooseFolderHint: "Answers retrieve only from these folders",
+	projectCreate: "Create project",
+	projectSave: "Save",
+	projectCancel: "Cancel",
+	projectNew: "New project",
+	projectAllNotes: "All notes",
+	projectNewFolder: "New folder",
+	projectCreateFolder: "Create",
+	projectDeleted: "deleted project",
+	projectFilterAll: "All",
+	projectScopeLine: "Scope: {name}",
+	projectConfirmSwitch: "Switching projects will start a new conversation in the new scope. Continue?",
 };
 
 export default t;

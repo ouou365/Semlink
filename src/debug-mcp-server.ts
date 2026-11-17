@@ -105,6 +105,7 @@ const ASK_TOOL = {
 		type: "object",
 		properties: {
 			question: { type: "string", description: "The question to ask, in any language" },
+			project: { type: "string", description: "Optional Project name or id — limits retrieval to that project's source folders (agent answers only see notes inside the scope)" },
 		},
 		required: ["question"],
 	},
@@ -556,14 +557,15 @@ export class DebugMcpServer {
 		}
 	}
 
-	private async handleAsk(params: { name?: string; arguments?: { question?: string } }): Promise<unknown> {
+	private async handleAsk(params: { name?: string; arguments?: { question?: string; project?: string } }): Promise<unknown> {
 		if (params.name !== "ask") throw new Error(`Unknown tool: ${params.name}`);
 		const question = (params.arguments?.question ?? "").trim();
 		if (!question) throw new Error("Missing question");
+		const project = (params.arguments?.project ?? "").trim() || undefined;
 		if (this.busy) throw new Error("Another ask is still running — poll /health or retry later");
 		this.busy = true;
 		try {
-			const result = await this.runAsk(question);
+			const result = await this.runAsk(question, project);
 			return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
 		} finally {
 			this.busy = false;

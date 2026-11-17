@@ -275,7 +275,7 @@ export class ToolCore {
 	constructor(private deps: ToolCoreDeps) {}
 
 	/** 按名称执行工具；永远返回文本（错误也文本化）。 */
-	async execute(name: string, args: Record<string, unknown>): Promise<string> {
+	async execute(name: string, args: Record<string, unknown>, scope?: string[]): Promise<string> {
 		// 旧会话兼容：历史上下文里模型可能仍按旧名调用，映射到新工具（不对外声明）
 		const legacy: Record<string, string> = {
 			search_notes: "search",
@@ -292,39 +292,63 @@ export class ToolCore {
 		const a = args as Record<string, string | number | boolean | string[] | undefined>;
 		// 工具参数 exclude（string[]）——与全局设置排除合并，见 excludedMatch()
 		const exclude = (a.exclude as string[] | undefined) ?? undefined;
+		// Project 白名单（per-call 透传，避免共享单例在多视图并发时竞态；
+		// 2026-11-16）——归一化后下推到各工具。
+		const scopeNorm = this.normalizeScope(scope);
 		try {
 			switch (name) {
 				case "search":
-					return await this.search(String(a.query ?? ""), Number(a.limit) || 10, a.path as string | undefined, Number(a.alpha) || 0.5, exclude);
+					return await this.search(String(a.query ?? ""), Number(a.limit) || 10, a.path as string | undefined, Number(a.alpha) || 0.5, exclude, scopeNorm);
 				case "keyword":
-					return await this.searchBm25(String(a.query ?? ""), Number(a.limit) || 10, a.path as string | undefined, Boolean(a.case_sensitive), exclude);
+					return await this.searchBm25(String(a.query ?? ""), Number(a.limit) || 10, a.path as string | undefined, Boolean(a.case_sensitive), exclude, scopeNorm);
 				case "semantic":
-					return await this.searchVector(String(a.query ?? ""), Number(a.limit) || 10, Number(a.threshold) || 0.3, a.path as string | undefined, exclude);
+					return await this.searchVector(String(a.query ?? ""), Number(a.limit) || 10, Number(a.threshold) || 0.3, a.path as string | undefined, exclude, scopeNorm);
 				case "ls":
-					return await this.ls(a.path as string | undefined, (a.sort as string) ?? "modified", Number(a.limit) || 50, Number(a.offset) || 0, a.recursive !== false, a.since as string | undefined, a.until as string | undefined, exclude);
+					return await this.ls(a.path as string | undefined, (a.sort as string) ?? "modified", Number(a.limit) || 50, Number(a.offset) || 0, a.recursive !== false, a.since as string | undefined, a.until as string | undefined, exclude, scopeNorm);
 				case "read":
-					return await this.read(String(a.path ?? ""), Number(a.offset) || 0, a.limit === undefined ? undefined : Number(a.limit), a.heading as string | undefined, a.max_depth === undefined ? undefined : Number(a.max_depth));
+					return await this.read(String(a.path ?? ""), Number(a.offset) || 0, a.limit === undefined ? undefined : Number(a.limit), a.heading as string | undefined, a.max_depth === undefined ? undefined : Number(a.max_depth), scopeNorm);
 				case "grep":
-					return await this.grep(String(a.pattern ?? ""), Boolean(a.regex), a.path as string | undefined, Boolean(a.case_sensitive), Number(a.context) === 0 ? 0 : Number(a.context) || 1, Number(a.limit) || 10, Number(a.offset) || 0, exclude);
+					return await this.grep(String(a.pattern ?? ""), Boolean(a.regex), a.path as string | undefined, Boolean(a.case_sensitive), Number(a.context) === 0 ? 0 : Number(a.context) || 1, Number(a.limit) || 10, Number(a.offset) || 0, exclude, scopeNorm);
 				case "find":
-					return await this.find(String(a.pattern ?? ""), a.path as string | undefined, Number(a.limit) || 20, exclude);
+					return await this.find(String(a.pattern ?? ""), a.path as string | undefined, Number(a.limit) || 20, exclude, scopeNorm);
 				case "headings":
-					return await this.headings(String(a.path ?? ""));
+					return await this.headings(String(a.path ?? ""), scopeNorm);
 				case "links":
-					return await this.links(String(a.path ?? ""));
+					return await this.links(String(a.path ?? ""), scopeNorm);
 				case "active":
 					return await this.active();
 				case "status":
 					return await this.status();
 				case "reindex":
 					return await this.reindex(a.path as string | undefined, Boolean(a.force));
-				}
+			}
 			// 未声明的工具名：文本化兜底（防御；正常调用不会走到）
 			return `Error: unknown tool: ${name}`;
 		} catch (e) {
 			return `Error: ${e instanceof Error ? e.message : String(e)}`;
 		}
 	}
+
+	/** Project 白名单归一化：空/全空 → undefined（全库放行）；其余去空白、
+	 *  统一尾斜杠。大小写不敏感匹配在 scopeMatch 里做（跨平台路径大小写
+	 *  不可靠）。 */
+	private normalizeScope(raw?: string[]): string[] | undefined {
+		const out = (raw ?? [])
+			.map((p) => p.trim().replace(/^\/+/, "").replace(/\/*$/, "/"))
+			.filter((p) => p.length > 1);
+		return out.length > 0 ? out : undefined;
+	}
+
+	/** Project 白名单判定（2026-11-16）：scope 未定义 = 全库放行；定义了
+	 *  则路径必须以任一前缀开头（大小写不敏感，跨平台）。 */
+	private scopeMatch(path: string, scope?: string[]): boolean {
+		if (!scope || scope.length === 0) return true;
+		const p = path.toLowerCase();
+		return scope.some((pre) => p.startsWith(pre.toLowerCase()));
+	}
+
+	/** Project 越界的统一错误文本（read/headings/links 单篇读取的边界）。 */
+	private static SCOPE_ERROR = "Error: out of project scope — this note is not part of the active project's source folders.";
 
 	// ──── 检索 ────
 
@@ -368,14 +392,14 @@ export class ToolCore {
 	}
 
 	/** 通用检索：BM25 + 向量并行，RRF 融合；向量路不可用时纯 BM25 兜底。 */
-	async search(query: string, limit = 10, path?: string, alpha = 0.5, exclude?: string[]): Promise<string> {
+	async search(query: string, limit = 10, path?: string, alpha = 0.5, exclude?: string[], scope?: string[]): Promise<string> {
 		if (!query.trim()) return "Error: missing query";
 		const { prefix } = this.resolvePrefix(path);
 		const useVector = this.deps.store.searchGate();
 		const [bm25, vector] = (await Promise.all([
-			this.bm25Raw(query, limit * 2, prefix || undefined, false, exclude).catch(() => []),
+			this.bm25Raw(query, limit * 2, prefix || undefined, false, exclude, scope).catch(() => []),
 			useVector
-				? this.vectorRaw(query, limit * 2, 0.2, prefix || undefined, exclude).catch(() => [])
+				? this.vectorRaw(query, limit * 2, 0.2, prefix || undefined, exclude, scope).catch(() => [])
 				: Promise.resolve([] as SearchResultLike[]),
 		])) as [SearchResultLike[], SearchResultLike[]];
 		const sources: string[] = [];
@@ -394,6 +418,10 @@ export class ToolCore {
 			const add = (alpha * 1) / (RRF_K + i + 1);
 			fused.set(r.path, prev ? { ...prev, score: prev.score + add, heading: r.heading ?? prev.heading, preview: r.preview ?? prev.preview } : { ...r, score: add });
 		});
+		// Project 白名单兜底（上游 SQL/向量已预过滤，这里挡融合边界）
+		for (const [p, r] of fused) {
+			if (!this.scopeMatch(r.path, scope)) fused.delete(p);
+		}
 
 		const results = [...fused.values()]
 			.sort((a, b) => b.score - a.score)
@@ -406,10 +434,10 @@ export class ToolCore {
 	}
 
 	/** 纯 BM25-lite：分词 → LIKE 候选 → idf/tf 打分。 */
-	async searchBm25(query: string, limit = 10, path?: string, caseSensitive = false, exclude?: string[]): Promise<string> {
+	async searchBm25(query: string, limit = 10, path?: string, caseSensitive = false, exclude?: string[], scope?: string[]): Promise<string> {
 		if (!query.trim()) return "Error: missing query";
 		const { prefix } = this.resolvePrefix(path);
-		const results = await this.bm25Raw(query, limit, prefix || undefined, caseSensitive, exclude);
+		const results = await this.bm25Raw(query, limit, prefix || undefined, caseSensitive, exclude, scope);
 		return this.truncate(
 			JSON.stringify(
 				{
@@ -426,7 +454,7 @@ export class ToolCore {
 
 	/** 纯向量检索；不可用时返回明确的提示而不是空结果。path 解析为
 	 *  vault 相对前缀后下推 store——打分循环内预过滤，限定单文件也凑得满 limit。 */
-	async searchVector(query: string, limit = 10, threshold = 0.3, path?: string, exclude?: string[]): Promise<string> {
+	async searchVector(query: string, limit = 10, threshold = 0.3, path?: string, exclude?: string[], scope?: string[]): Promise<string> {
 		if (!query.trim()) return "Error: missing query";
 		if (!this.deps.store.searchGate()) {
 			return JSON.stringify({
@@ -434,7 +462,7 @@ export class ToolCore {
 			});
 		}
 		const { prefix } = this.resolvePrefix(path);
-		const results = await this.vectorRaw(query, limit, threshold, prefix || undefined, exclude);
+		const results = await this.vectorRaw(query, limit, threshold, prefix || undefined, exclude, scope);
 		return this.truncate(
 			JSON.stringify(
 				{
@@ -451,14 +479,14 @@ export class ToolCore {
 
 	/** BM25 检索：先查索引 chunk（毫秒级），未命中则兜底扫描 Vault 文件——
 	 *  BM25 兜底必须兜得住：内容还没索引时也能按文件词频返回结果。 */
-	private async bm25Raw(query: string, limit: number, path?: string, caseSensitive = false, exclude?: string[]): Promise<SearchResultLike[]> {
-		const indexed = await this.bm25Indexed(query, limit, path, caseSensitive, exclude);
+	private async bm25Raw(query: string, limit: number, path?: string, caseSensitive = false, exclude?: string[], scope?: string[]): Promise<SearchResultLike[]> {
+		const indexed = await this.bm25Indexed(query, limit, path, caseSensitive, exclude, scope);
 		if (indexed.length > 0) return indexed.slice(0, limit);
-		return await this.bm25FileScan(query, limit, path, caseSensitive, exclude);
+		return await this.bm25FileScan(query, limit, path, caseSensitive, exclude, scope);
 	}
 
 	/** 索引快路径：分词 → 每个词 LIKE 取候选 → idf·饱和tf 累计打分。 */
-	private async bm25Indexed(query: string, limit: number, path?: string, caseSensitive = false, exclude?: string[]): Promise<SearchResultLike[]> {
+	private async bm25Indexed(query: string, limit: number, path?: string, caseSensitive = false, exclude?: string[], scope?: string[]): Promise<SearchResultLike[]> {
 		const tokens = this.tokenize(query);
 		if (tokens.length === 0) return [];
 		// 排除在 SQL（NOT LIKE）与结果层各挡一道：索引里可能仍有规则变更前的旧内容
@@ -467,7 +495,7 @@ export class ToolCore {
 		for (const token of tokens) {
 			let hits: Array<{ path: string; matchCount: number; preview: string }> = [];
 			try {
-				hits = await this.deps.store.textSearch(token, Math.min(limit * 3, 200), path, globalExcludes.length > 0 ? globalExcludes : undefined);
+				hits = await this.deps.store.textSearch(token, Math.min(limit * 3, 200), path, globalExcludes.length > 0 ? globalExcludes : undefined, scope);
 			} catch {
 				return []; // 索引不可用 → 交给文件扫描兜底
 			}
@@ -475,6 +503,7 @@ export class ToolCore {
 			const idf = Math.log(1 + 200 / df);
 			for (const h of hits) {
 				if (this.excludedMatch(h.path, exclude)) continue;
+				if (!this.scopeMatch(h.path, scope)) continue;
 				const tf = h.matchCount > 0 ? h.matchCount / (h.matchCount + 1.2) : 0;
 				const prev = scores.get(h.path);
 				scores.set(h.path, { score: (prev?.score ?? 0) + idf * tf, preview: prev?.preview ?? h.preview });
@@ -487,7 +516,7 @@ export class ToolCore {
 	}
 
 	/** 文件扫描兜底：并发读取笔记内容，按命中词数与词覆盖打分。 */
-	private async bm25FileScan(query: string, limit: number, path?: string, caseSensitive = false, exclude?: string[]): Promise<SearchResultLike[]> {
+	private async bm25FileScan(query: string, limit: number, path?: string, caseSensitive = false, exclude?: string[], scope?: string[]): Promise<SearchResultLike[]> {
 		const tokens = this.tokenize(query);
 		if (tokens.length === 0) return [];
 		const res = new RegExp(tokens.map((t) => this.escapeRegExp(t)).join("|"), caseSensitive ? "g" : "gi");
@@ -495,6 +524,7 @@ export class ToolCore {
 		const files = this.deps.vault.getFiles().filter((f) => {
 			if (!/\.(md|txt|markdown)$/i.test(f.path)) return false;
 			if (base && !f.path.startsWith(base)) return false;
+			if (!this.scopeMatch(f.path, scope)) return false;
 			return !this.excludedMatch(f.path, exclude);
 		});
 		const scored: SearchResultLike[] = [];
@@ -549,7 +579,7 @@ export class ToolCore {
 	 *  向量扫描内部（打分循环按 note_path 跳过）——一次扫描返回过滤后的
 	 *  精确 topN：无 over-fetch、无多余元数据查询，候选被排除占据时也
 	 *  不会凑不满 limit。 */
-	private async vectorRaw(query: string, limit: number, threshold: number, path?: string, exclude?: string[]): Promise<SearchResultLike[]> {
+	private async vectorRaw(query: string, limit: number, threshold: number, path?: string, exclude?: string[], scope?: string[]): Promise<SearchResultLike[]> {
 		const embedResult = await this.deps.client.embed([query]);
 		const excludes = [...(this.deps.excludedPaths?.() ?? []), ...(exclude ?? [])]
 			.map((p) => p.trim())
@@ -560,6 +590,7 @@ export class ToolCore {
 			threshold,
 			path,
 			excludes.length > 0 ? excludes : undefined,
+			scope,
 		);
 		return hits.map((r) => ({ path: r.notePath, heading: r.heading, preview: r.contentPreview, score: r.score }));
 	}
@@ -575,12 +606,14 @@ export class ToolCore {
 		since?: string,
 		until?: string,
 		exclude?: string[],
+		scope?: string[],
 	): Promise<string> {
 		const paths = await this.deps.store.getAllIndexedPaths();
 		const { prefix: base } = this.resolvePrefix(prefix);
 		const notes: Array<{ path: string; created: string | null; modified: string | null }> = [];
 		for (const p of paths) {
 			if (base && !p.startsWith(base)) continue;
+			if (!this.scopeMatch(p, scope)) continue;
 			if (this.excludedMatch(p, exclude)) continue;
 			if (!recursive) {
 				const rel = base ? p.slice(base.length).replace(/^\/+/, "") : p;
@@ -622,8 +655,12 @@ export class ToolCore {
 		limit?: number,
 		heading?: string,
 		maxDepth?: number,
+		scope?: string[],
 	): Promise<string> {
 		if (!path) return "Error: missing path";
+		// Project 边界（2026-11-16）：范围外笔记对 agent 不存在——明文报错
+		// 而非静默放行（拖入附件走 context 不经此路径，不受影响）。
+		if (!this.scopeMatch(path, scope)) return ToolCore.SCOPE_ERROR;
 		const file = this.deps.vault.getAbstractFileByPath(path);
 		if (!(file instanceof TFile)) return `Error: file not found: ${path}`;
 		const content = await this.deps.vault.read(file);
@@ -702,6 +739,7 @@ export class ToolCore {
 		limit: number,
 		offset: number,
 		exclude?: string[],
+		scope?: string[],
 	): Promise<string> {
 		if (!pattern) return "Error: missing pattern";
 
@@ -715,6 +753,7 @@ export class ToolCore {
 		const files = this.deps.vault.getFiles().filter((f) => {
 			if (!/\.(md|txt|markdown)$/i.test(f.path)) return false;
 			if (pathBase && !f.path.toLowerCase().startsWith(pathBase.toLowerCase())) return false;
+			if (!this.scopeMatch(f.path, scope)) return false;
 			return !this.excludedMatch(f.path, exclude);
 		});
 
@@ -801,7 +840,7 @@ export class ToolCore {
 		);
 	}
 
-	async find(pattern: string, prefix: string | undefined, limit = 20, exclude?: string[]): Promise<string> {
+	async find(pattern: string, prefix: string | undefined, limit = 20, exclude?: string[], scope?: string[]): Promise<string> {
 		if (!pattern) return "Error: missing pattern";
 		// glob：* → 任意字符（含路径分隔符——"*关键词*" 即按包含匹配，
 		// 否则子目录里的文件永远匹配不上），? → 单字符；其余按字面匹配
@@ -816,6 +855,7 @@ export class ToolCore {
 		for (const file of this.deps.vault.getFiles()) {
 			if (!/\.(md|txt|markdown)$/i.test(file.path)) continue;
 			if (base && !file.path.startsWith(base)) continue;
+			if (!this.scopeMatch(file.path, scope)) continue;
 			if (this.excludedMatch(file.path, exclude)) continue;
 			const name = file.path.slice(base ? base.length + 1 : 0);
 			if (!re.test(name) && !re.test(file.path)) continue;
@@ -848,8 +888,9 @@ export class ToolCore {
 		);
 	}
 
-	async headings(path: string): Promise<string> {
+	async headings(path: string, scope?: string[]): Promise<string> {
 		if (!path) return "Error: missing path";
+		if (!this.scopeMatch(path, scope)) return ToolCore.SCOPE_ERROR;
 		const file = this.deps.vault.getAbstractFileByPath(path);
 		if (!(file instanceof TFile)) return `Error: file not found: ${path}`;
 		const content = await this.deps.vault.cachedRead(file);
@@ -863,8 +904,9 @@ export class ToolCore {
 		);
 	}
 
-	async links(path: string): Promise<string> {
+	async links(path: string, scope?: string[]): Promise<string> {
 		if (!path) return "Error: missing path";
+		if (!this.scopeMatch(path, scope)) return ToolCore.SCOPE_ERROR;
 		const file = this.deps.vault.getAbstractFileByPath(path);
 		if (!(file instanceof TFile)) return `Error: file not found: ${path}`;
 

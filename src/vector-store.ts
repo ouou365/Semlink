@@ -421,9 +421,9 @@ export class VectorStore {
 	/** 向量搜索总开关（设置页 RAG 标签注入）：关闭时所有语义检索直接返回空。 */
 	searchGate: () => boolean = () => true;
 
-	async search(queryEmbedding: number[], limit = 10, threshold = 0.3, pathFilter?: string, excludePaths?: string[]): Promise<SearchResult[]> {
+	async search(queryEmbedding: number[], limit = 10, threshold = 0.3, pathFilter?: string, excludePaths?: string[], scopePrefixes?: string[]): Promise<SearchResult[]> {
 		if (!this.searchGate()) return [];
-		return await this.call<SearchResult[]>("search", [queryEmbedding, limit, threshold, pathFilter, excludePaths]);
+		return await this.call<SearchResult[]>("search", [queryEmbedding, limit, threshold, pathFilter, excludePaths, scopePrefixes]);
 	}
 
 	/** Note→note "related notes" via max-pooling over the source note's chunks
@@ -436,8 +436,8 @@ export class VectorStore {
 	/** 该笔记是否已有至少一个向量（同内容短路跳过的裁决，见 scheduler）。 */
 	async noteHasVectors(notePath: string): Promise<boolean> { return await this.call<boolean>("noteHasVectors", [notePath]); }
 	/** Fast substring search over indexed chunk content (for the grep tool). */
-	async textSearch(pattern: string, limit = 200, pathFilter?: string, excludePaths?: string[]): Promise<Array<{ path: string; matchCount: number; preview: string }>> {
-		return await this.call<Array<{ path: string; matchCount: number; preview: string }>>("textSearch", [pattern, limit, pathFilter, excludePaths]);
+	async textSearch(pattern: string, limit = 200, pathFilter?: string, excludePaths?: string[], scopePrefixes?: string[]): Promise<Array<{ path: string; matchCount: number; preview: string }>> {
+		return await this.call<Array<{ path: string; matchCount: number; preview: string }>>("textSearch", [pattern, limit, pathFilter, excludePaths, scopePrefixes]);
 	}
 
 	/** Chunk a markdown document. Runs in the worker thread so large-file

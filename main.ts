@@ -1241,12 +1241,18 @@ export default class SmartVaultPlugin extends Plugin {
 	/** ask 执行器：与侧栏同一条管线（agentic 模式、按问题推断读取深度、
 	 *  空历史——每次 ask 都是独立会话），收集完整思考过程与最终回答。 */
 	private debugAskRunning = false;
-	private async runDebugAsk(question: string): Promise<unknown> {
+	private async runDebugAsk(question: string, project?: string): Promise<unknown> {
 		if (this.debugAskRunning) throw new Error("Another ask is still running");
 		this.debugAskRunning = true;
 		const startedAt = Date.now();
 		try {
 			const thinking: ThinkingStep[] = [];
+			// Project 范围（2026-11-16）：按名称或 id 解析 settings.projects
+			// ——回归测试范围限定（范围命中/范围外拒答）的通道。
+			const def = project
+				? this.settings.projects.find((p) => p.id === project || p.name === project)
+				: undefined;
+			const scope = def ? { name: def.name, folders: def.folders } : undefined;
 			const result = await this.chatClient.chat(
 				"",
 				question,
@@ -1256,9 +1262,16 @@ export default class SmartVaultPlugin extends Plugin {
 				undefined, // onStream
 				undefined, // onRoundStart
 				(step) => thinking.push(step),
+				undefined, // onRetry
+				undefined, // signal
+				"proactive",
+				[], // contextNotePaths
+				undefined, // onThinkingDelta
+				scope,
 			);
 			return {
 				question,
+				project: def ? def.name : project ? `${project} (未找到，全库检索)` : undefined,
 				answer: result.answer,
 				thinking,
 				usedNotes: result.usedNotes,

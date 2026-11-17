@@ -766,6 +766,26 @@ const zh: Record<keyof typeof en, string> = {
 	historyLockedHint: "免费版保留最近 5 条对话，Pro 解锁完整历史",
 
 	botProDesc: "飞书机器人是 Pro 功能。在飞书里随时问答你的知识库，流式卡片回复。",
+
+// ──── Projects（检索范围限定，2026-11-16）────
+	promptProjectScope: "项目范围：当前会话限定在项目「{name}」——对你而言只有这些文件夹下的笔记存在：{folders}。工具结果已局限于此范围，范围外的笔记不存在，不要建议用户查阅其他位置。",
+	projectModalTitle: "创建项目",
+	projectEditTitle: "编辑项目",
+	projectNameLabel: "项目名称",
+	projectNamePlaceholder: "新项目",
+	projectSourceFolders: "知识范围（文件夹）",
+	projectChooseFolderHint: "回答只从这些文件夹检索",
+	projectCreate: "创建项目",
+	projectSave: "保存",
+	projectCancel: "取消",
+	projectNew: "新建项目",
+	projectAllNotes: "全部笔记",
+	projectNewFolder: "新建文件夹",
+	projectCreateFolder: "创建",
+	projectDeleted: "已删除项目",
+	projectFilterAll: "全部",
+	projectScopeLine: "范围：{name}",
+	projectConfirmSwitch: "切换项目将开始一个新的范围内的对话，继续吗？",
 };
 
 export default zh;

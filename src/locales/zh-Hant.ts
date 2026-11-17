@@ -765,6 +765,26 @@ const t: Record<keyof typeof en, string> = {
 	historyLockedHint: "免費版保留最近 5 個對話，Pro 解鎖完整歷史",
 
 	botProDesc: "飛書機器人是 Pro 功能。在飛書裡隨時問答你的知識庫，以串流卡片回覆。",
+
+// ──── Projects（检索范围限定，2026-11-16）────
+	promptProjectScope: "项目范围：当前会话限定在项目「{name}」——对你而言只有这些文件夹下的笔记存在：{folders}。工具结果已局限于此范围，范围外的笔记不存在，不要建议用户查阅其他位置。",
+	projectModalTitle: "建立專案",
+	projectEditTitle: "編輯專案",
+	projectNameLabel: "專案名稱",
+	projectNamePlaceholder: "新專案",
+	projectSourceFolders: "知識範圍（資料夾）",
+	projectChooseFolderHint: "回答只從這些資料夾檢索",
+	projectCreate: "建立專案",
+	projectSave: "保存",
+	projectCancel: "取消",
+	projectNew: "新建專案",
+	projectAllNotes: "全部筆記",
+	projectNewFolder: "新建資料夾",
+	projectCreateFolder: "创建",
+	projectDeleted: "已刪除專案",
+	projectFilterAll: "全部",
+	projectScopeLine: "範圍：{name}",
+	projectConfirmSwitch: "切換專案將開始一個新範圍的對話，繼續嗎？",
 };
 
 export default t;

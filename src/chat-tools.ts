@@ -79,10 +79,12 @@ export class SemlinkTools {
 		}));
 	}
 
-	/** Execute a tool by name; always returns a text result (errors included). */
-	async execute(name: string, args: Record<string, unknown>): Promise<string> {
+	/** Execute a tool by name; always returns a text result (errors included).
+	 *  scope = Project 白名单前缀（per-call 透传——共享单例跨视图并发时
+	 *  无实例态竞态；2026-11-16）。 */
+	async execute(name: string, args: Record<string, unknown>, scope?: string[]): Promise<string> {
 		this.core.maxChars = this.maxResultChars;
 		this.core.cite = (path, line, kind) => this.citeNumberer?.(path, line, kind) ?? null;
-		return await this.core.execute(name, args);
+		return await this.core.execute(name, args, scope);
 	}
 }

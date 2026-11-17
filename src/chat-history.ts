@@ -115,7 +115,7 @@ export class ChatHistoryStore {
 	}
 
 	/** Patch a session (folder moves / archive toggles from the drawer). */
-	updateSession(id: string, patch: Partial<Pick<ChatSession, "folder" | "archived" | "pinned">>): void {
+	updateSession(id: string, patch: Partial<Pick<ChatSession, "folder" | "archived" | "pinned" | "projectId">>): void {
 		const session = this.sessions.find((s) => s.id === id);
 		if (!session) return;
 		if (patch.folder !== undefined) {
@@ -129,6 +129,10 @@ export class ChatHistoryStore {
 		if (patch.pinned !== undefined) {
 			if (patch.pinned) session.pinned = true;
 			else delete session.pinned;
+		}
+		if (patch.projectId !== undefined) {
+			if (patch.projectId) session.projectId = patch.projectId;
+			else delete session.projectId;
 		}
 	}
 

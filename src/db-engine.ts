@@ -1344,7 +1344,7 @@ export class DbEngine {
 	 * the parallel allVectorPaths array — one scan yields the exact filtered
 	 * top-K, with no over-fetch and metadata lookups only for final hits.
 	 */
-	search(queryEmbedding: number[] | Float32Array, limit = 10, threshold = 0.3, pathFilter?: string, excludePaths?: string[]): SearchResult[] {
+	search(queryEmbedding: number[] | Float32Array, limit = 10, threshold = 0.3, pathFilter?: string, excludePaths?: string[], scopePrefixes?: string[]): SearchResult[] {
 		this.loadVectorCache();
 
 		if (!this.allVectors || this.allVectorIds.length === 0) {
@@ -1359,11 +1359,13 @@ export class DbEngine {
 
 		// Path predicates precomputed once (startsWith || includes semantics,
 		// matching the index-side isExcluded); lower-cased for matching.
+		// scopePrefixes = Project 白名单（任一前缀命中才保留，2026-11-16）。
 		const lowerPrefix = pathFilter?.toLowerCase();
 		const excl = excludePaths
 			?.map((e) => e.trim().toLowerCase())
 			.filter((e) => e.length > 0) ?? [];
-		const hasFilter = !!lowerPrefix || excl.length > 0;
+		const scopeFn = this.scopePredicate(scopePrefixes);
+		const hasFilter = !!lowerPrefix || excl.length > 0 || !!scopeFn;
 
 		// Compute cosine similarities in batches to avoid blocking too long
 		const BATCH = 10000;
@@ -1391,6 +1393,7 @@ export class DbEngine {
 						const p = this.allVectorPaths[i]?.toLowerCase() ?? "";
 						if (lowerPrefix && !p.startsWith(lowerPrefix)) continue;
 						if (excl.length > 0 && excl.some((e) => p.includes(e))) continue;
+						if (scopeFn && !scopeFn(p)) continue;
 					}
 					scores.push({ index: i, score });
 				}
@@ -1418,6 +1421,18 @@ export class DbEngine {
 		}
 
 		return results;
+	}
+
+	/** Project 白名单谓词（2026-11-16）：scopePrefixes 非空时，路径必须以
+	 *  任一前缀（小写化）开头才保留；空/未传 = 全库放行。前缀由调用方
+	 *  规范化带尾斜杠，这里再兜底小写化。 */
+	private scopePredicate(scopePrefixes?: string[]): ((p: string) => boolean) | null {
+		if (!scopePrefixes || scopePrefixes.length === 0) return null;
+		const prefixes = scopePrefixes
+			.map((p) => p.trim().toLowerCase())
+			.filter((p) => p.length > 0);
+		if (prefixes.length === 0) return null;
+		return (p: string) => prefixes.some((pre) => p.startsWith(pre));
 	}
 
 	/** Normalized query vector (unit length) for cosine similarity. */
@@ -1455,6 +1470,7 @@ export class DbEngine {
 		threshold = 0.3,
 		pathFilter?: string,
 		excludePaths?: string[],
+		scopePrefixes?: string[],
 	): Array<{ chunkId: string; score: number }> {
 		this.loadVectorCache();
 		if (!this.allVectors || !this.allVectorIds) return [];
@@ -1466,7 +1482,8 @@ export class DbEngine {
 		const excl = excludePaths
 			?.map((e) => e.trim().toLowerCase())
 			.filter((e) => e.length > 0) ?? [];
-		const hasFilter = !!lowerPrefix || excl.length > 0;
+		const scopeFn = this.scopePredicate(scopePrefixes);
+		const hasFilter = !!lowerPrefix || excl.length > 0 || !!scopeFn;
 
 		for (let i = startIdx; i < Math.min(endIdx, this.allVectorIds.length); i++) {
 			const offset = i * dim;
@@ -1483,6 +1500,7 @@ export class DbEngine {
 					const p = this.allVectorPaths[i]?.toLowerCase() ?? "";
 					if (lowerPrefix && !p.startsWith(lowerPrefix)) continue;
 					if (excl.length > 0 && excl.some((e) => p.includes(e))) continue;
+					if (scopeFn && !scopeFn(p)) continue;
 				}
 				out.push({ chunkId: this.allVectorIds[i], score });
 			}
@@ -1599,13 +1617,21 @@ export class DbEngine {
 	 * scanning every vault file (used by the grep tool). Returns matching note
 	 * paths with a count of matching chunks per note.
 	 */
-	textSearch(pattern: string, limit = 200, pathFilter?: string, excludePaths?: string[]): Array<{ path: string; matchCount: number; preview: string }> {
+	textSearch(pattern: string, limit = 200, pathFilter?: string, excludePaths?: string[], scopePrefixes?: string[]): Array<{ path: string; matchCount: number; preview: string }> {
 		const like = `%${pattern}%`;
 		let sql = "SELECT note_path, COUNT(*) as cnt, MAX(content_preview) as prev FROM chunks WHERE content LIKE ?";
 		const params: unknown[] = [like];
 		if (pathFilter) {
 			sql += " AND note_path LIKE ?";
 			params.push(`%${pathFilter}%`);
+		}
+		// Project 白名单（锚定前缀 OR 组，走 idx_chunks_note_path；2026-11-16）。
+		const scope = (scopePrefixes ?? [])
+			.map((p) => p.trim().replace(/\/?$/, "/").toLowerCase())
+			.filter((p) => p.length > 1);
+		if (scope.length > 0) {
+			sql += ` AND (${scope.map(() => "note_path LIKE ?").join(" OR ")})`;
+			for (const p of scope) params.push(`${p}%`);
 		}
 		// 排除前缀（NOT LIKE %p%）：startsWith 是 includes 的子集，一个条件
 		// 即覆盖索引侧 isExcluded 的两种匹配；索引里可能仍有规则变更前的旧内容。
