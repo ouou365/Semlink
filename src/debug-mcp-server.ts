@@ -10,7 +10,7 @@ import { createServer, IncomingMessage, ServerResponse, Server } from "http";
 import { debugLog } from "./log";
 
 /** ask 工具执行器：由 main.ts 注入（复用侧栏同一条 chat 管线）。 */
-export type DebugAskRunner = (question: string) => Promise<unknown>;
+export type DebugAskRunner = (question: string, project?: string) => Promise<unknown>;
 
 /** jump 工具执行器：由 main.ts 注入——调用侧栏 openNote 打开笔记并跳行，
  *  然后回报实际光标/滚动位置，用于自动验证引用跳行链路。 */
