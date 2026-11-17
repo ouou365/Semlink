@@ -2583,10 +2583,13 @@
     flex-direction: column;
     gap: 12px;
     /* Slim side padding — the conversation area spans nearly the full
-       panel width. scrollbar-gutter 两侧对称预留：引导 hub 超高出现滚动条
-       时内容列宽度不变（否则头部/品牌整体左移 ~22px，与主页错位）。 */
-    padding: 0 6px 8px;
-    scrollbar-gutter: stable both-edges;
+       panel width. scrollbar-gutter: stable（右侧单边预留）保证滚动条
+       出现与否内容列宽度不变（引导 hub 超高不跳变）；弃用 both-edges
+       对称预留——那会把消息内容整体推右 ~ gutter+padding，左边缘与
+       头部/输入卡错开（用户反馈：对话区左移与输入框左缘对齐）。
+       左内距 12px = 输入卡（input-wrapper）左内衬，两列左缘精确对齐。 */
+    padding: 0 6px 8px 12px;
+    scrollbar-gutter: stable;
     /* Obsidian's global CSS disables text selection in places; force it back
        on for the conversation so messages can be selected & copied. */
     user-select: text;
@@ -4429,13 +4432,23 @@ body .semlink-msg-user::selection {
     padding: 0;
     border: none;
     background: transparent;
+}/* 思考体行首原生图标（Lucide，替代 💭/🔧 emoji）：贴文字基线、
+   颜色继承行色（运行态 accent / 完成态 muted 都随 color 走）。 */
+.semlink-row-icon {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: -2px;
+    margin-right: 5px;
+}.semlink-row-icon .svg-icon,
+.semlink-row-icon svg {
+    width: 14px;
+    height: 14px;
 }/* 运行中的待完成行（onToolCall 即插入，结果回来被完整行接管）：
-   弱化+倾斜，与完成态的 details 行一眼区分。 */
+   淡灰（faint）弱于完成态的 muted，仅靠灰阶深浅区分状态。 */
 .semlink-tool-call.is-pending {
     font-size: 14px;
     font-weight: 600;
     color: var(--text-faint);
-    font-style: italic;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -4533,6 +4546,41 @@ body .semlink-msg-user::selection {
     word-break: break-word;
     margin: 6px 0 0;
     padding: 4px 8px;
+}/* 悬挂缩进（思考行/工具行/运行行统一）：文本列 27px =
+   8px 行内距 + 14px 图标 + 5px 间距；首行 text-indent 回拉 19px
+   从图标列起，换行续行落在文本列。必须在基础规则的 padding
+   shorthand 之后——同优先级靠文件序取胜，放前面会被
+   padding: 2px/4px 8px 覆盖，图标被 text-indent 拉到盒外遭
+   overflow:hidden 裁掉（实测踩坑）。 */
+.semlink-thinking-thought,
+.semlink-tool-call-summary,
+.semlink-tool-call.is-pending {
+    padding-left: 27px;
+    text-indent: -19px;
+}/* 运行中流光：文本 span 用 background-clip:text 上渐变（faint 基底
+   + normal 高光带），背景每次循环左移恰一个渐变周期（-200%）成
+   无缝扫光；只挂文本 span——SVG 图标 stroke 走 currentColor，整行
+   color:transparent 会连带图标透明。 */
+.semlink-tool-call.is-pending .semlink-row-text {
+    color: transparent;
+    background-image: linear-gradient(100deg,
+        var(--text-faint) 0%,
+        var(--text-faint) 42%,
+        var(--text-normal) 50%,
+        var(--text-faint) 58%,
+        var(--text-faint) 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: semlink-shimmer 1.6s linear infinite;
+}@keyframes semlink-shimmer {
+    to { background-position: -200% 0; }
+}@media (prefers-reduced-motion: reduce) {
+    .semlink-tool-call.is-pending .semlink-row-text {
+        animation: none;
+        color: var(--text-faint);
+        background-image: none;
+    }
 }/* Live reasoning-model thinking stream (reasoning_content / thinking_delta)
    inside the auto-expanded thinking preview: dimmer than recorded thoughts
    (it is transient raw reasoning, not a step), plain text, tail indicator. */
@@ -4544,14 +4592,13 @@ body .semlink-msg-user::selection {
     word-break: break-word;
     margin: 2px 0 6px;
     padding: 4px 8px;
+    /* 与思考体文本列（27px = 8px 行距 + 14px 图标 + 5px 间距）对齐：
+       流式思考正文不贴左缘，整面板一条文本栏。 */
+    padding-left: 27px;
 }.semlink-live-reasoning::after {
     content: "▍";
     color: var(--text-faint);
     animation: semlink-reason-blink 1s steps(2, start) infinite;
-}@keyframes semlink-reason-blink {
-    to {
-        visibility: hidden;
-    }
 }/* One-line reference source rows */
 .semlink-search-source-row {
     display: flex;
@@ -6845,6 +6892,10 @@ body .semlink-msg-user::selection {
     content: "\258D";
     color: var(--text-faint);
     animation: semlink-reason-blink 1s steps(2, start) infinite;
+}@keyframes semlink-reason-blink {
+    to {
+        visibility: hidden;
+    }
 }
 @media (prefers-reduced-motion: reduce) {
     .semlink-msg-answer-tail::after {

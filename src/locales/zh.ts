@@ -418,7 +418,6 @@ const zh: Record<keyof typeof en, string> = {
 	searchModelThinking: "模型思考中",
 	searchReconnecting: "重新连接中... {n}/{total}",
 	searchToolCalling: "正在调用 {tool}…",
-	searchToolRunning: "（运行中…）",
 	searchToolTrace: "工具调用",
 	searchThinkingProcess: "思考过程",
 	searchExpand: "展开",

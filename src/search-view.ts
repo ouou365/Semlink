@@ -1473,10 +1473,12 @@ export class SemanticSearchView extends ItemView {
 							// refreshLiveBody 摘掉它、由完整行（含请求/响应
 							// details）接管——同一位置、同一视觉语言。
 							clearPendingToolEl();
+							// 运行态只靠颜色区分（is-pending accent 色），不加
+							// 「运行中…」文字后缀——斜体和文字都是噪音。
 							pendingToolEl = liveBody.createDiv({
 								cls: "semlink-tool-call is-pending",
-								text: `🔧 ${toolName}${this.summarizeArgs(args)}${t("searchToolRunning")}`,
 							});
+							this.prefixRowIcon(pendingToolEl, this.toolIcon(toolName), `${toolName}${this.summarizeArgs(args)}`);
 							if (followThinking) liveBody.scrollTop = liveBody.scrollHeight;
 						},
 					// Analysis/overview-heavy prompts get deeper reading.
@@ -2807,15 +2809,14 @@ export class SemanticSearchView extends ItemView {
 		for (const step of steps) {
 			if (!step) continue; // defensive: never crash on a malformed step
 			if (step.type === "thought") {
-				container.createDiv({ cls: "semlink-thinking-thought", text: `💭 ${step.text}` });
+				const thoughtRow = container.createDiv({ cls: "semlink-thinking-thought" });
+				this.prefixRowIcon(thoughtRow, "brain", step.text);
 			} else {
 				// Each tool call is one line by default; click to expand and
 				// see the full request args and response.
 				const callDetails = container.createEl("details", { cls: "semlink-tool-call" });
-				callDetails.createEl("summary", {
-					cls: "semlink-tool-call-summary",
-					text: `🔧 ${step.name}${this.summarizeArgs(step.args)}`,
-				});
+				const summary = callDetails.createEl("summary", { cls: "semlink-tool-call-summary" });
+				this.prefixRowIcon(summary, this.toolIcon(step.name), `${step.name}${this.summarizeArgs(step.args)}`);
 
 				callDetails.createDiv({ cls: "semlink-tool-call-label", text: t("searchToolRequest") });
 				callDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.args) });
@@ -2835,6 +2836,39 @@ export class SemanticSearchView extends ItemView {
 	/** Analysis-heavy prompts (设计需求/总结/对比 etc.) get the "enhanced"
 	 *  depth: full-note reads allowed and a larger per-result cap, so the
 	 *  model can read related protocol/design docs before answering. */
+	/** 工具名 → Lucide 图标：一图一义，一眼可辨在调什么。含旧名别名
+	 *  （历史会话残留 search_notes/get_note 等旧字样也能取到图），
+	 *  未知名回退 wrench。 */
+	private static readonly TOOL_ICONS: Record<string, string> = {
+		search: "search", search_notes: "search", search_bm25: "search", search_vector: "search",
+		keyword: "text-search",
+		semantic: "sparkles", get_similar_notes: "sparkles",
+		read: "book-open", get_note: "book-open", get_section: "book-open",
+		grep: "search", grep_notes: "search",
+		ls: "list", list_indexed: "list", list_indexed_detailed: "list",
+		find: "folder-search",
+		headings: "list-tree",
+		links: "link",
+		active: "file", get_active_note: "file",
+		status: "activity",
+		reindex: "refresh-cw",
+		web_search: "globe",
+		mcp_info: "info",
+	};
+
+	/** 工具行图标名（未知工具回退 wrench）。 */
+	private toolIcon(name: string): string {
+		return SemanticSearchView.TOOL_ICONS[name?.trim()] ?? "wrench";
+	}
+
+	/** 行首原生图标（Lucide，替代 💭/🔧 emoji 前缀）：图标 inline-flex 贴
+	 *  首行、color 继承行色——is-pending 的运行态淡灰随行变色。文本 span
+	 *  挂 semlink-row-text 类，运行中的流光动画只上文本（图标不吃）。 */
+	private prefixRowIcon(row: HTMLElement, iconName: string, text: string): void {
+		setIcon(row.createSpan({ cls: "semlink-row-icon" }), iconName);
+		row.createSpan({ cls: "semlink-row-text", text });
+	}
+
 	/** Compact one-line preview of the request args, e.g. " — MIBT". */
 	private summarizeArgs(args: unknown): string {
 		if (args && typeof args === "object") {
