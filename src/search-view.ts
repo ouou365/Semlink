@@ -4176,6 +4176,9 @@ export class SemanticSearchView extends ItemView {
 		// 搜索行默认收纳（🔍 展开，2026-11-18 拍板）；收起时清掉未完查询，
 		// 避免「看不见但仍在过滤」的错觉。
 		const tools = drawer.createDiv({ cls: "semlink-history-tools semlink-hidden" });
+		// 搜索行置于菜单行（新对话/更多）之上（2026-11-18 用户拍板）：
+		// 创建顺序在菜单行之后，DOM 位置插到其前。
+		drawer.insertBefore(tools, menuRows);
 		const toggleSearch = (): void => {
 			const opening = tools.hasClass("semlink-hidden");
 			tools.toggleClass("semlink-hidden", !opening);
