@@ -33,6 +33,16 @@ export type DebugStatsRunner = (opts?: { op?: string }) => Promise<unknown>;
  *  加一次性 boolean 开关。 */
 export type DebugSqlRunner = (query: string) => Promise<unknown>;
 
+/** debug 面板五件套的 runner 束（2026-11-18）：logs/sqlwrite/runtrace/
+ * queuefailures/dbstate——一个对象收口，不再拉长构造器位置参数链。 */
+export interface DebugDebugRunner {
+	logs(args?: { clear?: boolean }): unknown | Promise<unknown>;
+	sqlwrite(args?: { sql?: string }): Promise<unknown>;
+	runtrace(): unknown;
+	queuefailures(): Promise<unknown> | unknown;
+	dbstate(): Promise<unknown> | unknown;
+}
+
 export type DebugUiRunner = (opts?: {
 	action?: string;
 	selector?: string;
@@ -400,6 +410,65 @@ const SQL_TOOL = {
 	},
 };
 
+// ── debug 面板五件套（2026-11-18）：worker 环形日志 / 可回滚 SQL 沙箱 /
+// run 生命周期 / 队列失败聚合 / 连接状态——生产环境远程取证不再靠改码
+// 重建重启的循环。
+const LOGS_TOOL = {
+	name: "logs",
+	description:
+		"Dump the DB worker's in-memory error log ring (last 200 entries): "
+		+ "RPC op errors with stacks, slow ops (>2s), console.error/warn "
+		+ "mirrors, unhandled rejections. Works even when the engine failed "
+		+ "to init (init-crash forensics).",
+	inputSchema: {
+		type: "object",
+		properties: { clear: { type: "boolean", description: "Clear the ring after dumping." } },
+	},
+};
+
+const SQLWRITE_TOOL = {
+	name: "sqlwrite",
+	description:
+		"Run ONE arbitrary SQL statement inside BEGIN...ROLLBACK — all side "
+		+ "effects are rolled back, zero residue. SELECT/PRAGMA return rows; "
+		+ "writes return changes. Errors carry the failing SQL + first param. "
+		+ "Use to reproduce write failures with real payloads or trial "
+		+ "candidate SQL without touching real data. txDepth-aware: nested "
+		+ "inside an open transaction it becomes a SAVEPOINT.",
+	inputSchema: {
+		type: "object",
+		properties: { sql: { type: "string", description: "Single SQL statement (no ; separators)." } },
+		required: ["sql"],
+	},
+};
+
+const RUNTRACE_TOOL = {
+	name: "runtrace",
+	description:
+		"Last 10 index-run lifecycles: trigger source, start/end times, "
+		+ "phase timeline, enqueued/processed/failed counts, crash stack. "
+		+ "Distinguishes a live run from a stale progress label at a glance.",
+	inputSchema: { type: "object", properties: {} },
+};
+
+const QUEUEFAIL_TOOL = {
+	name: "queuefailures",
+	description:
+		"Failed queue rows grouped by error signature: count, first/last "
+		+ "seen, sample note path, max retries — failure patterns (e.g. "
+		+ "'152 x nested BEGIN') visible in one call.",
+	inputSchema: { type: "object", properties: {} },
+};
+
+const DBSTATE_TOOL = {
+	name: "dbstate",
+	description:
+		"DB connection state snapshot: txDepth, PRAGMA in_transaction, "
+		+ "statement-cache size, vector cache flags, queue row count. "
+		+ "For transaction-bookkeeping bugs (nested BEGIN, leaked tx).",
+	inputSchema: { type: "object", properties: {} },
+};
+
 const STATS_TOOL = {
 	name: "stats",
 	description:
@@ -545,7 +614,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner, private runRecord?: DebugRecordRunner, private runSession?: DebugSessionRunner, private runFixture?: DebugFixtureRunner, private runBrowser?: DebugBrowserRunner, private runSettings?: DebugSettingsRunner, private runShare?: DebugShareRunner, private runSql?: DebugSqlRunner) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner, private runRecord?: DebugRecordRunner, private runSession?: DebugSessionRunner, private runFixture?: DebugFixtureRunner, private runBrowser?: DebugBrowserRunner, private runSettings?: DebugSettingsRunner, private runShare?: DebugShareRunner, private runSql?: DebugSqlRunner, private runDebug?: DebugDebugRunner) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -638,7 +707,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, SQL_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL, RECORD_TOOL, SESSION_TOOL, FIXTURE_TOOL, BROWSER_TOOL, SETTINGS_TOOL, SHARE_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, SQL_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL, RECORD_TOOL, SESSION_TOOL, FIXTURE_TOOL, BROWSER_TOOL, SETTINGS_TOOL, SHARE_TOOL, LOGS_TOOL, SQLWRITE_TOOL, RUNTRACE_TOOL, QUEUEFAIL_TOOL, DBSTATE_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -682,6 +751,16 @@ export class DebugMcpServer {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runShot?.(params.arguments as { target?: string | number; resize?: { index?: number; width?: number; height?: number; x?: number; y?: number }; zoom?: number } | undefined)) ?? { error: "no shot runner" }, null, 2) }] };
 					} else if (params.name === "sql") {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runSql?.(String((params.arguments as { query?: string } | undefined)?.query ?? ""))) ?? { error: "no sql runner" }, null, 2) }] };
+					} else if (params.name === "logs") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runDebug?.logs(params.arguments as { clear?: boolean } | undefined)) ?? { error: "no debug runner" }, null, 2) }] };
+					} else if (params.name === "sqlwrite") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runDebug?.sqlwrite(params.arguments as { sql?: string } | undefined)) ?? { error: "no debug runner" }, null, 2) }] };
+					} else if (params.name === "runtrace") {
+						result = { content: [{ type: "text", text: JSON.stringify(this.runDebug?.runtrace() ?? { error: "no debug runner" }, null, 2) }] };
+					} else if (params.name === "queuefailures") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runDebug?.queuefailures()) ?? { error: "no debug runner" }, null, 2) }] };
+					} else if (params.name === "dbstate") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runDebug?.dbstate()) ?? { error: "no debug runner" }, null, 2) }] };
 					} else {
 						result = await this.handleAsk(params);
 					}

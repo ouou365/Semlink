@@ -40,6 +40,9 @@ export class VectorStore {
 	/** browser worker 初始化失败原因（含栈头）——init 失败时随异常大声
 	 *  抛出，这里留档供 stats 调试响应透出。 */
 	lastBrowserWorkerError: string | null = null;
+	/** 最近一次 worker init 的分相计时（driver/engine 面包屑，boot-perf 取
+	 *  证用；init RPC 的回传载荷，2026-11-18）。 */
+	lastInitMarks: Array<{ at: string; ms: number }> | null = null;
 
 	/** Whether DB work is running off the main thread (browser worker up). */
 	get isWorkerMode(): boolean {
@@ -127,7 +130,8 @@ export class VectorStore {
 		// The browser entry ignores the passed dataDir and uses the OPFS
 		// namespace root as its virtual root. mode="wasm"：sqlite3-wasm +
 		// opfs-sahpool（事务即落盘；旧 sql.js 库由驱动自动迁移进 sahpool）。
-		await this.call("init", ["", "wasm"]);
+		const initMarks = await this.call<Array<{ at: string; ms: number }>>("init", ["", "wasm"]);
+		this.lastInitMarks = Array.isArray(initMarks) ? initMarks : null;
 		debugLog("[Semlink] VectorStore running in browser worker mode — DB engine is off the main thread");
 
 		// 迁移收尾（用户拍板「迁移完成自动删除 data/vault.db 与 vault.db.bak-*」）：
@@ -262,12 +266,35 @@ export class VectorStore {
 	}
 
 	/** 全量 note→mtime（entries 过 RPC，本地重建 Map）：scanVault 批量对账用。 */
+	async flushVectorCacheFile(force = false): Promise<void> {
+		await this.call("flushVectorCacheFile", [force]);
+	}
+
 	async vectorCount(): Promise<number> {
 		return await this.call<number>("vectorCount");
 	}
 
 	async debugExecSql(query: string): Promise<{ columns: string[]; rows: unknown[][]; ms: number }> {
 		return await this.call("debugExecSql", [query]);
+	}
+
+	// ── debug 面板（2026-11-18）：worker 环形日志 / 可回滚 SQL 沙箱 /
+	// 连接状态 / 队列失败聚合——semlink-debug MCP 的 `logs` `sqlwrite`
+	// `dbstate` `queuefailures` 工具的后端。
+	getWorkerLogs(clear?: boolean): Promise<unknown> {
+		return this.call("getWorkerLogs", [clear === true]);
+	}
+
+	async debugExecSqlWrite(sql: string): Promise<unknown> {
+		return await this.call("debugExecSqlWrite", [sql]);
+	}
+
+	debugDbState(): Promise<unknown> {
+		return this.call("debugDbState", []);
+	}
+
+	debugQueueFailures(): Promise<unknown> {
+		return this.call("debugQueueFailures", []);
 	}
 
 	async getAllNoteMtimeEntries(): Promise<Array<[string, number]>> {

@@ -14,6 +14,30 @@ import type { NoteChunk, QueueAction } from "./types";
 
 export type Dispatcher = (op: string, args: unknown[]) => Promise<unknown>;
 
+// ──── Worker 侧环形日志（2026-11-18 debug 面板） ────
+// 生产环境 worker 的 console/debugLog 远程不可见——RPC 异常、慢操作、
+// 未处理 rejection 全部落这条 ring，debug MCP `logs` 工具一键倒出。
+export interface WorkerLogEntry {
+	at: string;
+	kind: "op-error" | "op-slow" | "console-error" | "console-warn" | "unhandled";
+	op?: string;
+	ms?: number;
+	text: string;
+}
+const WORKER_LOG_RING: WorkerLogEntry[] = [];
+const WORKER_LOG_CAP = 200;
+
+export function workerLogPush(kind: WorkerLogEntry["kind"], text: string, op?: string, ms?: number): void {
+	WORKER_LOG_RING.push({ at: new Date().toISOString(), kind, op, ms, text: String(text).slice(0, 800) });
+	if (WORKER_LOG_RING.length > WORKER_LOG_CAP) WORKER_LOG_RING.shift();
+}
+
+export function workerLogGet(clear?: boolean): WorkerLogEntry[] {
+	const out = WORKER_LOG_RING.slice();
+	if (clear) WORKER_LOG_RING.length = 0;
+	return out;
+}
+
 /** Create a dispatcher closure owning one DbEngine instance. The dataDir
  *  arrives with the "init" op (each host passes its own); args[1] = 存储驱动
  *  模式（"wasm" = 浏览器 Worker + OPFS 页级持久化；缺省 "sqljs" = sql.js
@@ -21,13 +45,33 @@ export type Dispatcher = (op: string, args: unknown[]) => Promise<unknown>;
 export function createDispatcher(): Dispatcher {
 	let engine: DbEngine | null = null;
 
+	// dispatch 层统一捕获：op 异常（消息+栈）与慢操作（>2s）进 ring，
+	// `logs` 工具远程可读——生产环境 worker 异常不再黑洞。
 	return async (op: string, args: unknown[]): Promise<unknown> => {
+		const t0 = Date.now();
+		try {
+			const out = await dispatchInner(op, args);
+			const ms = Date.now() - t0;
+			if (ms > 2000) workerLogPush("op-slow", `${op} took ${ms}ms`, op, ms);
+			return out;
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e);
+			const stack = e instanceof Error && e.stack ? ` | ${e.stack.split("\n").slice(1, 4).join(" | ")}` : "";
+			workerLogPush("op-error", `${op}: ${msg}${stack}`, op, Date.now() - t0);
+			throw e;
+		}
+	};
+
+	async function dispatchInner(op: string, args: unknown[]): Promise<unknown> {
+		// 不依赖 engine：init 崩溃期间的日志恰恰最有价值
+		if (op === "getWorkerLogs") return workerLogGet(args[0] === true);
 		if (!engine) {
 			// Only "init" is valid before the engine exists.
 			if (op === "init") {
 				engine = new DbEngine(args[0] as string);
 				await engine.init((args[1] as DbMode | undefined) ?? "sqljs");
-				return null;
+				// 回传 init 分相计时（boot-perf 取证；原先回 null 无人消费）
+				return engine.getInitMarks();
 			}
 			throw new Error(`Engine not initialized (op=${op})`);
 		}
@@ -56,6 +100,7 @@ export function createDispatcher(): Dispatcher {
 			case "noteHasVectors": return engine.noteHasVectors(args[0] as string);
 			case "getActiveChunks": return engine.getActiveChunks();
 			case "vectorCount": return engine.vectorCount();
+			case "flushVectorCacheFile": return engine.flushVectorCacheFile(args[0] === true);
 			case "getChunkById": return engine.getChunkById(args[0] as string);
 			case "markChunksStale": return engine.markChunksStale(args[0] as string);
 			case "deleteChunksByNotePath": return engine.deleteChunksByNotePath(args[0] as string);
@@ -102,8 +147,12 @@ export function createDispatcher(): Dispatcher {
 			case "invalidateStats": return engine.invalidateStats();
 			case "clearQueue": return engine.clearQueue();
 			case "getPendingPaths": return engine.getPendingPaths();
+			// ── debug 面板（2026-11-18）──
+			case "debugExecSqlWrite": return engine.debugExecSqlWrite(args[0] as string);
+			case "debugDbState": return engine.debugDbState();
+			case "debugQueueFailures": return engine.debugQueueFailures();
 			default:
 				throw new Error(`Unknown op: ${op}`);
 		}
-	};
+	}
 }

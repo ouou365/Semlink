@@ -17,6 +17,7 @@ import { isSparseContent } from "./chunker";
 import wasmBase64 from "sql.js/dist/sql-wasm.wasm";
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
+import { ensureFileSync } from "./browser-fs";
 import { SqliteWasmDb, SqlJsSemDb, SemDb, DbMode } from "./sqlite-wasm-driver";
 import type { NoteChunk, SearchResult, QueueItem, QueueAction, QueueItemStatus } from "./types";
 
@@ -93,6 +94,13 @@ export class DbEngine {
 	// can fetch a stored vector by id without re-reading the DB.
 	private vectorIdToIndex: Map<string, number> = new Map();
 	private cacheLoaded = false;
+	/** 向量集纪元（2026-11-18）：任何改变「active 且有向量」集合的操作都
+	 *  +1 并落 meta。二进制缓存文件携带同一纪元——一致则启动时一次顺序
+	 *  读整体载入（~280MB 顺序读 1-3s），不一致则退回逐行 DB 全载
+	 *  （实测 42s，首查尖峰真凶）。 */
+	private vectorEpoch = 0;
+	private vectorCacheDirty = false;
+	private vectorCacheLastWrite = 0;
 	/** FTS5 全文索引可用性（2026-11-18）：生产 sqlite-wasm 含 FTS5，textSearch
 	 *  走 MATCH（毫秒级）；sql.js 回退构建不含，落回 LIKE 全扫（秒级）。 */
 	private fts5Available = false;
@@ -124,13 +132,32 @@ export class DbEngine {
 	 *              （OPFS 页级持久化，事务即落盘，无全量导出）
 	 *  - "sqljs" : Node worker / sync fallback → sql.js + 磁盘文件
 	 *              （整库内存镜像，save 全量导出——历史形态，保留兼容） */
+	/** init 分相计时（boot-perf 透传取证；2026-11-18 store.init 实测 7.6s，
+	 *  需要定位 worker 侧耗时落在哪一相）。 */
+	private initMarks: Array<{ at: string; ms: number }> = [];
+	getInitMarks(): Array<{ at: string; ms: number }> {
+		return this.initMarks;
+	}
+
 	async init(mode: DbMode = "sqljs"): Promise<void> {
 		this.dbMode = mode;
 
 		if (mode === "wasm") {
+			const initT0 = Date.now();
+			const im = (at: string): void => {
+				this.initMarks.push({ at, ms: Date.now() - initT0 });
+			};
 			this.db = await SqliteWasmDb.open();
+			im("db-open");
+			// driver 内部面包屑并进来（时间原点不同：driver marks 从 open 进
+			// 算，engine marks 从 init 进算——读数时分开看）
+			for (const m of SqliteWasmDb.lastOpenMarks) {
+				this.initMarks.push({ at: `driver:${m.at}`, ms: m.ms });
+			}
 			this.createTables();
+			im("createTables");
 			await this.migrateIfNeeded();
+			im("migrate");
 			return;
 		}
 
@@ -171,6 +198,12 @@ export class DbEngine {
 	}
 
 	private createTables() {
+		// 分相计时（boot-perf 取证）：2026-11-18 实测本函数整体 ~4.9s，
+		// 定位到语句组后收口。
+		const ddlT0 = Date.now();
+		const dmark = (at: string): void => {
+			this.initMarks.push({ at: `ddl:${at}`, ms: Date.now() - ddlT0 });
+		};
 		this.db!.run(`
 			CREATE TABLE IF NOT EXISTS chunks (
 				id TEXT PRIMARY KEY,
@@ -222,6 +255,7 @@ export class DbEngine {
 		`);
 
 		// Create indexes
+		dmark("tables");
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_note_path ON chunks (note_path)");
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_status ON chunks (status)");
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_queue_status ON queue (status, priority)");
@@ -230,8 +264,11 @@ export class DbEngine {
 		// getEmbeddedNoteCount 的 COUNT 走索引——5 万+ chunk 的大表上这类
 		// 查询全表扫要分钟级，把 worker 排成阻塞长龙（真机 2026-11-11）。
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_path_active_vec ON chunks (note_path, status) WHERE vector IS NOT NULL");
+		dmark("indexes");
 		this.installAuditTrigger();
+		dmark("audit");
 		this.setupFts5();
+		dmark("fts5");
 
 		// [更新时间播种] 数量快照缺失时在 init 补种（升级/换机/耐久快照导回
 		// 都可能丢 meta）——否则 syncActivityStamp 的首播种「只记录不触碰」
@@ -243,6 +280,7 @@ export class DbEngine {
 		// 「—」是诚实值，首笔笔记索引时经 save 比对 0:0→1:1 自然触到）。
 		// 每次 init 两条小 SELECT，命中快照时零写入。
 		const seeded = this.db!.exec("SELECT value FROM meta WHERE key = 'last_activity_counts'");
+		dmark("seed-check");
 		if (seeded.length === 0 || seeded[0].values.length === 0) {
 			const chunkRow = this.db!.exec("SELECT COUNT(*) FROM chunks");
 			const hasContent = chunkRow.length > 0 && Number(chunkRow[0].values[0][0]) > 0;
@@ -259,6 +297,7 @@ export class DbEngine {
 			);
 			if (hasContent) this.touchIndexActivity();
 		}
+		dmark("seed-done");
 	}
 
 	/** [审计] 黑匣子回读：最近的 chunks 删除现场（时间 + 剩余行数）。 */
@@ -374,21 +413,94 @@ export class DbEngine {
 		};
 	}
 
+	/** [debug] 可回滚 SQL 沙箱（2026-11-18 debug 面板）：任意 SQL（可多
+	 *  语句）在 begin/rollbackTransaction（txDepth 记账，外层事务开着时
+	 *  自动降级为 SAVEPOINT）里执行，结束后无条件回滚——副作用零残留。
+	 *  纯 SELECT/PRAGMA 返回行；含写语句走官方多语句 exec（changes 不经
+	 *  此通道，用 SELECT changes() 查）。用途：拿真实载荷复现写入失败、
+	 *  多语句二分（如 DROP TRIGGER 后重试），不动真数据。 */
+	debugExecSqlWrite(sql: string): { columns: string[]; rows: unknown[][]; ms: number; rolledBack: boolean } {
+		const q = sql.trim().replace(/;+\s*$/, "");
+		if (!q) throw new Error("sqlwrite: empty sql");
+		const t0 = Date.now();
+		this.beginTransaction();
+		try {
+			let out: { columns: string[]; rows: unknown[][] };
+			if (/^(select|pragma|explain|with)/i.test(q) && !q.includes(";")) {
+				const r = this.db!.exec(q);
+				out = { columns: r.length > 0 ? r[0].columns : [], rows: r.length > 0 ? r[0].values : [] };
+			} else {
+				this.db!.run(q);
+				out = { columns: [], rows: [] };
+			}
+			return { ...out, ms: Date.now() - t0, rolledBack: true };
+		} finally {
+			this.rollbackTransaction();
+		}
+	}
+
+	/** [debug] 连接/事务状态一瞥（2026-11-18 debug 面板）：事务类 bug
+	 *  （txDepth 记账漂移、嵌套 BEGIN）不用再靠错误文本反推。 */
+	debugDbState(): Record<string, unknown> {
+		let inTransaction = false;
+		try {
+			const r = this.db!.exec("PRAGMA in_transaction");
+			inTransaction = Number(r[0]?.values?.[0]?.[0] ?? 0) === 1;
+		} catch { /* 老构建无此 PRAGMA 时忽略 */ }
+		const w = this.db as SqliteWasmDb;
+		return {
+			txDepth: this.txDepth,
+			inTransaction,
+			stmtCacheSize: typeof w.stmtCacheSize === "function" ? w.stmtCacheSize() : null,
+			cacheLoaded: this.cacheLoaded,
+			vectorEpoch: this.vectorEpoch,
+			fts5Available: this.fts5Available,
+			queueRows: this.queueCount(),
+		};
+	}
+
+	/** [debug] 队列失败签名聚合（2026-11-18 debug 面板）：按错误签名分组
+	 *  （条数/首末时刻/样本路径/最大重试）——「152 条全是嵌套 BEGIN」这类
+	 *  模式一眼可见，不再手写 GROUP BY。 */
+	debugQueueFailures(): Record<string, unknown> {
+		const sig = this.db!.exec(
+			`SELECT SUBSTR(error, 1, 120) AS sig, COUNT(*) AS n,
+					MIN(datetime(created_at / 1000, 'unixepoch', 'localtime')) AS first_at,
+					MAX(datetime(created_at / 1000, 'unixepoch', 'localtime')) AS last_at,
+					MAX(retries) AS max_retries,
+					MAX(note_path) AS sample_path
+			 FROM queue WHERE status = 'failed' GROUP BY sig ORDER BY n DESC LIMIT 20`,
+		);
+		const totals = this.db!.exec("SELECT COUNT(*) FROM queue WHERE status = 'failed'");
+		return {
+			failedTotal: Number(totals[0]?.values?.[0]?.[0] ?? 0),
+			signatures: sig.length > 0 ? sig[0].values : [],
+		};
+	}
+
 	/** FTS5 全文索引装配（2026-11-18）：外部内容表（content='chunks'）+
 	 *  三触发器（增/删/改自动同步）——写入路径零改动，索引始终新鲜。
 	 *  首次（索引空但 chunks 有数据）事务内全量回填；sql.js 回退构建无
 	 *  FTS5 → fts5Available=false，textSearch 落回 LIKE。 */
 	private setupFts5(): void {
 		try {
-			// schema v2：加 content_preview UNINDEXED——聚合/预览全部在 fts 表
-			// 内完成，去掉回连 chunks 的 JOIN（外部内容表不存 UNINDEXED 列值，
-			// 触发器写入时带上即可）。版本不符 → 整表重建回填。
-			const FTS_SCHEMA_VERSION = 4;
+			// schema v5（2026-11-18）：v4 → v5 = 触发器身体强制刷新。v4 及更早
+			// 的库里残留 v1 时代的 'delete' 命令式 au/ad 触发器身体——FTS5 的
+			// 'delete' 命令要求传入内容与索引逐字节一致，漂移即抛
+			// "SQL logic error"（真机 33% 笔记嵌入失败）。触发器挂在 chunks
+			// 上，DROP TABLE chunks_fts 不删它们，CREATE IF NOT EXISTS 又会
+			// 保留旧身体——必须显式 DROP 后按当前源码重建。
+			const FTS_SCHEMA_VERSION = 5;
 			const stored = this.db!.exec("SELECT value FROM meta WHERE key = 'fts_schema_version'");
 			const verOk = stored.length > 0 && stored[0].values.length > 0 && String(stored[0].values[0][0]) === String(FTS_SCHEMA_VERSION);
 			if (!verOk) {
 				this.db!.run("DROP TABLE IF EXISTS chunks_fts");
 			}
+			// 触发器身体永远对齐当前源码：先 DROP 再 CREATE（IF NOT EXISTS
+			// 不校验身体，旧迭代残留会一直存活）。
+			this.db!.run("DROP TRIGGER IF EXISTS chunks_fts_ai");
+			this.db!.run("DROP TRIGGER IF EXISTS chunks_fts_ad");
+			this.db!.run("DROP TRIGGER IF EXISTS chunks_fts_au");
 			this.db!.run(
 				"CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(content, note_path UNINDEXED, content_preview UNINDEXED, tokenize='trigram')"
 			);
@@ -409,12 +521,20 @@ export class DbEngine {
 				END
 			`);
 			// 回填：FTS 空 + chunks 有数据（首次启用/schema 重建）。两者皆空/皆有 → 跳过。
-			const fc = this.db!.exec("SELECT COUNT(*) FROM chunks_fts")[0]?.values?.[0]?.[0] ?? 0;
-			const cc = this.db!.exec("SELECT COUNT(*) FROM chunks")[0]?.values?.[0]?.[0] ?? 0;
-			if (Number(cc) > 0 && Number(fc) === 0) {
-				const t0 = Date.now();
-				this.db!.run("INSERT INTO chunks_fts(rowid, content, note_path, content_preview) SELECT rowid, content, note_path, content_preview FROM chunks");
-				debugLog(`[Semlink] FTS5 backfilled ${Number(cc)} docs in ${Date.now() - t0}ms`);
+			// [2026-11-18] 仅在版本不符（=刚建表/待回填）时探测——健康槽上
+			// 这两条 COUNT(*) 每次启动都全量走索引：FTS5 无行数缓存，trigram
+			// 影子索引几百 MB 页面冷读实测 ~6s，是 store.init 最大单项
+			// （boot-perf ddl:fts5=6178ms）。版本相符时三触发器保证 fts 与
+			// chunks 同步，无漂移可能；崩溃中断回填则版本没写、下轮照旧
+			// 走重建路径，无遗漏窗口。
+			if (!verOk) {
+				const fc = this.db!.exec("SELECT COUNT(*) FROM chunks_fts")[0]?.values?.[0]?.[0] ?? 0;
+				const cc = this.db!.exec("SELECT COUNT(*) FROM chunks")[0]?.values?.[0]?.[0] ?? 0;
+				if (Number(cc) > 0 && Number(fc) === 0) {
+					const t0 = Date.now();
+					this.db!.run("INSERT INTO chunks_fts(rowid, content, note_path, content_preview) SELECT rowid, content, note_path, content_preview FROM chunks");
+					debugLog(`[Semlink] FTS5 backfilled ${Number(cc)} docs in ${Date.now() - t0}ms`);
+				}
 			}
 			this.db!.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('fts_schema_version', ?)", [String(FTS_SCHEMA_VERSION)]);
 			this.fts5Available = true;
@@ -641,6 +761,7 @@ export class DbEngine {
 		this.db.run("DELETE FROM queue");
 		this.db.run("DELETE FROM meta");
 		this.touchIndexActivity();
+		this.bumpVectorEpoch();
 		this.db.run("DELETE FROM note_doc_vectors");
 		this.db.run("DELETE FROM embed_skips");
 		this.statsSnapCache = null;
@@ -678,6 +799,7 @@ export class DbEngine {
 		this.db.run("DELETE FROM meta");
 		this.touchIndexActivity();
 		this.statsSnapCache = null;
+		this.bumpVectorEpoch();
 		this.allVectors = null;
 		this.allVectorIds = [];
 		this.allVectorPaths = [];
@@ -728,6 +850,23 @@ export class DbEngine {
 		this.txDepth--;
 		if (this.txDepth === 0) this.db!.run("COMMIT");
 		else this.db!.run(`RELEASE SAVEPOINT tx_${this.txDepth}`);
+	}
+
+	/** worker 内同步事务包装（2026-11-18）：与跨 RPC 的 begin/commit 共用
+	 *  txDepth 记账——外层已有事务（如 scheduler 的逐笔记事务开着时，另一
+	 *  路 enqueueMany/saveEmbeddings 进来）自动降级为 SAVEPOINT，绝不出现
+	 *  裸 BEGIN 撞 "cannot start a transaction within a transaction"
+	 *  （152→187 条 failed 的根因）。fn 必须纯同步——事务内绝不让出。 */
+	private withTx<T>(fn: () => T): T {
+		this.beginTransaction();
+		try {
+			const out = fn();
+			this.commitTransaction();
+			return out;
+		} catch (e) {
+			try { this.rollbackTransaction(); } catch { /* 已被外层回滚 */ }
+			throw e;
+		}
 	}
 
 	rollbackTransaction(): void {
@@ -801,6 +940,7 @@ export class DbEngine {
 			"UPDATE chunks SET status = 'stale' WHERE note_path = ? AND status = 'active'",
 			[notePath]
 		);
+		this.bumpVectorEpoch();
 		return result.changes;
 	}
 
@@ -813,6 +953,7 @@ export class DbEngine {
 		this.db!.run("DELETE FROM embed_skips WHERE note_path = ?", [notePath]);
 		this.cacheLoaded = false;
 		this.docCacheLoaded = false;
+		this.bumpVectorEpoch();
 		return result.changes;
 	}
 
@@ -822,6 +963,7 @@ export class DbEngine {
 			[notePath]
 		);
 		this.cacheLoaded = false;
+		this.bumpVectorEpoch();
 		return result.changes;
 	}
 
@@ -836,6 +978,7 @@ export class DbEngine {
 			[newPath, oldPath]
 		);
 		if (result.changes > 0 || docResult.changes > 0) {
+			this.bumpVectorEpoch();
 			this.cacheLoaded = false;
 			this.docCacheLoaded = false;
 		}
@@ -1010,6 +1153,7 @@ export class DbEngine {
 		if (indexed.size > 0 && removed > indexed.size * 0.1) {
 			console.error(`[Semlink][audit] pruneOrphanedPaths removed ${removed}/${indexed.size} paths — existingPaths.size=${existingPaths.size}`);
 		}
+		if (removed > 0) this.bumpVectorEpoch();
 		if (removed > 0) {
 			this.touchIndexActivity();
 			this.cacheLoaded = false;
@@ -1227,11 +1371,22 @@ export class DbEngine {
 	 *  追加——cacheLoaded 不再整缓存失效，消掉每次嵌入批后 280MB 冷重读
 	 *  （search 慢的最后一块拼图）。 */
 	async saveEmbeddings(chunkIds: string[], embeddings: number[][]): Promise<void> {
-		const CHUNK = 200;
 		const dim = EMBEDDING_DIM;
-		const yieldOnce = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
-		this.db!.exec("BEGIN");
+		// withTx（txDepth 记账）：scheduler 外层逐笔记事务开着时进来自动
+		// 降级为 SAVEPOINT——旧版直接 BEGIN 曾与外层撞 "cannot start a
+		// transaction within a transaction"（187 条 failed 实录）。fn 纯
+		// 同步，事务内不让出。
 		try {
+			this.saveEmbeddingsTx(chunkIds, embeddings, dim);
+		} catch (e) {
+			// 回滚后内存缓存增量可能与 DB 不一致 → 退回整载（下次 search 重读）
+			this.cacheLoaded = false;
+			throw e;
+		}
+	}
+
+	private saveEmbeddingsTx(chunkIds: string[], embeddings: number[][], dim: number): void {
+		this.withTx(() => {
 			for (let i = 0; i < chunkIds.length; i++) {
 				const embedding = embeddings[i];
 				if (!embedding) continue; // 无向量（纯文本索引）→ 保持 vector 为 NULL
@@ -1266,19 +1421,10 @@ export class DbEngine {
 						for (let j = 0; j < dim; j++) this.allVectors[count * dim + j] = vec[j];
 					}
 				}
-				if ((i + 1) % CHUNK === 0) {
-					this.db!.exec("COMMIT");
-					await yieldOnce();
-					this.db!.exec("BEGIN");
-				}
 			}
-			this.db!.exec("COMMIT");
-		} catch (e) {
-			try { this.db!.exec("ROLLBACK"); } catch { /* already rolled back */ }
-			// 事务回滚后内存缓存可能与 DB 不一致 → 退回整载（下次 search 重读）
-			this.cacheLoaded = false;
-			throw e;
-		}
+			this.vectorCacheDirty = true;
+			this.bumpVectorEpoch();
+		});
 	}
 
 	/** Save a document-level vector (derived from the note's heading tree).
@@ -1302,6 +1448,47 @@ export class DbEngine {
 	 */
 	loadVectorCache(): void {
 		if (this.cacheLoaded) return;
+
+		// ── 快路径：二进制顺序缓存（epoch 一致 = 向量集未变）──
+		this.loadVectorEpoch();
+		if (this.vectorEpoch > 0) {
+			try {
+				const p = join(this.dataDir, "vectors.cache");
+				if (existsSync(p)) {
+					const t0 = Date.now();
+					const buf = readFileSync(p);
+					const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+					const magic = buf.subarray(0, 4).toString("latin1");
+					const ver = dv.getUint32(4, true);
+					const epoch = Math.round(dv.getFloat64(8, true));
+					const count = dv.getUint32(16, true);
+					const dim = dv.getUint32(20, true);
+					const jsonLen = dv.getUint32(24, true);
+					if (
+						magic === "SLVC" && ver === 1 && epoch === this.vectorEpoch &&
+						dim === EMBEDDING_DIM && buf.byteLength >= 28 + jsonLen + count * dim * 4
+					) {
+						const meta = JSON.parse(buf.subarray(28, 28 + jsonLen).toString("utf8")) as { ids: string[]; paths: string[] };
+						if (meta.ids.length === count && meta.paths.length === count) {
+							const floats = new Float32Array(
+								buf.buffer, buf.byteOffset + 28 + jsonLen, count * dim
+							);
+							this.allVectors = new Float32Array(floats); // 拷贝脱离原 buffer
+							this.allVectorIds = meta.ids;
+							this.allVectorPaths = meta.paths;
+							this.vectorIdToIndex.clear();
+							for (let i = 0; i < count; i++) this.vectorIdToIndex.set(meta.ids[i], i);
+							this.cacheLoaded = true;
+							this.vectorCacheLastWrite = Date.now();
+							debugLog(`[Semlink] Vector cache loaded from binary (${count} vectors) in ${Date.now() - t0}ms`);
+							return;
+						}
+					}
+				}
+			} catch {
+				// 缓存损坏/半截 → 落回 DB 全载并重写
+			}
+		}
 
 		const results = this.db!.exec(
 			"SELECT id, note_path, vector FROM chunks WHERE status = 'active' AND vector IS NOT NULL"
@@ -1345,6 +1532,58 @@ export class DbEngine {
 		this.cacheLoaded = true;
 
 		debugLog(`[Semlink] Loaded ${numVectors} vectors into cache (${(numVectors * EMBEDDING_DIM * BYTES_PER_FLOAT / 1024 / 1024).toFixed(1)}MB)`);
+		// 全载后立即落二进制缓存：下次重启走快路径（顺序读 1-3s vs 42s）
+		this.flushVectorCacheFile(true);
+	}
+
+	/** 从 meta 载入向量集纪元（loadVectorCache 快路径的前置）。 */
+	private loadVectorEpoch(): void {
+		if (this.vectorEpoch > 0) return;
+		try {
+			const r = this.db!.exec("SELECT value FROM meta WHERE key = 'vector_epoch'");
+			this.vectorEpoch = Number(r[0]?.values?.[0]?.[0] ?? 0) || 0;
+		} catch {
+			this.vectorEpoch = 0;
+		}
+	}
+
+	/** 向量集变化 → 纪元 +1 并落 meta（与二进制缓存比对用）。 */
+	private bumpVectorEpoch(): void {
+		this.vectorEpoch += 1;
+		try {
+			this.db!.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('vector_epoch', ?)", [String(this.vectorEpoch)]);
+		} catch { /* meta 异常不阻断主流程 */ }
+	}
+
+	/** 写二进制向量缓存文件。force=false 时 30s 节流（嵌入风暴中不反复
+	 *  全量写盘）。 */
+	flushVectorCacheFile(force = false): void {
+		if (!this.cacheLoaded || !this.allVectors || this.allVectorIds.length === 0) return;
+		const now = Date.now();
+		if (!force && now - this.vectorCacheLastWrite < 30_000) return;
+		try {
+			// 新文件先建 OPFS 句柄：shim 对无句柄路径落 memoryFiles（内存），
+			// 重启即失——缓存必须真落 OPFS 才能跨启动存活。
+			ensureFileSync("vectors.cache");
+			const ids = this.allVectorIds;
+			const paths = this.allVectorPaths;
+			const metaJson = Buffer.from(JSON.stringify({ ids, paths }), "utf8");
+			const count = ids.length;
+			const dim = EMBEDDING_DIM;
+			const header = Buffer.alloc(28);
+			header.write("SLVC", 0, "latin1");
+			header.writeUInt32LE(1, 4);           // version
+			header.writeDoubleLE(this.vectorEpoch, 8);
+			header.writeUInt32LE(count, 16);
+			header.writeUInt32LE(dim, 20);
+			header.writeUInt32LE(metaJson.length, 24);
+			const floats = Buffer.from(this.allVectors.buffer, this.allVectors.byteOffset, count * dim * 4);
+			writeFileSync(join(this.dataDir, "vectors.cache"), Buffer.concat([header, metaJson, floats]));
+			this.vectorCacheLastWrite = now;
+			this.vectorCacheDirty = false;
+		} catch (e) {
+			debugLog(`[Semlink] vector cache write failed: ${e instanceof Error ? e.message : String(e)}`);
+		}
 	}
 
 	/** Load all DOCUMENT-level vectors into a contiguous Float32Array. Mirrors
@@ -1842,13 +2081,16 @@ export class DbEngine {
 	 *  改为：一条 SELECT 预载在途集合本地去重 + 单事务批量写，片间
 	 *  setTimeout(0) 让排队中的 RPC 插队处理。 */
 	async enqueueMany(items: Array<{ notePath: string; action: QueueAction; priority?: number }>): Promise<void> {
-		const CHUNK = 400;
-		const yieldOnce = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 		const inFlight = new Set<string>();
 		const r = this.db!.exec("SELECT note_path || '|' || action FROM queue WHERE status IN ('pending','processing')");
 		if (r.length > 0) for (const row of r[0].values) inFlight.add(String(row[0]));
-		this.db!.exec("BEGIN");
-		try {
+		// BEGIN/COMMIT/ROLLBACK 必须走 run 系通道（官方 db.exec）；驱动 exec()
+		// 首行就调 stmt.getColumnNames()，官方 glue 对 0 列语句无条件
+		// affirmColIndex(0) → "Column index 0 is out of range"（wasm 构建上
+		// exec 事务语句 100% 抛——2026-11-18 索引卡 85.3% 的根因）。
+		// withTx = txDepth 记账：scheduler 逐笔记事务开着时进来会降级为
+		// SAVEPOINT，不与外层撞 BEGIN。
+		this.withTx(() => {
 			for (let i = 0; i < items.length; i++) {
 				const item = items[i];
 				const key = `${item.notePath}|${item.action}`;
@@ -1858,18 +2100,8 @@ export class DbEngine {
 					"INSERT INTO queue (note_path, action, priority, status, retries, error, created_at) VALUES (?, ?, ?, 'pending', 0, NULL, ?)",
 					[item.notePath, item.action, item.priority ?? 2, Date.now()]
 				);
-				if ((i + 1) % CHUNK === 0) {
-					// 分片提交：片间隙 worker 消息泵可处理排队中的 RPC
-					this.db!.exec("COMMIT");
-					await yieldOnce();
-					this.db!.exec("BEGIN");
-				}
 			}
-			this.db!.exec("COMMIT");
-		} catch (e) {
-			try { this.db!.exec("ROLLBACK"); } catch { /* already rolled back */ }
-			throw e;
-		}
+		});
 	}
 
 	/** Dequeue the next batch of pending items */

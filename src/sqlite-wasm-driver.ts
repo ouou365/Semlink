@@ -157,7 +157,17 @@ export class SqliteWasmDb {
 	 *  （调用方从 fs shim 读好传入；非空才迁移）。迁移写法：把字节写进
 	 *  opfs-sahpool 将要打开的 OPFS 根路径文件——必须在 sahpool 拿独占
 	 *  句柄之前完成。之后事务即持久，save() 退化为周期维护。 */
+	/** 启动分相计时（最近一次 open() 的面包屑；boot-perf 经 engine 透传）。
+	 *  2026-11-18：store.init 实测 7.6s，需要知道 7.6s 花在哪一相。 */
+	static lastOpenMarks: Array<{ at: string; ms: number }> = [];
+
 	static async open(): Promise<SqliteWasmDb> {
+		const openT0 = Date.now();
+		const om = (at: string): void => {
+			SqliteWasmDb.lastOpenMarks.push({ at, ms: Date.now() - openT0 });
+		};
+		SqliteWasmDb.lastOpenMarks = [];
+		om("open-enter");
 		const wasmBinary = decodeBase64(sqlite3WasmBase64).buffer;
 		// 关掉 'opfs'/'opfs-vfs' 的自动安装：它们要按相对 URL 起 proxy worker，
 		// 在 esbuild 打包后的 Blob-URL Worker 里 new URL 会 Invalid URL（真机
@@ -177,6 +187,7 @@ export class SqliteWasmDb {
 			// locateFile 恒定返回文件名 + wasmBinary 已提供 → 永不走 URL fetch。
 			locateFile: (f: string) => f,
 		})) as OfficialModule;
+		om("wasm-mod-init");
 
 		// 显式安装 opfs-sahpool VFS（不会自动注册；返回的 PoolUtil 提供
 		// importDb——官方文档推荐的 DB 字节导入通道，正好承接 sql.js 旧库迁移）。
@@ -186,6 +197,7 @@ export class SqliteWasmDb {
 		} catch (e) {
 			throw new Error(`[wasm-driver installOpfsSAHPoolVfs] ${e instanceof Error ? e.message : String(e)}`);
 		}
+		om("sahpool-installed");
 		// shim 命名空间（'semlink-db'）里的 vault.db 有两种身份：
 		// a) sql.js 时代的旧库（一次性迁移源）；b) 耐久快照（writeLegacySnapshot
 		// 每 ≥10min 写一次的整库副本，槽丢失时的恢复源）。
@@ -244,6 +256,7 @@ export class SqliteWasmDb {
 			try { db?.close(); } catch { /* 已死 */ }
 			db = null;
 		}
+		om(`slot-probed(pages=${pageCount})`);
 		if (db && pageCount === 0 && legacySize > 0) {
 			db.close();
 			db = null;
@@ -266,6 +279,7 @@ export class SqliteWasmDb {
 		}
 
 		if (!db) throw new Error("[wasm-driver] unreachable: db not opened");
+		om("guard-done");
 		// 迁移备份自动清理：pre-wasm.bak 是迁移瞬间的一次性回滚安全网——
 		// 活槽健康开库（recovered=false：恢复/修复分支刚刷新 bak，其回滚
 		// 使命未终结）+ .migrated 标记在场 + bak 真实落笔年龄 ≥ 宽限期
@@ -289,6 +303,7 @@ export class SqliteWasmDb {
 		// 跨 worker 重启存活——无句柄的 shimWrite 落 memoryFiles，进程死
 		// 即失（marker 失踪引发的化石重播种死循环，见迁移块注释）。
 		await shimEnsure(DB_FILE);
+		om("open-done");
 		return new SqliteWasmDb(db, mod.capi, poolUtil, openDb);
 	}
 
@@ -324,10 +339,21 @@ export class SqliteWasmDb {
 			return { changes: 0 };
 		}
 		const stmt = this.stmtCache.get(sql) ?? this.cacheStmt(sql);
-		stmt.reset();
-		stmt.bind(params);
-		stmt.step();
-		return { changes: this.capi.sqlite3_changes(this.db.pointer) };
+		try {
+			stmt.reset();
+			stmt.bind(params);
+			stmt.step();
+			return { changes: this.capi.sqlite3_changes(this.db.pointer) };
+		} catch (e) {
+			// 带上 SQL 头与首个参数（路径/id），远程诊断不再靠猜
+			const ctx = params.length > 0 ? ` | ${sql.slice(0, 40)} | p0=${String(params[0]).slice(0, 60)}` : ` | ${sql.slice(0, 60)}`;
+			throw new Error(`${e instanceof Error ? e.message : String(e)}${ctx}`);
+		}
+	}
+
+	/** 语句缓存规模（debugDbState 透出——缓存漂移/膨胀一眼可见）。 */
+	stmtCacheSize(): number {
+		return this.stmtCache.size;
 	}
 
 	private cacheStmt(sql: string): OfficialStmt {

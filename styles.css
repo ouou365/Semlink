@@ -4598,8 +4598,10 @@ body .semlink-msg-user::selection {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.semlink-thinking-segment[open] .semlink-thinking-thought {
-    /* 段内思考行与标题文字列（27px）左对齐——思考/请求/返回一条基线 */
+.semlink-thinking-segment .semlink-thinking-thought {
+    /* 段内思考行与标题文字列（27px）左对齐——思考/请求/返回一条基线。
+       不限定 [open]：存档会话的段默认折叠态，限定会让规则永不命中
+       （内容裸在 8px 列，2026-11-18 实测）。 */
     padding-left: 27px;
     text-indent: 0;
 }/* 运行中流光：文本 span 用 background-clip:text 上渐变（faint 基底
@@ -5116,6 +5118,11 @@ body .semlink-msg-user::selection {
 .semlink-history-item-info{margin-left:0}
 .semlink-history-folder{display:flex;align-items:center;gap:.3rem;padding:.3rem .45rem;min-height:34px;border-radius:6px;cursor:pointer;color:var(--text-normal);font-weight:500}
 .semlink-history-folder:hover{background:var(--background-modifier-hover)}
+/* 项目组行（2026-11-18 Project 融合进文件夹区）：brain 图标品牌色，
+   当前选中范围行高亮名称。 */
+.semlink-history-project-row .semlink-row-icon svg{color:var(--interactive-accent)}
+.semlink-history-project-row.is-active .semlink-history-folder-name{color:var(--interactive-accent);font-weight:600}
+.semlink-history-project-row.is-active{background:linear-gradient(90deg,rgba(139,108,239,.08),transparent)}
 .semlink-history-folder-root .semlink-history-folder-name{font-weight:700}
 .semlink-history-folder-root{position:sticky;top:0;z-index:3;background:var(--background-secondary);border-bottom:1px solid var(--background-modifier-border);padding-top:.25rem;padding-bottom:.25rem}
 .semlink-history-folder-chev{display:inline-flex;color:var(--text-muted)}

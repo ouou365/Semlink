@@ -494,7 +494,8 @@ export type IndexPhase =
 	| "chunking"
 	| "embedding"
 	| "building_index"
-	| "completed";
+	| "completed"
+	| "error";
 
 /** Network health status */
 export type NetworkStatus = "healthy" | "degraded" | "paused";

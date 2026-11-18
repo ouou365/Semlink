@@ -274,6 +274,78 @@ export class ToolCore {
 
 	constructor(private deps: ToolCoreDeps) {}
 
+	// ──── 全库内容缓存（2026-11-18） ────
+	// grep 是逐文件全文扫描，库涨到 5443 文件/82MB（Wiki 目录入场）后冷盘
+	// 一轮 4.6s、热盘也要 1.6s + 82MB 逐行 split。静态缓存跨 ToolCore 实例
+	// （聊天视图 + MCP server）共享一份：启动后台预热 + mtime 校验自愈
+	// （文件改动后下一次 grep 自动重读），有界防膨胀（超限按插入序淘汰最旧）。
+	private static contentCache = new Map<string, { mtime: number; text: string }>();
+	private static contentCacheChars = 0;
+	/** 缓存字符总量上限（当前全库 ≈ 33M 字符，留 3 倍余量；JS 字符串
+	 *  UTF-16 实占约为该值 ×2 字节）。 */
+	private static readonly CONTENT_CACHE_CHAR_CAP = 96_000_000;
+	/** 预热只收 ≤2MB 的文件（更大的仅 4 个规范大文档，OS 页缓存已足够快）。 */
+	private static readonly WARM_FILE_BYTES = 2 * 1024 * 1024;
+	private static warmStarted = false;
+
+	/** grep 的带缓存读取：mtime 不符或未命中时重读并回填。 */
+	private async readCached(file: TFile): Promise<string> {
+		const hit = ToolCore.contentCache.get(file.path);
+		if (hit && hit.mtime === file.stat.mtime) return hit.text;
+		const text = await this.deps.vault.cachedRead(file);
+		ToolCore.cachePut(file.path, file.stat.mtime, text);
+		return text;
+	}
+
+	private static cachePut(path: string, mtime: number, text: string): void {
+		const cache = ToolCore.contentCache;
+		const old = cache.get(path);
+		if (old) {
+			ToolCore.contentCacheChars -= old.text.length;
+			cache.delete(path);
+		}
+		// 超限淘汰：Map 保持插入序，从最旧开始丢
+		while (ToolCore.contentCacheChars + text.length > ToolCore.CONTENT_CACHE_CHAR_CAP && cache.size > 0) {
+			const oldestKey = cache.keys().next().value;
+			if (oldestKey === undefined) break;
+			const evicted = cache.get(oldestKey)!;
+			ToolCore.contentCacheChars -= evicted.text.length;
+			cache.delete(oldestKey);
+		}
+		cache.set(path, { mtime, text });
+		ToolCore.contentCacheChars += text.length;
+	}
+
+	/** 启动后台预热：把 grep 扫描集（md/txt/markdown、≤2MB、未被排除）
+	 *  一次读进缓存，冷启动后的第一次 grep 直接热。每会话幂等；并发 8，
+	 *  每 32 文件让出主线程，不与启动期争抢。 */
+	static async warmContentCache(vault: Vault, excluded: (path: string) => boolean): Promise<void> {
+		if (ToolCore.warmStarted) return;
+		ToolCore.warmStarted = true;
+		const files = vault
+			.getFiles()
+			.filter((f) => f instanceof TFile && /\.(md|txt|markdown)$/i.test(f.path) && f.stat.size <= ToolCore.WARM_FILE_BYTES && !excluded(f.path));
+		let i = 0;
+		const worker = async (): Promise<void> => {
+			while (i < files.length) {
+				const f = files[i++]!;
+				const hit = ToolCore.contentCache.get(f.path);
+				if (!hit || hit.mtime !== f.stat.mtime) {
+					try {
+						const text = await vault.cachedRead(f);
+						// 回填记读取时的 mtime——读取期间文件若又被改，只
+						// 损失一次缓存命中，下次 grep 按 mtime 不符自愈
+						ToolCore.cachePut(f.path, f.stat.mtime, text);
+					} catch {
+						/* 文件在扫描间隙消失 */
+					}
+				}
+				if (i % 32 === 0) await new Promise((r) => setTimeout(r, 0));
+			}
+		};
+		await Promise.all(Array.from({ length: 8 }, () => worker()));
+	}
+
 	/** 按名称执行工具；永远返回文本（错误也文本化）。 */
 	async execute(name: string, args: Record<string, unknown>, scope?: string[]): Promise<string> {
 		// 旧会话兼容：历史上下文里模型可能仍按旧名调用，映射到新工具（不对外声明）
@@ -744,6 +816,10 @@ export class ToolCore {
 		if (!pattern) return "Error: missing pattern";
 
 		const re = new RegExp(regex ? pattern : this.escapeRegExp(pattern), caseSensitive ? "" : "i");
+		// 整串预过滤版：绝大多数文件不含 pattern，直接跳过 split——82MB
+		// 全库逐行 split 出 ~200 万行字符串是 grep 的主要 CPU 开销。加 m
+		// 标志让 ^/$ 与逐行判定同语义（无锚点的 pattern m 是 no-op）。
+		const pre = new RegExp(re.source, re.flags + "m");
 		const detailLimit = Math.min(Math.max(1, limit), 30);
 		const MAX_PATHS = 200;
 		const ctx = Math.min(Math.max(0, context), 3);
@@ -768,7 +844,8 @@ export class ToolCore {
 				chunk.map(async (file) => {
 					try {
 						if (file.stat.size > 5 * 1024 * 1024) return null;
-						const content = await this.deps.vault.cachedRead(file);
+						const content = await this.readCached(file);
+						if (!pre.test(content)) return null;
 						const lines = content.split("\n");
 						let fileMatches = 0;
 						const hits: string[] = [];

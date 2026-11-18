@@ -15,7 +15,7 @@ import { IndexQueue } from "./src/index-queue";
 import { EmbeddingClient } from "./src/embedding-client";
 import { ChatClient, inferAgentDepth, type ThinkingStep } from "./src/chat-client";
 import { SemlinkTools } from "./src/chat-tools";
-import { parseExcludePaths } from "./src/tools-core";
+import { parseExcludePaths, ToolCore } from "./src/tools-core";
 import { Scheduler } from "./src/scheduler";
 import { ProgressTracker } from "./src/progress";
 import { McpServer } from "./src/mcp-server";
@@ -182,6 +182,11 @@ export default class SmartVaultPlugin extends Plugin {
 		this.store.searchGate = () => activeEmbeddingProvider(this.settings).apiKey.trim() !== "";
 		await this.store.init();
 		bootMark("store.init");
+		// worker 侧分相面包屑并进 boot-perf（前缀 worker: 区分时间原点——
+		// worker marks 从 engine.init 进算，main marks 从 onload 进算）
+		for (const m of this.store.lastInitMarks ?? []) {
+			bootMarks.push({ at: `worker:${m.at}`, ms: m.ms });
+		}
 		// 一次性回填 embed_skips（embed_skips 上线前已完成索引的全稀疏笔记
 		// 等不到重索引、也产生不了向量——嵌入进度永远差几个点，如真机的
 		// 974/980=99.4%）。幂等、候选集趋近空集，后台跑不阻塞启动。
@@ -512,6 +517,14 @@ export default class SmartVaultPlugin extends Plugin {
 		// 要从 OPFS 全量读 ~280MB 向量（实测冷首查 17s）。启动 30s 后后台
 		// 预热，用户首查前缓存已热——搜索保持毫秒级。
 		window.setTimeout(() => void this.store.vectorCount().catch(() => { /* 预热失败不影响功能 */ }), 30_000);
+		// grep 内容缓存预热（2026-11-18）：库涨到 5443 文件/82MB 后 grep 冷
+		// 盘一轮 4.6s。启动 20s 后把扫描集读进 ToolCore 静态缓存（并发 8、
+		// 定期让出，不与启动期争抢）——冷启动后的第一次 grep 直接热。
+		window.setTimeout(() => {
+			const pats = parseExcludePaths(this.settings.excludePaths);
+			pats.push(this.app.vault.configDir);
+			void ToolCore.warmContentCache(this.app.vault, (p) => pats.some((pat) => p.startsWith(pat) || p.includes(pat))).catch(() => { /* 预热失败不影响功能 */ });
+		}, 20_000);
 		bootMark("onload-done");
 		debugLog("[Semlink] Plugin loaded");
 	}
@@ -750,6 +763,13 @@ export default class SmartVaultPlugin extends Plugin {
 			(opts) => this.runDebugSettings(opts),
 			(opts) => this.runDebugShare(opts),
 			(q: string) => this.store.debugExecSql(q),
+			{
+				logs: (opts) => this.store.getWorkerLogs(opts?.clear === true),
+				sqlwrite: (args) => this.store.debugExecSqlWrite(String(args?.sql ?? "")),
+				runtrace: () => this.scheduler.getRunTraces(),
+				queuefailures: () => this.store.debugQueueFailures(),
+				dbstate: () => this.store.debugDbState(),
+			},
 		);
 		try {
 			await server.start();
@@ -1003,6 +1023,8 @@ export default class SmartVaultPlugin extends Plugin {
 				schedulerBusy: this.scheduler.isRunning,
 				// phase 停在 running 集合但 busy=false = 进度条残留态
 				phaseIsStale: !this.scheduler.isRunning && ["scanning", "chunking", "embedding", "building_index"].includes(p.phase),
+				// run 级崩溃现场（catch 落入；正常完成 = null）
+				lastRunError: this.scheduler.lastRunError,
 			},
 			pendingSample: await this.scheduler.debugPendingMtimeSample(),
 		};
@@ -3924,7 +3946,7 @@ export default class SmartVaultPlugin extends Plugin {
 				await this.store.touchNoteMtime(f.path, 0);
 				await this.scheduler.enqueueFile(f.path, "update");
 			}
-			void this.scheduler.run();
+			void this.scheduler.run(true, "rebuild-prefix");
 			return { op, rebuildPath: prefix, notes: files.length, chunksPurged: purged, started: true };
 		}
 		if (op === "snapshot") {
@@ -4572,7 +4594,7 @@ export default class SmartVaultPlugin extends Plugin {
 	startFullIndex() {
 		// 静默守卫 + 静默启动：索引状态由状态栏/进度面板呈现，不再弹提示。
 		if (this.scheduler.isRunning) return;
-		void this.scheduler.run();
+		void this.scheduler.run(true, "reconcile");
 	}
 
 	/** 设置页"Rebuild"：随时可用（用户拍板「保持 Rebuild 随时可用」）——
@@ -4592,7 +4614,7 @@ export default class SmartVaultPlugin extends Plugin {
 		new Notice(`Semlink: ${t("noticeRebuildStarted")}`);
 		await this.store.clearAll();
 		this.progress.reset();
-		void this.scheduler.run();
+		void this.scheduler.run(true, "reindexAll");
 	}
 
 	// ──── UI ────

@@ -27,14 +27,10 @@ import { SaveNoteModal } from "./save-note-modal";
 
 /** 思考段状态（renderThinkingSteps 分段折叠）：当前未折叠的 <details> 段。
  *  由调用方持有——live 路径逐 step 调用须跨调用持续；完成态一次性渲染后
- *  由 renderThinking 收尾关段。startAt = 段首思考到达时刻（算持续时长）。 */
+ *  由 renderThinking 收尾关段。 */
 interface ThinkSegState {
 	seg: HTMLDetailsElement | null;
 	summary: HTMLElement | null;
-	startAt: number;
-	/** 段内最后一个思考的到达时刻——关段时长的终点（末段无工具跟随时
-	 *  由它算出「持续了 N 秒」，不再落成无秒数的秃标题）。 */
-	endAt: number;
 }
 import { ShareQrModal } from "./share-modal";
 import { renderSharePage } from "./share-page";
@@ -1054,6 +1050,14 @@ export class SemanticSearchView extends ItemView {
 		// emptied/removed by whichever branch takes over. thinkStart covers
 		// the WHOLE turn (search + chat), so the counter never resets.
 		const thinkStart = Date.now();
+		// 思考终点（2026-11-18）：正文流首块到达的时刻。秒数到这就冻结——
+		// 生成正文的时间不算进「思考了 N 秒」（用户拍板）。thinkElapsedSec
+		// 统一各处取值：终点前实时跳动，终点后冻结。
+		let thinkEndAt: number | null = null;
+		const thinkElapsedSec = (): number => {
+			const end = thinkEndAt ?? Date.now();
+			return Math.max(1, Math.round((end - thinkStart) / 1000));
+		};
 		const initialLoading = loadingEl.querySelector(".semlink-msg-loading");
 		const searchTick = (): void => {
 			if (!initialLoading?.isConnected) {
@@ -1404,7 +1408,7 @@ export class SemanticSearchView extends ItemView {
 				let renderedSteps = 0;
 				// 思考段状态（跨 step 持续）：当前未折叠的段。轮次切换
 				// （onRoundStart）关段；工具落位在 renderThinkingSteps 内关。
-				const liveSegState: ThinkSegState = { seg: null, summary: null, startAt: 0, endAt: 0 };
+				const liveSegState: ThinkSegState = { seg: null, summary: null };
 				const refreshLiveBody = (): void => {
 					if (liveBody.hasClass("semlink-hidden")) return;
 					// 外层会话滚动条 sticky 跟随：采样必须在追加步骤之前
@@ -1539,9 +1543,10 @@ export class SemanticSearchView extends ItemView {
 							// — startDots restores the expanded preview when the
 							// next round proves it was thinking.
 							streamShown = true;
+							if (thinkEndAt === null) thinkEndAt = Date.now();
 							stopAnswerAnim();
 							loadingTextSpan.textContent =
-								t("searchThinkingDuration").replace("{seconds}", this.formatDuration(Math.max(1, Math.round((Date.now() - thinkStart) / 1000))));
+								t("searchThinkingDuration").replace("{seconds}", this.formatDuration(thinkElapsedSec()));
 							loadingDotsSpan.textContent = "";
 							liveBody.addClass("semlink-hidden");
 							loadingTextEl.removeClass("is-open");
@@ -1603,7 +1608,7 @@ export class SemanticSearchView extends ItemView {
 								? { name: this.activeProject.name, folders: this.activeProject.folders }
 								: undefined,
 						);
-						const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
+						const elapsedSec = thinkElapsedSec();
 						stopAnswerAnim();
 						// Sticky scroll across the final swap: sample while the
 						// streaming bubble is still the view (BEFORE thinking +
@@ -1724,7 +1729,7 @@ export class SemanticSearchView extends ItemView {
 						stopAnswerAnim();
 						loadingEl.empty();
 						if (liveSteps.length > 0) {
-							const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
+							const elapsedSec = thinkElapsedSec();
 							this.renderThinking(loadingEl, liveSteps, elapsedSec);
 						}
 						loadingEl.createDiv({ cls: "semlink-msg-stopped", text: t("searchStopped") });
@@ -1736,7 +1741,7 @@ export class SemanticSearchView extends ItemView {
 						// Keep the thinking process visible even when the answer
 						// failed — show what the model did before the error.
 						if (liveSteps.length > 0) {
-							const elapsedSec = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
+							const elapsedSec = thinkElapsedSec();
 							this.renderThinking(loadingEl, liveSteps, elapsedSec);
 						}
 					}
@@ -2869,7 +2874,7 @@ export class SemanticSearchView extends ItemView {
 
 		// 完成态：一次性全量渲染后把收尾段（最后一段思考）也折叠——
 		// 打开「▸ 思考了 N 秒」看到的是标题行 + 工具主干，不再无限长。
-		const segState: ThinkSegState = { seg: null, summary: null, startAt: 0, endAt: 0 };
+		const segState: ThinkSegState = { seg: null, summary: null };
 		this.renderThinkingSteps(details, thinking, segState);
 		this.closeThinkSegment(segState);
 	}
@@ -2896,25 +2901,25 @@ export class SemanticSearchView extends ItemView {
 			if (!step) continue; // defensive: never crash on a malformed step
 			if (step.type === "thought") {
 				if (seg && !seg.seg) {
-					// 段标题（2026-11-18 定稿）：brain 图标 + 关段后的
-					// 「持续了 N 秒」——「思考」二字转为图标 tooltip，不再
-					// 占行内文字；不复制首行思考文本（与段内重复）。
-					seg.startAt = (step as { at?: number }).at ?? Date.now();
+					// 段标题（2026-11-18 终版·用户拍板）：brain 图标 + 固定文案
+					// 「模型推理」，不带时长后缀——正文完整展示，无去重需求。
 					const box = container.createEl("details", { cls: "semlink-thinking-segment" });
 					seg.summary = box.createEl("summary", { cls: "semlink-thinking-segment-summary" });
-					this.prefixRowIcon(seg.summary, "brain", "", t("thinkingSegmentTitle"));
+					this.prefixRowIcon(seg.summary, "brain", t("thinkingSegmentTitle"), t("thinkingSegmentTitle"));
 					seg.seg = box;
 				}
-				// 段内思考行不再重复 brain 图标（段标题已表意）——纯文本段落。
-				// 前导空白剥除（同流式块：空行开头会在标题下空出一截）。
-				const thoughtRow = (seg?.seg ?? container).createDiv({ cls: "semlink-thinking-thought" });
-				thoughtRow.setText((step.text ?? "").replace(/^[\s\r\n]+/, ""));
-				// 时长终点随段内思考推进（末段由它算出秒数）。
-				const at = (step as { at?: number }).at;
-				if (seg && at) seg.endAt = at;
+				// 段内思考行：剥前导空白，完整渲染（标题已是固定文案，无重复）。
+				let body = (step.text ?? "").replace(/^[\s\r\n]+/, "");
+				if (seg && seg.seg && body) {
+					const thoughtRow = seg.seg.createDiv({ cls: "semlink-thinking-thought" });
+					thoughtRow.setText(body);
+				} else if (!seg || !seg.seg) {
+					const thoughtRow = container.createDiv({ cls: "semlink-thinking-thought" });
+					thoughtRow.setText(body);
+				}
 			} else {
-				// 工具落位 = 前段思考已完成 → 折叠成标题行（补持续时长）
-				this.closeThinkSegment(seg, (step as { at?: number }).at);
+				// 工具落位 = 前段思考已完成 → 折叠成标题行
+				this.closeThinkSegment(seg);
 				// Each tool call is one line by default; click to expand and
 				// see the full request args and response.
 				// 方法名不占文字（一行内全是参数语义），悬停图标以 tooltip
@@ -2941,23 +2946,10 @@ export class SemanticSearchView extends ItemView {
 		}
 	}
 
-	/** 关闭思考段：标题写「持续了 N 秒」（起点=段首思考到达，终点=末个
-	 *  思考到达 / 关段触发点的较早语义——有任一时间戳即显示秒数），
-	 *  折叠。「思考」二字只存在于图标 tooltip（prefixRowIcon 的
-	 *  iconTitle），不占行内文字；步骤无时间戳（旧会话存档）时标题
-	 *  仅图标 + tooltip。 */
-	private closeThinkSegment(seg: ThinkSegState | undefined, endAt?: number): void {
+	/** 关闭思考段：标题即固定文案「模型推理」（2026-11-18 用户拍板去时长
+	 *  后缀），折叠。 */
+	private closeThinkSegment(seg: ThinkSegState | undefined): void {
 		if (!seg?.seg) return;
-		if (seg.summary) {
-			const textSpan = seg.summary.querySelector<HTMLElement>(".semlink-row-text");
-			const end = endAt ?? seg.endAt;
-			if (textSpan && end) {
-				const sec = Math.max(1, Math.round((end - seg.startAt) / 1000));
-				textSpan.textContent = t("thinkingSegmentDuration").replace("{duration}", this.formatDuration(sec));
-			} else if (textSpan) {
-				textSpan.textContent = t("thinkingSegmentTitle");
-			}
-		}
 		seg.seg.open = false;
 		seg.seg = null;
 		seg.summary = null;
@@ -3011,12 +3003,10 @@ export class SemanticSearchView extends ItemView {
 	private toolArgText(args: unknown): string {
 		const a = (args ?? {}) as Record<string, unknown>;
 		const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
-		const parts: string[] = [];
-		const primary = str(a.query) || str(a.pattern) || str(a.path);
-		if (primary) parts.push(primary);
-		const path = str(a.path);
-		if (path && path !== primary) parts.push(path.length > 44 ? `…${path.slice(-43)}` : path);
-		return parts.join(" · ");
+		// 只显示主参数（search 的 query / grep 的 pattern / read 的 path 即
+		// 本体）——path 过滤条件不再拼进行内（长路径占满整行，请求详情里
+		// 本就有完整 args，2026-11-18 用户拍板）。
+		return str(a.query) || str(a.pattern) || str(a.path);
 	}
 
 	/** Compact one-line preview of the request args, e.g. " — MIBT". */
@@ -3855,6 +3845,7 @@ export class SemanticSearchView extends ItemView {
 		// Project 筛选（用户拍板「Menu 增加 Project」2026-11-16）：顶部
 		// chips 行（全部 ｜ 各项目），与搜索过滤叠加。
 		let projectFilter: string | null = null;
+		let projectsCollapsed = false;
 		const searchInput = tools.createEl("input", {
 			cls: "semlink-history-search",
 			attr: { type: "text", placeholder: t("historySearch"), "aria-label": t("historySearch") },
@@ -3995,6 +3986,84 @@ export class SemanticSearchView extends ItemView {
 			// pinned group and the flat time buckets follow. Sessions filed
 			// into a folder appear ONLY inside it (not duplicated in the time
 			// flow); searching hides the folder group and flattens everything.
+			// ── 项目组（2026-11-18 Project 融合进文件夹区）：知识范围分组
+			// 与文件夹并列。行点击=切换检索范围（主页选择器同语义：生成中/
+			// 有消息先确认再新会话）；⊕ 新建按 License 分层（免费按现存
+			// 数量限 1 个——删除后可再建；激活无限）；行尾铅笔编辑、垃圾桶
+			// 删除（删后引用它的会话回退全库检索）。
+			if (!query) {
+				const projects = this.plugin.settings.projects ?? [];
+				const phead = list.createDiv({
+					cls: "semlink-history-group semlink-history-folders-head" + (projectsCollapsed ? " is-collapsed" : ""),
+				});
+				const pchev = phead.createSpan({ cls: "semlink-history-folder-chev" });
+				setIcon(pchev, projectsCollapsed ? "chevron-right" : "chevron-down");
+				phead.createSpan({ cls: "semlink-history-folder-name", text: t("projectGroup") });
+				phead.createSpan({ cls: "semlink-history-folder-count", text: String(projects.length) });
+				const padd = phead.createSpan({
+					cls: "semlink-history-folder-add",
+					attr: { "aria-label": t("projectNew") },
+				});
+				setIcon(padd, "plus");
+				padd.addEventListener("click", (e) => {
+					e.stopPropagation();
+					// 免费 1 个上限：按现存数量——删掉才能再建（License 摩擦点）
+					if (!pro && projects.length >= 1) {
+						this.closeHistoryDrawer(backdrop, drawer);
+						new LicenseModal(this.app, this.plugin, () => void this.showHistoryDrawer()).open();
+						return;
+					}
+					this.openProjectModal(undefined);
+				});
+				if (!projectsCollapsed) {
+					for (const p of projects) {
+						const row = list.createDiv({
+							cls: "semlink-history-folder semlink-history-project-row" + (this.activeProject?.id === p.id ? " is-active" : ""),
+						});
+						const icon = row.createSpan({ cls: "semlink-history-folder-chev" });
+						setIcon(icon, "brain");
+						row.createSpan({ cls: "semlink-history-folder-name", text: p.name });
+						row.createSpan({ cls: "semlink-history-folder-count", text: String(p.folders.length) });
+						const pacts = row.createSpan({ cls: "semlink-history-folder-acts" });
+						const edit = pacts.createSpan({
+							cls: "semlink-history-folder-act",
+							attr: { "aria-label": t("projectEditTitle") },
+						});
+						setIcon(edit, "pencil");
+						edit.addEventListener("click", (e) => {
+							e.stopPropagation();
+							this.openProjectModal(p);
+						});
+						const del = pacts.createSpan({
+							cls: "semlink-history-folder-act",
+							attr: { "aria-label": t("historyDeleteFolder") },
+						});
+						setIcon(del, "trash-2");
+						del.addEventListener("click", (e) => {
+							e.stopPropagation();
+							new ConfirmModal(this.app, t("projectDeleteTitle"), t("projectDeleteBody"), () => {
+								const plist = this.plugin.settings.projects;
+								const at = plist.findIndex((x) => x.id === p.id);
+								if (at >= 0) plist.splice(at, 1);
+								void this.plugin.saveSettings();
+								// 删的是当前选中范围 → 回全库（会话 projectId 悬空，
+								// 徽章灰态兜底，不强制打断当前会话）。
+								if (this.activeProject?.id === p.id) {
+									this.activeProject = null;
+									this.renderProjectChip();
+									this.refreshProjectBadge();
+								}
+								render();
+							}).open();
+						});
+						row.addEventListener("click", () => {
+							// 与主页选择器同语义：切换检索范围
+							this.switchProject(p);
+						});
+					}
+				}
+			}
+
 			const showFolders = pro && !query;
 
 			if (!pro && !query) {

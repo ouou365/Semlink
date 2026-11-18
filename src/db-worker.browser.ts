@@ -10,8 +10,32 @@
 
 import "./browser-polyfills";
 import { initBrowserFs, ensureFileSync, existsSync as existsSyncShim, writeFileSync, readFileSync, listFiles, unlinkSync, statSync as statSyncShim } from "./browser-fs";
-import { createDispatcher } from "./db-worker-core";
+import { createDispatcher, workerLogPush } from "./db-worker-core";
 import { probeSqliteBytes } from "./db-engine";
+
+// ── 环形日志钩子（2026-11-18 debug 面板）：console.error/warn 与未处理
+// rejection 镜像进 worker ring——`logs` 工具远程可读，生产环境不再黑洞。
+{
+	const origError = console.error.bind(console);
+	const origWarn = console.warn.bind(console);
+	console.error = (...args: unknown[]) => {
+		workerLogPush("console-error", args.map((a) => (a instanceof Error ? `${a.message} | ${(a.stack ?? "").split("\n").slice(1, 4).join(" | ")}` : typeof a === "string" ? a : JSON.stringify(a))).join(" "));
+		origError(...args);
+	};
+	console.warn = (...args: unknown[]) => {
+		workerLogPush("console-warn", args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));
+		origWarn(...args);
+	};
+	const selfAny = self as unknown as { addEventListener?: (t: string, cb: (ev: PromiseRejectionEvent | ErrorEvent) => void) => void };
+	selfAny.addEventListener?.("unhandledrejection", (ev) => {
+		const r = (ev as PromiseRejectionEvent).reason;
+		workerLogPush("unhandled", r instanceof Error ? `${r.message} | ${(r.stack ?? "").split("\n").slice(1, 4).join(" | ")}` : String(r));
+	});
+	selfAny.addEventListener?.("error", (ev) => {
+		const e = ev as ErrorEvent;
+		workerLogPush("unhandled", `${e.message || "worker error"}${e.filename ? ` @${e.filename}:${e.lineno}` : ""}`);
+	});
+}
 
 // Virtual root: all engine paths are relative to the OPFS namespace.
 const dispatch = createDispatcher();
@@ -157,9 +181,10 @@ selfAsAny.onmessage = async (e: MessageEvent) => {
 			// mode="wasm"：sqlite3-wasm + opfs-sahpool（事务即落盘）。旧 sql.js
 			// 库的迁移（semlink-db/vault.db → OPFS 根 → 备份清零）封装在驱动
 			// open() 里；不再需要 sql.js 时代的 .tmp 草稿文件。
-			await dispatch("init", ["", "wasm"]);
+			const initResult = await dispatch("init", ["", "wasm"]);
 			ready = true;
-			selfAsAny.postMessage({ reqId, result: null });
+			// 回传 init 分相计时（driver/engine 面包屑；boot-perf 取证用）
+			selfAsAny.postMessage({ reqId, result: initResult });
 			// 补处理 init 期间排队的调用
 			const queued = preInitQueue.splice(0);
 			for (const item of queued) {

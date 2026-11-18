@@ -87,6 +87,7 @@ export class Scheduler {
 	/** Full vault scan: enqueue all markdown files for indexing */
 	async scanVault(): Promise<void> {
 		this.progress.setPhase("scanning");
+		this.tracePhase("scanning");
 
 		const files = this.vault.getMarkdownFiles();
 		const excludePatterns = this.settings.excludePaths
@@ -192,6 +193,7 @@ export class Scheduler {
 		this.progress.current.skippedChunks = alreadyIndexed;
 
 		await this.queue.enqueueMany(items);
+		if (this.currentTrace) this.currentTrace.enqueued += items.length;
 		this.progress.incrementProcessed(0); // trigger UI update
 		debugLog(`[Semlink] Scan complete: ${items.length} files to index, ${alreadyIndexed} unchanged`);
 	}
@@ -267,11 +269,48 @@ export class Scheduler {
 	 * If scan=true, performs a full vault scan first to find new/modified files.
 	 * If scan=false (incremental), only processes items already in the queue.
 	 */
-	async run(scan = true): Promise<void> {
+	// ──── run 生命周期追踪（2026-11-18 debug 面板） ────
+	// 每次 run 一条：触发来源/起止时刻/相位流转/入队与成败计数/崩溃栈，
+	// 保留最近 10 轮。`runtrace` 工具远程可读——「run 死在哪一步」「phase
+	// 僵死还是真在跑」不再靠间接推理。
+	private runTraces: Array<{
+		trigger: string;
+		startedAt: number;
+		endedAt: number | null;
+		phases: Array<{ phase: string; at: number }>;
+		enqueued: number;
+		processedOK: number;
+		failed: number;
+		error: string | null;
+	}> = [];
+	private currentTrace: (typeof this.runTraces)[number] | null = null;
+
+	/** 相位打点（进当前 trace；无活跃 trace 时静默）。 */
+	private tracePhase(phase: string): void {
+		this.currentTrace?.phases.push({ phase, at: Date.now() });
+	}
+
+	getRunTraces(): unknown[] {
+		return this.runTraces.slice(-10);
+	}
+
+	async run(scan = true, trigger = ""): Promise<void> {
 		if (this.running) return;
 		this.running = true;
 		this.aborted = false;
 		this.authErrorShown = false;
+		this.currentTrace = {
+			trigger: trigger || (scan ? "full-scan" : "incremental"),
+			startedAt: Date.now(),
+			endedAt: null,
+			phases: [],
+			enqueued: 0,
+			processedOK: 0,
+			failed: 0,
+			error: null,
+		};
+		this.runTraces.push(this.currentTrace);
+		if (this.runTraces.length > 10) this.runTraces.shift();
 
 		// Revive rows stuck at 'processing' by an interrupted earlier run
 		// (reload/crash mid-index): dequeue only takes 'pending' and enqueue
@@ -315,6 +354,7 @@ export class Scheduler {
 			}
 
 			this.progress.setPhase(this.embedActive ? "embedding" : "chunking");
+			this.tracePhase(this.embedActive ? "embedding" : "chunking");
 
 			while (!this.aborted) {
 				// Check pause state
@@ -377,13 +417,28 @@ export class Scheduler {
 					this.progress.initFromStats(stats.indexedNotes, stats.activeChunks, stats.indexedNotes);
 				}
 				this.progress.complete();
+				this.tracePhase("completed");
 			}
+		} catch (e) {
+			// [2026-11-18] 原先无 catch：循环里任何逃逸异常 = unhandled
+			// rejection 静默杀死整个 run——phase 永远僵在 scanning、进度条
+			// 卡 85.3% 且无任何报错线索（真机：4501/5280 反复复现）。现在
+			// 落 lastRunError 供 stats 透出，并标记非运行态让下一轮对账
+			// 能重新启动 run。
+			this.lastRunError = e instanceof Error ? (e.stack ?? e.message).slice(0, 600) : String(e);
+			console.error("[Semlink] index run crashed:", e);
+			this.progress.setPhase("error");
+			if (this.currentTrace) this.currentTrace.error = this.lastRunError;
 		} finally {
 			// Always save on loop exit (normal completion, pause, or abort)
 			await this.store.save();
 			this.running = false;
+			if (this.currentTrace) this.currentTrace.endedAt = Date.now();
 		}
 	}
+
+	/** 最近一次 run 的崩溃现场（stats 透出；正常完成/中止 = null）。 */
+	lastRunError: string | null = null;
 
 	/** Run `fn` while holding the transaction lock. Chains onto the previous
 	 *  holder, so exactly one note's BEGIN..COMMIT is ever open at a time. */
@@ -712,15 +767,20 @@ export class Scheduler {
 				// 逐笔记实时存盘（OPFS：save = 打点，毫秒级）
 				await this.maybeSaveAsync();
 			}
+			if (this.currentTrace) this.currentTrace.processedOK++;
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : String(error);
+			const stack = error instanceof Error ? (error.stack ?? "").split("\n").slice(1, 4).join(" | ").slice(0, 400) : "";
 			const status = (error as { status?: number } | undefined)?.status;
 			console.error(`[Semlink] Error processing ${notePath}:`, msg);
 
 			for (const item of items) {
-				if (item.id != null) await this.queue.fail(item.id, msg);
+				// 完整错误（含栈头）落库——queuefailures 工具按签名聚合时
+				// 能直接看到失败语句/位置（2026-11-18 debug 面板）
+				await this.queue.fail(item.id, stack ? `${msg} | ${stack}` : msg);
 			}
 			this.progress.incrementFailed(items.length);
+			if (this.currentTrace) this.currentTrace.failed++;
 			this.progress.setConsecutiveFailures(this.client.consecutiveFailures);
 			this.progress.setNetworkStatus(this.client.networkStatus);
 
@@ -764,13 +824,18 @@ export class Scheduler {
 	}
 
 	/** 收尾存盘（队列清空时兜底一次；逐笔记存盘下通常已是幂等空转），
-	 *  顺带刷新进度弹窗的库体积（原挂在高频存盘里，现只在收尾查一次）。 */
+	 *  顺带刷新进度弹窗的库体积（原挂在高频存盘里，现只在收尾查一次）。
+	 *  并落盘向量二进制缓存（嵌入风暴中 30s 节流未写到的尾巴在此强制
+	 *  补写）——下次重启走顺序读快路径。 */
 	private async flushSave(): Promise<void> {
 		await this.store.save();
 		try {
 			const stats = await this.store.getStats();
 			this.progress.setDbSizeMb(stats.dbSizeMb);
 		} catch { /* worker 繁忙：体积显示保持旧值 */ }
+		try {
+			await this.store.flushVectorCacheFile(true);
+		} catch { /* 缓存写失败不影响主流程 */ }
 	}
 
 	/** Enqueue a single file for indexing (from watcher) */
@@ -821,7 +886,7 @@ export class Scheduler {
 		this.progress.setNetworkStatus("healthy");
 		this.aborted = false;
 		// Re-scan to restore totalNotes and already-indexed count, then continue
-		void this.run(true);
+		void this.run(true, "resume");
 	}
 
 	/** Abort indexing — synchronous, caller must call store.save()/close() to persist */
