@@ -2294,12 +2294,6 @@
 .semlink-search-view.semlink-main-tab {
     transition: padding-left 0.25s ease;
 }
-/* 常显菜单缩进：不依赖 main-tab——宽度驱动（>720px 自动展开）覆盖
-   侧栏实例（侧栏拖宽 >720 同样展开，2026-11-18 拍板） */
-.semlink-search-view.semlink-menu-persistent {
-    padding-left: 300px;
-    transition: padding-left 0.25s ease;
-}
 .semlink-history-drawer.is-persistent {
     box-shadow: none;
     z-index: 50;
@@ -5670,6 +5664,16 @@ body .semlink-msg-user::selection {
 }
 .semlink-search-view.semlink-main-tab {
     padding-bottom: 0;
+}
+/* 常显菜单展开：视图让出 300px，对话区横向空间随之重算（宽度驱动
+   >720px 自动展开，2026-11-18 用户拍板「展开之后要重新计算对话框的
+   横向空间」）。必须置于上方 .workspace-leaf-content 规则之后——同
+   优先级 shorthand（padding: 8px 12px 28px）会整段吞掉先写的
+   padding-left，致对话区左段被菜单遮挡（DEV-2 同款顺序陷阱，实测
+   踩实：computed padding-left 停在 12px）。 */
+.workspace-leaf-content .semlink-search-view.semlink-menu-persistent {
+    padding-left: 300px;
+    transition: padding-left 0.25s ease;
 }/* 排队卡片的 Steer（插队优先）按钮 */
 .semlink-queue-steer {
     display: inline-flex;
