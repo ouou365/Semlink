@@ -2331,9 +2331,10 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 2px 8px;
-    padding: 10px 12px 8px;
+    /* 头部窄化（2026-11-18 用户拍板「顶部改窄一点」）：10/8→6/5，
+       高度 44→37px，与抽屉头部（39px）同档 */
+    padding: 6px 12px 5px;
     flex-shrink: 0;
-    /* 项目徽章的定位锚（绝对定位挂头部底部条带，见徽章规则） */
     position: relative;
 }/* Left/right icon groups take equal space so the brand sits centered. */
 .semlink-search-header-side {
@@ -2478,7 +2479,9 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 12px 14px;
+    /* 头部窄化（2026-11-18 用户拍板「顶部改窄一点」）：12px→7px，
+       高度 49→39px，与对话区头部（44→37px）同档 */
+    padding: 7px 14px;
     border-bottom: 1px solid var(--background-modifier-border);
     flex-shrink: 0;
 }.semlink-history-title {
