@@ -3157,7 +3157,9 @@ export class SemanticSearchView extends ItemView {
 			cls: "semlink-thinking-summary",
 			text: t("searchThinkingDuration").replace("{seconds}", this.formatDuration(elapsedSec)),
 		});
-		if (model) summary.createSpan({ cls: "semlink-thinking-model", text: ` · ${model}` });
+		// 模型 ID 去分隔点、右对齐到行尾（2026-11-18 用户拍板）——摘要行
+		// flex 布局，margin-left:auto 吸走富余。
+		if (model) summary.createSpan({ cls: "semlink-thinking-model", text: model });
 
 		// 完成态：一次性全量渲染后把收尾段（最后一段思考）也折叠——
 		// 打开「▸ 思考了 N 秒」看到的是标题行 + 工具主干，不再无限长。
