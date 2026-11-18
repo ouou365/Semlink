@@ -2506,7 +2506,9 @@
     gap: 9px;
     padding: 6px 10px;
     border-radius: 8px;
-    font-size: 13px;
+    /* 加粗加大（2026-11-18 用户拍板，对齐豆包侧栏观感） */
+    font-size: 14px;
+    font-weight: var(--font-semibold);
     color: var(--text-normal);
     cursor: pointer;
     white-space: nowrap;
@@ -2537,10 +2539,12 @@
     width: 13px;
     height: 13px;
 }
-/* 「更多」展开的子行（归档对话）：缩进 + 小一号弱化 */
+/* 「更多」展开的子行（归档对话）：缩进 + 小一号弱化（常规字重，
+   与主行 600 拉开层级） */
 .semlink-history-menu-row.semlink-history-menu-sub {
     padding-left: 35px;
     font-size: 12.5px;
+    font-weight: var(--font-normal);
     color: var(--text-muted);
 }
 .semlink-history-menu-row.semlink-history-menu-sub .semlink-history-menu-row-icon svg {
