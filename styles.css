@@ -2500,36 +2500,58 @@
 .semlink-history-head-btn.is-active {
     color: var(--text-normal);
 }
-/* 新对话常驻 pill（2026-11-18 拍板，参考「新建任务」）：头部下方通栏、
-   浅底圆角；灰阶克制不引 accent（AP-2 同源） */
-.semlink-history-newchat-row {
-    padding: 10px 12px 4px;
+/* 菜单行（2026-11-18 二次拍板，参考豆包侧栏）：新对话/更多平铺行——
+   无框图标+文字，hover 浅底；「更多」行带右箭头行内展开归档入口 */
+.semlink-history-menu-rows {
+    padding: 8px 8px 2px;
     flex-shrink: 0;
 }
-.semlink-history-newchat-pill {
+.semlink-history-menu-row {
     display: flex;
     align-items: center;
-    gap: 7px;
-    width: 100%;
-    padding: 7px 11px;
-    border: 1px solid var(--background-modifier-border);
+    gap: 9px;
+    padding: 6px 10px;
     border-radius: 8px;
-    background: var(--background-secondary);
-    color: var(--text-normal);
     font-size: 13px;
+    color: var(--text-normal);
     cursor: pointer;
-    text-align: left;
+    white-space: nowrap;
 }
-.semlink-history-newchat-pill:hover {
+.semlink-history-menu-row:hover {
     background: var(--background-modifier-hover);
 }
-.semlink-history-newchat-pill .semlink-history-newchat-icon {
+.semlink-history-menu-row-icon {
     display: inline-flex;
     flex: none;
+    color: var(--text-muted);
 }
-.semlink-history-newchat-pill svg {
-    width: 15px;
-    height: 15px;
+.semlink-history-menu-row-icon svg {
+    width: 16px;
+    height: 16px;
+}
+.semlink-history-menu-row-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.semlink-history-menu-row-chev {
+    margin-left: auto;
+    display: inline-flex;
+    color: var(--text-faint);
+    flex: none;
+}
+.semlink-history-menu-row-chev svg {
+    width: 13px;
+    height: 13px;
+}
+/* 「更多」展开的子行（归档对话）：缩进 + 小一号弱化 */
+.semlink-history-menu-row.semlink-history-menu-sub {
+    padding-left: 35px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+}
+.semlink-history-menu-row.semlink-history-menu-sub .semlink-history-menu-row-icon svg {
+    width: 14px;
+    height: 14px;
 }
 .semlink-history-list {
     flex: 1 1 0;

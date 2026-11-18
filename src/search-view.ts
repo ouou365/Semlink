@@ -4107,30 +4107,23 @@ export class SemanticSearchView extends ItemView {
 		const header = drawer.createDiv({ cls: "semlink-history-header" });
 		const titleEl = header.createDiv({ cls: "semlink-history-title", text: t("historyTitle") });
 		// 头部图标行（2026-11-18 拍板，参考 WorkBuddy 侧栏）：搜索收纳成
-		// 🔍 图标（点击展开/收起搜索行）、归档入口收进「更多」菜单。
+		// 🔍 图标（点击展开/收起搜索行）；归档入口收进下方「更多」菜单行。
 		let view: "main" | "archive" = "main";
 		const searchToggleBtn = header.createEl("button", {
 			cls: "semlink-history-head-btn clickable-icon",
 			attr: { "aria-label": t("historySearch") },
 		});
 		setIcon(searchToggleBtn, "search");
-		const moreBtn = header.createEl("button", {
-			cls: "semlink-history-head-btn clickable-icon",
-			attr: { "aria-label": t("historyMore") },
-		});
-		setIcon(moreBtn, "more-horizontal");
 		const closeBtn = persistent ? null : header.createEl("button", { cls: "semlink-search-icon-btn clickable-icon" });
 		if (closeBtn) setIcon(closeBtn, "x");
 
-		// ── 新对话 pill（常驻，参考「新建任务」）：头部下方通栏按钮，
-		// 不再随主页状态隐藏（主页点击=无副作用的新会话入口）。
-		const pillRow = drawer.createDiv({ cls: "semlink-history-newchat-row" });
-		const drawerNewChat = pillRow.createEl("button", {
-			cls: "semlink-history-newchat-pill",
-			attr: { "aria-label": t("searchNewChat") },
-		});
-		const pillIcon = drawerNewChat.createSpan({ cls: "semlink-history-newchat-icon" });
-		setIcon(pillIcon, "plus");
+		// ── 菜单行（2026-11-18 二次拍板，参考豆包侧栏）：新对话/更多为
+		// 平铺行（无框图标+文字），替掉盒子 pill 与头部 ⋯ 图标。「更多」
+		// 行内展开收纳「归档对话」（豆包「更多 >」同构）。
+		const menuRows = drawer.createDiv({ cls: "semlink-history-menu-rows" });
+		const drawerNewChat = menuRows.createDiv({ cls: "semlink-history-menu-row" });
+		const rowIcon = drawerNewChat.createSpan({ cls: "semlink-history-menu-row-icon" });
+		setIcon(rowIcon, "message-square-plus");
 		drawerNewChat.createSpan({ cls: "semlink-search-newchat-label", text: t("searchNewChat") });
 		drawerNewChat.addEventListener("click", () => {
 			if (persistent) {
@@ -4142,6 +4135,29 @@ export class SemanticSearchView extends ItemView {
 			}
 		});
 		this.newChatPillEl = drawerNewChat;
+
+		let moreExpanded = false;
+		const moreRow = menuRows.createDiv({ cls: "semlink-history-menu-row" });
+		const moreIcon = moreRow.createSpan({ cls: "semlink-history-menu-row-icon" });
+		setIcon(moreIcon, "layout-grid");
+		moreRow.createSpan({ cls: "semlink-history-menu-row-label", text: t("historyMore") });
+		const moreChev = moreRow.createSpan({ cls: "semlink-history-menu-row-chev" });
+		setIcon(moreChev, "chevron-right");
+		const archiveEntryRow = menuRows.createDiv({
+			cls: "semlink-history-menu-row semlink-history-menu-sub semlink-hidden",
+		});
+		const archIcon = archiveEntryRow.createSpan({ cls: "semlink-history-menu-row-icon" });
+		setIcon(archIcon, "archive");
+		archiveEntryRow.createSpan({ cls: "semlink-history-menu-row-label", text: t("historyArchiveEntry") });
+		moreRow.addEventListener("click", () => {
+			moreExpanded = !moreExpanded;
+			setIcon(moreChev, moreExpanded ? "chevron-down" : "chevron-right");
+			archiveEntryRow.toggleClass("semlink-hidden", !moreExpanded);
+		});
+		archiveEntryRow.addEventListener("click", () => {
+			view = view === "main" ? "archive" : "main";
+			render();
+		});
 
 		const pro = this.plugin.licenseManager.isPro();
 		const freeLimit = this.plugin.licenseManager.freeHistoryLimit();
@@ -4576,22 +4592,6 @@ export class SemanticSearchView extends ItemView {
 			return item;
 		};
 
-		moreBtn.addEventListener("click", (e) => {
-			e.stopPropagation();
-			// 「更多」菜单（2026-11-18 拍板）：归档入口从头部图标收纳至此。
-			// 强制 DOM 菜单（同 openTranslateMenu 的 eval 实测定论）：macOS
-			// 桌面端 Obsidian 1.15+ 默认原生菜单，DOM 永不建、调试链全断。
-			const menu = new Menu();
-			menu.setUseNativeMenu(false);
-			menu.addItem((item) => {
-				item.setTitle(t("historyArchiveEntry")).setIcon("archive").onClick(() => {
-					view = view === "main" ? "archive" : "main";
-					render();
-				});
-			});
-			const r = moreBtn.getBoundingClientRect();
-			menu.showAtPosition({ x: r.left, y: r.bottom + 4 });
-		});
 		render();
 
 		if (persistent) {
