@@ -2302,6 +2302,10 @@
     /* 常显形态随视图 padding-top 下移 8px：抽屉标题行与视图头部
        按钮行对齐（浮层抽屉不偏移，从顶部 0 全覆盖）。 */
     top: 8px;
+    /* 展开态菜单白底（2026-11-18 用户拍板「展开之后颜色要做区分，
+       菜单是白色的」，参考豆包）：--background-primary 与对话区
+       #f6f6f6 灰底拉开层次；浮层抽屉保持 secondary 不变。 */
+    background: var(--background-primary);
 }
 .semlink-menu-persistent .semlink-history-drawer.is-persistent {
     transform: translateX(0);
