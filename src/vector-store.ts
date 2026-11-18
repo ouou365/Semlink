@@ -297,6 +297,17 @@ export class VectorStore {
 		return this.call("debugQueueFailures", []);
 	}
 
+	/** 聊天历史 OPFS 通道（2026-11-18）：chat-history.json 存 worker OPFS
+	 *  虚拟根，主线程不再同步读写持续增长的 16MB+ JSON。read null = 无数
+	 *  据（首次迁移源是插件 data 目录的旧磁盘文件）。 */
+	getChatHistory(): Promise<string | null> {
+		return this.call<string | null>("chatHistoryRead", []);
+	}
+
+	writeChatHistory(json: string): Promise<unknown> {
+		return this.call("chatHistoryWrite", [json]);
+	}
+
 	async getAllNoteMtimeEntries(): Promise<Array<[string, number]>> {
 		return await this.call<Array<[string, number]>>("getAllNoteMtimeEntries");
 	}

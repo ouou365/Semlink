@@ -2198,7 +2198,7 @@ export class SemanticSearchView extends ItemView {
 		// 原文：切回未翻译的原始回答（displayLang 回 null——重进会话显示原文）。
 		menu.addItem((item) => {
 			item.setTitle(t("translateOriginal")).onClick(() => {
-				this.restoreOriginalAnswer(turn, content, msg);
+				void this.restoreOriginalAnswer(turn, content, msg);
 			});
 		});
 		menu.addSeparator();
@@ -2232,6 +2232,17 @@ export class SemanticSearchView extends ItemView {
 	/** Translate `content` into `lang`（Obsidian 官网同款交互，用户拍板）：
 	 *  原文保持显示，每个块级元素行尾挂加载圈；翻译完成整体替换为译文
 	 *  markdown。已存译文秒显；失败摘除加载圈恢复原文 + Notice。 */
+	/** 译文/原文重渲后补挂正文引用标记（2026-11-18 用户实测：翻译成英文后
+	 *  [3:L275][9] 裸露成正文——重渲只补了 makeVaultPathsClickable，引用
+	 *  包装丢了）。按消息存档的 sources/sourceNumbers 重挂，与历史恢复路
+	 *  径同构；无来源存档的旧消息跳过（保持旧行为）。 */
+	private restoreCitationMarkers(root: HTMLElement, msg: HistoryMessage | undefined, text: string): void {
+		if (!msg?.sources || msg.sources.length === 0) return;
+		const usedSources = msg.sources.map((p) => ({ notePath: p, heading: "", contentPreview: "" })) as SearchResult[];
+		const thinking = (msg.thinking || []).map((s) => s as ThinkingStep);
+		this.makeCitationsClickable(root, msg.sourceNumbers ?? [], usedSources, text, thinking);
+	}
+
 	private async translateInto(turn: Element, content: string, lang: { value: Lang; label: string }, msg?: HistoryMessage): Promise<void> {
 		this.activeTranslateController?.abort();
 		const controller = new AbortController();
@@ -2242,11 +2253,18 @@ export class SemanticSearchView extends ItemView {
 		const stored = msg?.translations?.[lang.value];
 
 		if (stored !== undefined) {
-			// 已翻译过——整体替换为存储译文（秒切，不调模型）。
+			// 已翻译过——整体替换为存储译文（秒切，不调模型）。displayLang
+			// 同样要持久化（此前只有新翻译分支写——「还原原文→再切已译语言」
+			// 重载后回退显示原文，违背「上次看译文→重载仍译文」拍板）。
 			answerEl.empty();
 			const rendered = answerEl.createDiv({ cls: "markdown-rendered" });
 			await MarkdownRenderer.render(this.app, protectHyphens(stored), rendered, "", this);
 			this.makeVaultPathsClickable(rendered);
+			this.restoreCitationMarkers(rendered, msg, stored);
+			if (msg) {
+				msg.displayLang = lang.value;
+				await this.history.save();
+			}
 			return;
 		}
 
@@ -2261,6 +2279,7 @@ export class SemanticSearchView extends ItemView {
 			const rendered = answerEl.createDiv({ cls: "markdown-rendered" });
 			await MarkdownRenderer.render(this.app, protectHyphens(text), rendered, "", this);
 			this.makeVaultPathsClickable(rendered);
+			this.restoreCitationMarkers(rendered, msg, text);
 			if (msg) {
 				msg.translations = { ...(msg.translations ?? {}), [lang.value]: text };
 				msg.displayLang = lang.value;
@@ -2291,13 +2310,15 @@ export class SemanticSearchView extends ItemView {
 
 	/** Re-render the original (untranslated) answer markdown, removing any
 	 *  translation spinners. displayLang 回 null——重进会话恢复显示原文。 */
-	private restoreOriginalAnswer(turn: Element, content: string, msg?: HistoryMessage): void {
+	private async restoreOriginalAnswer(turn: Element, content: string, msg?: HistoryMessage): Promise<void> {
 		const answerEl = turn.querySelector(".semlink-msg-answer");
 		if (!answerEl) return;
 		answerEl.empty();
 		const rendered = answerEl.createDiv({ cls: "markdown-rendered" });
-		void MarkdownRenderer.render(this.app, protectHyphens(content), rendered, "", this);
+		await MarkdownRenderer.render(this.app, protectHyphens(content), rendered, "", this);
 		this.makeVaultPathsClickable(rendered);
+		// 切回原文同样要补挂引用标记（此前连原文的 [n] 都会裸露）
+		this.restoreCitationMarkers(rendered, msg, content);
 		if (msg) {
 			msg.displayLang = null;
 			void this.history.save();
@@ -3741,8 +3762,9 @@ export class SemanticSearchView extends ItemView {
 						answerEl.empty();
 						const translated = answerEl.createDiv({ cls: "markdown-rendered" });
 						await MarkdownRenderer.render(this.app, protectHyphens(msg.translations![showLang]), translated, "", this);
-						this.makeVaultPathsClickable(translated);
-					}
+							this.makeVaultPathsClickable(translated);
+							this.restoreCitationMarkers(translated, msg, msg.translations![showLang]);
+						}
 					// Restore this turn's context usage (ring + tooltip). Old
 					// sessions saved before these fields existed simply skip.
 					if (msg.contextTokens !== undefined || msg.contextBreakdown !== undefined || msg.cacheHitRate !== undefined) {

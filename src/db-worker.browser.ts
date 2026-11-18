@@ -133,6 +133,35 @@ selfAsAny.onmessage = async (e: MessageEvent) => {
 		return;
 	}
 
+		// ── 聊天历史 OPFS 通道（2026-11-18）：chat-history.json 从插件 data/
+	// 目录搬进 worker OPFS 虚拟根——主线程不再同步读写持续增长的 16MB+
+	// JSON（writeFileSync 主线程阻塞）。与 seedDb 同模式：早于 engine 初始
+	// 化处理（聊天视图构建早于 sqlite init 也照常读写）。args[0]=JSON 文本。
+	if (op === "chatHistoryRead") {
+		try {
+			await initBrowserFs("semlink-db");
+			await ensureFileSync("chat-history.json");
+			const size = statSyncShim("chat-history.json").size;
+			const text = size > 0 ? new TextDecoder().decode(readFileSync("chat-history.json")) : null;
+			selfAsAny.postMessage({ reqId, result: text });
+		} catch (err) {
+			selfAsAny.postMessage({ reqId, error: String(err instanceof Error ? err.message : err) });
+		}
+		return;
+	}
+	if (op === "chatHistoryWrite") {
+		try {
+			await initBrowserFs("semlink-db");
+			await ensureFileSync("chat-history.json");
+			const bytes = new TextEncoder().encode(String(args?.[0] ?? ""));
+			writeFileSync("chat-history.json", bytes);
+			selfAsAny.postMessage({ reqId, result: { bytes: bytes.length } });
+		} catch (err) {
+			selfAsAny.postMessage({ reqId, error: String(err instanceof Error ? err.message : err) });
+		}
+		return;
+	}
+
 	if (op === "repairFromBak") {
 		// 修复通道（真机 2026-11-11 槽名错位事故）：shim 命名空间里的
 		// pre-wasm.bak（= 迁移前完整旧索引）原地导入 canonical 槽。字节

@@ -1,62 +1,107 @@
 // ========================================
 // Semlink - Chat History Store
 // ========================================
-// Persists chat sessions to a standalone JSON file under the plugin's data
-// directory, keeping data.json (settings) lean. Sessions are capped to
+// Persists chat sessions as one JSON blob in the DB worker's OPFS (off the
+// main thread — the file grows into tens of MB and main-thread writeFileSync
+// blocked the renderer on every save). First load migrates the legacy disk
+// file (data/chat-history.json) into OPFS and retires it; on OPFS write
+// failure the legacy disk path stays as a fallback. Sessions are capped to
 // MAX_SESSIONS; the oldest are evicted when the cap is exceeded.
 
 import type { ChatSession, HistoryMessage } from "./types";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "fs";
 import { join } from "path";
 
 /** Maximum number of sessions to keep on disk. */
 const MAX_SESSIONS = 500;
 
-/** Shape of chat-history.json on disk: v1 was a bare session array; v2 wraps
- *  the sessions with an explicit folder registry. */
+/** Shape of chat-history.json: v1 was a bare session array; v2 wraps the
+ *  sessions with an explicit folder registry. */
 type StoredHistory = ChatSession[] | { sessions?: ChatSession[]; folders?: string[] };
 
+/** 存储通道（worker OPFS RPC）。read 返回 null = OPFS 无数据（首次迁移）。 */
+export interface ChatHistoryIo {
+	read(): Promise<string | null>;
+	write(json: string): Promise<unknown>;
+}
+
 export class ChatHistoryStore {
-	private filePath: string;
+	private legacyPath: string;
 	private sessions: ChatSession[] = [];
 	/** Explicitly created (possibly still empty) folder paths. */
 	private folderRegistry: string[] = [];
 	private loaded = false;
+	/** load 时发现数据来自旧磁盘文件（OPFS 空）→ 首次 save 后把旧文件改名
+	 *  退役，防下轮又从旧文件回灌。 */
+	private retireLegacy = false;
+	private legacyRetired = false;
 
-	constructor(dataDir: string) {
-		this.filePath = join(dataDir, "chat-history.json");
+	constructor(private io: ChatHistoryIo, dataDir: string) {
+		this.legacyPath = join(dataDir, "chat-history.json");
 	}
 
-	/** Load sessions from disk (once; subsequent calls return the cache). */
+	/** Load sessions (once; subsequent calls return the cache). OPFS 优先，
+	 *  OPFS 无数据时回落旧磁盘文件（迁移源）。 */
 	async load(): Promise<ChatSession[]> {
 		if (this.loaded) return this.sessions;
 		try {
-			if (existsSync(this.filePath)) {
-				const raw = JSON.parse(readFileSync(this.filePath, "utf-8")) as StoredHistory;
+			const raw = (await this.io.read()) ?? this.readLegacy();
+			if (raw) {
+				const parsed = JSON.parse(raw) as StoredHistory;
 				// v1 format was a bare session array; v2 wraps it so empty
 				// folders survive without any session pointing at them.
-				if (Array.isArray(raw)) {
-					this.sessions = raw;
+				if (Array.isArray(parsed)) {
+					this.sessions = parsed;
 				} else {
-					this.sessions = raw.sessions || [];
-					this.folderRegistry = raw.folders || [];
+					this.sessions = parsed.sessions || [];
+					this.folderRegistry = parsed.folders || [];
 				}
 			}
-		} catch {
+		} catch (e) {
+			console.error("[Semlink] Failed to load chat history:", e);
 			this.sessions = [];
 		}
 		this.loaded = true;
 		return this.sessions;
 	}
 
-	/** Persist current sessions to disk. */
-	async save(): Promise<void> {
+	/** 旧磁盘文件（迁移源）：OPFS 无数据时读一次。 */
+	private readLegacy(): string | null {
 		try {
-			const dir = join(this.filePath, "..");
-			if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-			writeFileSync(this.filePath, JSON.stringify({ sessions: this.sessions, folders: this.folderRegistry }, null, 2), "utf-8");
+			if (!existsSync(this.legacyPath)) return null;
+			const text = readFileSync(this.legacyPath, "utf-8");
+			if (text.trim().length === 0) return null;
+			this.retireLegacy = true;
+			return text;
+		} catch {
+			return null;
+		}
+	}
+
+	/** Persist current sessions（worker OPFS RPC，主线程零阻塞）。紧凑
+	 *  序列化（无缩进）——16MB 级 blob 缩 1/3，parse/write 同步提速。OPFS
+	 *  写失败回落旧磁盘路径（保底可读）。 */
+	async save(): Promise<void> {
+		const json = JSON.stringify({ sessions: this.sessions, folders: this.folderRegistry });
+		try {
+			await this.io.write(json);
+			if (this.retireLegacy && !this.legacyRetired) {
+				// OPFS 已接管 → 旧磁盘文件改名退役（防下轮空 OPFS 时又从旧
+				// 文件回灌出双头数据）。失败无碍——OPFS 已是唯一事实源。
+				try {
+					if (existsSync(this.legacyPath)) renameSync(this.legacyPath, this.legacyPath + ".pre-opfs");
+					this.legacyRetired = true;
+				} catch { /* 改名失败不影响功能 */ }
+			}
 		} catch (e) {
-			console.error("[Semlink] Failed to save chat history:", e);
+			console.error("[Semlink] Failed to save chat history to OPFS, falling back to disk:", e);
+			try {
+				const dir = join(this.legacyPath, "..");
+				if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+				writeFileSync(this.legacyPath, json, "utf-8");
+			} catch (e2) {
+				console.error("[Semlink] Failed to save chat history to disk fallback:", e2);
+			}
 		}
 	}
 

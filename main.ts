@@ -206,7 +206,15 @@ export default class SmartVaultPlugin extends Plugin {
 		// Single shared chat-history store: the search view writes to it and
 		// the LAN share server renders from it, so re-opened share URLs see
 		// the latest saved messages without cache drift.
-		this.historyStore = new ChatHistoryStore(dataDir);
+		// 存储=worker OPFS RPC（2026-11-18）：主线程不再同步读写 16MB+ 的
+		// JSON；dataDir 传给迁移通道（OPFS 空 → 旧磁盘文件一次性搬入）。
+		this.historyStore = new ChatHistoryStore(
+			{
+				read: () => this.store.getChatHistory(),
+				write: (json) => this.store.writeChatHistory(json),
+			},
+			dataDir,
+		);
 		// Persist the active chat model whenever it changes (search-view picker
 		// or the General settings dropdown).
 		this.chatClient.setModelChangeHandler(() => {
