@@ -211,6 +211,7 @@ const t: Record<keyof typeof en, string> = {
 	searchNewChatConfirmTitle: "Geração em andamento",
 	searchNewChatConfirmBody: "Iniciar um novo chat interromperá a geração atual. Continuar?",
 	historyTitle: "Semlink",
+	historyGroupChats: "Conversas",
 	historyMore: "Mais",
 	historyArchiveEntry: "Conversas arquivadas",
 	historyEmpty: "Nenhum histórico de conversas ainda",

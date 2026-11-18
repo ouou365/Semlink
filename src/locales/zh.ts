@@ -210,6 +210,7 @@ const zh: Record<keyof typeof en, string> = {
 	searchNewChatConfirmTitle: "正在生成回答",
 	searchNewChatConfirmBody: "开始新对话会中断当前生成，确定要开始新对话吗？",
 	historyTitle: "Semlink",
+	historyGroupChats: "对话",
 	historyMore: "更多",
 	historyArchiveEntry: "归档对话",
 	historyEmpty: "还没有历史对话",

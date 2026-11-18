@@ -4186,6 +4186,7 @@ export class SemanticSearchView extends ItemView {
 		let query = "";
 		let composing = false;
 		let projectsCollapsed = false;
+		let conversationsCollapsed = false;
 		const searchInput = tools.createEl("input", {
 			cls: "semlink-history-search",
 			attr: { type: "text", placeholder: t("historySearch"), "aria-label": t("historySearch") },
@@ -4411,6 +4412,24 @@ export class SemanticSearchView extends ItemView {
 			// archive, 2026-11-18) — the flow collects unbound ones; searching
 			// flattens everything.
 			const flow = query ? rest : rest.filter((s) => !s.projectId);
+			// 「对话」分组（2026-11-18 拍板「项目一个分类，对话一个分类」，
+			// 参考豆包「项目/任务∨」两级）：置顶与时间流收进可折叠组，
+			// 折叠时整段跳过（本组是列表末段）；搜索时平铺不分组。
+			if (!query) {
+				const chead = list.createDiv({
+					cls: "semlink-history-group semlink-history-folders-head" + (conversationsCollapsed ? " is-collapsed" : ""),
+				});
+				const cchev = chead.createSpan({ cls: "semlink-history-folder-chev" });
+				setIcon(cchev, conversationsCollapsed ? "chevron-right" : "chevron-down");
+				chead.createSpan({ cls: "semlink-history-folder-name", text: t("historyGroupChats") });
+				chead.createSpan({ cls: "semlink-history-folder-count", text: String(flow.length) });
+				chead.addEventListener("click", () => {
+					conversationsCollapsed = !conversationsCollapsed;
+					render();
+				});
+			}
+			// 折叠「对话」组 = 列表末段整段跳过（置顶/时间流/免费锁定都在组内）
+			if (!query && conversationsCollapsed) return;
 			if (pro) {
 				const pinned = pool.filter((x) => x.pinned);
 				if (pinned.length > 0) {

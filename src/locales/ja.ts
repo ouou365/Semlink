@@ -209,6 +209,7 @@ const t: Record<keyof typeof en, string> = {
 	searchNewChatConfirmTitle: "生成中",
 	searchNewChatConfirmBody: "新しいチャットを開始すると現在の生成が中断されます。続行しますか？",
 	historyTitle: "Semlink",
+	historyGroupChats: "チャット",
 	historyMore: "その他",
 	historyArchiveEntry: "アーカイブ済みチャット",
 	historyEmpty: "チャット履歴はまだありません",

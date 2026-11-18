@@ -209,6 +209,7 @@ const t: Record<keyof typeof en, string> = {
 	searchNewChatConfirmTitle: "생성 진행 중",
 	searchNewChatConfirmBody: "새 대화를 시작하면 현재 생성이 중단됩니다. 계속하시겠습니까?",
 	historyTitle: "Semlink",
+	historyGroupChats: "대화",
 	historyMore: "더보기",
 	historyArchiveEntry: "보관된 대화",
 	historyEmpty: "아직 채팅 기록이 없습니다",

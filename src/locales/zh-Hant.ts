@@ -209,6 +209,7 @@ const t: Record<keyof typeof en, string> = {
 	searchNewChatConfirmTitle: "正在生成回答",
 	searchNewChatConfirmBody: "開始新對話會中斷目前生成，確定要開始新對話嗎？",
 	historyTitle: "Semlink",
+	historyGroupChats: "對話",
 	historyMore: "更多",
 	historyArchiveEntry: "封存對話",
 	historyEmpty: "還沒有歷史對話",

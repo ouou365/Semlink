@@ -210,6 +210,7 @@ const t: Record<keyof typeof en, string> = {
 	searchNewChatConfirmTitle: "Идёт генерация",
 	searchNewChatConfirmBody: "Новый чат прервёт текущую генерацию. Продолжить?",
 	historyTitle: "Semlink",
+	historyGroupChats: "Чаты",
 	historyMore: "Ещё",
 	historyArchiveEntry: "Архивированные чаты",
 	historyEmpty: "История чатов пока пуста",

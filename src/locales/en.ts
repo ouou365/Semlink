@@ -208,6 +208,7 @@ const en = {
 	searchNewChatConfirmTitle: "Generation in progress",
 	searchNewChatConfirmBody: "Starting a new chat will interrupt the current generation. Continue?",
 	historyTitle: "Semlink",
+	historyGroupChats: "Chats",
 	historyMore: "More",
 	historyArchiveEntry: "Archived chats",
 	historyEmpty: "No chat history yet",
