@@ -4421,16 +4421,17 @@ body .semlink-msg-user::selection {
     color: var(--text-muted);
     user-select: none;
     list-style: none;
-    /* flex 行：::before 展开标记 + 时长文本 + 模型 ID（margin-left:auto
-       吸走富余右对齐到行尾，2026-11-18 拍板） */
+    /* flex 行：::before 展开标记 + 时长文本 + 模型 ID 依次靠左
+       （2026-11-18 二次拍板：不做右对齐，紧跟时长标签） */
     display: flex;
     align-items: center;
 }
-/* 摘要行尾的模型 ID：常规字重（不加粗）+ 再降一档灰（text-faint）——
-   Latin 字形在同字重下视觉密度高于 CJK，拆出降档后时长标签保持 600
-   不变。 */
+/* 摘要行的模型 ID：常规字重（不加粗）+ 降一档灰（text-faint）+ 小一号
+   （12px，时长标签 14px/600 不变）——Latin 字形视觉密度高于 CJK，降档
+   后作为次要信息退居时长之后。 */
 .semlink-thinking-model {
-    margin-left: auto;
+    margin-left: 6px;
+    font-size: 12px;
     font-weight: var(--font-normal);
     color: var(--text-faint);
 }
