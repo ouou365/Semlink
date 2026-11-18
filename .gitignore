@@ -17,3 +17,7 @@ node_modules/
 # 引用编号测试脚手架（本地）
 .cite-test/
 .DS_Store
+
+# 弹窗样式审查页运行时导出资产（可由 semlink-debug eval 重新生成，见 gen_modal_review.mjs 头注释）
+scripts-dev/_review_assets.json
+scripts-dev/_review_assets_extra.json
