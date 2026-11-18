@@ -423,9 +423,17 @@ export class SemanticSearchView extends ItemView {
 		this.menuBtnEl = menuBtn;
 		setIcon(menuBtn, "menu");
 		menuBtn.addEventListener("click", () => {
-			// 主区域实例：常显菜单已在 → 按钮变为收起/展开开关；侧栏实例照旧
-			// 弹出抽屉。构建中（history.load 的 await 间隙）先忽略点击。
+			// 构建中（history.load 的 await 间隙）先忽略点击。
 			if (this.buildingPersistentMenu) return;
+			// 宽态（>720）：☰ = 常显菜单开关（2026-11-18 用户拍板）——收起
+			// 后 DOM 已拆除，再点要重建 docked 抽屉并让对话区宽度重算
+			// （refreshMainTabUI 统一走 padding/拆建），而非弹浮层盖住内容。
+			if (!this.isNarrowWidth()) {
+				this.persistentMenuOn = !this.persistentMenuOn;
+				this.refreshMainTabUI();
+				return;
+			}
+			// 窄态：浮层抽屉（已在 → togglePersistentMenu 收/展；否则新开）
 			if (this.hasPersistentMenu()) this.togglePersistentMenu();
 			else void this.showHistoryDrawer();
 		});
@@ -4736,6 +4744,11 @@ export class SemanticSearchView extends ItemView {
 			return;
 		}
 		if (this.hasPersistentMenu() || this.buildingPersistentMenu) return;
+		// 跨界（窄→宽）常显展开前：收掉可能残留的浮层抽屉/遮罩，避免
+		// 双抽屉叠屏（窄态开着浮层拖宽窗口的路径）
+		this.contentEl.querySelectorAll(
+			":scope > .semlink-history-drawer:not(.is-persistent), :scope > .semlink-history-backdrop",
+		).forEach((el) => el.remove());
 		// buildingPersistentMenu 同步置位——layout-change 高频连发时，
 		// history.load() 的 await 间隙里不会重复构建出第二个抽屉。
 		this.buildingPersistentMenu = true;
