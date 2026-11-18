@@ -262,6 +262,14 @@ export class VectorStore {
 	}
 
 	/** 全量 note→mtime（entries 过 RPC，本地重建 Map）：scanVault 批量对账用。 */
+	async vectorCount(): Promise<number> {
+		return await this.call<number>("vectorCount");
+	}
+
+	async debugExecSql(query: string): Promise<{ columns: string[]; rows: unknown[][]; ms: number }> {
+		return await this.call("debugExecSql", [query]);
+	}
+
 	async getAllNoteMtimeEntries(): Promise<Array<[string, number]>> {
 		return await this.call<Array<[string, number]>>("getAllNoteMtimeEntries");
 	}

@@ -24,6 +24,18 @@ import { closeAllGuideModals, guideInProgress, onboardingActive, renderGuideHub,
 import { renderSettingsTabInto, type SettingsTab, type SmartVaultSettingTab } from "./settings";
 import type SmartVaultPlugin from "../main";
 import { SaveNoteModal } from "./save-note-modal";
+
+/** 思考段状态（renderThinkingSteps 分段折叠）：当前未折叠的 <details> 段。
+ *  由调用方持有——live 路径逐 step 调用须跨调用持续；完成态一次性渲染后
+ *  由 renderThinking 收尾关段。startAt = 段首思考到达时刻（算持续时长）。 */
+interface ThinkSegState {
+	seg: HTMLDetailsElement | null;
+	summary: HTMLElement | null;
+	startAt: number;
+	/** 段内最后一个思考的到达时刻——关段时长的终点（末段无工具跟随时
+	 *  由它算出「持续了 N 秒」，不再落成无秒数的秃标题）。 */
+	endAt: number;
+}
 import { ShareQrModal } from "./share-modal";
 import { renderSharePage } from "./share-page";
 import { ConfirmModal } from "./confirm-modal";
@@ -144,6 +156,10 @@ export class SemanticSearchView extends ItemView {
 	// Send-button state machine: idle(send) → loading(spin) → stop(abort).
 	private searchBtnEl!: HTMLButtonElement;
 	private isGenerating = false;
+	/** isGenerating 语义（2026-11-18 多开改造）：= 当前视图会话是否有
+	 *  运行在跑。后台化的其他会话运行不置此标志——主页可继续发新消息
+	 *  多开；isGenerating 置位点：本会话 runSearch 开始 / loadSession
+	 *  打开会跑着的会话 / doNewChat 回主页。 */
 	/** Debug runId（runSearch 入口自增）：chatview 的 done/runId 字段来源。
 	 *  static 序列号跨实例单调，popout/侧栏双实例也不会撞号。 */
 	static runSeq = 0;
@@ -168,6 +184,14 @@ export class SemanticSearchView extends ItemView {
 	private expandBtnEl: HTMLElement | null = null;
 	private inputHintEl: HTMLElement | null = null;
 	private activeAskController: AbortController | null = null;
+	/** 多开（2026-11-18）：按会话的运行注册表——会话 id → 助手气泡。
+	 *  回主页后台化的运行继续写自己的气泡；同会话可随时重挂载查看。 */
+	private activeRuns: Map<string, { bubble: HTMLElement }> = new Map();
+	/** 会话 id → 该会话在跑的控制器（stop 按钮 / 重发替换时按会话中止）。 */
+	private activeControllers: Map<string, AbortController> = new Map();
+	/** 后台完成未读：运行结束时用户不在现场的会话 id——抽屉行左槽亮点，
+	 *  loadSession 打开即消（视图级瞬态，不持久化）。 */
+	private unreadDone: Set<string> = new Set();
 	private lastBreakdown: ContextBreakdown | null = null;
 	private lastCacheHitRate: number | null = null;
 	private modelNameEl: HTMLElement | null = null;
@@ -713,7 +737,11 @@ export class SemanticSearchView extends ItemView {
 					this.scrollToBottom();
 					return;
 				}
-				this.activeAskController?.abort();
+				// 中止当前视图会话的运行（多开：其他会话的后台运行不受影响）。
+				const curCtl = this.currentSessionId
+					? this.activeControllers.get(this.currentSessionId)
+					: null;
+				curCtl?.abort();
 				this.setSendButtonState("idle");
 				return;
 			}
@@ -966,7 +994,6 @@ export class SemanticSearchView extends ItemView {
 		// the send button immediately becomes the clickable stop button.
 		this.isGenerating = true;
 		const controller = new AbortController();
-		this.activeAskController = controller;
 		this.setSendButtonState("stop");
 
 		// Clear the transient status once the first query is submitted.
@@ -1006,6 +1033,14 @@ export class SemanticSearchView extends ItemView {
 
 		// Append a loading placeholder for the assistant's reply.
 		const loadingEl = this.appendAssistantMessage(t("searchSearching"));
+		// 本轮运行的会话绑定（多开）：回主页/切会话后闭包继续写这个气泡
+		// （detach 不丢状态），完成答案经 runSessionId 落盘——doNewChat 会
+		// 清 currentSessionId，结束时不能再读它。
+		const runSessionId = this.currentSessionId;
+		if (runSessionId) {
+			this.activeRuns.set(runSessionId, { bubble: loadingEl });
+			this.activeControllers.set(runSessionId, controller);
+		}
 		// Pin the view to the new exchange NOW that the placeholder is in the
 		// DOM. The keydown/send-button handlers scroll right after
 		// `void runSearch()` — which only covers the user bubble, because the
@@ -1273,7 +1308,13 @@ export class SemanticSearchView extends ItemView {
 						answerAnimWin = null;
 					}
 				};
+				// 状态行的可变 label（startDots 每秒 render 读取）：正文流首块
+				// 到达时原位切换「生成回答中」，不必重启 startDots（重启会清掉
+				// 刚到的流式文本）。
+				let liveStatusLabel = "";
+				let liveStatusRender: (() => void) | null = null;
 				const startDots = (label: string): void => {
+					liveStatusLabel = label;
 					loadingTextEl.removeClass("semlink-hidden");
 					// Back to the live status line (shimmer resumes) — drop the
 					// collapsed-thinking summary look if a flash set it.
@@ -1313,21 +1354,18 @@ export class SemanticSearchView extends ItemView {
 						loadingTextSpan.textContent =
 							t("searchThinkingElapsed")
 								.replace("{seconds}", String(secs))
-								.replace("{status}", label) + "）";
+								.replace("{status}", liveStatusLabel) + "）";
 						loadingDotsSpan.textContent = "";
 					};
 						answerAnimWin = this.viewWin;
 						answerAnim = answerAnimWin.setInterval(render, 1000);
 						render();
+						liveStatusRender = render;
 				};
 				// Agentic mode: no retrieval phase — the wait before the first
 				// model round is model thinking. Round-start / tool / stream
 				// callbacks swap in their own status labels from here.
 				startDots(t("searchModelThinking"));
-				// Whether any tool has been called yet — decides whether the
-				// next round is "thinking" (模型思考中) or the final answer
-				// generation (生成回答中).
-				let hasCalledTool = false;
 
 				// The only up-front evidence step is dropped attachments (read
 				// in full before the model sees them). Agentic turns start
@@ -1364,6 +1402,9 @@ export class SemanticSearchView extends ItemView {
 				// re-render) so an expanded tool call stays expanded while the
 				// model keeps producing steps.
 				let renderedSteps = 0;
+				// 思考段状态（跨 step 持续）：当前未折叠的段。轮次切换
+				// （onRoundStart）关段；工具落位在 renderThinkingSteps 内关。
+				const liveSegState: ThinkSegState = { seg: null, summary: null, startAt: 0, endAt: 0 };
 				const refreshLiveBody = (): void => {
 					if (liveBody.hasClass("semlink-hidden")) return;
 					// 外层会话滚动条 sticky 跟随：采样必须在追加步骤之前
@@ -1372,16 +1413,19 @@ export class SemanticSearchView extends ItemView {
 					// 对帧间爆发增长免疫——见 liveBody 创建处的注释。
 					const m = this.messagesEl;
 					const outerNearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 200;
-					// 有步骤完成 → 待完成行（运行中标记）被完整行接管：先摘除，
-					// 完整行随后由 while 循环渲染到同一位置（步骤序列末尾）。
-					clearPendingToolEl();
+					// 注意：这里不摘待完成行（pendingToolEl）——refreshLiveBody
+					// 也会被收起/展开切换与 startDots 调用，无脑摘会把仍在运行
+					// 的工具的行丢掉（收起再展开即丢最新进度）。摘除时机在
+					// onThinking（完成步骤真正落位处）。
 					while (renderedSteps < liveSteps.length) {
-						this.renderThinkingSteps(liveBody, [liveSteps[renderedSteps]]);
+						this.renderThinkingSteps(liveBody, [liveSteps[renderedSteps]], liveSegState);
 						renderedSteps++;
 					}
 					// Keep the live reasoning stream last — steps rendered after
 					// it must not push it into the middle of the list.
-					if (liveReasonEl) liveBody.appendChild(liveReasonEl);
+					// 流式思考文本归当前段尾（正在写的思考随段展开可见）；
+					// 无段时平铺。
+					if (liveReasonEl) (liveSegState.seg ?? liveBody).appendChild(liveReasonEl);
 					if (followThinking) liveBody.scrollTop = liveBody.scrollHeight;
 					if (outerNearBottom) this.scrollToBottom();
 				};
@@ -1405,11 +1449,20 @@ export class SemanticSearchView extends ItemView {
 						const outerNearBottom =
 							this.messagesEl.scrollHeight - this.messagesEl.scrollTop - this.messagesEl.clientHeight < 200;
 						if (!liveReasonEl) {
+							// 行首思考图标与完成态 thought 行同款（brain）——
+							// 纯文本块裸行让人分不清这是思考还是掉版。
 							liveReasonEl = liveBody.createDiv({ cls: "semlink-live-reasoning" });
+							this.prefixRowIcon(liveReasonEl, "brain", "");
 						} else {
 							liveBody.appendChild(liveReasonEl);
 						}
-						liveReasonEl.setText(liveReasonPending);
+						// 只更新文本 span（整块 setText 会连图标一起抹掉）。
+						// 剥前导空白：reasoning 常以空行开头，pre-wrap 会把
+						// 内容推下去，标题和正文之间空出一大截（真机 11-18）。
+						const textSpan = liveReasonEl.querySelector<HTMLElement>(".semlink-row-text");
+						const shown = liveReasonPending.replace(/^[\s\r\n]+/, "");
+						if (textSpan) textSpan.setText(shown);
+						else liveReasonEl.setText(shown);
 						// Manually collapsed preview: keep the text current, don't
 						// fight the user. The full text repaints on re-expand since
 						// every callback carries the ACCUMULATED text.
@@ -1458,17 +1511,9 @@ export class SemanticSearchView extends ItemView {
 						(toolName, args) => {
 							// A tool is running — animate its label so a slow
 							// tool (e.g. a full-vault grep) doesn't look frozen.
-							// 主参数随行显示（grep 的 pattern / search 的 query /
-							// read 的 path），让「正在调用 grep」一眼可辨在查什么。
-							// args 由 chat 管线解析成对象后传来；超长截断防撑爆状态行。
-							const a = (args ?? {}) as Record<string, unknown>;
-							const raw = a.query ?? a.pattern ?? a.path ?? "";
-							const detail =
-								typeof raw === "string" && raw.trim()
-									? ` · ${raw.trim().length > 28 ? `${raw.trim().slice(0, 28)}…` : raw.trim()}`
-									: "";
-							hasCalledTool = true;
-							startDots(t("searchToolCalling").replace("{tool}", toolName).replace(/…$/, "") + detail);
+							// 参数不再随状态行（2026-11-18 用户拍板省略）：思考体
+							// 的待完成/完成工具行已带参数，状态行不重复。
+							startDots(t("searchToolCalling").replace("{tool}", toolName).replace(/…$/, ""));
 							// 思考体同步插一条待完成行（不滞后）：结果回来时
 							// refreshLiveBody 摘掉它、由完整行（含请求/响应
 							// details）接管——同一位置、同一视觉语言。
@@ -1478,7 +1523,7 @@ export class SemanticSearchView extends ItemView {
 							pendingToolEl = liveBody.createDiv({
 								cls: "semlink-tool-call is-pending",
 							});
-							this.prefixRowIcon(pendingToolEl, this.toolIcon(toolName), `${toolName}${this.summarizeArgs(args)}`);
+							this.prefixRowIcon(pendingToolEl, this.toolIcon(toolName), this.toolArgText(args), toolName);
 							if (followThinking) liveBody.scrollTop = liveBody.scrollHeight;
 						},
 					// Analysis/overview-heavy prompts get deeper reading.
@@ -1507,15 +1552,25 @@ export class SemanticSearchView extends ItemView {
 							streamText = text;
 							startTypewriter();
 						},						() => {
-							// Round start: before any tool was called it's the
-							// thinking phase (模型思考中); after tools it's the
-							// final answer generation (生成回答中).
-							startDots(hasCalledTool ? t("searchGeneratingAnswer") : t("searchModelThinking"));
+							// Round start: the model has NOT produced body text yet
+							// (答案轮也会先流一大段 reasoning——hasCalledTool 猜轮次
+							// 会把「生成回答中」提前到思考期，2026-11-18 用户实测打脸）
+							// → 统一「模型思考中」；正文流到达由 onStream 收头部。
+							// 新轮次 = 前一段思考完成 → 折叠成标题行（补时长）。
+							this.closeThinkSegment(liveSegState);
+							startDots(t("searchModelThinking"));
 						},
 						(step) => {
 							// A new thinking step arrived — refresh the live
 							// thinking preview (which auto-follows to the
 							// bottom during generation, see refreshLiveBody).
+							// 到达即打时间戳：段标题的「持续了 N 秒」由它算出；
+							// 随 thinking 一并存档，完成态重渲也有时长。
+							(step as { at?: number }).at = Date.now();
+							// 完成步骤落位 = 待完成行（运行中标记）被完整行接管：
+							// 在这里摘除（refreshLiveBody 会被收起/展开切换调用，
+							// 在那里摘会把仍在运行的工具行丢掉）。
+							clearPendingToolEl();
 							liveSteps.push(step);
 							refreshLiveBody();
 						},
@@ -1655,6 +1710,7 @@ export class SemanticSearchView extends ItemView {
 						result.contextTokens,
 						result.contextBreakdown,
 						result.cacheHitRate,
+						runSessionId ?? undefined,
 					);
 
 						// Action buttons (icons) below the sources: copy / save /
@@ -1693,13 +1749,27 @@ export class SemanticSearchView extends ItemView {
 		} finally {
 			// The dropped notes were consumed by this turn.
 			this.attachments = [];
-			// Leave generating mode: button back to send, controller released.
-			this.isGenerating = false;
-			this.activeAskController = null;
-			this.setSendButtonState("idle");
-			// 队列里有排队的跟进指令 → 回填输入区并立即续跑。
-			if (this.queuedFollowUps.length > 0) {
+			// 注销本轮运行（多开注册表）；按钮/idle 态只在视图仍停在本轮
+			// 会话时复位——后台完成的运行不能动用户当前看到的会话状态。
+			// （runSessionId 为空 = 没建过会话，注册表里本就没有条目。）
+			if (runSessionId) {
+				this.activeRuns.delete(runSessionId);
+				this.activeControllers.delete(runSessionId);
+			}
+			if (this.currentSessionId === runSessionId) {
+				this.isGenerating = false;
+				this.setSendButtonState("idle");
+			}
+			// 队列里有排队的跟进指令且视图仍在本轮会话 → 回填输入区并立即
+			// 续跑。后台完成的运行不抢主页的输入区。
+			if (this.queuedFollowUps.length > 0 && this.currentSessionId === runSessionId) {
 				void this.dequeueNextFollowUp();
+			}
+			// 后台完成标记：运行结束时用户不在该会话现场（主页/别的会话）
+			// → 抽屉该会话行左槽亮一个「刚完成」圆点，点开即消（ZCode 语义）。
+			if (runSessionId && this.currentSessionId !== runSessionId) {
+				this.unreadDone.add(runSessionId);
+				this.refreshPersistentMenu();
 			}
 		}
 	}
@@ -2797,7 +2867,11 @@ export class SemanticSearchView extends ItemView {
 			text: t("searchThinkingDuration").replace("{seconds}", this.formatDuration(elapsedSec)),
 		});
 
-		this.renderThinkingSteps(details, thinking);
+		// 完成态：一次性全量渲染后把收尾段（最后一段思考）也折叠——
+		// 打开「▸ 思考了 N 秒」看到的是标题行 + 工具主干，不再无限长。
+		const segState: ThinkSegState = { seg: null, summary: null, startAt: 0, endAt: 0 };
+		this.renderThinkingSteps(details, thinking, segState);
+		this.closeThinkSegment(segState);
 	}
 
 	/**
@@ -2805,32 +2879,88 @@ export class SemanticSearchView extends ItemView {
 	 * Shared by the finished answer's collapsible section and the LIVE
 	 * preview shown while the answer is still being generated.
 	 */
-	private renderThinkingSteps(container: HTMLElement, steps: ThinkingStep[]): void {
+	/**
+	 * Render the thinking steps (thoughts + tool calls) into a container.
+	 * Shared by the finished answer's collapsible section and the LIVE
+	 * preview shown while the answer is still being generated.
+	 *
+	 * 思考段自动折叠（2026-11-18）：连续的 💭 思考打包进 <details> 段落
+	 * ——工具落位自动把前段折叠成一行摘要（💭 首行截断，点击展开全文），
+	 * 工具行保持平铺（进度主干一眼可见）。思考不再无限堆高面板。
+	 * segState 由调用方持有（live 逐 step 调用须跨调用持续）；不给或在
+	 * 完成态调用结束时由调用方收尾关段。
+	 */
+	private renderThinkingSteps(container: HTMLElement, steps: ThinkingStep[], segState?: ThinkSegState): void {
+		const seg = segState;
 		for (const step of steps) {
 			if (!step) continue; // defensive: never crash on a malformed step
 			if (step.type === "thought") {
-				const thoughtRow = container.createDiv({ cls: "semlink-thinking-thought" });
-				this.prefixRowIcon(thoughtRow, "brain", step.text);
+				if (seg && !seg.seg) {
+					// 段标题（2026-11-18 定稿）：brain 图标 + 关段后的
+					// 「持续了 N 秒」——「思考」二字转为图标 tooltip，不再
+					// 占行内文字；不复制首行思考文本（与段内重复）。
+					seg.startAt = (step as { at?: number }).at ?? Date.now();
+					const box = container.createEl("details", { cls: "semlink-thinking-segment" });
+					seg.summary = box.createEl("summary", { cls: "semlink-thinking-segment-summary" });
+					this.prefixRowIcon(seg.summary, "brain", "", t("thinkingSegmentTitle"));
+					seg.seg = box;
+				}
+				// 段内思考行不再重复 brain 图标（段标题已表意）——纯文本段落。
+				// 前导空白剥除（同流式块：空行开头会在标题下空出一截）。
+				const thoughtRow = (seg?.seg ?? container).createDiv({ cls: "semlink-thinking-thought" });
+				thoughtRow.setText((step.text ?? "").replace(/^[\s\r\n]+/, ""));
+				// 时长终点随段内思考推进（末段由它算出秒数）。
+				const at = (step as { at?: number }).at;
+				if (seg && at) seg.endAt = at;
 			} else {
+				// 工具落位 = 前段思考已完成 → 折叠成标题行（补持续时长）
+				this.closeThinkSegment(seg, (step as { at?: number }).at);
 				// Each tool call is one line by default; click to expand and
 				// see the full request args and response.
+				// 方法名不占文字（一行内全是参数语义），悬停图标以 tooltip
+				// 显示工具名（2026-11-18 用户拍板）。
 				const callDetails = container.createEl("details", { cls: "semlink-tool-call" });
 				const summary = callDetails.createEl("summary", { cls: "semlink-tool-call-summary" });
-				this.prefixRowIcon(summary, this.toolIcon(step.name), `${step.name}${this.summarizeArgs(step.args)}`);
+				this.prefixRowIcon(summary, this.toolIcon(step.name), this.toolArgText(step.args), step.name);
 
 				callDetails.createDiv({ cls: "semlink-tool-call-label", text: t("searchToolRequest") });
 				callDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.args) });
 
-				// Response: nested <details>, collapsed by default — click
-				// "返回 ›" to expand the (often large) JSON result.
+				// Response: nested <details> — 点开工具行时**同步展开**（不用
+				// 再点一次「返回」，2026-11-18）；返回体高由 CSS 钳 10 行内滚。
 				const responseDetails = callDetails.createEl("details", { cls: "semlink-tool-call-response" });
 				responseDetails.createEl("summary", {
 					cls: "semlink-tool-call-label semlink-tool-call-response-summary",
 					text: t("searchToolResponse"),
 				});
 				responseDetails.createEl("pre", { cls: "semlink-tool-call-pre", text: this.prettyJson(step.result) });
+				callDetails.addEventListener("toggle", () => {
+					responseDetails.open = callDetails.open;
+				});
 			}
 		}
+	}
+
+	/** 关闭思考段：标题写「持续了 N 秒」（起点=段首思考到达，终点=末个
+	 *  思考到达 / 关段触发点的较早语义——有任一时间戳即显示秒数），
+	 *  折叠。「思考」二字只存在于图标 tooltip（prefixRowIcon 的
+	 *  iconTitle），不占行内文字；步骤无时间戳（旧会话存档）时标题
+	 *  仅图标 + tooltip。 */
+	private closeThinkSegment(seg: ThinkSegState | undefined, endAt?: number): void {
+		if (!seg?.seg) return;
+		if (seg.summary) {
+			const textSpan = seg.summary.querySelector<HTMLElement>(".semlink-row-text");
+			const end = endAt ?? seg.endAt;
+			if (textSpan && end) {
+				const sec = Math.max(1, Math.round((end - seg.startAt) / 1000));
+				textSpan.textContent = t("thinkingSegmentDuration").replace("{duration}", this.formatDuration(sec));
+			} else if (textSpan) {
+				textSpan.textContent = t("thinkingSegmentTitle");
+			}
+		}
+		seg.seg.open = false;
+		seg.seg = null;
+		seg.summary = null;
 	}
 
 	/** Analysis-heavy prompts (设计需求/总结/对比 etc.) get the "enhanced"
@@ -2844,7 +2974,7 @@ export class SemanticSearchView extends ItemView {
 		keyword: "text-search",
 		semantic: "sparkles", get_similar_notes: "sparkles",
 		read: "book-open", get_note: "book-open", get_section: "book-open",
-		grep: "search", grep_notes: "search",
+		grep: "file-text", grep_notes: "file-text",
 		ls: "list", list_indexed: "list", list_indexed_detailed: "list",
 		find: "folder-search",
 		headings: "list-tree",
@@ -2864,9 +2994,29 @@ export class SemanticSearchView extends ItemView {
 	/** 行首原生图标（Lucide，替代 💭/🔧 emoji 前缀）：图标 inline-flex 贴
 	 *  首行、color 继承行色——is-pending 的运行态淡灰随行变色。文本 span
 	 *  挂 semlink-row-text 类，运行中的流光动画只上文本（图标不吃）。 */
-	private prefixRowIcon(row: HTMLElement, iconName: string, text: string): void {
-		setIcon(row.createSpan({ cls: "semlink-row-icon" }), iconName);
+	private prefixRowIcon(row: HTMLElement, iconName: string, text: string, iconTitle?: string): void {
+		const iconSpan = row.createSpan({ cls: "semlink-row-icon" });
+		setIcon(iconSpan, iconName);
+		// 悬停图标显示工具名（tooltip）——方法名不占行内文字后的轻量提示
+		if (iconTitle) {
+			iconSpan.setAttr("title", iconTitle);
+			iconSpan.setAttr("aria-label", iconTitle);
+		}
 		row.createSpan({ cls: "semlink-row-text", text });
+	}
+
+	/** 工具行参数文本：主参数（query/pattern/path）+ path 随行（grep 带
+	 *  path 过滤时一并显示，超长保留尾部文件名段）；方法名藏进图标
+	 *  tooltip 后，行内只剩参数语义（2026-11-18）。 */
+	private toolArgText(args: unknown): string {
+		const a = (args ?? {}) as Record<string, unknown>;
+		const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+		const parts: string[] = [];
+		const primary = str(a.query) || str(a.pattern) || str(a.path);
+		if (primary) parts.push(primary);
+		const path = str(a.path);
+		if (path && path !== primary) parts.push(path.length > 44 ? `…${path.slice(-43)}` : path);
+		return parts.join(" · ");
 	}
 
 	/** Compact one-line preview of the request args, e.g. " — MIBT". */
@@ -3407,13 +3557,10 @@ export class SemanticSearchView extends ItemView {
 	 *  While a generation is running, ask first — new chat interrupts it, and
 	 *  an accidental click would silently throw away the in-flight answer. */
 	private newChatFromUi(): void {
-		if (this.isGenerating) {
-			new ConfirmModal(this.app, t("searchNewChatConfirmTitle"), t("searchNewChatConfirmBody"), () => {
-				this.activeAskController?.abort();
-				this.doNewChat();
-			}).open();
-			return;
-		}
+		// 生成中回主页：运行**继续**（不 abort 不确认）——答案完成时经
+		// history.addMessage 正常落盘，抽屉里该会话不丢进度；生成态下
+		// 发送按钮仍是 stop（点它才中止）。旧确认框会杀掉运行，与
+		// 「回到主页只是换个视图」的预期相悖（2026-11-18 用户拍板）。
 		this.doNewChat();
 	}
 
@@ -3426,6 +3573,9 @@ export class SemanticSearchView extends ItemView {
 		this.renderWelcome();
 		// Empty area cannot hide a first question — drop the subtitle row.
 		this.updateCompactHeader();
+		// 主页无当前会话 → 无生成态（后台运行不受影响，注册表照常管理）。
+		this.isGenerating = false;
+		this.setSendButtonState("idle");
 		this.inputEl.focus();
 	}
 
@@ -3481,8 +3631,12 @@ export class SemanticSearchView extends ItemView {
 		contextTokens?: number,
 		contextBreakdown?: ContextBreakdown,
 		cacheHitRate?: number | null,
+		runSessionId?: string,
 	): Promise<HistoryMessage | null> {
-		if (!this.currentSessionId) return null;
+		// 会话定位：优先调用方传入的运行会话（后台完成时 currentSessionId
+		// 已被主页清空，没有它答案会被静默丢弃——2026-11-18 空页事故根因）。
+		const sid = runSessionId ?? this.currentSessionId;
+		if (!sid) return null;
 		await this.history.load();
 		const msg: HistoryMessage = {
 			role: "assistant",
@@ -3493,6 +3647,8 @@ export class SemanticSearchView extends ItemView {
 				name: s.type === "tool" ? s.name : undefined,
 				args: s.type === "tool" ? s.args : undefined,
 				result: s.type === "tool" ? s.result : undefined,
+				// 到达时间戳透传：完成态重渲的段标题「持续了 N 秒」靠它
+				at: (s as { at?: number }).at,
 			})),
 			sources,
 			sourceNumbers: sourceNumbers?.filter((n) => Number.isFinite(n)),
@@ -3502,8 +3658,10 @@ export class SemanticSearchView extends ItemView {
 			cacheHitRate,
 			timestamp: Date.now(),
 		};
-		this.currentMessages.push(msg);
-		this.history.addMessage(this.currentSessionId, msg);
+		// 内存数组只在该会话正是当前视图会话时才推（后台完成时视图可能
+		// 在主页/别的会话——各自的 currentMessages 不能污染）。
+		if (this.currentSessionId === sid) this.currentMessages.push(msg);
+		this.history.addMessage(sid, msg);
 		void this.history.save();
 		this.refreshPersistentMenu();
 		return msg;
@@ -3619,6 +3777,21 @@ export class SemanticSearchView extends ItemView {
 		// scrollToBottom may not fire a scroll event when the session is
 		// shorter than the viewport — re-check the subtitle row manually.
 		this.updateCompactHeader();
+		// 后台运行重挂载：点回正在生成的会话 → 把 detach 的助手气泡（思考
+		// 面板/流式区，闭包仍在实时写入）接回消息区末尾，思考进度与流式
+		// 答案无缝续显；运行已完成时注册表已注销，走上面的存档渲染。
+		// 打开的是跑着的会话 → 视图恢复生成态（stop 按钮/编辑钮规则）。
+		const runBubble = this.activeRuns.get(session.id)?.bubble;
+		if (runBubble && !runBubble.isConnected) {
+			this.messagesEl.appendChild(runBubble);
+			this.scrollToBottom();
+		}
+		// 打开即消后台完成点（无论该会话是否还在跑）。
+		if (this.unreadDone.delete(session.id)) {
+			this.refreshPersistentMenu();
+		}
+		this.isGenerating = this.activeRuns.has(session.id);
+		this.setSendButtonState(this.isGenerating ? "stop" : "idle");
 		this.inputEl.focus();
 	}
 
@@ -4122,8 +4295,12 @@ export class SemanticSearchView extends ItemView {
 			});
 		};
 
-		const renderItem = (container: HTMLElement, session: ChatSession, compact = false, showPin = true): HTMLElement => {
-			const item = container.createDiv({ cls: "semlink-history-item" });
+	const renderItem = (container: HTMLElement, session: ChatSession, compact = false, showPin = true): HTMLElement => {
+		const item = container.createDiv({ cls: "semlink-history-item" });
+		// 后台完成未读点：左槽亮品牌色圆点（此行隐藏 pin 避免重叠），点开即消。
+		if (this.unreadDone.has(session.id)) {
+			item.createDiv({ cls: "semlink-history-item-unread" });
+		}
 			// Drag a conversation onto a folder row (Folders tab) to file it.
 			item.draggable = true;
 			item.addEventListener("dragstart", (e) => {

@@ -7,7 +7,7 @@ import { readdir, readFile } from "fs/promises";
 import { join } from "path";
 import { debugLog } from "./log";
 import type { Scheduler } from "./scheduler";
-import type { SmartVaultSettings } from "./types";
+import type { SmartVaultSettings, QueueAction } from "./types";
 
 /** Grace period (ms) after startup during which events are ignored */
 const STARTUP_GRACE_MS = 5000;
@@ -67,6 +67,11 @@ export class VaultWatcher {
 			window.clearInterval(this.arrivalTimer);
 			this.arrivalTimer = null;
 		}
+		if (this.enqueueFlushTimer !== null) {
+			window.clearTimeout(this.enqueueFlushTimer);
+			this.enqueueFlushTimer = null;
+		}
+		this.pendingEnqueues.clear();
 	}
 
 	setAutoIndex(enabled: boolean): void {
@@ -83,10 +88,7 @@ export class VaultWatcher {
 		if (file.extension !== "md") return;
 		if (this.isExcluded(file.path)) return;
 
-		this.debounce(file.path, () => void (async () => {
-			await this.scheduler.enqueueFile(file.path, "add");
-			this.ensureSchedulerRunning();
-		})());
+		this.debounce(file.path, () => this.scheduleEnqueue(file.path, "add"));
 	}
 
 	private onModify(file: TAbstractFile) {
@@ -95,19 +97,15 @@ export class VaultWatcher {
 		if (file.extension !== "md") return;
 		if (this.isExcluded(file.path)) return;
 
-		this.debounce(file.path, () => void (async () => {
-			await this.scheduler.enqueueFile(file.path, "update");
-			this.ensureSchedulerRunning();
-		})());
+		this.debounce(file.path, () => this.scheduleEnqueue(file.path, "update"));
 	}
 
 	private onDelete(file: TAbstractFile) {
 		if (!this.autoIndex || !this.ready) return;
 		if (!(file instanceof TFile)) return;
 
-		// Fire-and-forget: enqueue is async (routes through the worker), but the
-		// event handler itself must stay synchronous.
-		void this.scheduler.enqueueFile(file.path, "delete").then(() => this.ensureSchedulerRunning());
+		// 合批通道：删除风暴（整夹移除）同窗合并成一次 enqueueMany。
+		this.scheduleEnqueue(file.path, "delete");
 	}
 
 	private onRename(file: TAbstractFile, oldPath: string) {
@@ -117,7 +115,7 @@ export class VaultWatcher {
 
 		if (this.isExcluded(file.path)) {
 			// Moved to excluded location — delete old index entries
-			void this.scheduler.enqueueFile(oldPath, "delete").then(() => this.ensureSchedulerRunning());
+			this.scheduleEnqueue(oldPath, "delete");
 		} else {
 			// Old path was indexed → real rename, update the path in-place, no
 			// re-embedding needed. Otherwise the file is arriving into scope
@@ -127,8 +125,7 @@ export class VaultWatcher {
 				if (await this.scheduler.hasIndexEntries(oldPath)) {
 					await this.scheduler.renamePath(oldPath, file.path);
 				} else {
-					await this.scheduler.enqueueFile(file.path, "add");
-					this.ensureSchedulerRunning();
+					this.scheduleEnqueue(file.path, "add");
 				}
 			})();
 		}
@@ -239,7 +236,7 @@ export class VaultWatcher {
 	// 5s is long enough that a brief pause while typing won't trigger an
 	// embedding round-trip (which churns progress events / UI updates), but
 	// short enough that a real edit is picked up promptly.
-	private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+	private debounceTimers: Map<string, number> = new Map();
 
 	private debounce(path: string, fn: () => void, delay = 5000) {
 		const existing = this.debounceTimers.get(path);
@@ -249,5 +246,29 @@ export class VaultWatcher {
 			this.debounceTimers.delete(path);
 			fn();
 		}, delay));
+	}
+
+	// ── 入队合批（2026-11-18）：debounce 到期的每个路径不再各自发一条
+	// 单 enqueue RPC——先落 pendingEnqueues，250ms 汇聚窗把同瞬到期的
+	// 一整批（大文件夹移动/导入可达数百路径）合并成一次 enqueueMany
+	// （engine 侧单事务+分片让出）。几百条单 RPC 曾把 worker 压 ~30s，
+	// 用户的 search 全程排队（rpcdiag 实录）。
+	private pendingEnqueues: Map<string, QueueAction> = new Map();
+	private enqueueFlushTimer: number | null = null;
+
+	private scheduleEnqueue(path: string, action: QueueAction): void {
+		this.pendingEnqueues.set(path, action);
+		if (this.enqueueFlushTimer === null) {
+			this.enqueueFlushTimer = window.setTimeout(() => {
+				this.enqueueFlushTimer = null;
+				const items = [...this.pendingEnqueues].map(([p, a]) => ({ notePath: p, action: a }));
+				this.pendingEnqueues.clear();
+				if (items.length === 0) return;
+				void (async () => {
+					await this.scheduler.enqueueFiles(items);
+					this.ensureSchedulerRunning();
+				})();
+			}, 250);
+		}
 	}
 }

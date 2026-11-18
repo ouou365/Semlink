@@ -417,6 +417,8 @@ const t: Record<keyof typeof en, string> = {
 	searchModelThinking: "모델 생각 중",
 	searchReconnecting: "다시 연결 중... {n}/{total}",
 	searchToolCalling: "{tool} 호출 중…",
+	thinkingSegmentTitle: "생각",
+	thinkingSegmentDuration: "{duration} 소요",
 	searchToolTrace: "도구 호출",
 	searchThinkingProcess: "생각 과정",
 	searchExpand: "펼치기",

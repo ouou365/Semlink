@@ -508,6 +508,10 @@ export default class SmartVaultPlugin extends Plugin {
 		// 已 fire-and-forget，这里不再重复 await——真机 2026-11-12 启动慢根因
 		// 之一：getStats + 两个 COUNT 在数万 chunk 的冷库上要数秒，await 把
 		// onload 尾巴拖住且旧面包屑停在 mcp-server 完全不可见。
+		// 向量缓存预热（2026-11-18）：worker 重启后 cacheLoaded 复位，首查
+		// 要从 OPFS 全量读 ~280MB 向量（实测冷首查 17s）。启动 30s 后后台
+		// 预热，用户首查前缓存已热——搜索保持毫秒级。
+		window.setTimeout(() => void this.store.vectorCount().catch(() => { /* 预热失败不影响功能 */ }), 30_000);
 		bootMark("onload-done");
 		debugLog("[Semlink] Plugin loaded");
 	}
@@ -745,6 +749,7 @@ export default class SmartVaultPlugin extends Plugin {
 			(opts) => this.runDebugBrowser(opts),
 			(opts) => this.runDebugSettings(opts),
 			(opts) => this.runDebugShare(opts),
+			(q: string) => this.store.debugExecSql(q),
 		);
 		try {
 			await server.start();
@@ -4280,8 +4285,23 @@ export default class SmartVaultPlugin extends Plugin {
 			const doc = el.ownerDocument;
 			const win = doc.defaultView ?? window;
 			const r = el.getBoundingClientRect();
-			const cx = r.x + r.width / 2;
-			const cy = r.y + r.height / 2;
+			const cx = Math.round(r.x + r.width / 2);
+			const cy = Math.round(r.y + r.height / 2);
+			// 真实管线优先（2026-11-18）：CSS :hover 只认真实输入——合成
+			// 事件触发不了。经 @electron/remote 拿调用方窗口的 webContents
+			// 注入 mouseMove（主窗元素可注入；popout/非桌面回退合成派发）。
+			let realHover = false;
+			if (doc === window.document) {
+				const ereq = (window as unknown as { require?: (m: string) => unknown }).require;
+				const remote = (ereq?.("electron") as { remote?: { getCurrentWebContents?(): { sendInputEvent(ev: { type: string; x: number; y: number }): void } } } | undefined)?.remote;
+				const wc = remote?.getCurrentWebContents?.();
+				if (wc) {
+					try {
+						wc.sendInputEvent({ type: "mouseMove", x: cx, y: cy });
+						realHover = true;
+					} catch { /* remote 不可用 → 合成兜底 */ }
+				}
+			}
 			const W = win as unknown as { PointerEvent?: typeof PointerEvent; MouseEvent: typeof MouseEvent };
 			const PE = W.PointerEvent ?? W.MouseEvent;
 			const init = {
@@ -4300,6 +4320,7 @@ export default class SmartVaultPlugin extends Plugin {
 			return {
 				action,
 				hovered: info[idx],
+				real: realHover,
 				dispatch: { seq: seq.map(([t]) => t), rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } },
 			};
 		}
@@ -4373,9 +4394,29 @@ export default class SmartVaultPlugin extends Plugin {
 			(el as HTMLSelectElement).value = value;
 			el.dispatchEvent(new Event("change", { bubbles: true }));
 		} else if ((el as HTMLElement).isContentEditable) {
+			// contenteditable 走原生编辑管线（2026-11-18）：旧法 textContent
+			// 直写会把内部结构（占位/chips/骨架）连根拔掉，视图的同步逻辑
+			// 随即回写把字吃掉——自动化「打不进字」的真因。execCommand 在
+			// Chromium 里触发与真实键入一致的 beforeinput/input（CJK 亦可）。
+			const cdoc = el.ownerDocument;
 			(el as HTMLElement).focus();
-			(el as HTMLElement).textContent = value;
-			el.dispatchEvent(new Event("input", { bubbles: true }));
+			const csel = cdoc.defaultView!.getSelection()!;
+			csel.removeAllRanges();
+			const crange = cdoc.createRange();
+			crange.selectNodeContents(el);
+			csel.addRange(crange);
+			let ok = false;
+			try {
+				cdoc.execCommand("delete");
+				ok = value === "" ? true : cdoc.execCommand("insertText", false, value);
+			} catch {
+				ok = false;
+			}
+			if (!ok) {
+				// 兜底：极老内核无 execCommand——退回直写（旧行为）。
+				(el as HTMLElement).textContent = value;
+				el.dispatchEvent(new Event("input", { bubbles: true }));
+			}
 		} else {
 			return { error: "target is not an input/textarea/select/contenteditable", matched: info[idx] };
 		}

@@ -162,18 +162,20 @@ export class Scheduler {
 		// 冗余 pending（迁移过渡把全量笔记当新增重入队、而库内 mtime 完好）
 		// ——逐条比对 MAX(chunk.mtime) ≥ file.mtime 即删，否则 paused 里的
 		// 索引器稍后处理它们会二次嵌入（embeddedChunks 曾涨到 73,030 >
-		// 总块数 65,237）。每 200 条让出 UI。
+		// 总块数 65,237）。
 		const pendingPaths = await this.queue.getPendingPaths();
 		const redundant: Array<{ path: string; mtime: number }> = [];
-		let pendingChecked = 0;
+		// 一次 GROUP BY 拉回全量 note→mtime 本地比对（同 scanVault 的批量
+		// 口径）：原逐条 getNoteMtime RPC 在大队列上连续轰炸 worker，
+		// 用户的 search RPC 只能在间隙里排队（僵持的另一源头，2026-11-18）。
+		const storedMtimesMap = new Map(await this.store.getAllNoteMtimeEntries());
 		for (const pendingPath of pendingPaths) {
-			const file = this.vault.getAbstractFileByPath(pendingPath) as TFile | null;
+			const file = this.findFileFlexible(pendingPath) as TFile | null;
 			if (!file || !("stat" in file)) continue;
-			const stored = await this.store.getNoteMtime(pendingPath);
+			const stored = storedMtimesMap.get(pendingPath) ?? null;
 			if (stored !== null && file.stat.mtime <= stored) {
 				redundant.push({ path: pendingPath, mtime: file.stat.mtime });
 			}
-			if (++pendingChecked % 200 === 0) await this.yieldControl();
 		}
 		const redundantRemoved = redundant.length > 0
 			? await this.store.purgeRedundantQueue(redundant)
@@ -398,8 +400,24 @@ export class Scheduler {
 	}
 
 	/** Process a single note's queue items. Returns true if chunks were actually indexed. */
+	/** Unicode 归一化文件解析（2026-11-18）：外部同步/下载产生的韩文等
+	 *  文件名常是 NFD（Jamo 分解），队列/历史里留的可能是 NFC——两者
+	 *  字符串不相等，getAbstractFileByPath 永远 null → 对账反复入队一个
+	 *  永不消失的 pending（真机：sdf-315-E-압축됨.md 循环 2.7h）。先精确
+	 *  匹配，失败后按 NFC 归一化比对全库。 */
+	private findFileFlexible(notePath: string): TFile | null {
+		const exact = this.vault.getAbstractFileByPath(notePath);
+		if (exact instanceof TFile) return exact;
+		const target = notePath.normalize("NFC");
+		for (const f of this.vault.getMarkdownFiles()) {
+			if (f.path === notePath) return f;
+			if (f.path.normalize("NFC") === target) return f;
+		}
+		return null;
+	}
+
 	private async processNote(notePath: string, items: QueueItem[]): Promise<boolean> {
-		const file = this.vault.getAbstractFileByPath(notePath);
+		const file = this.findFileFlexible(notePath);
 		if (!file || !(file instanceof TFile)) {
 			// File deleted
 			await this.store.deleteChunksByNotePath(notePath);
@@ -613,7 +631,7 @@ export class Scheduler {
 			const tasks: Array<{ notePath: string; mtime: number; headingText: string }> = [];
 			for (const notePath of missing) {
 				if (this.aborted) break;
-				const file = this.vault.getAbstractFileByPath(notePath);
+				const file = this.findFileFlexible(notePath);
 				if (!file || !(file instanceof TFile)) continue;
 				try {
 					const content = await this.vault.read(file);
@@ -758,6 +776,15 @@ export class Scheduler {
 	/** Enqueue a single file for indexing (from watcher) */
 	async enqueueFile(notePath: string, action: QueueAction): Promise<void> {
 		await this.queue.enqueue(notePath, action, action === "update" ? 3 : 2);
+	}
+
+	/** Enqueue a batch in one RPC（watcher 合批通道，2026-11-18）：大文件夹
+	 *  移动/导入时每文件 2-4 条单 enqueue RPC 同瞬齐发，几百条把 worker
+	 *  压 ~30s（rpcdiag 实录），用户 search 全程排队。批走 enqueueMany
+	 *  （engine 侧单事务+分片让出）。 */
+	async enqueueFiles(items: Array<{ notePath: string; action: QueueAction }>): Promise<void> {
+		if (items.length === 0) return;
+		await this.queue.enqueueMany(items);
 	}
 
 	/** Rename a note's path in the index without re-embedding (from watcher) */

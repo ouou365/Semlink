@@ -55,6 +55,7 @@ export function createDispatcher(): Dispatcher {
 			case "getChunksByNotePath": return engine.getChunksByNotePath(args[0] as string);
 			case "noteHasVectors": return engine.noteHasVectors(args[0] as string);
 			case "getActiveChunks": return engine.getActiveChunks();
+			case "vectorCount": return engine.vectorCount();
 			case "getChunkById": return engine.getChunkById(args[0] as string);
 			case "markChunksStale": return engine.markChunksStale(args[0] as string);
 			case "deleteChunksByNotePath": return engine.deleteChunksByNotePath(args[0] as string);
@@ -62,6 +63,7 @@ export function createDispatcher(): Dispatcher {
 			case "renameNotePath": return engine.renameNotePath(args[0] as string, args[1] as string);
 			case "getNoteMtime": return engine.getNoteMtime(args[0] as string);
 			case "getAllNoteMtimeEntries": return engine.getAllNoteMtimeEntries();
+			case "debugExecSql": return engine.debugExecSql(args[0] as string);
 			case "touchNoteMtime": return engine.touchNoteMtime(args[0] as string, args[1] as number);
 			case "getAllIndexedPaths": return engine.getAllIndexedPaths();
 			case "pruneOrphanedPaths": return engine.pruneOrphanedPaths(args[0] as Set<string>);

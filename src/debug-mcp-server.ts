@@ -31,6 +31,8 @@ export type DebugStatsRunner = (opts?: { op?: string }) => Promise<unknown>;
  *  popout）里按 CSS 选择器/可见文本查找元素并交互（query/click/type/
  *  scroll/hover/key）。通用的界面交互入口：新走查不再需要给 measure
  *  加一次性 boolean 开关。 */
+export type DebugSqlRunner = (query: string) => Promise<unknown>;
+
 export type DebugUiRunner = (opts?: {
 	action?: string;
 	selector?: string;
@@ -346,8 +348,11 @@ const UI_TOOL = {
 	description:
 		"Interact with the plugin UI directly at the DOM level (runs inside the " +
 		"Obsidian renderer, across the main window and popout windows): query " +
-		"elements by CSS selector or visible text, click, type, scroll, hover " +
-		"(JS hover handlers/tooltips), or inject keyboard events (Enter/Escape). " +
+		"elements by CSS selector or visible text, click, type (contenteditable "
+		+ "goes through the native editing pipeline — works on the chat input), "
+		+ "scroll, hover (REAL mouseMove via Electron input pipeline — CSS "
+		+ ":hover applies, e.g. history-row pin appears; popouts fall back to "
+		+ "synthetic events), or inject keyboard events (Enter/Escape). " +
 		"Returns every match with tag/classes/text/rect/visibility so you can " +
 		"pick an index. Prefer this over OS-level UI automation — selectors " +
 		"are the plugin's own class names (.semlink-*). Typical walkthrough: " +
@@ -379,6 +384,20 @@ const RELOAD_TOOL = {
 		"usually arrives, but the CONNECTION will drop and later calls will fail until the app is " +
 		"back. After calling reload, poll GET /health until it responds again, then re-initialize.",
 	inputSchema: { type: "object", properties: {}, required: [] },
+};
+
+const SQL_TOOL = {
+	name: "sql",
+	description:
+		"Run a READ-ONLY SQL query against the index database (SELECT/EXPLAIN "
+		+ "only, enforced) with wall-clock ms — ground-truth timing for "
+		+ "retrieval tuning (FTS5 MATCH vs LIKE). The chunks_fts virtual table "
+		+ "holds tokenized chunk content (MATCH queries, 91k docs).",
+	inputSchema: {
+		type: "object",
+		properties: { query: { type: "string", description: "SELECT/EXPLAIN statement." } },
+		required: ["query"],
+	},
 };
 
 const STATS_TOOL = {
@@ -526,7 +545,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner, private runRecord?: DebugRecordRunner, private runSession?: DebugSessionRunner, private runFixture?: DebugFixtureRunner, private runBrowser?: DebugBrowserRunner, private runSettings?: DebugSettingsRunner, private runShare?: DebugShareRunner) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner, private runRecord?: DebugRecordRunner, private runSession?: DebugSessionRunner, private runFixture?: DebugFixtureRunner, private runBrowser?: DebugBrowserRunner, private runSettings?: DebugSettingsRunner, private runShare?: DebugShareRunner, private runSql?: DebugSqlRunner) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -619,7 +638,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL, RECORD_TOOL, SESSION_TOOL, FIXTURE_TOOL, BROWSER_TOOL, SETTINGS_TOOL, SHARE_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, SQL_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL, RECORD_TOOL, SESSION_TOOL, FIXTURE_TOOL, BROWSER_TOOL, SETTINGS_TOOL, SHARE_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -661,6 +680,8 @@ export class DebugMcpServer {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runUi?.(params.arguments as { action?: string; selector?: string; text?: string; value?: string; index?: number; doc?: string; to?: string; dy?: number; key?: string; includeHidden?: boolean; timeout?: number; patterns?: string[] } | undefined)) ?? { error: "no ui runner" }, null, 2) }] };
 					} else if (params.name === "shot") {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runShot?.(params.arguments as { target?: string | number; resize?: { index?: number; width?: number; height?: number; x?: number; y?: number }; zoom?: number } | undefined)) ?? { error: "no shot runner" }, null, 2) }] };
+					} else if (params.name === "sql") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runSql?.(String((params.arguments as { query?: string } | undefined)?.query ?? ""))) ?? { error: "no sql runner" }, null, 2) }] };
 					} else {
 						result = await this.handleAsk(params);
 					}

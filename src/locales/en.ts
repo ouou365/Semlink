@@ -416,6 +416,8 @@ const en = {
 	searchModelThinking: "Model thinking",
 	searchReconnecting: "Reconnecting... {n}/{total}",
 	searchToolCalling: "Calling {tool}…",
+	thinkingSegmentTitle: "Thinking",
+	thinkingSegmentDuration: "took {duration}",
 	searchToolTrace: "Tool Calls",
 	searchThinkingProcess: "Thinking Process",
 	searchExpand: "Expand",

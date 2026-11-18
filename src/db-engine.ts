@@ -93,6 +93,11 @@ export class DbEngine {
 	// can fetch a stored vector by id without re-reading the DB.
 	private vectorIdToIndex: Map<string, number> = new Map();
 	private cacheLoaded = false;
+	/** FTS5 全文索引可用性（2026-11-18）：生产 sqlite-wasm 含 FTS5，textSearch
+	 *  走 MATCH（毫秒级）；sql.js 回退构建不含，落回 LIKE 全扫（秒级）。 */
+	private fts5Available = false;
+	/** FTS5 装配失败原因（catch 里记录，debugExecSql 响应带出）。 */
+	private fts5LastError = "";
 
 	// In-memory cache for DOCUMENT-level vectors (one per note, from headings).
 	// Separate from the chunk cache above so the two search paths never mix.
@@ -226,6 +231,7 @@ export class DbEngine {
 		// 查询全表扫要分钟级，把 worker 排成阻塞长龙（真机 2026-11-11）。
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_path_active_vec ON chunks (note_path, status) WHERE vector IS NOT NULL");
 		this.installAuditTrigger();
+		this.setupFts5();
 
 		// [更新时间播种] 数量快照缺失时在 init 补种（升级/换机/耐久快照导回
 		// 都可能丢 meta）——否则 syncActivityStamp 的首播种「只记录不触碰」
@@ -343,6 +349,80 @@ export class DbEngine {
 		this.db!.run("DROP TABLE chunks_old");
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_note_path ON chunks (note_path)");
 		this.db!.run("CREATE INDEX IF NOT EXISTS idx_chunks_status ON chunks (status)");
+	}
+
+
+	/** [诊断] 只读 SQL 计时执行（debug sql 工具后端）：仅允许 SELECT/
+	 *  EXPLAIN，返回列名/行/耗时——检索调优的 ground truth。 */
+	debugExecSql(query: string): { columns: string[]; rows: unknown[][]; ms: number; fts5Available: boolean; fts5LastError?: string } {
+		const q = query.trim();
+		if (!/^(select|explain|insert\s+into\s+chunks_fts\(chunks_fts\))/i.test(q)) throw new Error("debugExecSql: only SELECT/EXPLAIN/fts-integrity allowed");
+		const t0 = Date.now();
+		// INSERT（fts integrity-check 等特殊命令）无结果行——wasm 驱动的
+		// exec 读不到列会抛 "Column index 0 is out of range"，走 run。
+		if (/^insert/i.test(q)) {
+			this.db!.run(q);
+			return { columns: [], rows: [], ms: Date.now() - t0, fts5Available: this.fts5Available };
+		}
+		const r = this.db!.exec(q);
+		return {
+			columns: r.length > 0 ? r[0].columns : [],
+			rows: r.length > 0 ? r[0].values : [],
+			ms: Date.now() - t0,
+			fts5Available: this.fts5Available,
+			fts5LastError: this.fts5LastError || undefined,
+		};
+	}
+
+	/** FTS5 全文索引装配（2026-11-18）：外部内容表（content='chunks'）+
+	 *  三触发器（增/删/改自动同步）——写入路径零改动，索引始终新鲜。
+	 *  首次（索引空但 chunks 有数据）事务内全量回填；sql.js 回退构建无
+	 *  FTS5 → fts5Available=false，textSearch 落回 LIKE。 */
+	private setupFts5(): void {
+		try {
+			// schema v2：加 content_preview UNINDEXED——聚合/预览全部在 fts 表
+			// 内完成，去掉回连 chunks 的 JOIN（外部内容表不存 UNINDEXED 列值，
+			// 触发器写入时带上即可）。版本不符 → 整表重建回填。
+			const FTS_SCHEMA_VERSION = 4;
+			const stored = this.db!.exec("SELECT value FROM meta WHERE key = 'fts_schema_version'");
+			const verOk = stored.length > 0 && stored[0].values.length > 0 && String(stored[0].values[0][0]) === String(FTS_SCHEMA_VERSION);
+			if (!verOk) {
+				this.db!.run("DROP TABLE IF EXISTS chunks_fts");
+			}
+			this.db!.run(
+				"CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(content, note_path UNINDEXED, content_preview UNINDEXED, tokenize='trigram')"
+			);
+			this.db!.run(`
+				CREATE TRIGGER IF NOT EXISTS chunks_fts_ai AFTER INSERT ON chunks BEGIN
+					INSERT INTO chunks_fts(rowid, content, note_path, content_preview) VALUES (new.rowid, new.content, new.note_path, new.content_preview);
+				END
+			`);
+			this.db!.run(`
+				CREATE TRIGGER IF NOT EXISTS chunks_fts_ad AFTER DELETE ON chunks BEGIN
+					DELETE FROM chunks_fts WHERE rowid = old.rowid;
+				END
+			`);
+			this.db!.run(`
+				CREATE TRIGGER IF NOT EXISTS chunks_fts_au AFTER UPDATE ON chunks BEGIN
+					DELETE FROM chunks_fts WHERE rowid = old.rowid;
+					INSERT INTO chunks_fts(rowid, content, note_path, content_preview) VALUES (new.rowid, new.content, new.note_path, new.content_preview);
+				END
+			`);
+			// 回填：FTS 空 + chunks 有数据（首次启用/schema 重建）。两者皆空/皆有 → 跳过。
+			const fc = this.db!.exec("SELECT COUNT(*) FROM chunks_fts")[0]?.values?.[0]?.[0] ?? 0;
+			const cc = this.db!.exec("SELECT COUNT(*) FROM chunks")[0]?.values?.[0]?.[0] ?? 0;
+			if (Number(cc) > 0 && Number(fc) === 0) {
+				const t0 = Date.now();
+				this.db!.run("INSERT INTO chunks_fts(rowid, content, note_path, content_preview) SELECT rowid, content, note_path, content_preview FROM chunks");
+				debugLog(`[Semlink] FTS5 backfilled ${Number(cc)} docs in ${Date.now() - t0}ms`);
+			}
+			this.db!.run("INSERT OR REPLACE INTO meta (key, value) VALUES ('fts_schema_version', ?)", [String(FTS_SCHEMA_VERSION)]);
+			this.fts5Available = true;
+		} catch (e) {
+			this.fts5Available = false;
+			this.fts5LastError = e instanceof Error ? e.message : String(e);
+			console.warn("[Semlink] FTS5 unavailable — textSearch falls back to LIKE:", this.fts5LastError);
+		}
 	}
 
 	/** [审计] 黑匣子：chunks 删除现场（时间戳 + 剩余行数）落库，跨重载可查
@@ -1141,21 +1221,64 @@ export class DbEngine {
 	 * Save embeddings directly to SQLite BLOB.
 	 * Each embedding = EMBEDDING_DIM × Float32 = 4096 bytes.
 	 */
-	saveEmbeddings(chunkIds: string[], embeddings: number[][]): void {
-		for (let i = 0; i < chunkIds.length; i++) {
-			const embedding = embeddings[i];
-			if (!embedding) continue; // 无向量（纯文本索引）→ 保持 vector 为 NULL
-			const vec = new Float32Array(EMBEDDING_DIM);
-			for (let j = 0; j < Math.min(embedding.length, EMBEDDING_DIM); j++) {
-				vec[j] = embeddings[i][j];
+	/** 向量批量写（2026-11-18 v2）：单事务 + 200/片让出（同 enqueueMany
+	 *  口径——后台写不再独占 worker，用户 search 在片间隙插队）；并且
+	 *  **增量更新内存向量缓存**：已有 id 原地写 Float32Array、新 id 倍容
+	 *  追加——cacheLoaded 不再整缓存失效，消掉每次嵌入批后 280MB 冷重读
+	 *  （search 慢的最后一块拼图）。 */
+	async saveEmbeddings(chunkIds: string[], embeddings: number[][]): Promise<void> {
+		const CHUNK = 200;
+		const dim = EMBEDDING_DIM;
+		const yieldOnce = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+		this.db!.exec("BEGIN");
+		try {
+			for (let i = 0; i < chunkIds.length; i++) {
+				const embedding = embeddings[i];
+				if (!embedding) continue; // 无向量（纯文本索引）→ 保持 vector 为 NULL
+				const vec = new Float32Array(dim);
+				for (let j = 0; j < Math.min(embedding.length, dim); j++) {
+					vec[j] = embedding[j];
+				}
+				const blob = Buffer.from(vec.buffer);
+				this.db!.run(
+					"UPDATE chunks SET status = 'active', vector = ? WHERE id = ?",
+					[blob, chunkIds[i]]
+				);
+				// 内存缓存增量更新（仅在缓存已加载且非整库清空态）
+				if (this.cacheLoaded && this.allVectors) {
+					const idx = this.vectorIdToIndex.get(chunkIds[i]);
+					if (idx !== undefined) {
+						// 既有向量原地覆写
+						for (let j = 0; j < dim; j++) this.allVectors[idx * dim + j] = vec[j];
+					} else {
+						// 新激活 chunk：倍容追加
+						const count = this.allVectorIds.length;
+						if ((count + 1) * dim > this.allVectors.length) {
+							const cap = Math.max(1024, count * 2) * dim;
+							const grown = new Float32Array(cap);
+							grown.set(this.allVectors.subarray(0, count * dim));
+							this.allVectors = grown;
+						}
+						this.vectorIdToIndex.set(chunkIds[i], count);
+						this.allVectorIds.push(chunkIds[i]);
+						const prow = this.db!.exec("SELECT note_path FROM chunks WHERE id = ?", [chunkIds[i]]);
+						this.allVectorPaths.push((prow[0]?.values?.[0]?.[0] as string) ?? "");
+						for (let j = 0; j < dim; j++) this.allVectors[count * dim + j] = vec[j];
+					}
+				}
+				if ((i + 1) % CHUNK === 0) {
+					this.db!.exec("COMMIT");
+					await yieldOnce();
+					this.db!.exec("BEGIN");
+				}
 			}
-			const blob = Buffer.from(vec.buffer);
-			this.db!.run(
-				"UPDATE chunks SET status = 'active', vector = ? WHERE id = ?",
-				[blob, chunkIds[i]]
-			);
+			this.db!.exec("COMMIT");
+		} catch (e) {
+			try { this.db!.exec("ROLLBACK"); } catch { /* already rolled back */ }
+			// 事务回滚后内存缓存可能与 DB 不一致 → 退回整载（下次 search 重读）
+			this.cacheLoaded = false;
+			throw e;
 		}
-		this.cacheLoaded = false;
 	}
 
 	/** Save a document-level vector (derived from the note's heading tree).
@@ -1618,6 +1741,46 @@ export class DbEngine {
 	 * paths with a count of matching chunks per note.
 	 */
 	textSearch(pattern: string, limit = 200, pathFilter?: string, excludePaths?: string[], scopePrefixes?: string[]): Array<{ path: string; matchCount: number; preview: string }> {
+		const trimmed = pattern.trim();
+		// FTS5 路径（2026-11-18）：MATCH 短语 + 尾部前缀星——毫秒级替代
+		// LIKE '%..%' 全扫（91k chunks 上 1.5~3.7s/次）。引号内短语给出
+		// 连续子串语义（CJK 逐字成 token，短语=相邻序列≈子串）；尾部 *
+		// 让拉丁词保留前缀命中（PPU → PPUs）。空结果 = 真不存在，直返。
+		if (this.fts5Available && trimmed.length >= 3) {
+			const phrase = trimmed.replace(/"/g, '""');
+			// 引号短语（不加尾部 *）：trigram 下 = 连续子串语义（与原 LIKE
+			// 一致）；带 * 的前缀语法在 trigram 上会静默零命中（实测）。
+			const match = `"${phrase}"`;
+			let sql = `SELECT note_path, COUNT(*) as cnt, MAX(content_preview) as prev
+				FROM chunks_fts WHERE chunks_fts MATCH ?`;
+			const fparams: unknown[] = [match];
+			if (pathFilter) {
+				sql += " AND note_path LIKE ?";
+				fparams.push(`%${pathFilter}%`);
+			}
+			const fscope = (scopePrefixes ?? [])
+				.map((p) => p.trim().replace(/\/?$/, "/").toLowerCase())
+				.filter((p) => p.length > 1);
+			if (fscope.length > 0) {
+				sql += ` AND (${fscope.map(() => "note_path LIKE ?").join(" OR ")})`;
+				for (const p of fscope) fparams.push(`${p}%`);
+			}
+			for (const ex of excludePaths ?? []) {
+				const t = ex.trim();
+				if (!t) continue;
+				sql += " AND note_path NOT LIKE ?";
+				fparams.push(`%${t}%`);
+			}
+			sql += " GROUP BY note_path ORDER BY cnt DESC LIMIT ?";
+			fparams.push(Math.max(1, limit));
+			const frows = this.db!.exec(sql, fparams);
+			if (frows.length === 0 || frows[0].values.length === 0) return [];
+			return frows[0].values.map((row) => ({
+				path: String(row[0] ?? ""),
+				matchCount: Number(row[1] ?? 0),
+				preview: String(row[2] ?? ""),
+			}));
+		}
 		const like = `%${pattern}%`;
 		let sql = "SELECT note_path, COUNT(*) as cnt, MAX(content_preview) as prev FROM chunks WHERE content LIKE ?";
 		const params: unknown[] = [like];
@@ -1673,10 +1836,39 @@ export class DbEngine {
 		);
 	}
 
-	/** Enqueue multiple items */
-	enqueueMany(items: Array<{ notePath: string; action: QueueAction; priority?: number }>): void {
-		for (const item of items) {
-			this.enqueue(item.notePath, item.action, item.priority ?? 2);
+	/** Enqueue multiple items. 单事务 + 400/片让出：旧实现逐条 SELECT 去重
+	 *  + autocommit INSERT，OPFS 上几千条 = 单条 RPC 独占 worker 7s+，
+	 *  期间用户 search 一路排队（2026-11-18 rpcdiag 实录僵持根因）。
+	 *  改为：一条 SELECT 预载在途集合本地去重 + 单事务批量写，片间
+	 *  setTimeout(0) 让排队中的 RPC 插队处理。 */
+	async enqueueMany(items: Array<{ notePath: string; action: QueueAction; priority?: number }>): Promise<void> {
+		const CHUNK = 400;
+		const yieldOnce = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+		const inFlight = new Set<string>();
+		const r = this.db!.exec("SELECT note_path || '|' || action FROM queue WHERE status IN ('pending','processing')");
+		if (r.length > 0) for (const row of r[0].values) inFlight.add(String(row[0]));
+		this.db!.exec("BEGIN");
+		try {
+			for (let i = 0; i < items.length; i++) {
+				const item = items[i];
+				const key = `${item.notePath}|${item.action}`;
+				if (inFlight.has(key)) continue;
+				inFlight.add(key);
+				this.db!.run(
+					"INSERT INTO queue (note_path, action, priority, status, retries, error, created_at) VALUES (?, ?, ?, 'pending', 0, NULL, ?)",
+					[item.notePath, item.action, item.priority ?? 2, Date.now()]
+				);
+				if ((i + 1) % CHUNK === 0) {
+					// 分片提交：片间隙 worker 消息泵可处理排队中的 RPC
+					this.db!.exec("COMMIT");
+					await yieldOnce();
+					this.db!.exec("BEGIN");
+				}
+			}
+			this.db!.exec("COMMIT");
+		} catch (e) {
+			try { this.db!.exec("ROLLBACK"); } catch { /* already rolled back */ }
+			throw e;
 		}
 	}
 

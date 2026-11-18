@@ -313,6 +313,8 @@ html.toc-force .toc.has-toc{display:block;position:fixed;right:16px;left:auto;to
 .toc-top svg{width:13px;height:13px;flex:none}
 .toc-top:hover{color:var(--brand-ink)}
 .toc-item{display:block;padding:4px 10px;color:var(--muted);text-decoration:none;border-left:2px solid var(--line);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:0 6px 6px 0}
+/* 一级目录（用户提问）：品牌色加粗，与回答内标题一眼分层 */
+.toc-item.toc-q{color:var(--brand-ink);font-weight:600;border-left-color:var(--brand)}
 .toc-item:hover{color:var(--ink);background:var(--bubble)}
 .toc-item.is-active{color:var(--brand-ink);border-left-color:var(--brand);font-weight:600;background:linear-gradient(90deg,rgba(139,108,239,.09),transparent)}
 .toc-h1{font-weight:600;color:var(--ink)}
@@ -337,7 +339,7 @@ html.toc-force .toc.has-toc{display:block;position:fixed;right:16px;left:auto;to
 </nav>
 </header>
 <div class="pc-body">
-<section class="head"><h1>${safeTitle}</h1><div class="meta"><span>${dateLabel}</span><span class="dot"></span><span data-ui="meta">${esc(t("shareFooter"))}</span></div></section>
+<section class="head"><h1 id="q-head">${safeTitle}</h1><div class="meta"><span>${dateLabel}</span><span class="dot"></span><span data-ui="meta">${esc(t("shareFooter"))}</span></div></section>
 <div class="thread">
 ${parts.join("\n")}
 </div>
@@ -430,8 +432,13 @@ ${parts.join("\n")}
 	var thread = document.querySelector(".thread");
 	var toc = document.getElementById("toc");
 	if (thread && toc) {
-		var hs = thread.querySelectorAll("h1,h2,h3,h4");
-		if (hs.length >= 3) {
+		/* 空标题过滤：空文本的 h* 不进大纲（避免空行占位） */
+		var all = thread.querySelectorAll("h1,h2,h3,h4");
+		var heads = [];
+		for (var k = 0; k < all.length; k++) {
+			if ((all[k].textContent || "").trim().length > 0) heads.push(all[k]);
+		}
+		if (heads.length >= 3) {
 			var list = document.createElement("div");
 			/* back-to-top pinned above the outline */
 			var topLink = document.createElement("a");
@@ -443,7 +450,19 @@ ${parts.join("\n")}
 				window.scrollTo({ top: 0, behavior: "smooth" });
 			});
 			toc.appendChild(topLink);
-			hs.forEach(function (h, i) {
+			/* 一级目录 = 用户提问（页面标题 h1），置于大纲首位 */
+			var qh = document.getElementById("q-head");
+			var qItem = document.createElement("a");
+			qItem.className = "toc-item toc-q";
+			qItem.textContent = qh ? qh.textContent : "";
+			qItem.href = "#q-head";
+			qItem.addEventListener("click", function (e) {
+				e.preventDefault();
+				if (qh) qh.scrollIntoView({ behavior: "smooth", block: "start" });
+				else window.scrollTo({ top: 0, behavior: "smooth" });
+			});
+			list.appendChild(qItem);
+			heads.forEach(function (h, i) {
 				if (!h.id) h.id = "sec-" + i;
 				var a = document.createElement("a");
 				a.className = "toc-item toc-" + h.tagName.toLowerCase();
@@ -468,16 +487,17 @@ ${parts.join("\n")}
 					applyToc();
 				});
 			}
-			/* highlight the section currently in view (last heading above the line) */
+			/* highlight the section currently in view (last heading above the line);
+			   items[0] 是提问项：没有任何标题过线时高亮它（还在读问题/结论前） */
 			var items = list.querySelectorAll(".toc-item");
 			var updateActive = function () {
 				var cur = -1;
-				for (var i = 0; i < hs.length; i++) {
-					if (hs[i].getBoundingClientRect().top <= 120) cur = i;
+				for (var i = 0; i < heads.length; i++) {
+					if (heads[i].getBoundingClientRect().top <= 120) cur = i;
 					else break;
 				}
 				for (var j = 0; j < items.length; j++) {
-					items[j].classList.toggle("is-active", j === cur);
+					items[j].classList.toggle("is-active", j === cur + 1);
 				}
 			};
 			document.addEventListener("scroll", updateActive, { passive: true });

@@ -4447,7 +4447,6 @@ body .semlink-msg-user::selection {
    淡灰（faint）弱于完成态的 muted，仅靠灰阶深浅区分状态。 */
 .semlink-tool-call.is-pending {
     font-size: 14px;
-    font-weight: 600;
     color: var(--text-faint);
     white-space: nowrap;
     overflow: hidden;
@@ -4456,7 +4455,6 @@ body .semlink-msg-user::selection {
 }.semlink-tool-call-summary {
     cursor: pointer;
     font-size: 14px;
-    font-weight: 600;
     /* Quiet row, not a white bar: muted text on the gray panel, so the
        tools never compete with the answer (the "主"). */
     color: var(--text-muted);
@@ -4516,9 +4514,9 @@ body .semlink-msg-user::selection {
     font-size: 14px;
     color: var(--text-muted);
     margin: 4px 0 2px;
-    /* Align the label with the rule below it — the whole expanded block
-       sits indented under the summary for a clearer hierarchy. */
-    padding-left: 12px;
+    /* 与段标题文字列（27px）对齐——思考/请求/返回所有内容文本共用
+       同一条左基线（2026-11-18 用户拍板）。 */
+    padding-left: 27px;
 }.semlink-tool-call-pre {
     font-family: var(--font-monospace);
     font-size: 12px;
@@ -4527,7 +4525,10 @@ body .semlink-msg-user::selection {
     word-break: break-word;
     /* No max-height: content flows fully — per-block scrollbars would
        nest inside the thinking panel's own scrolling. */
-    margin: 0 0 0 12px;
+    /* 左侧竖线随块整体缩进到标题文字列（27px）——线与「思考/持续了」
+       的文字起点同一条线；JSON 文本在线内右侧 8px 起排（引用块样式）。 */
+    margin: 0 0 0 27px;
+    padding: 5px 8px 5px 6px;
     padding: 5px 8px 5px 10px;
     /* Left rule instead of a background block: request/response content
        reads as an indented continuation of the tool row, not a card. */
@@ -4536,6 +4537,11 @@ body .semlink-msg-user::selection {
     border-left: 2px solid var(--background-modifier-border);
     border-radius: 0;
     color: var(--text-normal);
+}/* 返回体钳 10 行内滚（2026-11-18）：12px×1.4 行高 ≈16.8px/行，大 JSON
+   不再撑爆面板；请求体保持完整不钳（参数本来就短）。 */
+.semlink-tool-call-response .semlink-tool-call-pre {
+    max-height: 168px;
+    overflow-y: auto;
 }/* New conversation button (above the input) */
 /* Model thought block inside the thinking process */
 .semlink-thinking-thought {
@@ -4557,6 +4563,45 @@ body .semlink-msg-user::selection {
 .semlink-tool-call.is-pending {
     padding-left: 27px;
     text-indent: -19px;
+}/* 思考段（💭 打包自动折叠，2026-11-18）：ZCode 式标题行「思考 · 持续了
+   N 秒」（关段时补时长）——无行图标，不做首行回拉缩进；段内思考行
+   纯文本（不重复 brain 图标），40px 缩进表达从属。段默认折叠（live
+   正在写的段 open）。 */
+.semlink-thinking-segment {
+    margin-top: 6px;
+}
+.semlink-thinking-segment > summary {
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-muted);
+    list-style: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0;
+    padding: 3px 4px;
+    /* brain 图标列与工具行同栏（8px 起）：悬挂缩进必须在 padding
+       之后（同优先级靠文件序，踩坑见 hanging-indent 注释） */
+    padding-left: 27px;
+    text-indent: -19px;
+    border-radius: 3px;
+    user-select: text;
+}
+.semlink-thinking-segment > summary::-webkit-details-marker {
+    display: none;
+}
+.semlink-thinking-segment > summary:hover {
+    color: var(--text-normal);
+    background: var(--background-modifier-hover);
+}
+.semlink-thinking-segment > summary .semlink-row-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.semlink-thinking-segment[open] .semlink-thinking-thought {
+    /* 段内思考行与标题文字列（27px）左对齐——思考/请求/返回一条基线 */
+    padding-left: 27px;
+    text-indent: 0;
 }/* 运行中流光：文本 span 用 background-clip:text 上渐变（faint 基底
    + normal 高光带），背景每次循环左移恰一个渐变周期（-200%）成
    无缝扫光；只挂文本 span——SVG 图标 stroke 走 currentColor，整行
@@ -4593,8 +4638,11 @@ body .semlink-msg-user::selection {
     margin: 2px 0 6px;
     padding: 4px 8px;
     /* 与思考体文本列（27px = 8px 行距 + 14px 图标 + 5px 间距）对齐：
-       流式思考正文不贴左缘，整面板一条文本栏。 */
+       流式思考正文不贴左缘，整面板一条文本栏。行首 brain 图标与完成态
+       thought 行同款（prefixRowIcon 结构）——text-indent 回拉必须在
+       padding 之后（同优先级靠文件序，踩坑见 hanging-indent 注释）。 */
     padding-left: 27px;
+    text-indent: -19px;
 }.semlink-live-reasoning::after {
     content: "▍";
     color: var(--text-faint);
@@ -5040,14 +5088,22 @@ body .semlink-msg-user::selection {
 .semlink-history-archive-btn{margin-left:auto}
 .semlink-history-newfolder{margin:.5rem .8rem .1rem;padding:.4rem .6rem;border:1px dashed var(--background-modifier-border);border-radius:8px;cursor:pointer;font-size:.8rem;color:var(--text-muted)}
 .semlink-history-newfolder:hover{color:var(--text-normal);border-color:var(--interactive-accent)}
-.semlink-history-folder:hover 
+.semlink-history-folder:hover{background:var(--background-modifier-hover)}
 /* Pro history folder tree */
-.semlink-history-item{position:relative}
+/* 行左 34px 常驻置顶槽（2026-11-18 用户拍板留足空间）：标题列恒定起点，
+   pin 悬停浮现/已钉常显都落在槽内（absolute 不参与 flex，显隐零位移）。 */
+.semlink-history-item{position:relative;padding-left:34px !important}
 .semlink-history-item .clickable-icon{height:26px;display:flex;align-items:center}
 .semlink-history-item-time{height:26px;display:flex;align-items:center}
-.semlink-history-item-pin{flex:none;display:flex;opacity:0;transition:opacity .12s}
-.semlink-history-item:hover .semlink-history-item-pin{opacity:1}
-.semlink-history-item-pin.is-pinned{opacity:1;color:var(--interactive-accent)}
+/* pin 绝对定位在左槽内垂直居中；!important 压 Obsidian .clickable-icon
+   的 display 声明（同 semlink-hidden 哲学）。 */
+.semlink-history-item .semlink-history-item-pin{position:absolute;left:5px;top:50%;transform:translateY(-50%);margin:0;flex:none;display:none !important;transition:opacity .12s}
+.semlink-history-item:hover .semlink-history-item-pin{display:flex !important}
+.semlink-history-item .semlink-history-item-pin.is-pinned{display:flex !important;color:var(--interactive-accent)}
+/* 后台完成未读点：左槽品牌色圆点（ZCode「刚完成」语义），点开即消；
+   未读行隐藏 pin（同槽防重叠，hover 也不出——先看答案再钉）。 */
+.semlink-history-item-unread{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--interactive-accent);flex:none}
+.semlink-history-item:has(.semlink-history-item-unread) .semlink-history-item-pin{display:none !important}
 .semlink-history-item-pin.clickable-icon{background:transparent;box-shadow:none}
 .semlink-history-item-pin.clickable-icon:hover{background:transparent;box-shadow:none}
 .semlink-history-item-pin.clickable-icon:hover{color:var(--text-accent)}
