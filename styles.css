@@ -2294,8 +2294,11 @@
 .semlink-search-view.semlink-main-tab {
     transition: padding-left 0.25s ease;
 }
-.semlink-search-view.semlink-main-tab.semlink-menu-persistent {
+/* 常显菜单缩进：不依赖 main-tab——宽度驱动（>720px 自动展开）覆盖
+   侧栏实例（侧栏拖宽 >720 同样展开，2026-11-18 拍板） */
+.semlink-search-view.semlink-menu-persistent {
     padding-left: 300px;
+    transition: padding-left 0.25s ease;
 }
 .semlink-history-drawer.is-persistent {
     box-shadow: none;

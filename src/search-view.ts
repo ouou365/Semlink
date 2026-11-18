@@ -211,13 +211,16 @@ export class SemanticSearchView extends ItemView {
 	private menuBtnEl: HTMLElement | null = null; // history drawer toggle
 	private guideHomeBtnEl: HTMLElement | null = null; // 菜单右侧：无对话=对话引导，有对话=回到主页
 	// ── 主区域（新标签页）实例的常显历史菜单 ──
-	/** persistentMenuOn：菜单按钮切换的用户偏好（每个视图会话重置为开）；
-	 *  buildingPersistentMenu：layout-change 高频触发下防止重复构建；
-	 *  persistentMenuRefresh：抽屉 render 闭包的句柄，会话落盘后刷新列表。 */
+	/** persistentMenuOn：菜单显隐偏好。宽度驱动（2026-11-18 用户拍板）：
+	 *  视图宽度跨 720px 边界时自动置位（宽=开/窄=关），同侧内 ☰ 手动
+	 *  开关不被覆盖；buildingPersistentMenu：layout-change 高频触发下
+	 *  防止重复构建；persistentMenuRefresh：抽屉 render 闭包的句柄，
+	 *  会话落盘后刷新列表。 */
 	private persistentMenuOn = true;
-	/** 上一次 refreshMainTabUI 时是否在弹窗中——检测「首次进入弹窗」，
-	 *  首次进入时默认收起左侧菜单（用户点 ☰ 再展开）。 */
-	private lastInPopout = false;
+	/** 上一次宽度判定侧（true=宽 >720）：跨界检测用，null=首轮。 */
+	private lastWidthSide: boolean | null = null;
+	/** 视图宽度直观察：跨 720 边界判定不依赖 layout-change 事件时机。 */
+	private widthRO: ResizeObserver | null = null;
 	private buildingPersistentMenu = false;
 	private persistentMenuRefresh: (() => void) | null = null;
 	/** 弹窗宽度联动：当前监听 resize 的弹窗 window（换窗/回侧栏时换绑）。 */
@@ -847,6 +850,11 @@ export class SemanticSearchView extends ItemView {
 		// 主区域（新标签页）实例：常显历史菜单 + 专属底色。布局变化（拖动
 		// 换区）后由 layout-change 重新校正；侧栏实例两类样式都不挂。
 		this.refreshMainTabUI();
+		// 宽度直观察（2026-11-18 拍板 >720 自动展开菜单）：layout-change
+		// 不覆盖全部宽度变化源（如程序化 setStyle），ResizeObserver 兜底
+		// 使跨 720 边界判定不漏拍。
+		this.widthRO = new ResizeObserver(() => this.refreshMainTabUI());
+		this.widthRO.observe(this.contentEl);
 		this.registerEvent(this.app.workspace.on("layout-change", () => {
 			this.refreshMainTabUI();
 			this.adoptLeafWindow();
@@ -992,6 +1000,8 @@ export class SemanticSearchView extends ItemView {
 			this.modelPopupEl = null;
 		}
 		this.persistentMenuRefresh = null;
+		this.widthRO?.disconnect();
+		this.widthRO = null;
 		this.popoutResizeWin?.removeEventListener("resize", this.onPopoutResize);
 		this.popoutResizeWin = null;
 		this.contentEl.empty();
@@ -4661,7 +4671,7 @@ export class SemanticSearchView extends ItemView {
 	private refreshMainTabUI(): void {
 		const isMain = this.isMainTab();
 		const inPopout = this.inPopoutWindow();
-		// 弹窗宽度联动：换绑 resize 监听到当前弹窗 window，跨越 600px
+		// 弹窗宽度联动：换绑 resize 监听到当前弹窗 window，跨越 720px
 		// 边界时经本方法自动增减常显菜单（onPopoutResize → 这里）
 		const popoutWin = inPopout ? this.contentEl.ownerDocument.defaultView ?? null : null;
 		if (this.popoutResizeWin && this.popoutResizeWin !== popoutWin) {
@@ -4682,22 +4692,26 @@ export class SemanticSearchView extends ItemView {
 			setIcon(this.popoutBtnEl, "picture-in-picture-2");
 			this.popoutBtnEl.setAttribute("aria-label", inPopout ? t("dockBackWindow") : t("popOutWindow"));
 		}
-		// 首次进入弹窗：默认收起左侧菜单——弹窗是聚焦对话的形态，
-		// 菜单点 ☰ 随时展开（窄幅 ≤600 的自动收起逻辑不受影响）。
-		if (inPopout && !this.lastInPopout) {
-			this.persistentMenuOn = false;
+		// 宽度驱动（2026-11-18 用户拍板）：视图宽度 >720px 自动展开左侧
+		// 菜单、≤720px 自动收起——跨边界时改写偏好，同侧内 ☰ 手动开关
+		// 不被覆盖。视图宽度：主区域=leaf 宽，弹窗=窗口宽（等价）。
+		const viewWidth = this.contentEl.getBoundingClientRect().width;
+		const wide = viewWidth > 720;
+		if (wide !== this.lastWidthSide) {
+			this.lastWidthSide = wide;
+			this.persistentMenuOn = wide;
 		}
-		this.lastInPopout = inPopout;
 		// 独立弹窗：隐藏 Obsidian 的视图标题头（Semlink 名牌/图标），
 		// 对话区顶满整窗；窗口自身的系统标题栏负责拖动/关闭
 		this.contentEl.parentElement?.querySelector(":scope > .view-header")
 			?.toggleClass("semlink-hidden", inPopout);
-		// 弹窗窄幅（≤600px）：常显菜单自动收起，点菜单按钮出浮层抽屉
-		const persistent = isMain && !this.popoutWindowNarrow() && this.persistentMenuOn;
+		// 窄幅（≤720px）：常显菜单自动收起，点菜单按钮出浮层抽屉。
+		// 不限主区域——侧栏实例拖宽 >720 同样自动展开（2026-11-18 拍板）。
+		const persistent = wide && this.persistentMenuOn;
 		this.contentEl.toggleClass("semlink-menu-persistent", persistent);
-		if (!isMain || !persistent) {
-			// 拖回侧栏 / 弹窗窄幅 / 用户收起过：常显菜单就地拆除，
-			// 回落为浮层抽屉模式（宽幅恢复时由 resize 重建）
+		if (!persistent) {
+			// 拖回侧栏 / 窄幅 / 用户收起过：常显菜单就地拆除，
+			// 回落为浮层抽屉模式（宽幅恢复时跨边界重建）
 			this.contentEl.querySelector(":scope > .semlink-history-drawer.is-persistent")?.remove();
 			this.persistentMenuRefresh = null;
 			return;
@@ -4711,10 +4725,11 @@ export class SemanticSearchView extends ItemView {
 		});
 	}
 
-	/** 弹窗是否处于窄幅（≤600px）：常显菜单收起，历史走浮层抽屉。 */
-	private popoutWindowNarrow(): boolean {
-		const win = this.contentEl.ownerDocument.defaultView;
-		return !!win && win.innerWidth <= 600;
+	/** 视图是否处于窄幅（≤720px）：常显菜单收起，历史走浮层抽屉。
+	 *  按视图宽度（主区域=leaf 宽，弹窗=窗口宽）而非窗口宽度——侧栏
+	 *  拖宽/分栏变化同样驱动。 */
+	private isNarrowWidth(): boolean {
+		return this.contentEl.getBoundingClientRect().width <= 720;
 	}
 
 	/** 会话落盘后刷新常显菜单列表（浮层抽屉每次打开重建，无需此步）。 */
