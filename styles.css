@@ -4422,10 +4422,12 @@ body .semlink-msg-user::selection {
     user-select: none;
     list-style: none;
 }
-/* 摘要行尾的模型 ID：常规字重（不加粗）——Latin 字形在同字重下视觉
-   密度高于 CJK，拆出降档后时长标签保持 600 不变。 */
+/* 摘要行尾的模型 ID：常规字重（不加粗）+ 再降一档灰（text-faint）——
+   Latin 字形在同字重下视觉密度高于 CJK，拆出降档后时长标签保持 600
+   不变。 */
 .semlink-thinking-model {
     font-weight: var(--font-normal);
+    color: var(--text-faint);
 }
 /* While the thinking panel is expanded, pin its header ("思考了 N 秒") to
    the top of the scrollable conversation so it can be collapsed from
