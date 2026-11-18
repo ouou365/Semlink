@@ -2403,8 +2403,7 @@
 }
 .semlink-search-header--compact .semlink-search-first-question {
     /* flex 垂直居中：inline 布局会让文字贴着 logo 基线排、视觉偏下。
-       保持单行行高（标题与图标同行居中）；项目徽章不参与此行布局，
-       绝对定位挂在头部底部专属条带里（见 .semlink-project-badge）。 */
+       保持单行行高（标题与图标同行居中）。 */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2477,15 +2476,59 @@
 }.semlink-history-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 2px;
     padding: 12px 14px;
     border-bottom: 1px solid var(--background-modifier-border);
     flex-shrink: 0;
 }.semlink-history-title {
+    /* 标题吸走富余空间使图标组靠右聚拢（原 space-between 在 4 子元素
+       （标题+🔍+⋯+✕）下会均匀散开） */
+    margin-right: auto;
     font-size: 14px;
     font-weight: 600;
     color: var(--text-normal);
-}.semlink-history-list {
+}
+/* 抽屉头部图标钮（🔍 搜索收纳 / ⋯ 更多）：clickable-icon 基础上的
+   一致灰阶；is-active = 搜索行展开中 */
+.semlink-history-head-btn {
+    color: var(--text-muted);
+}
+.semlink-history-head-btn:hover,
+.semlink-history-head-btn.is-active {
+    color: var(--text-normal);
+}
+/* 新对话常驻 pill（2026-11-18 拍板，参考「新建任务」）：头部下方通栏、
+   浅底圆角；灰阶克制不引 accent（AP-2 同源） */
+.semlink-history-newchat-row {
+    padding: 10px 12px 4px;
+    flex-shrink: 0;
+}
+.semlink-history-newchat-pill {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    padding: 7px 11px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    background: var(--background-secondary);
+    color: var(--text-normal);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+}
+.semlink-history-newchat-pill:hover {
+    background: var(--background-modifier-hover);
+}
+.semlink-history-newchat-pill .semlink-history-newchat-icon {
+    display: inline-flex;
+    flex: none;
+}
+.semlink-history-newchat-pill svg {
+    width: 15px;
+    height: 15px;
+}
+.semlink-history-list {
     flex: 1 1 0;
     overflow-y: auto;
     padding: 6px;
@@ -4378,7 +4421,13 @@ body .semlink-msg-user::selection {
     color: var(--text-muted);
     user-select: none;
     list-style: none;
-}/* While the thinking panel is expanded, pin its header ("思考了 N 秒") to
+}
+/* 摘要行尾的模型 ID：常规字重（不加粗）——Latin 字形在同字重下视觉
+   密度高于 CJK，拆出降档后时长标签保持 600 不变。 */
+.semlink-thinking-model {
+    font-weight: var(--font-normal);
+}
+/* While the thinking panel is expanded, pin its header ("思考了 N 秒") to
    the top of the scrollable conversation so it can be collapsed from
    anywhere. Sticky headers stack: an expanded tool call's summary pins
    right below this one (same background = seamless). */
@@ -5087,7 +5136,6 @@ body .semlink-msg-user::selection {
 .semlink-history-folder-mask-title{font-size:.85rem;font-weight:700;color:var(--text-normal)}
 .semlink-history-folder-mask-cta{border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);border-radius:999px;padding:.35rem 1.1rem;font-size:.85rem;font-weight:700;cursor:pointer}
 .semlink-history-folder-mask-cta:hover{filter:brightness(1.08)}
-.semlink-history-archive-btn{margin-left:auto}
 .semlink-history-newfolder{margin:.5rem .8rem .1rem;padding:.4rem .6rem;border:1px dashed var(--background-modifier-border);border-radius:8px;cursor:pointer;font-size:.8rem;color:var(--text-muted)}
 .semlink-history-newfolder:hover{color:var(--text-normal);border-color:var(--interactive-accent)}
 .semlink-history-folder:hover{background:var(--background-modifier-hover)}
@@ -5133,11 +5181,6 @@ body .semlink-msg-user::selection {
 .semlink-history-folder:hover .semlink-history-folder-acts{opacity:1}
 .semlink-history-folder-act{display:inline-flex;color:var(--text-muted);cursor:pointer}
 .semlink-history-folder-act:hover{color:var(--text-normal)}
-.semlink-history-folder-edit{gap:.3rem}
-.semlink-history-folder-edit .semlink-folder-input{flex:1;min-width:0}
-.semlink-history-folder-edit .semlink-folder-input{height:24px;padding:.1rem .45rem}
-.semlink-history-folder-edit .semlink-history-folder-act{opacity:1}
-.semlink-history-unfiled-gap{height:.8rem}
 /* 树形缩进：每层 body 相对父层缩进 1.5rem 并画一条竖线，子行/子项
     只保留固定基数 padding——竖线始终对齐本层 chevron，嵌套自动对齐。 */
 .semlink-history-folder-body {
@@ -5153,13 +5196,9 @@ body .semlink-msg-user::selection {
 }
 .semlink-history-folder.is-drop{background:var(--background-modifier-hover);outline:2px dashed var(--interactive-accent);outline-offset:-2px}
 .semlink-history-folder-body .semlink-history-item-pin{display:none}
-.semlink-history-item:hover .semlink-folder-input{width:100%;border:1px solid var(--background-modifier-border);border-radius:6px;background:var(--background-primary);color:var(--text-normal);padding:.45rem .6rem;font-family:inherit}
-.semlink-folder-name-modal{width:min(22rem,80vw)}
 .semlink-confirm-row{display:flex;justify-content:flex-end;gap:.5rem;margin-top:.8rem}
-.semlink-folder-name-modal .modal-content{padding:.9rem 1rem 1rem}
-.semlink-folder-name-modal h2{margin:.1rem 0 .7rem;font-size:1rem}
-.semlink-folder-name-modal .semlink-folder-input-row{margin-top:.8rem}
-.semlink-folder-input-row{display:flex;gap:.5rem;justify-content:flex-end;margin-top:.8rem}/* ── Pro usage & cost dashboard ── */
+/* ── Pro usage & cost dashboard ── */
+
 .semlink-usage-modal .modal-content{padding:1.1rem 1.2rem}
 .semlink-usage-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.6rem;margin-bottom:1rem}
 .semlink-usage-card{border:1px solid var(--background-modifier-border);border-radius:10px;padding:.7rem .8rem}
@@ -5524,22 +5563,13 @@ body .semlink-msg-user::selection {
     }
 }/* ── 工具栏行合并进输入卡：模型选择器在卡片底行左端，按钮靠右 ── */
 .semlink-search-model .semlink-search-model-trigger {
-    margin-right: auto;
     padding: 2px 4px;
     border-radius: 6px;
 }
 .semlink-search-model .semlink-search-model-trigger:hover {
     background: var(--background-modifier-hover);
 }
-/* 菜单标题行里的「新对话」入口：紧凑形态（无外框、hover 浅底）。
-   margin-left：archive 钮的 margin-left:auto 会吸走全部富余空间、把
-   标题和本钮压到 0 间距（用户截图"和左侧 Menu 之间加点间隔"）——这里
-   给标题行一个不依赖分配算法的保底间距。 */
-.semlink-history-header .semlink-search-newchat {
-    padding: 4px 8px;
-    margin-left: 12px;
-    margin-right: 2px;
-}/* ── 排队跟进指令卡片（生成中发送的消息，贴在输入行上方）── */
+/* ── 排队跟进指令卡片（生成中发送的消息，贴在输入行上方）── */
 .semlink-queue {
     display: flex;
     flex-direction: column;
@@ -7721,28 +7751,33 @@ body .semlink-msg-user::selection {
 }
 
 /* ── Project（检索范围限定，2026-11-16）── */
-/* 主页输入框上方的选择带 + chip */
-.semlink-project-band {
-    display: flex;
-    justify-content: flex-start;
-    padding: 0 4px 6px;
-}
+/* 输入卡底行的项目 chip（2026-11-18 二次拍板：会话归属/检索范围合一居
+   此，头部徽章条带撤除）。灰阶克制（AP-2）：不用 accent 彩色，选中态
+   仅以 text-normal 深一档区分；无底色，hover 才浮起。 */
 .semlink-project-chip {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    max-width: 100%;
-    padding: 3px 10px;
-    border-radius: 999px;
-    background: var(--background-modifier-hover);
+    max-width: 220px;
+    padding: 2px 6px;
+    border-radius: 6px;
     color: var(--text-muted);
     font-size: 12px;
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
+    flex: none;
+}
+.semlink-search-model .semlink-project-chip {
+    /* 行内布局：模型选择器让出 margin-right:auto，由 chip 吸走富余空间、
+       保持展开/发送按钮靠右（两处 auto 会对半分空间把 chip 挤到行中） */
+    margin-right: auto;
+}
+.semlink-project-chip:hover {
+    background: var(--background-modifier-hover);
 }
 .semlink-project-chip.is-active {
-    color: var(--text-accent);
+    color: var(--text-normal);
 }
 .semlink-project-chip-text {
     overflow: hidden;
@@ -7808,55 +7843,6 @@ body .semlink-msg-user::selection {
 .semlink-project-popup-edit svg {
     width: 13px;
     height: 13px;
-}
-/* 会话头部徽章（firstQuestion 行尾） */
-.semlink-project-badge {
-    /* 独立条带：绝对定位挂头部底部居中，不参与标题行的布局/居中——
-       标题保持与图标同行的原始垂直居中，徽章占据头部额外让出的高度 */
-    position: absolute;
-    bottom: 4px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 1px 8px;
-    border-radius: 999px;
-    background: var(--interactive-accent);
-    color: var(--text-on-accent);
-    font-size: 11px;
-    font-weight: var(--font-bold);
-    white-space: nowrap;
-}
-/* compact 且徽章可见：头部底部追加一块专属高度放项目名（:has 探测，
-   无项目的会话不加高，仍是原单行头部） */
-.semlink-search-header--compact:has(.semlink-project-badge:not(.semlink-hidden)) {
-    padding-bottom: 20px;
-}
-.semlink-project-badge.is-dangling {
-    background: var(--text-faint);
-    color: var(--text-normal);
-}
-/* 历史菜单 chips 筛选行 */
-.semlink-project-chips {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    padding: 4px 10px 8px;
-}
-.semlink-project-chips.semlink-hidden {
-    display: none;
-}
-.semlink-project-chip-item {
-    padding: 2px 10px;
-    border-radius: 999px;
-    background: var(--background-modifier-hover);
-    color: var(--text-muted);
-    font-size: 12px;
-    cursor: pointer;
-    white-space: nowrap;
-    flex: none;
-}
-.semlink-project-chip-item.is-active {
-    color: var(--text-on-accent);
-    background: var(--interactive-accent);
 }
 /* 创建/编辑弹窗：文件夹多选列表 */
 .semlink-project-folders {

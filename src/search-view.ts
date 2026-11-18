@@ -7,7 +7,7 @@
 // retrieved notes), with a collapsible list of source note cards. If no chat
 // provider is configured, it falls back to showing the raw result list.
 
-import { App, ItemView, MarkdownRenderer, MarkdownView, WorkspaceLeaf, TFile, Vault, Notice, Menu, Modal, setIcon } from "obsidian";
+import { ItemView, MarkdownRenderer, MarkdownView, WorkspaceLeaf, TFile, Vault, Notice, Menu, setIcon } from "obsidian";
 import type { VectorStore } from "./vector-store";
 import type { EmbeddingClient } from "./embedding-client";
 import type { ChatClient, ThinkingStep, ContextBreakdown } from "./chat-client";
@@ -76,6 +76,100 @@ const HOME_SUGGESTION_POOL: Array<{ key: string; icon: string }> = [
  *  (list dashes and "---" rules don't match the surrounding-word rule). */
 function protectHyphens(text: string): string {
 	return text.replace(/(?<=[\w\u4e00-\u9fff])-(?=[\w\u4e00-\u9fff])/g, "\u2011");
+}
+
+/** Streamed-translation block splitter（用户拍板 2026-11-18「翻译一段就
+ *  显示一段」）：从流式累积的译文里解析出已完成的顶层 markdown 单元——
+ *  标题/水平线单行成块，段落读到空行成块，列表逐个顶层 li 成块（嵌套
+ *  子列表/缩进续行并入当前 li），引用块/表格/围栏代码各自连续成块。末尾
+ *  仍在流式中的半截块留在 rest（行有界：不以 \n 结尾的最后一行一律算
+ *  未完成，防止标题打到一半就被换入）。行级 best-effort——流结束后的
+ *  全量解析才权威（块数对不上时 UI 侧退回整卡渲染兜底）。 */
+function parseTranslationUnits(text: string): { units: string[]; rest: string } {
+	const units: string[] = [];
+	const fenceOf = (line: string): { char: string; len: number } | null => {
+		const m = /^ {0,3}(`{3,}|~{3,})\s*$/.exec(line);
+		return m ? { char: m[1][0], len: m[1].length } : null;
+	};
+	const isHeading = (l: string): boolean => /^#{1,6}\s/.test(l);
+	const isHr = (l: string): boolean => /^ {0,3}(?:(-\s*){3,}|(\*\s*){3,}|(_\s*){3,})$/.test(l);
+	const isQuote = (l: string): boolean => /^ {0,3}>/.test(l);
+	const isTable = (l: string): boolean => /^\s*\|/.test(l);
+	const itemOf = (l: string): { indent: number } | null => {
+		const m = /^(\s*)(?:[-*+]|\d{1,9}[.)])\s+/.exec(l);
+		return m ? { indent: m[1].length } : null;
+	};
+	let cur: string[] = [];
+	let curType: "p" | "list" | "quote" | "table" | "code" | null = null;
+	let listBase = 0;
+	let fence: { char: string; len: number } | null = null;
+	const flush = (): void => {
+		if (cur.length > 0) units.push(cur.join("\n"));
+		cur = [];
+		curType = null;
+	};
+	const lines = text.split("\n");
+	// 行有界：最后一个不带换行的半截行不算完成——先摘出来并进 rest。
+	const pending = text.endsWith("\n") || lines[lines.length - 1] === "" ? "" : lines.pop()!;
+	for (const line of lines) {
+		if (fence) {
+			// 闭合围栏（同字符且长度不小于开头、无 info 串）→ 整块代码成单元。
+			const close = fenceOf(line);
+			if (close && close.char === fence.char && close.len >= fence.len) {
+				cur.push(line);
+				flush();
+				fence = null;
+			} else {
+				cur.push(line);
+			}
+			continue;
+		}
+		const open = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+		if (open) {
+			flush();
+			curType = "code";
+			fence = { char: open[1][0], len: open[1].length };
+			cur.push(line);
+			continue;
+		}
+		if (line.trim().length === 0) {
+			flush();
+			continue;
+		}
+		if (isHeading(line) || isHr(line)) {
+			// 单行块：出现即完成（该行已带换行边界）。
+			flush();
+			units.push(line);
+			continue;
+		}
+		const item = itemOf(line);
+		if (item) {
+			if (curType === "list" && item.indent > listBase) {
+				cur.push(line); // 嵌套子列表/缩进续行——并入当前 li 单元
+				continue;
+			}
+			const startingList = curType !== "list";
+			flush();
+			curType = "list";
+			if (startingList) listBase = item.indent;
+			cur.push(line);
+			continue;
+		}
+		// 普通行：quote/table 按类型分块；列表的懒续行并入当前 li。
+		if (curType === "list") {
+			cur.push(line);
+			continue;
+		}
+		const lineType: "p" | "quote" | "table" = isQuote(line) ? "quote" : isTable(line) ? "table" : "p";
+		if (lineType !== curType) flush();
+		curType = lineType;
+		cur.push(line);
+	}
+	// 半截行继续当前块（下一轮 delta 全量重解析会自行归位）。
+	if (pending) {
+		cur.push(pending);
+	}
+	return { units, rest: cur.join("\n") };
 }
 
 /** Recency bucket for a session timestamp: today / yesterday / 3天前 /
@@ -174,7 +268,6 @@ export class SemanticSearchView extends ItemView {
 	private activeProject: ProjectDef | null = null;
 	private projectChipEl: HTMLElement | null = null;
 	private projectPopupEl: HTMLElement | null = null;
-	private projectBadgeEl: HTMLElement | null = null;
 	/** Input tall mode (half-screen editor for long prompts). */
 	private inputExpanded = false;
 	private expandBtnEl: HTMLElement | null = null;
@@ -363,7 +456,6 @@ export class SemanticSearchView extends ItemView {
 		// Right icon group: settings.
 		const rightIcons = header.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
 		this.headerRightIconsEl = rightIcons;
-		this.refreshLicenseUI();
 		// Upgrade entry (✨): one of the three standing Pro entry points
 		// (header, settings, locked items). Hidden the moment a license
 		// activates — refreshLicenseUI() runs on every settings save.
@@ -372,6 +464,10 @@ export class SemanticSearchView extends ItemView {
 			attr: { "aria-label": t("upgradeProBtn") },
 		});
 		this.upgradeBtnEl = upgradeBtn;
+		// 可见性按许可态收敛——必须在 upgradeBtnEl 赋值之后调（此前放在
+		// 按钮创建之前，?. 短路成 no-op：Pro 用户重启/重载后 ✨ 恒显示，
+		// 直到会话内再次 saveSettings 才藏——2026-11-18 用户实测截图）。
+		this.refreshLicenseUI();
 		setIcon(upgradeBtn, "sparkles");
 		upgradeBtn.addEventListener("click", () => {
 			// ✨ 入口按许可状态分流：免费态 = 升级营销窗；Pro 态 = Eagle 式
@@ -407,10 +503,8 @@ export class SemanticSearchView extends ItemView {
 		// Second header row: the first question in small text. It appears
 		// only while the first question is scrolled under the header (see
 		// updateCompactHeader) so the conversation topic stays visible.
-		// 尾部追加 Project 徽章（2026-11-16）：会话所属项目的常显标识。
 		const firstQ = header.createDiv({ cls: "semlink-search-first-question" });
 		this.firstQuestionTextEl = firstQ.createSpan({ cls: "semlink-search-first-question-text" });
-		this.projectBadgeEl = firstQ.createSpan({ cls: "semlink-project-badge semlink-hidden" });
 
 		// ── Conversation area (middle, scrollable) ──
 		this.statusEl = contentEl.createDiv({ cls: "semlink-search-status" });
@@ -442,18 +536,6 @@ export class SemanticSearchView extends ItemView {
 
 		// ── Input footer (bottom, fixed) ──
 		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
-
-		// ── Project 选择带（用户拍板 2026-11-16：输入框上方一条）──
-		// 当前项目 chip（无项目 = 全部笔记），点击弹层切换/新建/编辑。
-		// 弹层仿 modelPopup（body 懒创建 + repatriate 迁窗）。
-		const projectBand = footer.createDiv({ cls: "semlink-project-band" });
-		this.projectChipEl = projectBand.createDiv({ cls: "semlink-project-chip" });
-		this.projectChipEl.addEventListener("click", (e) => {
-			e.stopPropagation();
-			this.toggleProjectPopup();
-		});
-		this.renderProjectChip();
-		this.registerDomEvent(this.contentEl, "click", () => this.hideProjectPopup());
 
 		// 模型选择器（原独立工具栏行）：现在直接挂到输入卡底部行左端——
 		// 工具栏整行删除，把一行高度还给内容。创建于卡片之后移动过去。
@@ -664,6 +746,21 @@ export class SemanticSearchView extends ItemView {
 		// 展开/发送按钮靠右（原独立工具栏行已删除）。
 		const modelEl = wrapper.createDiv({ cls: "semlink-search-model" });
 		modelEl.prepend(modelTrigger);
+		// ── Project chip（用户拍板 2026-11-18 二次：会话归属/检索范围合一，
+		// 居输入卡底部行、模型选择器右侧；头部徽章条带与输入框上方选择带
+		// 均撤除——单一标识、不占额外行）。无项目 = 全部笔记，点击弹层
+		// 切换/新建/编辑；弹层仿 modelPopup（body 懒创建 + repatriate 迁窗）。
+		// loadSession 会把 activeProject 同步回会话绑定项目，chip 即会话
+		// 归属标识。
+		this.projectChipEl = modelEl.createDiv({ cls: "semlink-project-chip" });
+		this.projectChipEl.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.toggleProjectPopup();
+		});
+		this.renderProjectChip();
+		// 点外部关闭挂在 contentEl（随视图跨窗迁移）；弹层本身挂在 body
+		// 上、不经过 contentEl 冒泡，弹层内部的点击由各自行处理器关闭。
+		this.registerDomEvent(this.contentEl, "click", () => this.hideProjectPopup());
 
 		// Expand/collapse toggle left of the send button: grows the input to
 		// half the screen for long prompts, collapses back on click (and after
@@ -1456,7 +1553,8 @@ export class SemanticSearchView extends ItemView {
 							// 行首思考图标与完成态 thought 行同款（brain）——
 							// 纯文本块裸行让人分不清这是思考还是掉版。
 							liveReasonEl = liveBody.createDiv({ cls: "semlink-live-reasoning" });
-							this.prefixRowIcon(liveReasonEl, "brain", "");
+							// 流式思考行图标同挂 "LLM" tooltip（与完成态一致）
+							this.prefixRowIcon(liveReasonEl, "brain", "", "LLM");
 						} else {
 							liveBody.appendChild(liveReasonEl);
 						}
@@ -1694,7 +1792,7 @@ export class SemanticSearchView extends ItemView {
 					// 打字机收尾（用户拍板 2026-11-12）：等流式正文 reveal 播完
 					// 再做最终替换——整块下发的答案也能逐字播出，而不是一闪而过。
 					await typewriterDrain();
-					this.renderThinking(loadingEl, firstStep ? [firstStep, ...thinking] : thinking, elapsedSec);
+					this.renderThinking(loadingEl, firstStep ? [firstStep, ...thinking] : thinking, elapsedSec, this.chatClient.getActiveModelLabel() ?? undefined);
 					this.updateContextInfo(result.contextTokens, result.contextBreakdown, result.cacheHitRate);
 					// Render the answer as markdown (Obsidian's renderer handles
 					// headings, lists, code, links, etc.).
@@ -1730,7 +1828,7 @@ export class SemanticSearchView extends ItemView {
 						loadingEl.empty();
 						if (liveSteps.length > 0) {
 							const elapsedSec = thinkElapsedSec();
-							this.renderThinking(loadingEl, liveSteps, elapsedSec);
+							this.renderThinking(loadingEl, liveSteps, elapsedSec, this.chatClient.getActiveModelLabel() ?? undefined);
 						}
 						loadingEl.createDiv({ cls: "semlink-msg-stopped", text: t("searchStopped") });
 					} else {
@@ -1742,7 +1840,7 @@ export class SemanticSearchView extends ItemView {
 						// failed — show what the model did before the error.
 						if (liveSteps.length > 0) {
 							const elapsedSec = thinkElapsedSec();
-							this.renderThinking(loadingEl, liveSteps, elapsedSec);
+							this.renderThinking(loadingEl, liveSteps, elapsedSec, this.chatClient.getActiveModelLabel() ?? undefined);
 						}
 					}
 				}
@@ -2195,6 +2293,13 @@ export class SemanticSearchView extends ItemView {
 	 *  translation into a per-turn block below the answer. */
 	private openTranslateMenu(anchor: HTMLElement, turn: Element, content: string, msg?: HistoryMessage): void {
 		const menu = new Menu();
+		// 强制 DOM 菜单（2026-11-18 eval 实测定论）：Obsidian 1.15 起
+		// macOS 桌面端 Menu 默认 useNativeMenu=true——showAtPosition 走
+		// Electron 原生 popup，永远不建 DOM。原生菜单 capturePage 截不到、
+		// semlink-debug ui 查不到、合成点击选不了项——E2E/录制工具链整
+		// 条断（真机用户不受影响，原生菜单照常弹出，但插件既有的「官网
+		// 同款」DOM 菜单形态与跨平台一致性更符合本插件交互拍板）。
+		menu.setUseNativeMenu(false);
 		// 原文：切回未翻译的原始回答（displayLang 回 null——重进会话显示原文）。
 		menu.addItem((item) => {
 			item.setTitle(t("translateOriginal")).onClick(() => {
@@ -2229,9 +2334,6 @@ export class SemanticSearchView extends ItemView {
 		}
 	}
 
-	/** Translate `content` into `lang`（Obsidian 官网同款交互，用户拍板）：
-	 *  原文保持显示，每个块级元素行尾挂加载圈；翻译完成整体替换为译文
-	 *  markdown。已存译文秒显；失败摘除加载圈恢复原文 + Notice。 */
 	/** 译文/原文重渲后补挂正文引用标记（2026-11-18 用户实测：翻译成英文后
 	 *  [3:L275][9] 裸露成正文——重渲只补了 makeVaultPathsClickable，引用
 	 *  包装丢了）。按消息存档的 sources/sourceNumbers 重挂，与历史恢复路
@@ -2243,6 +2345,15 @@ export class SemanticSearchView extends ItemView {
 		this.makeCitationsClickable(root, msg.sourceNumbers ?? [], usedSources, text, thinking);
 	}
 
+	/** Translate `content` into `lang`（Obsidian 官网同款交互 + 用户拍板
+	 *  2026-11-18「流式返回满了一段就翻译一段」）：原文保持显示、每块行
+	 *  尾挂加载圈；译文流式回传分两层显示——已完成块边界一到就完整渲染
+	 *  换入（li 保圆点只换内容，其余块整块替换）；进行中块字到即原位流
+	 *  式预览（160ms 节流，加载圈摘除、译文随流生长），边界到达后由完
+	 *  整渲染无缝接管。流结束：译文单元与原文块一一对上就就地收尾（补
+	 *  引用/路径链接——wrap 非幂等只跑一遍，免整卡重渲闪烁）；对不上退
+	 *  回整卡权威渲染兜底。已存译文秒显；失败摘除剩余加载圈 + Notice
+	 *  （已换入段落保留）。 */
 	private async translateInto(turn: Element, content: string, lang: { value: Lang; label: string }, msg?: HistoryMessage): Promise<void> {
 		this.activeTranslateController?.abort();
 		const controller = new AbortController();
@@ -2268,36 +2379,198 @@ export class SemanticSearchView extends ItemView {
 			return;
 		}
 
-		// 原文保持显示：每个块级元素行尾挂加载圈（先清旧圈防重复注入）。
-		this.injectTranslationSpinners(answerEl);
+		// 流式渐进翻译（2026-11-18 用户拍板「流式返回满了一段就翻译一段」）：
+		// 行圈注入与换入面对同一组块元素（整卡替换路径会包一层
+		// .markdown-rendered——answerBlocksRoot 归一化下钻）。两层显示：
+		// ① 已完成块（边界已到）→ 完整渲染换入；② 进行中块（rest）→
+		// 字到即原位流式预览（节流 ~160ms），加载圈摘除、译文随流生长，
+		// 边界到达后由完整渲染无缝接管。全部渲染走同一条串行链——预览
+		// 与完成换入绝不并发写同一目标（边界时刻两者会落到同一块）。
+		const root = this.answerBlocksRoot(answerEl);
+		this.injectTranslationSpinners(root);
+		const targets = this.collectTranslateTargets(root);
+		let units: string[] = [];
+		let nextUnit = 0;
+		let renderBusy = false;
+		let renderFailed = false;
+		let drainPromise = Promise.resolve();
+		let renderChain: Promise<void> = Promise.resolve();
+		const enqueueRender = (targetEl: Element, md: string): Promise<void> => {
+			const p = renderChain.then(async () => {
+				if (controller.signal.aborted) return;
+				try {
+					await this.renderTranslatedUnit(targetEl, md, root);
+				} catch {
+					// 单段渲染失败：跳过；收尾按结构校验走整卡兜底。
+					renderFailed = true;
+				}
+			});
+			renderChain = p;
+			return p;
+		};
+		// 单飞换入循环：onDelta 只更新 units 并请求 drain；进行中的循环每
+		// 轮重读 units/nextUnit，自然接续新到段落。
+		const requestDrain = (): Promise<void> => {
+			if (renderBusy) return drainPromise;
+			renderBusy = true;
+			drainPromise = (async () => {
+				try {
+					while (nextUnit < units.length && nextUnit < targets.length && !controller.signal.aborted) {
+						const p = enqueueRender(targets[nextUnit], units[nextUnit]);
+						nextUnit++;
+						await p;
+					}
+				} finally {
+					renderBusy = false;
+				}
+			})();
+			return drainPromise;
+		};
+		// 进行中块的流式预览：rest 非空即视为「正在生长的那一段」——首个
+		// delta 摘掉它的加载圈，此后按 160ms 节流把最新 rest 原位渲成
+		// markdown（走同一渲染链）。文本节点级速度的视觉：不等边界，
+		// 译文随流生长。
+		let latestAcc = "";
+		let previewIdx = -1;
+		let previewScheduled = false;
+		let previewTimer: number | null = null;
+		const clearPreview = (): void => {
+			if (previewTimer !== null) {
+				try {
+					this.viewWin.clearTimeout(previewTimer);
+				} catch {
+					/* 窗口已毁——定时器随窗口死亡 */
+				}
+				previewTimer = null;
+			}
+			previewScheduled = false;
+			previewIdx = -1;
+		};
+		const onDelta = (acc: string): void => {
+			latestAcc = acc;
+			const parsed = parseTranslationUnits(acc);
+			units = parsed.units;
+			const rest = parsed.rest.trim();
+			const idx = units.length; // 进行中块的目标下标（完成的块由 drain 接管）
+			if (rest && idx < targets.length) {
+				if (previewIdx !== idx) {
+					// 新的进行中块：摘掉加载圈（流式文本本身就是进度指示）
+					previewIdx = idx;
+					targets[idx].querySelectorAll(".semlink-line-spinner").forEach((el) => el.remove());
+				}
+				if (!previewScheduled) {
+					previewScheduled = true;
+					previewTimer = this.viewWin.setTimeout(() => {
+						previewScheduled = false;
+						previewTimer = null;
+						const now = parseTranslationUnits(latestAcc);
+						const cur = now.rest.trim();
+						const curIdx = now.units.length;
+						if (!cur || curIdx >= targets.length || controller.signal.aborted) return;
+						void enqueueRender(targets[curIdx], cur);
+					}, 160);
+				}
+			}
+			void requestDrain();
+		};
 
 		try {
-			const text = await this.chatClient.translate(content, lang.label, undefined, controller.signal);
+			const text = await this.chatClient.translate(content, lang.label, onDelta, controller.signal);
+			clearPreview();
 			if (controller.signal.aborted) return;
-			// 完成：整体替换为译文（加载圈随之清空）。
-			answerEl.empty();
-			const rendered = answerEl.createDiv({ cls: "markdown-rendered" });
-			await MarkdownRenderer.render(this.app, protectHyphens(text), rendered, "", this);
-			this.makeVaultPathsClickable(rendered);
-			this.restoreCitationMarkers(rendered, msg, text);
+			// 收尾：rest 是最后一段（流已结束必然完整），并入渲染。
+			const parsed = parseTranslationUnits(text);
+			const allUnits = parsed.rest.trim().length > 0 ? [...parsed.units, parsed.rest] : parsed.units;
+			units = allUnits;
+			await requestDrain();
+			await renderChain;
+			if (controller.signal.aborted) return;
+			if (!renderFailed && targets.length > 0 && allUnits.length === targets.length) {
+				// 一段段换入且块数一一对上：就地收尾（引用/路径链接只跑一遍
+				// ——wrap 非幂等，重跑会双层包裹），免整卡重渲闪烁。
+				root.querySelectorAll(".semlink-line-spinner").forEach((el) => el.remove());
+				this.restoreCitationMarkers(root, msg, text);
+				this.makeVaultPathsClickable(root);
+			} else {
+				// 结构对不上（模型改写了分块）：整卡权威渲染兜底。
+				answerEl.empty();
+				const rendered = answerEl.createDiv({ cls: "markdown-rendered" });
+				await MarkdownRenderer.render(this.app, protectHyphens(text), rendered, "", this);
+				this.makeVaultPathsClickable(rendered);
+				this.restoreCitationMarkers(rendered, msg, text);
+			}
 			if (msg) {
 				msg.translations = { ...(msg.translations ?? {}), [lang.value]: text };
 				msg.displayLang = lang.value;
 				await this.history.save();
 			}
 		} catch (e) {
+			clearPreview();
 			if (controller.signal.aborted || (e as { name?: string } | undefined)?.name === "AbortError") return;
-			// 失败：摘除加载圈，原文保持不动 + Notice。
+			// 失败：摘除剩余加载圈 + Notice（已换入的段落保留，未换入段落原文不动）。
 			answerEl.querySelectorAll(".semlink-line-spinner").forEach((el) => el.remove());
 			new Notice(t("translateFailed"));
 		}
 	}
 
+	/** 翻译操作的内容根：新答案的块是 .semlink-msg-answer 直接子节点，但
+	 *  整卡替换路径（已译秒切/还原原文/上次翻译完成）会包一层
+	 *  .markdown-rendered——存在唯一该包裹时下钻一层，行圈注入与渐进换入
+	 *  面对同一组块元素。 */
+	private answerBlocksRoot(answerEl: Element): HTMLElement {
+		const first = answerEl.firstElementChild;
+		if (answerEl.children.length === 1 && first instanceof HTMLElement && first.classList.contains("markdown-rendered")) {
+			return first;
+		}
+		return answerEl as HTMLElement;
+	}
+
+	/** 原文答案的渐进替换单元（与行圈注入同粒度）：顶层块逐个；列表逐 li
+	 *  ——「翻译一段就显示一段」的最小自然单位；hr 无译文，跳过。 */
+	private collectTranslateTargets(root: Element): Element[] {
+		const targets: Element[] = [];
+		for (const block of Array.from(root.children)) {
+			if (block.tagName === "HR") continue;
+			if (block.tagName === "UL" || block.tagName === "OL") {
+				for (const li of Array.from(block.children)) {
+					if (li.tagName === "LI") targets.push(li);
+				}
+				continue;
+			}
+			targets.push(block);
+		}
+		return targets;
+	}
+
+	/** 原位换入一段已完成译文：li 目标保圆点（清空后搬入渲染出的 li 内
+	 *  容），其余块级目标整块替换（同形换入）——加载圈随 swap 消失。在
+	 *  隐藏临时容器里渲染完再搬节点，避免闪现半成品。 */
+	private async renderTranslatedUnit(target: Element, md: string, root: HTMLElement): Promise<void> {
+		const temp = root.createDiv({ cls: "semlink-hidden" });
+		try {
+			await MarkdownRenderer.render(this.app, protectHyphens(md), temp, "", this);
+			if (!target.isConnected) return; // 期间 DOM 已被换（重译/还原原文）
+			if (target.tagName === "LI") {
+				const renderedLi = temp.querySelector("li");
+				target.empty();
+				const source = renderedLi ?? temp;
+				while (source.firstChild) target.appendChild(source.firstChild);
+			} else {
+				const frag = temp.ownerDocument!.createDocumentFragment();
+				while (temp.firstChild) frag.appendChild(temp.firstChild);
+				target.replaceWith(frag);
+			}
+		} finally {
+			temp.detach();
+		}
+	}
+
 	/** 翻译进行中：原文每个块级元素行尾挂加载圈（ul/ol 逐 li；hr 跳过）。
-	 *  先清旧圈防重复注入。 */
-	private injectTranslationSpinners(answerEl: Element): void {
-		answerEl.querySelectorAll(".semlink-line-spinner").forEach((el) => el.remove());
-		for (const block of Array.from(answerEl.children)) {
+	 *  先清旧圈防重复注入。root 由 answerBlocksRoot 归一化，保证与渐进换
+	 *  入面对同一组块元素。 */
+	private injectTranslationSpinners(root: Element): void {
+		root.querySelectorAll(".semlink-line-spinner").forEach((el) => el.remove());
+		for (const block of Array.from(root.children)) {
 			if (block.tagName === "HR") continue;
 			const targets = block.tagName === "UL" || block.tagName === "OL"
 				? Array.from(block.children).filter((c) => c.tagName === "LI")
@@ -2355,7 +2628,10 @@ export class SemanticSearchView extends ItemView {
 		return this.plugin.settings.projects.find((p) => p.id === id)?.name ?? null;
 	}
 
-	/** chip 文本/态刷新（独立于 setProject：loadSession 切换时不重开会话）。 */
+	/** chip 文本/态刷新（独立于 setProject：loadSession 切换时不重开会话）。
+	 *  无项目显示「选择项目」CTA（2026-11-18 拍板，参考「选择分组 ∨」设
+	 *  计）——点击弹层选择；范围实际仍是全库，弹层首行照常提供「全部笔
+	 *  记」。 */
 	private renderProjectChip(): void {
 		if (!this.projectChipEl) return;
 		this.projectChipEl.empty();
@@ -2363,36 +2639,11 @@ export class SemanticSearchView extends ItemView {
 		setIcon(icon, "folder");
 		this.projectChipEl.createSpan({
 			cls: "semlink-project-chip-text",
-			text: this.activeProject ? this.activeProject.name : t("projectAllNotes"),
+			text: this.activeProject ? this.activeProject.name : t("projectChoose"),
 		});
 		const caret = this.projectChipEl.createSpan({ cls: "semlink-project-chip-caret" });
 		setIcon(caret, "chevron-down");
 		this.projectChipEl.toggleClass("is-active", this.activeProject !== null);
-	}
-
-	/** 头部徽章（firstQuestion 行旁）：优先当前会话的 projectId（历史会话
-	 *  可能与选择器不同步），新会话用 activeProject。悬空 id 显灰态。 */
-	private refreshProjectBadge(): void {
-		if (!this.projectBadgeEl) return;
-		let name: string | null = null;
-		let dangling = false;
-		const pid = this.currentSessionId ? this.history.get(this.currentSessionId)?.projectId : undefined;
-		if (pid) {
-			const p = this.plugin.settings.projects.find((x) => x.id === pid);
-			if (p) name = p.name;
-			else dangling = true;
-		} else if (this.activeProject) {
-			name = this.activeProject.name;
-		}
-		this.projectBadgeEl.toggleClass("semlink-hidden", !name && !dangling);
-		this.projectBadgeEl.empty();
-		if (dangling) {
-			this.projectBadgeEl.addClass("is-dangling");
-			this.projectBadgeEl.setText(t("projectDeleted"));
-		} else if (name) {
-			this.projectBadgeEl.removeClass("is-dangling");
-			this.projectBadgeEl.setText(name);
-		}
 	}
 
 	private toggleProjectPopup(): void {
@@ -2408,7 +2659,9 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	private showProjectPopup(): void {
-		if (!this.projectChipEl) return;
+		// 锚点：输入卡底行的项目 chip（弹层向上展开）。
+		const anchorEl = this.projectChipEl;
+		if (!anchorEl) return;
 		if (!this.projectPopupEl) {
 			this.projectPopupEl = this.viewDoc.body.createDiv({ cls: "semlink-search-depth-popup semlink-project-popup semlink-hidden" });
 		}
@@ -2452,18 +2705,28 @@ export class SemanticSearchView extends ItemView {
 			this.openProjectModal(undefined);
 		});
 
-		// 定位：触发器上方（仿 showModelPopup 的先显示后夹紧）
-		const rect = this.projectChipEl.getBoundingClientRect();
+		// 定位：锚点在视口下半（主页 chip）→ 弹层向上（原行为）；在上半
+		// （头部「项目名称 ›」行）→ 弹层向下（标题行的下拉语义）。先按
+		// 方向摆好，显示后按实际尺寸夹紧越界（上下溢/右越界）。
+		const rect = anchorEl.getBoundingClientRect();
 		const vh = this.viewWin.innerHeight;
 		const vw = this.viewWin.innerWidth;
 		popup.style.left = rect.left + "px";
-		popup.style.removeProperty("top");
-		popup.style.bottom = (vh - rect.top + 4) + "px";
+		if (rect.top > vh / 2) {
+			popup.style.removeProperty("top");
+			popup.style.bottom = (vh - rect.top + 4) + "px";
+		} else {
+			popup.style.removeProperty("bottom");
+			popup.style.top = (rect.bottom + 4) + "px";
+		}
 		popup.removeClass("semlink-hidden");
 		const pr = popup.getBoundingClientRect();
-		if (pr.top < 8 || pr.bottom > rect.top - 2) {
+		if (pr.top < 8) {
 			popup.style.removeProperty("bottom");
-			popup.style.top = Math.max(8, Math.min(rect.top - pr.height - 4, vh - pr.height - 8)) + "px";
+			popup.style.top = "8px";
+		} else if (pr.bottom > vh - 8) {
+			popup.style.removeProperty("top");
+			popup.style.bottom = "8px";
 		}
 		if (pr.left + pr.width > vw - 8) {
 			popup.style.left = Math.max(8, vw - pr.width - 8) + "px";
@@ -2474,19 +2737,16 @@ export class SemanticSearchView extends ItemView {
 	private switchProject(p: ProjectDef | null): void {
 		this.activeProject = p;
 		this.renderProjectChip();
-		this.refreshProjectBadge();
 		if (this.currentMessages.length > 0 || this.isGenerating) {
 			// 生成中先确认中断；否则直接开新会话（干净进入新范围）。
 			if (this.isGenerating) {
 				new ConfirmModal(this.app, t("projectNew"), t("projectConfirmSwitch"), () => {
 					this.doNewChat();
-					this.refreshProjectBadge();
 				});
 				return;
 			}
 			this.doNewChat();
 		}
-		this.refreshProjectBadge();
 	}
 
 	/** 创建/编辑弹窗入口：保存 → 落 settings.projects + 推送全部视图 +
@@ -2884,14 +3144,20 @@ export class SemanticSearchView extends ItemView {
 	/**
 	 * Render the "thinking" collapsible (default closed) listing the model's
 	 * thoughts and tool calls in chronological order, above the answer. The
-	 * label shows how long the model spent, e.g. "思考了 30 秒".
+	 * label shows how long the model spent, e.g. "思考了 30 秒"; 消息记录了
+	 * 模型标签时追加「· 模型 ID」（2026-11-18 用户拍板：模型归属放摘要行
+	 * 一次，不逐段重复——历史无记录的消息如实不加）。
 	 */
-	private renderThinking(container: HTMLElement, thinking: ThinkingStep[], elapsedSec: number): void {
+	private renderThinking(container: HTMLElement, thinking: ThinkingStep[], elapsedSec: number, model?: string): void {
 		const details = container.createEl("details", { cls: "semlink-thinking" });
-		details.createEl("summary", {
+		// 模型 ID 独立 span 常规字重（2026-11-18 用户拍板「模型 ID 不要
+		// 加粗」）：摘要行整体 600，Latin 字形视觉上比 CJK 更重，模型 ID
+		// 拆出降回 normal——时长标签保持原字重不变。
+		const summary = details.createEl("summary", {
 			cls: "semlink-thinking-summary",
 			text: t("searchThinkingDuration").replace("{seconds}", this.formatDuration(elapsedSec)),
 		});
+		if (model) summary.createSpan({ cls: "semlink-thinking-model", text: ` · ${model}` });
 
 		// 完成态：一次性全量渲染后把收尾段（最后一段思考）也折叠——
 		// 打开「▸ 思考了 N 秒」看到的是标题行 + 工具主干，不再无限长。
@@ -2926,7 +3192,9 @@ export class SemanticSearchView extends ItemView {
 					// 「模型推理」，不带时长后缀——正文完整展示，无去重需求。
 					const box = container.createEl("details", { cls: "semlink-thinking-segment" });
 					seg.summary = box.createEl("summary", { cls: "semlink-thinking-segment-summary" });
-					this.prefixRowIcon(seg.summary, "brain", t("thinkingSegmentTitle"), t("thinkingSegmentTitle"));
+					// 图标 tooltip = "LLM"（各语言通用缩写，不进 locale）——
+					// 原先与行文字重复（模型推理），悬停无信息量（2026-11-18）。
+					this.prefixRowIcon(seg.summary, "brain", t("thinkingSegmentTitle"), "LLM");
 					seg.seg = box;
 				}
 				// 段内思考行：剥前导空白，完整渲染（标题已是固定文案，无重复）。
@@ -3473,11 +3741,9 @@ export class SemanticSearchView extends ItemView {
 		});
 	}
 
-	/** The toolbar new-chat pill only makes sense once a conversation exists
-	 *  — hide it while the welcome screen is up. */
+	/** 主页/会话态的头部图标联动（抽屉新对话 pill 已常驻，不随态隐藏）。 */
 	private updateHomeIconVisibility(): void {
 		const onHome = !!this.messagesEl.querySelector(".semlink-search-welcome");
-		this.newChatPillEl?.toggleClass("is-hidden", onHome);
 		// 菜单右侧动态按钮：主页=对话引导；会话中=回到主页
 		if (this.guideHomeBtnEl) {
 			setIcon(this.guideHomeBtnEl, onHome ? "help-circle" : "home");
@@ -3664,6 +3930,9 @@ export class SemanticSearchView extends ItemView {
 			sources,
 			sourceNumbers: sourceNumbers?.filter((n) => Number.isFinite(n)),
 			elapsedSec,
+			// 思考摘要行的「· 模型」后缀数据源（2026-11-18）：落盘当轮真实
+			// 模型，历史恢复如实显示；旧消息无此字段（不加后缀）。
+			model: this.chatClient.getActiveModelLabel() ?? undefined,
 			contextTokens,
 			contextBreakdown,
 			cacheHitRate,
@@ -3703,15 +3972,14 @@ export class SemanticSearchView extends ItemView {
 		}
 		this.currentSessionId = session.id;
 		this.currentMessages = [...session.messages];
-		// Project 同步（2026-11-16）：继续旧会话 = 回到它的检索范围；
-		// 选择器 chip 与头部徽章随之刷新。悬空项目回退全库。
+		// Project 同步（2026-11-16）：继续旧会话 = 回到它的检索范围，
+		// 输入卡底行 chip 随之刷新（悬空项目回退全库）——chip 即会话
+		// 归属标识（2026-11-18 二次拍板：头部徽章撤除）。
 		const sessionProj = session.projectId
 			? this.plugin.settings.projects.find((p) => p.id === session.projectId) ?? null
 			: null;
 		this.activeProject = sessionProj;
 		this.renderProjectChip();
-		// 徽章与 chip 同步刷新（漏掉会导致重启后恢复会话时徽章一直隐藏）
-		this.refreshProjectBadge();
 		// Header subtitle = the session's first question (same as live chats).
 		const firstUser = session.messages.find((m) => m.role === "user");
 		if (firstUser) {
@@ -3745,7 +4013,7 @@ export class SemanticSearchView extends ItemView {
 				} else {
 					const bubble = this.appendAssistantMessage("");
 					const thinking = (msg.thinking || []).map((s) => s as ThinkingStep);
-					if (thinking.length > 0) this.renderThinking(bubble, thinking, msg.elapsedSec || 0);
+					if (thinking.length > 0) this.renderThinking(bubble, thinking, msg.elapsedSec || 0, msg.model);
 					const answerEl = bubble.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
 					await MarkdownRenderer.render(this.app, protectHyphens(msg.content), answerEl, "", this);
 					if (msg.sources && msg.sources.length > 0) {
@@ -3826,13 +4094,31 @@ export class SemanticSearchView extends ItemView {
 		});
 		const header = drawer.createDiv({ cls: "semlink-history-header" });
 		const titleEl = header.createDiv({ cls: "semlink-history-title", text: t("historyTitle") });
-		// 新对话入口（原输入区上方工具栏）：菜单标题行右侧、archive 左侧。
-		// 主页状态下隐藏（无会话可新开），与原 updateHomeIconVisibility 口径一致。
-		const drawerNewChat = header.createEl("button", {
-			cls: "semlink-search-newchat" + (!this.messagesEl.querySelector(".semlink-search-welcome") ? "" : " is-hidden"),
+		// 头部图标行（2026-11-18 拍板，参考 WorkBuddy 侧栏）：搜索收纳成
+		// 🔍 图标（点击展开/收起搜索行）、归档入口收进「更多」菜单。
+		let view: "main" | "archive" = "main";
+		const searchToggleBtn = header.createEl("button", {
+			cls: "semlink-history-head-btn clickable-icon",
+			attr: { "aria-label": t("historySearch") },
+		});
+		setIcon(searchToggleBtn, "search");
+		const moreBtn = header.createEl("button", {
+			cls: "semlink-history-head-btn clickable-icon",
+			attr: { "aria-label": t("historyMore") },
+		});
+		setIcon(moreBtn, "more-horizontal");
+		const closeBtn = persistent ? null : header.createEl("button", { cls: "semlink-search-icon-btn clickable-icon" });
+		if (closeBtn) setIcon(closeBtn, "x");
+
+		// ── 新对话 pill（常驻，参考「新建任务」）：头部下方通栏按钮，
+		// 不再随主页状态隐藏（主页点击=无副作用的新会话入口）。
+		const pillRow = drawer.createDiv({ cls: "semlink-history-newchat-row" });
+		const drawerNewChat = pillRow.createEl("button", {
+			cls: "semlink-history-newchat-pill",
 			attr: { "aria-label": t("searchNewChat") },
 		});
-		setIcon(drawerNewChat, "plus");
+		const pillIcon = drawerNewChat.createSpan({ cls: "semlink-history-newchat-icon" });
+		setIcon(pillIcon, "plus");
 		drawerNewChat.createSpan({ cls: "semlink-search-newchat-label", text: t("searchNewChat") });
 		drawerNewChat.addEventListener("click", () => {
 			if (persistent) {
@@ -3844,64 +4130,38 @@ export class SemanticSearchView extends ItemView {
 			}
 		});
 		this.newChatPillEl = drawerNewChat;
-		// Far right: archive entry → dedicated view of archived chats
-		// (free tier: everything past the 5-active window; deletable there).
-		const archiveBtn = header.createEl("button", {
-			cls: "semlink-history-archive-btn clickable-icon",
-			attr: { "aria-label": t("historyArchiveBtn") },
-		});
-		setIcon(archiveBtn, "archive");
-		const closeBtn = persistent ? null : header.createEl("button", { cls: "semlink-search-icon-btn clickable-icon" });
-		if (closeBtn) setIcon(closeBtn, "x");
 
 		const pro = this.plugin.licenseManager.isPro();
 		const freeLimit = this.plugin.licenseManager.freeHistoryLimit();
-		let view: "main" | "archive" = "main";
 
 		// The search input is created ONCE and only shown/hidden by render() —
 		// re-creating it on each keystroke breaks CJK IME composition (the
 		// element the IME is typing into gets replaced mid-composition).
-		const tools = drawer.createDiv({ cls: "semlink-history-tools" });
+		// 搜索行默认收纳（🔍 展开，2026-11-18 拍板）；收起时清掉未完查询，
+		// 避免「看不见但仍在过滤」的错觉。
+		const tools = drawer.createDiv({ cls: "semlink-history-tools semlink-hidden" });
+		const toggleSearch = (): void => {
+			const opening = tools.hasClass("semlink-hidden");
+			tools.toggleClass("semlink-hidden", !opening);
+			searchToggleBtn.toggleClass("is-active", opening);
+			if (opening) searchInput.focus();
+			else if (query) {
+				searchInput.value = "";
+				query = "";
+				render();
+			}
+		};
+		searchToggleBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			toggleSearch();
+		});
 		let query = "";
 		let composing = false;
-		// Project 筛选（用户拍板「Menu 增加 Project」2026-11-16）：顶部
-		// chips 行（全部 ｜ 各项目），与搜索过滤叠加。
-		let projectFilter: string | null = null;
 		let projectsCollapsed = false;
 		const searchInput = tools.createEl("input", {
 			cls: "semlink-history-search",
 			attr: { type: "text", placeholder: t("historySearch"), "aria-label": t("historySearch") },
 		});
-		// Project chips（创建一次，render 里只刷激活态——与搜索框同款
-		// 生命周期，避免重建打断交互）。
-		const chipsRow = tools.createDiv({ cls: "semlink-project-chips" });
-		const refreshChips = (): void => {
-			chipsRow.empty();
-			const projects = this.plugin.settings.projects;
-			if (projects.length === 0) {
-				chipsRow.addClass("semlink-hidden");
-				return;
-			}
-			chipsRow.removeClass("semlink-hidden");
-			const chip = (label: string, active: boolean, set: () => void): void => {
-				const c = chipsRow.createSpan({ cls: "semlink-project-chip-item", text: label });
-				c.toggleClass("is-active", active);
-				c.addEventListener("click", () => {
-					set();
-					refreshChips();
-					render();
-				});
-			};
-			chip(t("projectFilterAll"), projectFilter === null, () => {
-				projectFilter = null;
-			});
-			for (const p of projects) {
-				chip(p.name, projectFilter === p.id, () => {
-					projectFilter = p.id;
-				});
-			}
-		};
-		refreshChips();
 		const applySearch = (): void => {
 			query = searchInput.value.trim().toLowerCase();
 			if (view !== "main") view = "main";
@@ -3923,8 +4183,6 @@ export class SemanticSearchView extends ItemView {
 
 		const list = drawer.createDiv({ cls: "semlink-history-list" });
 		const collapsed = new Set<string>();
-		// Folder path currently being renamed inline (null = none).
-		let editingPath: string | null = null;
 
 		// Paging counters live OUTSIDE render() so "Show more" survives
 		// re-renders (they were per-render locals once — the button reset
@@ -3944,7 +4202,6 @@ export class SemanticSearchView extends ItemView {
 			const all = allSessions.filter((x) => !x.archived); // active, newest first
 			const manuallyArchived = allSessions.filter((x) => x.archived);
 			list.empty();
-			refreshChips();
 			// NOTE: tools (the search input) is never emptied — it is created
 			// once and only shown/hidden, or CJK IME composition breaks.
 			// Header chrome per view.
@@ -3978,11 +4235,6 @@ export class SemanticSearchView extends ItemView {
 
 			// ── Main view ──
 			let pool = all;
-			// Project 筛选（chips 行，2026-11-16）：与搜索过滤叠加；已删
-			// 项目的会话归入「全部」。
-			if (projectFilter !== null) {
-				pool = pool.filter((s) => s.projectId === projectFilter);
-			}
 			if (pro && query) {
 				pool = pool.filter((s) =>
 					s.title.toLowerCase().includes(query) ||
@@ -4003,16 +4255,15 @@ export class SemanticSearchView extends ItemView {
 
 			const rest = pool;
 
-			// ── Unified single list (Time ⊕ Folder fusion): the Folders group
-			// sits on top (Pro, collapsible, count + new-folder action), the
-			// pinned group and the flat time buckets follow. Sessions filed
-			// into a folder appear ONLY inside it (not duplicated in the time
-			// flow); searching hides the folder group and flattens everything.
-			// ── 项目组（2026-11-18 Project 融合进文件夹区）：知识范围分组
-			// 与文件夹并列。行点击=切换检索范围（主页选择器同语义：生成中/
-			// 有消息先确认再新会话）；⊕ 新建按 License 分层（免费按现存
-			// 数量限 1 个——删除后可再建；激活无限）；行尾铅笔编辑、垃圾桶
-			// 删除（删后引用它的会话回退全库检索）。
+			// ── Unified single list（2026-11-18 真合并拍板）：Projects 组在
+			// 顶部（可折叠、计数 + ⊕ 新建），置顶组与时间流随后。绑定项目
+			// 的会话只出现在自己的项目里（不重复进时间流）；搜索时整组
+			// 隐藏、全部命中平铺。
+			// ── 项目组 = 抽屉归档容器（真合并）：会话拖到项目行 = 绑定该
+			// 项目（会话归属+检索范围合一，updateSession projectId）；行
+			// 点击=折叠/展开（范围切换归输入卡 chip）。⊕ 新建按 License
+			// 分层（免费按现存数量限 1 个——删除后可再建）；行尾铅笔编辑、
+			// 垃圾桶删除（删后引用会话解绑回时间流）。
 			if (!query) {
 				const projects = this.plugin.settings.projects ?? [];
 				const phead = list.createDiv({
@@ -4037,15 +4288,23 @@ export class SemanticSearchView extends ItemView {
 					}
 					this.openProjectModal(undefined);
 				});
+				phead.addEventListener("click", () => {
+					projectsCollapsed = !projectsCollapsed;
+					render();
+				});
 				if (!projectsCollapsed) {
 					for (const p of projects) {
+						const filed = rest.filter((s) => s.projectId === p.id);
+						const pCollapsed = collapsed.has(p.id);
 						const row = list.createDiv({
-							cls: "semlink-history-folder semlink-history-project-row" + (this.activeProject?.id === p.id ? " is-active" : ""),
+							cls: "semlink-history-folder semlink-history-project-row"
+								+ (pCollapsed ? " is-collapsed" : "")
+								+ (this.activeProject?.id === p.id ? " is-active" : ""),
 						});
 						const icon = row.createSpan({ cls: "semlink-history-folder-chev" });
 						setIcon(icon, "brain");
 						row.createSpan({ cls: "semlink-history-folder-name", text: p.name });
-						row.createSpan({ cls: "semlink-history-folder-count", text: String(p.folders.length) });
+						row.createSpan({ cls: "semlink-history-folder-count", text: String(filed.length) });
 						const pacts = row.createSpan({ cls: "semlink-history-folder-acts" });
 						const edit = pacts.createSpan({
 							cls: "semlink-history-folder-act",
@@ -4058,7 +4317,7 @@ export class SemanticSearchView extends ItemView {
 						});
 						const del = pacts.createSpan({
 							cls: "semlink-history-folder-act",
-							attr: { "aria-label": t("historyDeleteFolder") },
+							attr: { "aria-label": t("projectDeleteTitle") },
 						});
 						setIcon(del, "trash-2");
 						del.addEventListener("click", (e) => {
@@ -4068,233 +4327,62 @@ export class SemanticSearchView extends ItemView {
 								const at = plist.findIndex((x) => x.id === p.id);
 								if (at >= 0) plist.splice(at, 1);
 								void this.plugin.saveSettings();
-								// 删的是当前选中范围 → 回全库（会话 projectId 悬空，
-								// 徽章灰态兜底，不强制打断当前会话）。
+								// 引用它的会话全部解绑 → 回时间流；当前范围命中
+								// 则 chip 回全库（不强制打断当前会话）。
+								for (const s of this.history.list()) {
+									if (s.projectId === p.id) {
+										this.history.updateSession(s.id, { projectId: "" });
+									}
+								}
+								void this.history.save();
 								if (this.activeProject?.id === p.id) {
 									this.activeProject = null;
 									this.renderProjectChip();
-									this.refreshProjectBadge();
 								}
 								render();
 							}).open();
 						});
+						// 行点击=折叠/展开（归档容器语义；范围切换在输入卡 chip）
 						row.addEventListener("click", () => {
-							// 与主页选择器同语义：切换检索范围
-							this.switchProject(p);
+							if (collapsed.has(p.id)) collapsed.delete(p.id);
+							else collapsed.add(p.id);
+							render();
 						});
-					}
-				}
-			}
-
-			const showFolders = pro && !query;
-
-			if (!pro && !query) {
-				// Free tier: the Folders group header is visible but locked —
-				// tapping it opens the activation modal (the friction point
-				// the old Folders tab provided).
-				const head = list.createDiv({ cls: "semlink-history-group semlink-history-folders-head is-locked" });
-				head.createSpan({ cls: "semlink-history-folder-name", text: t("historyTabFolder") });
-				const lock = head.createSpan({ cls: "semlink-history-folder-lock" });
-				setIcon(lock, "lock");
-				head.addEventListener("click", () => {
-					this.closeHistoryDrawer(backdrop, drawer);
-					new LicenseModal(this.app, this.plugin, () => void this.showHistoryDrawer()).open();
-				});
-			}
-
-			if (showFolders) {
-				// Folder tree (nested via "/" in folder names). Empty folders
-				// come from the store's registry so they survive without any
-				// session inside.
-				interface FNode { name: string; path: string; children: Map<string, FNode>; sessions: ChatSession[]; }
-				const root: FNode = { name: "", path: "", children: new Map(), sessions: [] };
-				const addPath = (folder: string): void => {
-					const parts = folder.split("/").map((x) => x.trim()).filter(Boolean);
-					let node = root;
-					let path = "";
-					for (const part of parts) {
-						path = path ? `${path}/${part}` : part;
-						if (!node.children.has(part)) node.children.set(part, { name: part, path, children: new Map(), sessions: [] });
-						node = node.children.get(part)!;
-					}
-				};
-				for (const f of this.history.folders()) addPath(f);
-				for (const session of rest) {
-					if (!session.folder) continue;
-					const parts = session.folder.split("/").map((x) => x.trim()).filter(Boolean);
-					let node = root;
-					for (const part of parts) node = node.children.get(part)!;
-					node.sessions.push(session);
-				}
-				const countOf = (n: FNode): number =>
-					n.sessions.length + [...n.children.values()].reduce((a, c) => a + countOf(c), 0);
-				const folderRoots = [...root.children.values()].sort((a, b) => a.name.localeCompare(b.name));
-
-				const renderNode = (n: FNode, depth: number, container: HTMLElement): void => {
-					const isCollapsed = collapsed.has(n.path);
-					if (editingPath === n.path) {
-						// Inline rename: [icon][input][✓][✕] — name, count and
-						// the action buttons are all hidden while editing.
-						const editRow = container.createDiv({ cls: "semlink-history-folder semlink-history-folder-edit semlink-history-folder-pl" });
-						const icon = editRow.createSpan({ cls: "semlink-history-folder-chev" });
-						setIcon(icon, isCollapsed ? "chevron-right" : "chevron-down");
-						const input = editRow.createEl("input", {
-							cls: "semlink-folder-input",
-							attr: { type: "text", value: n.name },
-						});
-						const finish = (apply: boolean): void => {
-							const name = input.value.trim().slice(0, 24);
-							if (apply && name && name !== n.name) {
-								const parentPrefix = n.path.includes("/") ? n.path.slice(0, n.path.lastIndexOf("/")) : "";
-								this.history.renameFolder(n.path, parentPrefix ? `${parentPrefix}/${name}` : name);
-								void this.history.save();
+						row.addEventListener("dragover", (e) => {
+							const dt = e.dataTransfer;
+							if (dt?.types.includes("text/semlink-session")) {
+								e.preventDefault();
+								e.stopPropagation();
+								// Must match the dragstart effectAllowed("move"),
+								// or Chromium silently cancels the drop.
+								dt.dropEffect = "move";
+								row.addClass("is-drop");
 							}
-							editingPath = null;
-							render();
-						};
-						input.addEventListener("keydown", (e) => {
-							if (e.key === "Enter") { e.preventDefault(); finish(true); }
-							else if (e.key === "Escape") { e.preventDefault(); finish(false); }
-							e.stopPropagation();
 						});
-						input.addEventListener("click", (e) => e.stopPropagation());
-						const ok = editRow.createSpan({
-							cls: "semlink-history-folder-act",
-							attr: { "aria-label": t("historyFolderOk") },
-						});
-						setIcon(ok, "check");
-						ok.addEventListener("click", (e) => { e.stopPropagation(); finish(true); });
-						const cancel = editRow.createSpan({
-							cls: "semlink-history-folder-act",
-							attr: { "aria-label": t("historyCancel") },
-						});
-						setIcon(cancel, "x");
-						cancel.addEventListener("click", (e) => { e.stopPropagation(); finish(false); });
-						window.setTimeout(() => { input.focus(); input.select(); }, 0);
-						// Keep the expanded subtree visible while renaming — only
-						// the row itself switches to edit mode.
-						if (!isCollapsed) {
-							const body = container.createDiv({ cls: "semlink-history-folder-body" });
-							for (const child of [...n.children.values()].sort((a, b) => a.name.localeCompare(b.name))) renderNode(child, depth + 1, body);
-							for (const session of n.sessions) renderItem(body, session);
-						}
-						return;
-					}
-					const row = container.createDiv({
-						cls: "semlink-history-folder semlink-history-folder-pl" + (isCollapsed ? " is-collapsed" : ""),
-					});
-					const chev = row.createSpan({ cls: "semlink-history-folder-chev" });
-					setIcon(chev, isCollapsed ? "chevron-right" : "chevron-down");
-					row.createSpan({ cls: "semlink-history-folder-name", text: n.name });
-					row.createSpan({ cls: "semlink-history-folder-count", text: String(countOf(n)) });
-					// Hover actions: rename + delete.
-					const acts = row.createSpan({ cls: "semlink-history-folder-acts" });
-					const ren = acts.createSpan({
-						cls: "semlink-history-folder-act",
-						attr: { "aria-label": t("historyRenameFolder") },
-					});
-					setIcon(ren, "pencil");
-					ren.addEventListener("click", (e) => {
-						e.stopPropagation();
-						editingPath = n.path;
-						render();
-					});
-					const del = acts.createSpan({
-						cls: "semlink-history-folder-act",
-						attr: { "aria-label": t("historyDeleteFolder") },
-					});
-					setIcon(del, "trash-2");
-					del.addEventListener("click", (e) => {
-						e.stopPropagation();
-						const doDelete = () => {
-							this.history.deleteFolder(n.path);
-							void this.history.save();
-							render();
-						};
-						const n2 = countOf(n);
-						if (n2 > 0) {
-							new ConfirmModal(this.app, t("historyDeleteFolder"),
-								t("historyDeleteFolderConfirm").replace("{n}", String(n2)), doDelete).open();
-							return;
-						}
-						doDelete();
-					});
-					row.addEventListener("click", () => {
-						if (collapsed.has(n.path)) collapsed.delete(n.path);
-						else collapsed.add(n.path);
-						render();
-					});
-					row.addEventListener("dragover", (e) => {
-						const dt = e.dataTransfer;
-						if (dt?.types.includes("text/semlink-session")) {
+						row.addEventListener("dragleave", () => row.removeClass("is-drop"));
+						row.addEventListener("drop", (e) => {
 							e.preventDefault();
 							e.stopPropagation();
-							// Must match the dragstart effectAllowed("move"),
-							// or Chromium silently cancels the drop.
-							dt.dropEffect = "move";
-							row.addClass("is-drop");
-						}
-					});
-					row.addEventListener("dragleave", () => row.removeClass("is-drop"));
-					row.addEventListener("drop", (e) => {
-						e.preventDefault();
-						e.stopPropagation();
-						row.removeClass("is-drop");
-						const id = e.dataTransfer?.getData("text/semlink-session");
-						if (!id) return;
-						this.history.updateSession(id, { folder: n.path });
-						void this.history.save();
-						render();
-					});
-					if (!isCollapsed) {
-						const body = container.createDiv({ cls: "semlink-history-folder-body" });
-						for (const child of [...n.children.values()].sort((a, b) => a.name.localeCompare(b.name))) {
-							renderNode(child, depth + 1, body);
-						}
-						for (const session of n.sessions) renderItem(body, session);
-					}
-				};
-
-				if (folderRoots.length > 0) {
-					// The "Folders" group header: chevron + name + folder count +
-					// new-folder action; the whole row toggles the collapse.
-					const isCollapsed = collapsed.has("__folders_root__");
-					const head = list.createDiv({
-						cls: "semlink-history-group semlink-history-folders-head" + (isCollapsed ? " is-collapsed" : ""),
-					});
-					const chev = head.createSpan({ cls: "semlink-history-folder-chev" });
-					setIcon(chev, isCollapsed ? "chevron-right" : "chevron-down");
-					head.createSpan({ cls: "semlink-history-folder-name", text: t("historyTabFolder") });
-					head.createSpan({ cls: "semlink-history-folder-count", text: String(folderRoots.length) });
-					const add = head.createSpan({
-						cls: "semlink-history-folder-add",
-						attr: { "aria-label": t("historyNewFolder") },
-					});
-					setIcon(add, "folder-plus");
-					add.addEventListener("click", (e) => {
-						e.stopPropagation();
-						new FolderNameModal(this.app, "", (name) => {
-							this.history.createFolder(name);
+							row.removeClass("is-drop");
+							const id = e.dataTransfer?.getData("text/semlink-session");
+							if (!id) return;
+							this.history.updateSession(id, { projectId: p.id });
 							void this.history.save();
 							render();
-						}).open();
-					});
-					head.addEventListener("click", () => {
-						if (collapsed.has("__folders_root__")) collapsed.delete("__folders_root__");
-						else collapsed.add("__folders_root__");
-						render();
-					});
-					if (!isCollapsed) {
-						const body = list.createDiv({ cls: "semlink-history-folder-body" });
-						for (const child of folderRoots) renderNode(child, 1, body);
+						});
+						if (!pCollapsed) {
+							const body = list.createDiv({ cls: "semlink-history-folder-body" });
+							for (const session of filed) renderItem(body, session);
+						}
 					}
 				}
 			}
 
-			// Pinned group first (Pro), then the flat time buckets. Filed
-			// sessions are excluded from the flow when the folder group is
-			// shown — they live inside their folder only.
-			const flow = showFolders ? rest.filter((s) => !s.folder) : rest;
+			// Pinned group first (Pro), then the flat time buckets. Sessions
+			// bound to a project live inside their project only (merged
+			// archive, 2026-11-18) — the flow collects unbound ones; searching
+			// flattens everything.
+			const flow = query ? rest : rest.filter((s) => !s.projectId);
 			if (pro) {
 				const pinned = pool.filter((x) => x.pinned);
 				if (pinned.length > 0) {
@@ -4437,15 +4525,18 @@ export class SemanticSearchView extends ItemView {
 			}
 			// Pin icon: visible to everyone on hover; for free users clicking
 			// it is a friction point (activation modal), like Folders/search.
-			if (pro) {
-				const folderBtn = item.createEl("button", {
+			if (session.projectId) {
+				// 移出项目（真合并归档）：仅绑定会话显示，点击解绑 → 回时间流。
+				const unbindBtn = item.createEl("button", {
 					cls: "semlink-history-item-folder clickable-icon",
-					attr: { "aria-label": t("historyFolder") },
+					attr: { "aria-label": t("projectRemoveSession") },
 				});
-				setIcon(folderBtn, "folder-input");
-				folderBtn.addEventListener("click", (e) => {
+				setIcon(unbindBtn, "folder-minus");
+				unbindBtn.addEventListener("click", (e) => {
 					e.stopPropagation();
-					this.showFolderMenu(e, session, () => render());
+					this.history.updateSession(session.id, { projectId: "" });
+					void this.history.save();
+					render();
 				});
 			}
 			const archBtn = item.createEl("button", {
@@ -4473,9 +4564,21 @@ export class SemanticSearchView extends ItemView {
 			return item;
 		};
 
-		archiveBtn.addEventListener("click", () => {
-			view = view === "archive" ? "main" : "archive";
-			render();
+		moreBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			// 「更多」菜单（2026-11-18 拍板）：归档入口从头部图标收纳至此。
+			// 强制 DOM 菜单（同 openTranslateMenu 的 eval 实测定论）：macOS
+			// 桌面端 Obsidian 1.15+ 默认原生菜单，DOM 永不建、调试链全断。
+			const menu = new Menu();
+			menu.setUseNativeMenu(false);
+			menu.addItem((item) => {
+				item.setTitle(t("historyArchiveEntry")).setIcon("archive").onClick(() => {
+					view = view === "main" ? "archive" : "main";
+					render();
+				});
+			});
+			const r = moreBtn.getBoundingClientRect();
+			menu.showAtPosition({ x: r.left, y: r.bottom + 4 });
 		});
 		render();
 
@@ -4493,42 +4596,6 @@ export class SemanticSearchView extends ItemView {
 			closeBtn?.addEventListener("click", () => this.closeHistoryDrawer(backdrop, drawer));
 			backdrop?.addEventListener("click", () => this.closeHistoryDrawer(backdrop, drawer));
 		}
-	}
-
-	/** Folder picker menu for a history session (Pro). */
-	private showFolderMenu(evt: MouseEvent, session: ChatSession, onChange: () => void): void {
-		const menu = new Menu();
-		for (const f of this.history.folders()) {
-			menu.addItem((item) => {
-				item.setTitle(f)
-					.setIcon(session.folder === f ? "check" : "folder")
-					.onClick(() => {
-						this.history.updateSession(session.id, { folder: f });
-						void this.history.save();
-						onChange();
-					});
-			});
-		}
-		if (session.folder) {
-			menu.addItem((item) => {
-				item.setTitle(t("historyRemoveFolder")).setIcon("folder-minus").onClick(() => {
-					this.history.updateSession(session.id, { folder: "" });
-					void this.history.save();
-					onChange();
-				});
-			});
-		}
-		menu.addSeparator();
-		menu.addItem((item) => {
-			item.setTitle(t("historyNewFolder")).setIcon("folder-plus").onClick(() => {
-				new FolderNameModal(this.app, session.folder || "", (name) => {
-					this.history.updateSession(session.id, { folder: name });
-					void this.history.save();
-					onChange();
-				}).open();
-			});
-		});
-		menu.showAtMouseEvent(evt);
 	}
 
 	private closeHistoryDrawer(backdrop: HTMLElement | null, drawer: HTMLElement): void {
@@ -5592,51 +5659,3 @@ export class SemanticSearchView extends ItemView {
 		return dot > 0 ? name.slice(0, dot) : name;
 	}
 }
-
-
-/** Tiny input modal used by the Pro history-management folder picker. */
-class FolderNameModal extends Modal {
-	private initial: string;
-	private onDone: (name: string) => void;
-
-	constructor(app: App, initial: string, onDone: (name: string) => void) {
-		super(app);
-		this.initial = initial;
-		this.onDone = onDone;
-		this.modalEl.addClass("semlink-folder-name-modal");
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.empty();
-		// Clean title (no ellipsis — that's the trigger-button wording), a
-		// single primary action + cancel. Enter still submits.
-		contentEl.createEl("h2", { text: t("folderModalTitle") });
-		const input = contentEl.createEl("input", {
-			cls: "semlink-folder-input",
-			attr: { type: "text", placeholder: t("historyFolderPlaceholder"), value: this.initial },
-		});
-		input.focus();
-		const submit = () => {
-			const name = input.value.trim().slice(0, 24);
-			if (name) {
-				this.onDone(name);
-				this.close();
-			}
-		};
-		input.addEventListener("keydown", (e) => {
-			if (e.key === "Enter") submit();
-		});
-		const row = contentEl.createDiv({ cls: "semlink-folder-input-row" });
-		const cancel = row.createEl("button", { text: t("cancel") });
-		cancel.addEventListener("click", () => this.close());
-		const ok = row.createEl("button", { cls: "mod-cta", text: t("historyFolderOk") });
-		ok.addEventListener("click", submit);
-	}
-
-	onClose() {
-		this.contentEl.empty();
-	}
-}
-
-

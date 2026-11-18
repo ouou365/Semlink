@@ -778,6 +778,7 @@ export default class SmartVaultPlugin extends Plugin {
 				queuefailures: () => this.store.debugQueueFailures(),
 				dbstate: () => this.store.debugDbState(),
 			},
+			(expr) => this.runDebugEval(expr),
 		);
 		try {
 			await server.start();
@@ -1262,6 +1263,37 @@ export default class SmartVaultPlugin extends Plugin {
 				? this.chatClient.latestCiteRegistry.map((path, i) => ({ n: i + 1, path, line: this.chatClient.latestCiteLines[i] ?? null }))
 				: null,
 		};
+	}
+
+	/** eval 工具执行器（2026-11-18 加）：在 Semlink 视图所在窗口上下文里
+	 *  求值任意 JS 表达式——诊断「改构建产物插桩→reload→点击→猜」循环的
+	 *  终极杠杆：原型打补丁捕获活实例（如包一层 Menu.prototype.
+	 *  showAtPosition 拿到真实 Menu）、直读内部状态、探测 computed style，
+	 *  一次到位。绑定 view/plugin/app/obsidian/win/doc/workspace/vault，
+	 *  支持 await（写表达式或 async IIFE 均可）。仅本地 debug server
+	 *  （127.0.0.1）暴露——它本就能驱动整个 UI，eval 不引入新信任边界。 */
+	private async runDebugEval(expr: string): Promise<unknown> {
+		if (!expr.trim()) return { ok: false, error: "expr required" };
+		const leaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+		const view = leaves[0]?.view as SemanticSearchView | undefined;
+		const win = (view?.contentEl?.ownerDocument?.defaultView ?? window) as Window;
+		const doc = win.document;
+		const AsyncFunction = Object.getPrototypeOf(async () => 0).constructor as new (
+			...args: string[]
+		) => (...bindings: unknown[]) => Promise<unknown>;
+		try {
+			// require("obsidian")：esbuild CJS 产物里 obsidian 是 external——
+			// 运行时就是用它加载的，此处复用同一通道拿模块命名空间。
+			const obsidianMod = require("obsidian") as unknown;
+			const fn = new AsyncFunction(
+				"view", "plugin", "app", "obsidian", "win", "doc", "workspace", "vault",
+				`"use strict"; return (${expr});`,
+			);
+			const result = await fn(view, this, this.app, obsidianMod, win, doc, this.app.workspace, this.app.vault);
+			return { ok: true, expr, result };
+		} catch (e) {
+			return { ok: false, expr, error: e instanceof Error ? `${e.message}` : String(e), stack: e instanceof Error ? (e.stack ?? "").split("\n").slice(0, 6) : undefined };
+		}
 	}
 
 	/** 设置嵌入模型选择（引导/设置统一入口）：键变化（换模型，含首次从
@@ -4240,7 +4272,13 @@ export default class SmartVaultPlugin extends Plugin {
 				if (matches.some((o) => o !== m && m.el.contains(o.el))) matches.splice(i, 1);
 			}
 		}
-		const info = matches.map(({ el, ...rest }) => rest);
+		const info = matches.map(({ el, ...rest }) => {
+			// attrs 全量回显（aria-label/disabled/aria-pressed…）——图标按钮
+			// 无文本，靠属性才能精确定位（此前只能靠按钮顺序猜）。
+			const attrs: Record<string, string> = {};
+			for (const a of Array.from(el.attributes)) attrs[a.name] = a.value;
+			return { ...rest, attrs };
+		});
 
 		if (action === "query") return { action, count: matches.length, matches: info };
 		const m = matches[idx];

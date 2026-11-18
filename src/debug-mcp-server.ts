@@ -112,6 +112,12 @@ export type DebugSettingsRunner = (opts?: { op?: string; patch?: Record<string, 
  *  一次调用返回 url + token。 */
 export type DebugShareRunner = (opts?: { op?: string; sessionId?: string }) => Promise<unknown>;
 
+/** eval 工具执行器：由 main.ts 注入——在 Semlink 视图所在窗口上下文里
+ *  求值任意 JS 表达式（绑定 view/plugin/app/obsidian/win/doc），返回
+ *  JSON 结果。诊断「改构建产物插桩→reload→点击→猜」循环的终极杠杆：
+ *  原型打补丁捕获实例、直读内部状态、探测 computed style 一次到位。 */
+export type DebugEvalRunner = (expr: string) => Promise<unknown>;
+
 interface JsonRpcRequest {
 	jsonrpc: "2.0";
 	id?: string | number | null;
@@ -363,7 +369,7 @@ const UI_TOOL = {
 		+ "scroll, hover (REAL mouseMove via Electron input pipeline — CSS "
 		+ ":hover applies, e.g. history-row pin appears; popouts fall back to "
 		+ "synthetic events), or inject keyboard events (Enter/Escape). " +
-		"Returns every match with tag/classes/text/rect/visibility so you can " +
+		"Returns every match with tag/classes/text/attrs/rect/visibility so you can " +
 		"pick an index. Prefer this over OS-level UI automation — selectors " +
 		"are the plugin's own class names (.semlink-*). Typical walkthrough: " +
 		"ui{action:\"click\",selector:...} then shot to inspect.",
@@ -392,7 +398,10 @@ const RELOAD_TOOL = {
 		"Use it after the plugin source was rebuilt to load the new build. " +
 		"IMPORTANT: the reload tears down this MCP server ~0.5s after the call — this response " +
 		"usually arrives, but the CONNECTION will drop and later calls will fail until the app is " +
-		"back. After calling reload, poll GET /health until it responds again, then re-initialize.",
+		"back. After calling reload, poll GET /health until it responds again, then re-initialize. " +
+		"Note: tools newly registered in the rebuilt plugin only appear in your toolset after " +
+		"the MCP client reconnects — until then call them via a fresh session or work around " +
+		"with the already-exposed tools (e.g. eval).",
 	inputSchema: { type: "object", properties: {}, required: [] },
 };
 
@@ -467,6 +476,27 @@ const DBSTATE_TOOL = {
 		+ "statement-cache size, vector cache flags, queue row count. "
 		+ "For transaction-bookkeeping bugs (nested BEGIN, leaked tx).",
 	inputSchema: { type: "object", properties: {} },
+};
+
+const EVAL_TOOL = {
+	name: "eval",
+	description:
+		"Evaluate an arbitrary JS expression in the Semlink view's window "
+		+ "context and return the JSON result. Bindings: view "
+		+ "(SemanticSearchView instance), plugin (SmartVaultPlugin), app "
+		+ "(Obsidian App), obsidian (the obsidian module — Menu, Notice…), "
+		+ "win/doc (the view's window/document), workspace, vault. Await is "
+		+ "supported — write an expression or an async IIFE. The single "
+		+ "lever for \"why doesn't X render/behave\": monkey-patch a "
+		+ "prototype to capture live instances (e.g. wrap Menu.prototype."
+		+ "showAtPosition to inspect the real Menu), read internal state, "
+		+ "probe computed styles — replaces the edit-build-instrumentation "
+		+ "reload loop. Local-only debug server; it already drives the UI.",
+	inputSchema: {
+		type: "object",
+		properties: { expr: { type: "string", description: "JS expression or async IIFE; the value you want JSON-serialized." } },
+		required: ["expr"],
+	},
 };
 
 const STATS_TOOL = {
@@ -614,7 +644,7 @@ export class DebugMcpServer {
 	/** 串行化：一次只跑一个 ask（聊天管线占上下文与 API 配额）。 */
 	private busy = false;
 
-	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner, private runRecord?: DebugRecordRunner, private runSession?: DebugSessionRunner, private runFixture?: DebugFixtureRunner, private runBrowser?: DebugBrowserRunner, private runSettings?: DebugSettingsRunner, private runShare?: DebugShareRunner, private runSql?: DebugSqlRunner, private runDebug?: DebugDebugRunner) {
+	constructor(port: number, runAsk: DebugAskRunner, runReload: () => void, private runJump?: DebugJumpRunner, private runMeasure?: DebugMeasureRunner, private runShot?: DebugShotRunner, private runStats?: DebugStatsRunner, private runUi?: DebugUiRunner, private runOpfs?: DebugOpfsRunner, private runRpcDiag?: () => unknown, private runModel?: DebugModelRunner, private runChatView?: DebugChatViewRunner, private runRecord?: DebugRecordRunner, private runSession?: DebugSessionRunner, private runFixture?: DebugFixtureRunner, private runBrowser?: DebugBrowserRunner, private runSettings?: DebugSettingsRunner, private runShare?: DebugShareRunner, private runSql?: DebugSqlRunner, private runDebug?: DebugDebugRunner, private runEval?: DebugEvalRunner) {
 		this._port = port;
 		this.runAsk = runAsk;
 		this.runReload = runReload;
@@ -707,7 +737,7 @@ export class DebugMcpServer {
 					result = {};
 					break;
 				case "tools/list":
-					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, SQL_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL, RECORD_TOOL, SESSION_TOOL, FIXTURE_TOOL, BROWSER_TOOL, SETTINGS_TOOL, SHARE_TOOL, LOGS_TOOL, SQLWRITE_TOOL, RUNTRACE_TOOL, QUEUEFAIL_TOOL, DBSTATE_TOOL] };
+					result = { tools: [ASK_TOOL, JUMP_TOOL, MEASURE_TOOL, SHOT_TOOL, RELOAD_TOOL, STATS_TOOL, SQL_TOOL, UI_TOOL, OPFS_TOOL, RPCDIAG_TOOL, MODEL_TOOL, CHAT_TOOL, RECORD_TOOL, SESSION_TOOL, FIXTURE_TOOL, BROWSER_TOOL, SETTINGS_TOOL, SHARE_TOOL, LOGS_TOOL, SQLWRITE_TOOL, RUNTRACE_TOOL, QUEUEFAIL_TOOL, DBSTATE_TOOL, EVAL_TOOL] };
 					break;
 				case "tools/call": {
 					if (!params) {
@@ -761,6 +791,8 @@ export class DebugMcpServer {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runDebug?.queuefailures()) ?? { error: "no debug runner" }, null, 2) }] };
 					} else if (params.name === "dbstate") {
 						result = { content: [{ type: "text", text: JSON.stringify((await this.runDebug?.dbstate()) ?? { error: "no debug runner" }, null, 2) }] };
+					} else if (params.name === "eval") {
+						result = { content: [{ type: "text", text: JSON.stringify((await this.runEval?.(String((params.arguments as { expr?: string } | undefined)?.expr ?? ""))) ?? { error: "no eval runner" }, null, 2) }] };
 					} else {
 						result = await this.handleAsk(params);
 					}

@@ -636,8 +636,12 @@ export interface HistoryMessage {
 	 *  numbers the model cited) — restored cards keep the real [n]. */
 	sourceNumbers?: number[];
 	elapsedSec?: number;
+	/** 产生本回答的模型标签（如 "deepseek-flash"，2026-11-18 加）。思考折
+	 *  叠条摘要行用它显示「思考了 N 秒 · 模型」；旧消息无此字段——如实
+	 *  不显示（不回退当前激活模型，避免历史张冠李戴）。 */
+	model?: string;
 	/** Context usage of this turn, so the ring + tooltip can be restored
-	 * when the session is re-opened from history. */
+	 *  when the session is re-opened from history. */
 	contextTokens?: number;
 	contextBreakdown?: ContextBreakdown;
 	cacheHitRate?: number | null;
