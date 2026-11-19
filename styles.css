@@ -5194,20 +5194,22 @@ body .semlink-msg-user::selection {
 .semlink-history-newfolder:hover{color:var(--text-normal);border-color:var(--interactive-accent)}
 .semlink-history-folder:hover{background:var(--background-modifier-hover)}
 /* Pro history folder tree */
-/* 行左 34px 常驻置顶槽（2026-11-18 用户拍板留足空间）：标题列恒定起点，
-   pin 悬停浮现/已钉常显都落在槽内（absolute 不参与 flex，显隐零位移）。 */
-.semlink-history-item{position:relative;padding-left:34px !important}
+/* 会话行（2026-11-19 拍板：置顶按钮挪到操作组——「移出项目」文件夹
+   图标左边；行首 34px 置顶槽退役，标题文字向左缩进贴齐行 padding。 */
+.semlink-history-item{position:relative;padding-left:.45rem}
 .semlink-history-item .clickable-icon{height:26px;display:flex;align-items:center}
 .semlink-history-item-time{height:26px;display:flex;align-items:center}
-/* pin 绝对定位在左槽内垂直居中；!important 压 Obsidian .clickable-icon
-   的 display 声明（同 semlink-hidden 哲学）。 */
-.semlink-history-item .semlink-history-item-pin{position:absolute;left:5px;top:50%;transform:translateY(-50%);margin:0;flex:none;display:none !important;transition:opacity .12s}
-.semlink-history-item:hover .semlink-history-item-pin{display:flex !important}
-.semlink-history-item .semlink-history-item-pin.is-pinned{display:flex !important;color:var(--interactive-accent)}
-/* 后台完成未读点：左槽品牌色圆点（ZCode「刚完成」语义），点开即消；
-   未读行隐藏 pin（同槽防重叠，hover 也不出——先看答案再钉）。 */
-.semlink-history-item-unread{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--interactive-accent);flex:none}
-.semlink-history-item:has(.semlink-history-item-unread) .semlink-history-item-pin{display:none !important}
+/* pin：流内操作按钮，与 folder/archive 同款 hover 显隐；已钉常显（accent 色）。
+   特异性说明：.semlink-history-folder-body 内的隐藏规则（下方）与 hover
+   同级时后者胜——与旧 absolute 版行为一致（项目内 hover 亦可见）。 */
+.semlink-history-item .semlink-history-item-pin{margin:0;flex:none;display:none;transition:opacity .12s}
+.semlink-history-item:hover .semlink-history-item-pin{display:flex}
+.semlink-history-item .semlink-history-item-pin.is-pinned{display:flex;color:var(--interactive-accent)}
+/* 后台完成未读点：行首品牌色圆点（ZCode「刚完成」语义），点开即消；
+   未读行文字让位（圆点占左槽），hover 也不出 pin——先看答案再钉。 */
+.semlink-history-item-unread{position:absolute;left:5px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--interactive-accent);flex:none}
+.semlink-history-item:has(.semlink-history-item-unread) .semlink-history-item-pin{display:none}
+.semlink-history-item:has(.semlink-history-item-unread){padding-left:24px}
 .semlink-history-item-pin.clickable-icon{background:transparent;box-shadow:none}
 .semlink-history-item-pin.clickable-icon:hover{background:transparent;box-shadow:none}
 .semlink-history-item-pin.clickable-icon:hover{color:var(--text-accent)}
