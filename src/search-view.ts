@@ -109,8 +109,18 @@ function parseTranslationUnits(text: string): { units: string[]; rest: string } 
 		curType = null;
 	};
 	const lines = text.split("\n");
-	// 行有界：最后一个不带换行的半截行不算完成——先摘出来并进 rest。
-	const pending = text.endsWith("\n") || lines[lines.length - 1] === "" ? "" : lines.pop()!;
+	// 行有界：最后一行不带换行 = 流式半截 → 摘出并进 rest（下一轮 delta
+	// 全量重解析自行归位）。**结尾换行产生的空串尾行必须直接丢弃**——
+	// 它不是空行内容：若留在 lines 里会被当作空行 flush，表格块就在
+	// 「表头行 + 结尾换行」的瞬间被提前 flush 成残缺 unit（只有表头），
+	// drain 渲染消费掉名额后，后续完整表格 unit 因 nextUnit 已越过而
+	// 永不渲染（真机 2026-11-19 翻译表格 bug 复盘，DEV 待记）。
+	let pending = "";
+	if (lines[lines.length - 1] === "") {
+		lines.pop();
+	} else {
+		pending = lines.pop()!;
+	}
 	for (const line of lines) {
 		if (fence) {
 			// 闭合围栏（同字符且长度不小于开头、无 info 串）→ 整块代码成单元。
@@ -2418,14 +2428,20 @@ export class SemanticSearchView extends ItemView {
 		let renderFailed = false;
 		let drainPromise = Promise.resolve();
 		let renderChain: Promise<void> = Promise.resolve();
-		const enqueueRender = (targetEl: Element, md: string): Promise<void> => {
+		// 统一串行链：预览与完成换入绝不并发写同一目标（边界时刻两者会落
+		// 到同一块）。preview 用原位填充保住 target 元素身份——若预览也用
+		// replaceWith 会销毁 target，边界到达后 drain 拿着 detached 引用被
+		// isConnected 短路，表格等块永久停留在预览的裸文本形态（真机
+		// 2026-11-19 复现：英文译文表格显示为一行裸管道文本且不再修正）。
+		const enqueue = (targetEl: Element, md: string, mode: "render" | "preview"): Promise<void> => {
 			const p = renderChain.then(async () => {
 				if (controller.signal.aborted) return;
 				try {
-					await this.renderTranslatedUnit(targetEl, md, root);
+					if (mode === "preview") await this.previewTranslatedUnit(targetEl, md, root);
+					else await this.renderTranslatedUnit(targetEl, md, root);
 				} catch {
 					// 单段渲染失败：跳过；收尾按结构校验走整卡兜底。
-					renderFailed = true;
+					if (mode === "render") renderFailed = true;
 				}
 			});
 			renderChain = p;
@@ -2439,7 +2455,7 @@ export class SemanticSearchView extends ItemView {
 			drainPromise = (async () => {
 				try {
 					while (nextUnit < units.length && nextUnit < targets.length && !controller.signal.aborted) {
-						const p = enqueueRender(targets[nextUnit], units[nextUnit]);
+						const p = enqueue(targets[nextUnit], units[nextUnit], "render");
 						nextUnit++;
 						await p;
 					}
@@ -2490,7 +2506,7 @@ export class SemanticSearchView extends ItemView {
 						const cur = now.rest.trim();
 						const curIdx = now.units.length;
 						if (!cur || curIdx >= targets.length || controller.signal.aborted) return;
-						void enqueueRender(targets[curIdx], cur);
+						void enqueue(targets[curIdx], cur, "preview");
 					}, 160);
 				}
 			}
@@ -2566,7 +2582,7 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	/** 原位换入一段已完成译文：li 目标保圆点（清空后搬入渲染出的 li 内
-	 *  容），其余块级目标整块替换（同形换入）——加载圈随 swap 消失。在
+	 *  内容），其余块级目标整块替换（同形换入）——加载圈随 swap 消失。在
 	 *  隐藏临时容器里渲染完再搬节点，避免闪现半成品。 */
 	private async renderTranslatedUnit(target: Element, md: string, root: HTMLElement): Promise<void> {
 		const temp = root.createDiv({ cls: "semlink-hidden" });
@@ -2583,6 +2599,24 @@ export class SemanticSearchView extends ItemView {
 				while (temp.firstChild) frag.appendChild(temp.firstChild);
 				target.replaceWith(frag);
 			}
+		} finally {
+			temp.detach();
+		}
+	}
+
+	/** 流式预览（进行中块的原位填充）：与 renderTranslatedUnit 的差别在
+	 *  **保留 target 元素身份**——empty+appendChild 而非 replaceWith。预览
+	 *  若 replaceWith 会销毁 target，边界到达后 drain 的完整换入面对
+	 *  detached 引用被 isConnected 短路跳过，该块（典型=表格）永久停留
+	 *  在预览裸文本形态。中间态可能出现 p 落进 table 标签的临时结构，
+	 *  边界一到由 renderTranslatedUnit 的同形换入修正。 */
+	private async previewTranslatedUnit(target: Element, md: string, root: HTMLElement): Promise<void> {
+		const temp = root.createDiv({ cls: "semlink-hidden" });
+		try {
+			await MarkdownRenderer.render(this.app, protectHyphens(md), temp, "", this);
+			if (!target.isConnected) return;
+			target.empty();
+			while (temp.firstChild) target.appendChild(temp.firstChild);
 		} finally {
 			temp.detach();
 		}
