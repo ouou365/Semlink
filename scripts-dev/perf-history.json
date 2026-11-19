@@ -1,0 +1,44 @@
+[
+ {
+  "at": "2026-11-19T03:47:29.979Z",
+  "machine": "ouzhongyuandeMac-mini.local",
+  "corpus": {
+   "notes": 1130,
+   "chunks": 65025
+  },
+  "perf": {
+   "grep": {
+    "min": 30,
+    "all": [
+     30,
+     49,
+     50
+    ]
+   },
+   "keyword": {
+    "min": 490,
+    "all": [
+     490,
+     511,
+     522
+    ]
+   },
+   "search": {
+    "min": 834,
+    "all": [
+     834,
+     891,
+     878
+    ]
+   },
+   "semantic": {
+    "min": 424,
+    "all": [
+     424,
+     431,
+     477
+    ]
+   }
+  }
+ }
+]
