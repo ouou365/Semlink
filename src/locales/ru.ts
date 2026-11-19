@@ -724,7 +724,6 @@ const t: Record<keyof typeof en, string> = {
 	historyUnarchive: "Восстановить",
 	historyArchivedManualHead: "В архиве ({n})",
 	historyArchiveBtn: "Архив",
-	historyArchiveTitle: "Архив",
 	historyBack: "Назад",
 	confirmOk: "OK",
 	confirmCancel: "Отмена",

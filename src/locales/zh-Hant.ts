@@ -723,7 +723,6 @@ const t: Record<keyof typeof en, string> = {
 	historyUnarchive: "還原",
 	historyArchivedManualHead: "已封存（{n}）",
 	historyArchiveBtn: "已封存",
-	historyArchiveTitle: "已封存",
 	historyBack: "返回",
 	confirmOk: "確定",
 	confirmCancel: "取消",

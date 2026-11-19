@@ -723,7 +723,6 @@ const t: Record<keyof typeof en, string> = {
 	historyUnarchive: "復元",
 	historyArchivedManualHead: "アーカイブ済み（{n}）",
 	historyArchiveBtn: "アーカイブ済み",
-	historyArchiveTitle: "アーカイブ",
 	historyBack: "戻る",
 	confirmOk: "OK",
 	confirmCancel: "キャンセル",

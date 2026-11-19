@@ -4291,12 +4291,6 @@ export class SemanticSearchView extends ItemView {
 		moreRow.createSpan({ cls: "semlink-history-menu-row-label", text: t("historyMore") });
 		const moreChev = moreRow.createSpan({ cls: "semlink-history-menu-row-chev" });
 		setIcon(moreChev, "chevron-right");
-		const archiveEntryRow = menuRows.createDiv({
-			cls: "semlink-history-menu-row semlink-history-menu-sub semlink-hidden",
-		});
-		const archIcon = archiveEntryRow.createSpan({ cls: "semlink-history-menu-row-icon" });
-		setIcon(archIcon, "archive");
-		archiveEntryRow.createSpan({ cls: "semlink-history-menu-row-label", text: t("historyArchiveEntry") });
 		// ── 用量与统计（2026-11-19 二次拍板：从顶级行收进「更多」子组，
 		// 与归档对话同款次级弱化样式；原 gauge 头部按钮已停用，此行为
 		// 唯一活跃入口）。浮层抽屉先收起再进屏，常显 docked 抽屉保持
@@ -4319,12 +4313,7 @@ export class SemanticSearchView extends ItemView {
 		moreRow.addEventListener("click", () => {
 			moreExpanded = !moreExpanded;
 			setIcon(moreChev, moreExpanded ? "chevron-down" : "chevron-right");
-			archiveEntryRow.toggleClass("semlink-hidden", !moreExpanded);
 			usageEntryRow.toggleClass("semlink-hidden", !moreExpanded);
-		});
-		archiveEntryRow.addEventListener("click", () => {
-			view = view === "main" ? "archive" : "main";
-			render();
 		});
 
 		const pro = this.plugin.licenseManager.isPro();
@@ -4404,34 +4393,10 @@ export class SemanticSearchView extends ItemView {
 			list.empty();
 			// NOTE: tools (the search input) is never emptied — it is created
 			// once and only shown/hidden, or CJK IME composition breaks.
-			// Header chrome per view.
-			if (view === "archive") {
-				titleEl.setText(t("historyArchiveTitle"));
-				tools.hide();
-			} else {
-				titleEl.setText(t("historyTitle"));
-				tools.show();
-			}
-
-			// ── Archive view: every locked/archived chat, deletable. ──
-			if (view === "archive") {
-				const back = list.createDiv({ cls: "semlink-history-more", text: `← ${t("historyBack")}` });
-				back.addEventListener("click", () => { view = "main"; render(); });
-				// Manually archived chats (any tier): restore or delete.
-				if (manuallyArchived.length > 0) {
-					const head = list.createDiv({ cls: "semlink-history-archive-head" });
-					head.createSpan({
-						cls: "semlink-history-archive-title",
-						text: t("historyArchivedManualHead").replace("{n}", String(manuallyArchived.length)),
-					});
-					const items = list.createDiv({ cls: "semlink-history-group-items semlink-history-archive-items" });
-					for (const session of manuallyArchived) renderArchivedItem(items, session, true);
-				}
-				if (manuallyArchived.length === 0) {
-					list.createDiv({ cls: "semlink-history-empty", text: t("historyArchiveEmptyPro") });
-				}
-				return;
-			}
+			// Header chrome 恒定（2026-11-19 拍板：归档只作用于「对话」组，
+			// 上面的部分不再隐藏/替换——标题恒 Semlink、搜索行恒显示）。
+			titleEl.setText(t("historyTitle"));
+			tools.show();
 
 			// ── Main view ──
 			let pool = all;
@@ -4592,16 +4557,52 @@ export class SemanticSearchView extends ItemView {
 			// 折叠时整段跳过（本组是列表末段）；搜索时平铺不分组。
 			if (!query) {
 				const chead = list.createDiv({
-					cls: "semlink-history-group semlink-history-folders-head" + (conversationsCollapsed ? " is-collapsed" : ""),
+					cls: "semlink-history-group semlink-history-folders-head"
+						+ (view === "archive" ? " is-archived" : conversationsCollapsed ? " is-collapsed" : ""),
 				});
 				// Codex 式组头同款：chevron 文字后、hover 显示，计数移除
 				chead.createSpan({ cls: "semlink-history-folder-name", text: t("historyGroupChats") });
+				// 归档切换图标（2026-11-19 拍板）：挂在组头文字右边、只展示
+				// 图标；点击只替换对话组内容——上面的 Projects 组保持可见
+				// （原整卡归档视图退役）。归档态图标 accent 高亮。
+				const archToggle = chead.createSpan({
+					cls: "semlink-history-folder-arch clickable-icon" + (view === "archive" ? " is-active" : ""),
+					attr: { "aria-label": t("historyArchiveEntry") },
+				});
+				setIcon(archToggle, "archive");
+				archToggle.addEventListener("click", (e) => {
+					e.stopPropagation();
+					view = view === "archive" ? "main" : "archive";
+					render();
+				});
 				const cchev = chead.createSpan({ cls: "semlink-history-folder-chev" });
-				setIcon(cchev, conversationsCollapsed ? "chevron-right" : "chevron-down");
+				setIcon(cchev, view === "archive" || !conversationsCollapsed ? "chevron-down" : "chevron-right");
 				chead.addEventListener("click", () => {
+					// 归档态下组头点击 = 退出归档（回到时间流）；否则折叠切换
+					if (view === "archive") {
+						view = "main";
+						render();
+						return;
+					}
 					conversationsCollapsed = !conversationsCollapsed;
 					render();
 				});
+			}
+			// 归档态：对话组内容 = 手动归档列表（恢复/删除），组体恒显示
+			// （归档态忽略折叠）；上面的部分已渲染，不隐藏。
+			if (!query && view === "archive") {
+				if (manuallyArchived.length === 0) {
+					list.createDiv({ cls: "semlink-history-empty", text: t("historyArchiveEmptyPro") });
+				} else {
+					const head = list.createDiv({ cls: "semlink-history-archive-head" });
+					head.createSpan({
+						cls: "semlink-history-archive-title",
+						text: t("historyArchivedManualHead").replace("{n}", String(manuallyArchived.length)),
+					});
+					const items = list.createDiv({ cls: "semlink-history-group-items semlink-history-archive-items" });
+					for (const session of manuallyArchived) renderArchivedItem(items, session, true);
+				}
+				return;
 			}
 			// 折叠「对话」组 = 列表末段整段跳过（置顶/时间流/免费锁定都在组内）
 			if (!query && conversationsCollapsed) return;

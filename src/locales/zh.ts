@@ -724,7 +724,6 @@ const zh: Record<keyof typeof en, string> = {
 	historyUnarchive: "恢复",
 	historyArchivedManualHead: "已归档（{n}）",
 	historyArchiveBtn: "已归档",
-	historyArchiveTitle: "已归档",
 	historyBack: "返回",
 	confirmOk: "确定",
 	confirmCancel: "取消",

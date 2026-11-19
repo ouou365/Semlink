@@ -722,7 +722,6 @@ const en = {
 	historyUnarchive: "Restore",
 	historyArchivedManualHead: "Archived ({n})",
 	historyArchiveBtn: "Archived",
-	historyArchiveTitle: "Archived",
 	historyBack: "Back",
 	confirmOk: "OK",
 	confirmCancel: "Cancel",

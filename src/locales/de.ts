@@ -723,7 +723,6 @@ const t: Record<keyof typeof en, string> = {
 	historyUnarchive: "Wiederherstellen",
 	historyArchivedManualHead: "Archiviert ({n})",
 	historyArchiveBtn: "Archiviert",
-	historyArchiveTitle: "Archiviert",
 	historyBack: "Zurück",
 	confirmOk: "OK",
 	confirmCancel: "Abbrechen",

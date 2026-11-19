@@ -723,7 +723,6 @@ const t: Record<keyof typeof en, string> = {
 	historyUnarchive: "복원",
 	historyArchivedManualHead: "보관됨 ({n})",
 	historyArchiveBtn: "보관함",
-	historyArchiveTitle: "보관됨",
 	historyBack: "뒤로",
 	confirmOk: "확인",
 	confirmCancel: "취소",
