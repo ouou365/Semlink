@@ -485,9 +485,8 @@ export class SemanticSearchView extends ItemView {
 		// 直到会话内再次 saveSettings 才藏——2026-11-18 用户实测截图）。
 		this.refreshLicenseUI();
 		// 许可证图标（2026-11-19 拍板）：原 ✨ sparkle 星形让位给品牌 logo，
-		// 入口改用 id-card（证件=许可语义；lucide 无 "license" 图标名，实测
-		// setIcon("license") 为空，id-card 是同库里最贴近的证件形状）。
-		setIcon(upgradeBtn, "id-card");
+		// 入口改用 gem（宝石=Pro 高级感；曾用 id-card，用户改拍板 gem）。
+		setIcon(upgradeBtn, "gem");
 		upgradeBtn.addEventListener("click", () => {
 			// ✨ 入口按许可状态分流：免费态 = 升级营销窗；Pro 态 = Eagle 式
 			// About 窗（LicenseModal 的 Pro 分支只有状态行 + 停用，观感近空，
