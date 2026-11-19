@@ -3211,7 +3211,8 @@ input[type="radio"]:checked::after { mask-size: 50%; mask-position: 50% 50%; mas
 .semlink-search-view.semlink-settings-active .semlink-search-status {
     display: none;
 }
-.semlink-search-welcome.semlink-settings-screen {
+.semlink-search-welcome.semlink-settings-screen,
+.semlink-search-welcome.semlink-usage-screen {
     justify-content: flex-start;
     align-items: stretch;
     width: 100%;
@@ -3228,10 +3229,19 @@ input[type="radio"]:checked::after { mask-size: 50%; mask-position: 50% 50%; mas
     height: auto;
     flex: 1 1 auto;
     min-height: 0;
+}/* 统计屏（用量与统计详情屏）：顶条/布局与设置屏同构（选择器并入上
+   规则），内容列复用主列 1080 可读口径——全宽下表格行长失控；居中
+   由 margin auto 承担（messages 为 flex 列）。顶部 12px 让卡片区不
+   贴死顶条底缘。 */
+.semlink-search-welcome.semlink-usage-screen {
+    max-width: min(1080px, calc(100% - 32px));
+    margin: 0 auto;
+    padding-top: 12px;
 }/* 设置屏入场：150ms 淡入 + 4px 上浮（对话 ↔ 设置是全屏内容互换，
    零过渡的瞬间互换是生硬感的主要来源）。退出不做对称动画——
    返回要快于进入。顶条（返回/品牌/语言）与内容同曲线，避免错拍。 */
 .semlink-search-welcome.semlink-settings-screen,
+.semlink-search-welcome.semlink-usage-screen,
 .semlink-search-header.semlink-settings-corners {
     animation: semlink-settings-enter 0.15s ease-out;
 }
@@ -8355,7 +8365,7 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 <body class="rv theme-light">
 <div class="rv-topbar">
 	<strong>Semlink 弹窗样式审查</strong>
-	<span class="rv-gen-note">v2.3.0 · 29 个渲染态 · 生成于 2026-11-19 00:37 · 样式保真：Obsidian 运行时导出 + styles.css 内联</span>
+	<span class="rv-gen-note">v2.3.0 · 30 个渲染态 · 生成于 2026-11-19 00:58 · 样式保真：Obsidian 运行时导出 + styles.css 内联</span>
 	<button id="rv-theme-toggle" onclick="rvToggleTheme()">🌙 深色</button>
 </div>
 <nav class="rv-sidebar">
@@ -8378,6 +8388,7 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 <a href="#add-provider-icons">自定义供应商（图标面板展开态）</a>
 <div class="rv-group-title">用量与许可</div>
 <a href="#usage">用量看板（免费态）&nbsp;UsageModal</a>
+<a href="#usage-screen">用量与统计详情屏（视图内全屏）</a>
 <a href="#license">升级&nbsp;/&nbsp;许可&nbsp;LicenseModal（免费态）</a>
 <a href="#license-about">关于弹窗&nbsp;LicenseInfoModal</a>
 <div class="rv-group-title">MCP</div>
@@ -8947,7 +8958,7 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 		<h2>用量看板（免费态） UsageModal</h2>
 		<div class="rv-meta">
 			<code>usage-modal.ts</code>
-			<span>入口：设置→「用量与费用」（Pro 区模糊门控）</span>
+			<span>入口：历史弹窗入口（当前已停用）；渲染本体与详情屏共用 usage-screen.ts</span>
 			<span>类：<code>semlink-usage-modal</code></span>
 		</div>
 		<p class="rv-note">无标题栏（正文自带 h2/h3 标题） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
@@ -8989,6 +9000,59 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 <div class="setting-item"><div class="setting-item-info"><div class="setting-item-name">清除本地用量记录</div></div><div class="setting-item-control"><button>清除</button></div></div></div>
 			</div>
 		</div>
+	</div>
+</section>
+
+<section class="rv-section" id="usage-screen">
+	<header class="rv-sec-head">
+		<h2>用量与统计详情屏（视图内全屏）</h2>
+		<div class="rv-meta">
+			<code>search-view.ts + usage-screen.ts</code>
+			<span>入口：抽屉「新对话」下方菜单行点击 → 对话区切换成统计屏；← 返回恢复对话/主页</span>
+			<span>modalEl 类：（无）</span>
+		</div>
+		<p class="rv-note">锚定弹层（fixed 定位挂 body，此处静态化展示） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
+	</header>
+	<div class="rv-stage">
+		
+<div class="semlink-search-header semlink-guide-corners semlink-settings-corners">
+	<div class="semlink-search-header-side">
+		<button class="semlink-search-icon-btn clickable-icon" aria-label="返回"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-arrow-left"><path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path></svg></button>
+	</div>
+	<div class="semlink-search-brand-group"><span class="semlink-search-brand">用量与统计</span></div>
+</div>
+<div class="semlink-search-welcome semlink-usage-screen">
+	
+<h2>用量与成本</h2>
+<div class="semlink-usage-cards">
+	<div class="semlink-usage-card"><div class="semlink-usage-card-value">$4.21</div><div class="semlink-usage-card-label">本月费用</div></div>
+	<div class="semlink-usage-card"><div class="semlink-usage-card-value">$18.60</div><div class="semlink-usage-card-label">累计费用</div></div>
+	<div class="semlink-usage-card"><div class="semlink-usage-card-value">612</div><div class="semlink-usage-card-label">本月请求</div></div>
+	<div class="semlink-usage-card"><div class="semlink-usage-card-value">2.4M → 890.5k</div><div class="semlink-usage-card-label">累计 tokens（入 → 出）</div></div>
+</div>
+<div class="semlink-usage-body semlink-usage-locked">
+	<div class="semlink-usage-gate">
+		<div class="semlink-usage-gate-title">用量看板是 Pro 功能</div>
+		<div class="semlink-usage-gate-desc">用量数据一直在本地记录，升级后即可查看完整统计。</div>
+		<button class="mod-cta">升级 Pro</button>
+	</div>
+	<div class="semlink-usage-section">
+		<div class="semlink-usage-section-title">近 30 天</div>
+		<div class="semlink-usage-chart"><div class="semlink-usage-bar" style="height:62%"></div><div class="semlink-usage-bar" style="height:75%"></div><div class="semlink-usage-bar" style="height:80%"></div><div class="semlink-usage-bar" style="height:55%"></div><div class="semlink-usage-bar" style="height:92%"></div><div class="semlink-usage-bar" style="height:32%"></div><div class="semlink-usage-bar" style="height:96%"></div><div class="semlink-usage-bar" style="height:29%"></div><div class="semlink-usage-bar" style="height:92%"></div><div class="semlink-usage-bar" style="height:53%"></div><div class="semlink-usage-bar" style="height:81%"></div><div class="semlink-usage-bar" style="height:73%"></div><div class="semlink-usage-bar" style="height:64%"></div><div class="semlink-usage-bar" style="height:87%"></div><div class="semlink-usage-bar" style="height:42%"></div><div class="semlink-usage-bar" style="height:95%"></div><div class="semlink-usage-bar" style="height:18%"></div><div class="semlink-usage-bar" style="height:95%"></div><div class="semlink-usage-bar" style="height:43%"></div><div class="semlink-usage-bar" style="height:87%"></div><div class="semlink-usage-bar" style="height:65%"></div><div class="semlink-usage-bar" style="height:72%"></div><div class="semlink-usage-bar" style="height:82%"></div><div class="semlink-usage-bar" style="height:52%"></div><div class="semlink-usage-bar" style="height:93%"></div><div class="semlink-usage-bar" style="height:28%"></div><div class="semlink-usage-bar" style="height:96%"></div><div class="semlink-usage-bar" style="height:32%"></div><div class="semlink-usage-bar" style="height:91%"></div><div class="semlink-usage-bar" style="height:56%"></div></div>
+	</div>
+	<div class="semlink-usage-section">
+		<div class="semlink-usage-section-title">按模型</div>
+		<table class="semlink-usage-table">
+			<tr><th>模型</th><th>请求</th><th>输入 tokens</th><th>输出 tokens</th><th>费用</th></tr>
+			<tr><td>deepseek-chat</td><td>214</td><td>980.2k</td><td>312.4k</td><td class="semlink-usage-cost">$1.42</td></tr>
+			<tr><td>deepseek-reasoner</td><td>96</td><td>540.9k</td><td>187.1k</td><td class="semlink-usage-cost">$1.08</td></tr>
+			<tr><td>qwen-max</td><td>58</td><td>212.3k</td><td>88.7k</td><td class="semlink-usage-cost">$0.94</td></tr>
+		</table>
+		<div class="semlink-usage-hint">在 设置 → 模型 里给模型填写价格即可计算费用；未填价格的模型只统计 tokens</div>
+	</div>
+</div>
+<div class="setting-item"><div class="setting-item-info"><div class="setting-item-name">清除本地用量记录</div></div><div class="setting-item-control"><button>清除</button></div></div>
+</div>
 	</div>
 </section>
 

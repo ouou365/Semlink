@@ -734,6 +734,7 @@ const t: Record<keyof typeof en, string> = {
 	historyNoMatch: "일치하는 채팅이 없습니다",
 	historyCancel: "취소",
 	usageTitle: "사용량 및 비용",
+	usageStatsEntry: "사용량 및 통계",
 	usageThisMonth: "이번 달",
 	usageTotal: "전체 기간",
 	usageRequestsMonth: "요청 수 (이번 달)",

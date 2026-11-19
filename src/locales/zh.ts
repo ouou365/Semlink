@@ -735,6 +735,7 @@ const zh: Record<keyof typeof en, string> = {
 	historyNoMatch: "没有匹配的对话",
 	historyCancel: "取消",
 	usageTitle: "用量与成本",
+	usageStatsEntry: "用量与统计",
 	usageThisMonth: "本月费用",
 	usageTotal: "累计费用",
 	usageRequestsMonth: "本月请求",

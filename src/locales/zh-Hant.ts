@@ -734,6 +734,7 @@ const t: Record<keyof typeof en, string> = {
 	historyNoMatch: "沒有符合的對話",
 	historyCancel: "取消",
 	usageTitle: "用量與成本",
+	usageStatsEntry: "用量與統計",
 	usageThisMonth: "本月費用",
 	usageTotal: "累計費用",
 	usageRequestsMonth: "本月請求",

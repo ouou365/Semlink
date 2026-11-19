@@ -20,6 +20,7 @@ import { ChatHistoryStore } from "./chat-history";
 import { brandLogoOf, formatContextWindow } from "./settings-models";
 import { LicenseModal, LicenseInfoModal } from "./license-modal";
 import { UsageModal } from "./usage-modal";
+import { renderUsageDashboard } from "./usage-screen";
 import { closeAllGuideModals, guideInProgress, onboardingActive, renderGuideHub, renderOnboarding } from "./onboarding";
 import { renderSettingsTabInto, type SettingsTab, type SmartVaultSettingTab } from "./settings";
 import type SmartVaultPlugin from "../main";
@@ -330,12 +331,16 @@ export class SemanticSearchView extends ItemView {
 	private settingsInitialTab: SettingsTab | undefined = undefined;
 	/** 嵌入的设置 Tab 实例句柄（退出时 destroy 断开进度订阅）。 */
 	private settingsEmbed: { destroy(): void; tab: SmartVaultSettingTab } | null = null;
-	/** 会话进行中打开设置屏的快照：退出后原样恢复对话。 */
+	/** 会话进行中打开设置屏的快照：退出后原样恢复对话。与用量统计屏
+	 *  共用（两屏互斥，同一时刻只有一方持有快照）。 */
 	private settingsConvSnapshot: {
 		sessionId: string | null;
 		firstQuestion: string;
 		messages: HistoryMessage[];
 	} | null = null;
+	/** 抽屉「用量与统计」详情屏开关（2026-11-19 拍板）：与设置屏同占
+	 *  欢迎区、互斥；点击抽屉菜单行进入，返回条退出恢复对话/主页。 */
+	private usageScreenOpen = false;
 	/** Set when the user skips the guide. With no API key configured the
 	 *  guide is the default landing page on every fresh view open; skipping
 	 *  only dismisses it for the current view session, not forever. */
@@ -3403,7 +3408,7 @@ export class SemanticSearchView extends ItemView {
 		// 引导弹窗生命周期注释）。设置页正常使用的共享 modal（AddProvider/
 		// AddModel）不经 openGuideModal 登记，不受影响。
 		closeAllGuideModals();
-		this.pushTrace(`renderWelcome mode=${this.settingsMode ? "settings" : this.guideModeActive() ? "guide" : "home"}`);
+		this.pushTrace(`renderWelcome mode=${this.settingsMode ? "settings" : this.usageScreenOpen ? "usage" : this.guideModeActive() ? "guide" : "home"}`);
 		// Track the greeting slot + language in every mode so the 60s timer
 		// only reacts to real time-slot changes and refreshLanguage only
 		// rebuilds the welcome when the language actually changed.
@@ -3412,13 +3417,17 @@ export class SemanticSearchView extends ItemView {
 		// The guide shows for first-run users, on demand via the header help
 		// icon (guideRequested), or while a run is mid-flight (the first
 		// saved key would otherwise make onboardingActive() drop the guide).
-		// 设置屏打开中：占据同一块欢迎区，引导 chrome 让位。
-		const guideMode = this.guideModeActive() && !this.settingsMode;
+		// 设置屏/用量统计屏打开中：占据同一块欢迎区，引导 chrome 让位。
+		const guideMode = this.guideModeActive() && !this.settingsMode && !this.usageScreenOpen;
 		this.setGuideChrome(guideMode);
-		this.setSettingsChrome(this.settingsMode);
+		this.setSettingsChrome(this.settingsMode || this.usageScreenOpen);
 
 		if (this.settingsMode) {
 			this.renderSettingsScreen();
+			return;
+		}
+		if (this.usageScreenOpen) {
+			this.renderUsageScreen();
 			return;
 		}
 		if (guideMode) {
@@ -3609,6 +3618,8 @@ export class SemanticSearchView extends ItemView {
 	 *  modelTab 是旧布尔入口，等价 tab:"model"。 */
 	private openSettingsScreen(opts?: { tab?: SettingsTab; modelTab?: boolean }): void {
 		this.pushTrace(`openSettingsScreen tab=${String(opts?.tab ?? opts?.modelTab ? "model" : "default")}`);
+		// 用量统计屏与设置屏互斥（防御：常显抽屉在统计屏上仍可见）
+		if (this.usageScreenOpen) this.closeUsageScreen();
 		this.settingsInitialTab = opts?.tab ?? (opts?.modelTab ? "model" : undefined);
 		const onHome = !!this.messagesEl.querySelector(".semlink-search-welcome");
 		this.settingsConvSnapshot = onHome ? null : {
@@ -3690,6 +3701,64 @@ export class SemanticSearchView extends ItemView {
 		// Base 页偏好组的下拉。
 		const host = this.messagesEl.createDiv({ cls: "semlink-search-welcome semlink-settings-screen" });
 		this.settingsEmbed = renderSettingsTabInto(host, this.plugin, this.settingsInitialTab);
+	}
+
+	/** 打开视图内用量与统计详情屏（抽屉「用量与统计」入口，2026-11-19
+	 *  拍板）：会话进行中先快照当前对话，退出原样恢复——机制与设置屏
+	 *  同构，快照字段共用（两屏互斥，同一时刻只有一方持有）。 */
+	private openUsageScreen(): void {
+		this.pushTrace("openUsageScreen");
+		if (this.settingsMode) this.closeSettingsScreen();
+		const onHome = !!this.messagesEl.querySelector(".semlink-search-welcome");
+		this.settingsConvSnapshot = onHome ? null : {
+			sessionId: this.currentSessionId,
+			firstQuestion: this.firstQuestion,
+			messages: [...this.currentMessages],
+		};
+		this.usageScreenOpen = true;
+		this.messagesEl.empty();
+		this.renderWelcome();
+	}
+
+	private closeUsageScreen(): void {
+		this.pushTrace(`closeUsageScreen snap=${this.settingsConvSnapshot ? "yes" : "no"}`);
+		this.usageScreenOpen = false;
+		this.setSettingsChrome(false);
+		this.messagesEl.empty();
+		const snap = this.settingsConvSnapshot;
+		this.settingsConvSnapshot = null;
+		if (snap && snap.sessionId && snap.messages.length > 0) {
+			// 从快照原样恢复对话（loadSession 会整屏重渲并滚动到底）
+			void this.loadSession({
+				id: snap.sessionId,
+				title: snap.firstQuestion,
+				messages: snap.messages,
+				createdAt: Date.now(),
+				updatedAt: Date.now(),
+			});
+			return;
+		}
+		this.renderWelcome();
+	}
+
+	/** 用量与统计详情屏：顶条与设置屏同构（← 返回 + 中央页面名，无
+	 *  PiP/语言钮），内容复用 usage-screen.ts 的仪表盘渲染——数据、
+	 *  Pro 门控与弹窗完全同一实现。 */
+	private renderUsageScreen(): void {
+		const corners = this.messagesEl.createDiv({ cls: "semlink-search-header semlink-guide-corners semlink-settings-corners" });
+		const leftSide = corners.createDiv({ cls: "semlink-search-header-side" });
+		const backBtn = leftSide.createEl("button", {
+			cls: "semlink-search-icon-btn clickable-icon",
+			attr: { "aria-label": t("historyBack") },
+		});
+		setIcon(backBtn, "arrow-left");
+		backBtn.addEventListener("click", () => {
+			this.closeUsageScreen();
+		});
+		const brandGroup = corners.createDiv({ cls: "semlink-search-brand-group" });
+		brandGroup.createSpan({ cls: "semlink-search-brand", text: t("usageStatsEntry") });
+		const host = this.messagesEl.createDiv({ cls: "semlink-search-welcome semlink-usage-screen" });
+		renderUsageDashboard(host, this.plugin);
 	}
 
 	/** 语言切换菜单（引导页与设置屏共用）：列出全部 UI 语言（原生标签），
@@ -4143,6 +4212,24 @@ export class SemanticSearchView extends ItemView {
 			}
 		});
 		this.newChatPillEl = drawerNewChat;
+
+		// ── 用量与统计（2026-11-19 拍板：新对话正下方常驻入口，点击
+		// 对话区切换成统计详情屏；原 gauge 头部按钮已停用，此行为唯一
+		// 活跃入口）。浮层抽屉先收起再进屏，常显 docked 抽屉保持不动
+		// （同设置屏行为）。 ──
+		const usageRow = menuRows.createDiv({ cls: "semlink-history-menu-row" });
+		const usageIcon = usageRow.createSpan({ cls: "semlink-history-menu-row-icon" });
+		setIcon(usageIcon, "gauge");
+		usageRow.createSpan({ cls: "semlink-history-menu-row-label", text: t("usageStatsEntry") });
+		usageRow.addEventListener("click", () => {
+			if (persistent) {
+				this.openUsageScreen();
+			} else {
+				// 浮层抽屉：先收起再进屏，避免抽屉挡住统计画面
+				closeBtn?.click();
+				this.openUsageScreen();
+			}
+		});
 
 		let moreExpanded = false;
 		const moreRow = menuRows.createDiv({ cls: "semlink-history-menu-row" });

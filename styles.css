@@ -2826,7 +2826,8 @@
 .semlink-search-view.semlink-settings-active .semlink-search-status {
     display: none;
 }
-.semlink-search-welcome.semlink-settings-screen {
+.semlink-search-welcome.semlink-settings-screen,
+.semlink-search-welcome.semlink-usage-screen {
     justify-content: flex-start;
     align-items: stretch;
     width: 100%;
@@ -2843,10 +2844,19 @@
     height: auto;
     flex: 1 1 auto;
     min-height: 0;
+}/* 统计屏（用量与统计详情屏）：顶条/布局与设置屏同构（选择器并入上
+   规则），内容列复用主列 1080 可读口径——全宽下表格行长失控；居中
+   由 margin auto 承担（messages 为 flex 列）。顶部 12px 让卡片区不
+   贴死顶条底缘。 */
+.semlink-search-welcome.semlink-usage-screen {
+    max-width: min(1080px, calc(100% - 32px));
+    margin: 0 auto;
+    padding-top: 12px;
 }/* 设置屏入场：150ms 淡入 + 4px 上浮（对话 ↔ 设置是全屏内容互换，
    零过渡的瞬间互换是生硬感的主要来源）。退出不做对称动画——
    返回要快于进入。顶条（返回/品牌/语言）与内容同曲线，避免错拍。 */
 .semlink-search-welcome.semlink-settings-screen,
+.semlink-search-welcome.semlink-usage-screen,
 .semlink-search-header.semlink-settings-corners {
     animation: semlink-settings-enter 0.15s ease-out;
 }

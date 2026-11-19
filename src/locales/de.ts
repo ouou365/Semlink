@@ -734,6 +734,7 @@ const t: Record<keyof typeof en, string> = {
 	historyNoMatch: "Keine passenden Chats",
 	historyCancel: "Abbrechen",
 	usageTitle: "Nutzung & Kosten",
+	usageStatsEntry: "Nutzung & Statistiken",
 	usageThisMonth: "Diesen Monat",
 	usageTotal: "Gesamt",
 	usageRequestsMonth: "Anfragen (Monat)",

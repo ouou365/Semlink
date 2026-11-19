@@ -733,6 +733,7 @@ const en = {
 	historyNoMatch: "No matching chats",
 	historyCancel: "Cancel",
 	usageTitle: "Usage & Cost",
+	usageStatsEntry: "Usage & Stats",
 	usageThisMonth: "This month",
 	usageTotal: "All time",
 	usageRequestsMonth: "Requests (month)",

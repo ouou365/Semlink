@@ -734,6 +734,7 @@ const t: Record<keyof typeof en, string> = {
 	historyNoMatch: "一致するチャットがありません",
 	historyCancel: "キャンセル",
 	usageTitle: "使用量とコスト",
+	usageStatsEntry: "使用量と統計",
 	usageThisMonth: "今月",
 	usageTotal: "累計",
 	usageRequestsMonth: "リクエスト数（月）",

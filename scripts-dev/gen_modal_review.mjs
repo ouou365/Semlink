@@ -329,6 +329,19 @@ ${setting({ controls: btn(t("cancel")) + btn(t("create"), "mod-cta") })}
 ${setting({ name: t("usageClear"), controls: btn(t("usageClearBtn")) })}`;
 	},
 
+	// 用量与统计详情屏（view 内全屏，非 Modal）：顶条（← 返回 + 居中
+	// 页面名）+ 仪表盘宿主；DOM 与真实屏逐节点同构，样式全靠 styles.css。
+	"usage-screen": () => `
+<div class="semlink-search-header semlink-guide-corners semlink-settings-corners">
+	<div class="semlink-search-header-side">
+		<button class="semlink-search-icon-btn clickable-icon" aria-label="${esc(t("historyBack"))}">${ic("arrow-left")}</button>
+	</div>
+	<div class="semlink-search-brand-group"><span class="semlink-search-brand">${t("usageStatsEntry")}</span></div>
+</div>
+<div class="semlink-search-welcome semlink-usage-screen">
+	${builders.usage().replace(/^<h2>[^<]*<\/h2>\n/, "")}
+</div>`,
+
 	license: () => `
 ${setting({ name: t("licenseStatusFree"), desc: t("licenseFreeDesc") })}
 <div class="semlink-license-subhead">${t("upgradeBenefitsTitle")}</div>
@@ -655,7 +668,8 @@ const sections = [
 	{ id: "add-provider-catalog", group: "模型", name: "添加供应商·目录 AddProviderModal(catalog)", file: "settings-models.ts", entry: "模型页「＋ 添加供应商」", mcls: modalCls("semlink-add-provider-modal", "smart-vault-settings"), header: [t("pickProvider")], b: builders["add-provider-catalog"] },
 	{ id: "add-provider-custom", group: "模型", name: "添加自定义供应商 AddProviderModal(custom)", file: "settings-models.ts", entry: "目录尾部「自定义供应商」/ 引导复用", mcls: modalCls("semlink-add-provider-modal", "smart-vault-settings"), header: [t("customTitle")], b: () => builders["add-provider-custom"]("base") },
 	{ id: "add-provider-icons", group: "模型", name: "自定义供应商（图标面板展开态）", file: "settings-models.ts", entry: "同上；点击图标块展开内置图标面板", mcls: modalCls("semlink-add-provider-modal", "smart-vault-settings"), header: [t("customTitle")], b: () => builders["add-provider-custom"]("icons") },
-	{ id: "usage", group: "用量与许可", name: "用量看板（免费态） UsageModal", file: "usage-modal.ts", entry: "设置→「用量与费用」（Pro 区模糊门控）", mcls: "semlink-usage-modal", header: null, b: builders.usage },
+	{ id: "usage", group: "用量与许可", name: "用量看板（免费态） UsageModal", file: "usage-modal.ts", entry: "历史弹窗入口（当前已停用）；渲染本体与详情屏共用 usage-screen.ts", mcls: "semlink-usage-modal", header: null, b: builders.usage },
+	{ id: "usage-screen", group: "用量与许可", name: "用量与统计详情屏（视图内全屏）", file: "search-view.ts + usage-screen.ts", entry: "抽屉「新对话」下方菜单行点击 → 对话区切换成统计屏；← 返回恢复对话/主页", mcls: "", header: null, b: builders["usage-screen"], pop: true },
 	{ id: "license", group: "用量与许可", name: "升级 / 许可 LicenseModal（免费态）", file: "license-modal.ts", entry: "设置页 / 聊天头部 / 各锁定项「升级」", mcls: "semlink-license-modal", header: null, b: builders.license },
 	{ id: "license-about", group: "用量与许可", name: "关于弹窗 LicenseInfoModal", file: "license-modal.ts", entry: "设置→基础→License 行（参考 Eagle 关于窗）", mcls: modalCls("semlink-license-modal", "semlink-license-about-modal"), header: null, b: builders["license-about"] },
 	{ id: "mcp-config", group: "MCP", name: "外部 MCP 服务器配置 McpServerConfigModal（Form）", file: "settings.ts", entry: "设置→工具→「添加外部服务器」/ 编辑", mcls: modalCls("semlink-mcp-edit-modal", "semlink-mcp-client-modal", "smart-vault-settings"), header: [t("mcpNew")], b: () => builders["mcp-config"]("form") },
@@ -740,7 +754,9 @@ const sectionsHtml = sections
 	.map((s) => {
 		const body = s.b();
 		const inner = s.pop
-			? `<div class="${s.mcls}">${body}</div>`
+			? s.mcls
+				? `<div class="${s.mcls}">${body}</div>`
+				: body
 			: `<div class="modal-container mod-dim rv-static">
 			<div class="modal-bg" style="opacity: 0.85;"></div>
 			<div class="modal${s.mcls ? " " + s.mcls : ""}">
