@@ -687,19 +687,50 @@ const sections = [
 ];
 
 // ── CSS 组装 ──
-const APP_AREA =
-	/workspace|markdown|cm-|metadata-|bases|canvas|pdf|nav-|sync-|community|publish|graph|callout|prompt|suggestion|search-|mobile-|\.menu|tooltip|notice|status-bar|ribbon|titlebar|sidebar-toggle|drawer|flair|hotkey|internal-link|tree-item|view-header|lightbox|webviewer|combobox|multi-select|drag-ghost|loader-spinner|empty-state|messageBar|editorUndoBar|textLayer|annotation|xfa|pele|mermaid|HyperMD|inline-title|is-floating|mobile-navbar|mobile-tab|vertical-tab|horizontal-tab|document-search|is-phone|is-tablet|is-mobile|popout|translucent|drag-reorder|file-tree|bases-|help-options|open-vault|slides|pele/;
-const COMP_KEEP = /\.modal|setting-item|setting-title|text-input|textarea|select|dropdown|checkbox|clickable-icon|svg-icon|button|input/;
-const keepVar = (sel) =>
-	/(^|,)\s*(:root|body|\.theme-light|\.theme-dark|\.mod-macos|\.mod-windows|\.mod-linux)/.test(sel) ||
-	(COMP_KEEP.test(sel) && !APP_AREA.test(sel));
-const keepComp = (sel) => COMP_KEEP.test(sel) && !APP_AREA.test(sel);
-const filterRules = (arr, keep) => {
+// 过滤策略（v3，2026-11-19 保真度修复）：按逗号拆分选择器、任一部分通过
+// 即保留整条规则。旧版"整条选择器串匹配才保留"曾误杀关键规则：
+//   - `select, .combobox-button, .dropdown { height: var(--input-height) }`
+//     因列表里带 .combobox-button 被整条丢 → 页面 select 塌到 18px；
+//   - 全局 `* { box-sizing: border-box }` 因 selector 是 `*` 不含 KEEP 词
+//     被丢 → 页面 input/textarea 退回 content-box，高度 54px、JSON 视图
+//     横向溢出（用户截图报的四个问题里三个都源于此）。
+// APP_AREA 词表只在"该部分"里命中才丢，避免列表连坐。
+const APP_AREA_PART =
+	/annotationLayer|textLayer|xfaLayer|workspace|markdown|cm-|metadata-|bases|canvas|pdf|nav-|sync-|community|publish|graph|callout|prompt|suggestion|search-|mobile-|\.menu|tooltip|notice|status-bar|ribbon|titlebar|sidebar-toggle|drawer|flair|hotkey|internal-link|tree-item|view-header|lightbox|webviewer|combobox|multi-select|drag-ghost|loader-spinner|empty-state|messageBar|editorUndoBar|HyperMD|inline-title|is-floating|mobile-navbar|mobile-tab|vertical-tab|horizontal-tab|document-search|is-phone|is-tablet|is-mobile|popout|translucent|drag-reorder|file-tree|bases-|help-options|open-vault|slides|pele|\.dialog|combobox-button|multi-select-input|radioButton|choiceWidgetAnnotation|textWidgetAnnotation|buttonWidgetAnnotation|attachment/;
+const COMP_KEEP_PART = /\.modal|setting-item|setting-title|text-input|textarea|dropdown|checkbox|clickable-icon|svg-icon|button|input|select/;
+// 纯元素/通配锚定的选择器部分（input[type=…]:hover、select、*、h2、code…）
+const ELEMENT_PART = /^(html|body|\*|h[1-6]|p|a|ul|ol|li|code|pre|table|thead|tbody|tr|th|td|img|kbd|hr|strong|em|b|i|small|span|label|blockquote|figure|figcaption|input|select|textarea|button|option)([.:[]|$)/;
+const keepPart = (part) => {
+	const p = part.trim();
+	if (!p) return false;
+	if (p.indexOf(".semlink-") !== -1 || p.indexOf(".smart-vault") !== -1) return false;
+	// :root 与主题类（.theme-light/.theme-dark）是主题变量的主载体，
+	// 必须保留（--background-modifier-border/--input-shadow 等都挂在这）。
+	if (p.indexOf(":root") === 0 || /\.theme-(light|dark)\b/.test(p)) return true;
+	if (APP_AREA_PART.test(p)) return false;
+	if (p === "*" || p.indexOf("*") === 0) return true;
+	if (ELEMENT_PART.test(p)) return true;
+	return COMP_KEEP_PART.test(p);
+};
+const keepRule = (txt) => {
+	const sel = txt.split("{")[0];
+	return sel.split(",").some((part) => keepPart(part));
+};
+// html/body 整元素规则丢弃：真机 body 的 overflow:hidden、position 等布局
+// 重属性会破坏审查页自身滚动（页面变量走 vars 段，不受影响）。
+// 但含自定义属性的规则必须保留——--input-height / --background-modifier-border
+// 等一大批关键变量恰恰定义在 body 上（丢了它们 plugin 规则的
+// var() 声明整条失效，就是"边框变黑/高度不一致"的元凶）。
+const dropPageLayout = (txt) => {
+	if (/--[a-zA-Z][\w-]*\s*:/.test(txt)) return false;
+	const sel = txt.split("{")[0];
+	return sel.split(",").every((p) => { const t = p.trim(); return t === "html" || t === "body"; });
+};
+const filterRules = (arr) => {
 	const seen = new Set();
 	const out = [];
 	for (const { g, t: txt } of arr) {
-		const sel = txt.split("{")[0];
-		if (!keep(sel) || seen.has(txt)) continue;
+		if (!keepRule(txt) || seen.has(txt) || dropPageLayout(txt)) continue;
 		seen.add(txt);
 		// 还原所在 @media/@supports 上下文（逐层包裹；同条件重复包裹语义等价）
 		let body = txt;
@@ -708,8 +739,8 @@ const filterRules = (arr, keep) => {
 	}
 	return out;
 };
-const baseVars = filterRules(assets.vars, keepVar).join("\n");
-const baseComp = filterRules(assets.comp, keepComp).join("\n");
+const baseVars = filterRules(assets.vars).join("\n");
+const baseComp = filterRules(assets.comp).join("\n");
 
 const reviewCss = `
 /* ── 审查页自身（非插件样式） ── */

@@ -1845,7 +1845,10 @@
     font-size: 14px;
     appearance: none;
     -webkit-appearance: none;
-    background: var(--background-primary) url(data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2716%27 height=%2716%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23999%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E) no-repeat right 14px center;
+    /* chevron 自绘（url 必须带引号：无引号 data URI 整条 background 声明
+       会被浏览器 CSS 解析静默丢弃——CSSOM 里 backgroundImage 为空、箭头
+       消失，真机 modal-review 对照实测抓到） */
+    background: var(--background-primary) url('data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2716%27 height=%2716%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23999%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E') no-repeat right 14px center;
 }.smart-vault-settings .semlink-editor-select:hover {
     border-color: var(--background-modifier-border-hover);
 }.smart-vault-settings .semlink-editor-select:focus,
