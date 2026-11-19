@@ -2304,12 +2304,16 @@
        空隙：main-tab 的 view padding-top 归零，抽屉偏移同步归零；
        侧栏/弹窗浮层不受此规则影响）。 */
     top: 0;
-    /* 菜单底色（2026-11-19 三改拍板）：对话区保持原本 #f6f6f6 灰，
-       菜单要与它拉开层次且不能用白/近似白——secondary(#f6f6f6) 与
-       对话区撞色被否，取 secondary 向黑混 5%（≈#eaeaea）深一档；
-       color-mix 随主题变量缩放，深色下同样比对话区深。浮层抽屉
-       保持 secondary 不变。 */
-    background: color-mix(in srgb, var(--background-secondary) 95%, black);
+    /* 菜单底色（2026-11-19 五改定稿，用户三选一拍板）：冷调蓝灰
+       #eef1f5——带 3% 蓝调的冷灰（ChatGPT/Codex 式干净感），比对话区
+       #f6f6f6 略深且色温更冷，层次可辨不刺眼。深色主题不受此值影响
+       （走下方 .theme-dark 规则保持 secondary）。被否记录：纯白 ✗ /
+       secondary 撞色 ✗ / #eaeaea 纯灰发闷 ✗。 */
+    background: #eef1f5;
+}
+.theme-dark .semlink-history-drawer.is-persistent {
+    /* 深色跟随主题：secondary（侧栏惯例一档），浅色定值不适用 */
+    background: var(--background-secondary);
 }
 .semlink-menu-persistent .semlink-history-drawer.is-persistent {
     transform: translateX(0);
