@@ -25,12 +25,11 @@ import { App, Component, MarkdownRenderer } from "obsidian";
 import { allLangs, t } from "./i18n";
 import type { HistoryMessage } from "./types";
 
-// 品牌 logo（2026-11-19 拍板：插件 UI 的 semlink-logo 已换 sparkles 多星
-// （lucide.dev/icons/sparkles），分享页随品牌同步用同一星形；stroke
-// currentColor 继承页面文字色，引用处自行注入 color 属性染紫色）。
-// 与 Obsidian setIcon("sparkles") 同源路径。
+// 品牌 logo（2026-11-19 拍板：实心填充 sparkles——大星/左下圆点/右上闪点
+// 全部 fill currentColor，随页面文字色；引用处自行注入 color 属性染紫色）。
+// 与 Obsidian 注册的 semlink-logo 实心版同源（见 main.ts addIcon）。
 const logoSvg =
-	'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg>';
+	'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M21 0.8 Q21.5 3.5 24.2 4 Q21.5 4.5 21 7.2 Q20.5 4.5 17.8 4 Q20.5 3.5 21 0.8 Z"/><circle cx="4" cy="20" r="2"/></svg>';
 
 export type ShareTheme = "light" | "dark";
 
