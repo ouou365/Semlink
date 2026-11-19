@@ -5561,6 +5561,13 @@ body .semlink-msg-user::selection {
 .semlink-history-folders-head .semlink-history-folder-chev {
 	display: flex;
 	flex-shrink: 0;
+	/* Codex 式（2026-11-19 拍板）：chevron 已挪到文字后，常态隐藏、
+	   行悬停才显示（触屏无 hover 不影响折叠——点击热区是整行） */
+	opacity: 0;
+	transition: opacity 0.12s ease-out;
+}
+.semlink-history-folders-head:hover .semlink-history-folder-chev {
+	opacity: 1;
 }
 .semlink-history-folders-head .semlink-history-folder-chev .svg-icon,
 .semlink-history-folders-head .semlink-history-folder-chev svg {

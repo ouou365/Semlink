@@ -4398,10 +4398,11 @@ export class SemanticSearchView extends ItemView {
 				const phead = list.createDiv({
 					cls: "semlink-history-group semlink-history-folders-head" + (projectsCollapsed ? " is-collapsed" : ""),
 				});
+				// Codex 式组头（2026-11-19 拍板）：chevron 挪到文字后、hover 才
+				// 显示；计数徽章移除（数字统计不再展示）。
+				phead.createSpan({ cls: "semlink-history-folder-name", text: t("projectGroup") });
 				const pchev = phead.createSpan({ cls: "semlink-history-folder-chev" });
 				setIcon(pchev, projectsCollapsed ? "chevron-right" : "chevron-down");
-				phead.createSpan({ cls: "semlink-history-folder-name", text: t("projectGroup") });
-				phead.createSpan({ cls: "semlink-history-folder-count", text: String(projects.length) });
 				const padd = phead.createSpan({
 					cls: "semlink-history-folder-add",
 					attr: { "aria-label": t("projectNew") },
@@ -4431,9 +4432,12 @@ export class SemanticSearchView extends ItemView {
 								+ (this.activeProject?.id === p.id ? " is-active" : ""),
 						});
 						const icon = row.createSpan({ cls: "semlink-history-folder-chev" });
-						setIcon(icon, "brain");
+						// 文件夹图标 + 开合态区分（2026-11-19 拍板，替代 brain）：
+						// 折叠 = folder-closed（合上），展开 = folder-open（打开）。
+						// 注意不能用 "folder"——这版 Obsidian 的 lucide 库把 folder
+						// 注册成与 folder-open 同图（实测 CSSOM class 即证）。
+						setIcon(icon, pCollapsed ? "folder-closed" : "folder-open");
 						row.createSpan({ cls: "semlink-history-folder-name", text: p.name });
-						row.createSpan({ cls: "semlink-history-folder-count", text: String(filed.length) });
 						const pacts = row.createSpan({ cls: "semlink-history-folder-acts" });
 						const edit = pacts.createSpan({
 							cls: "semlink-history-folder-act",
@@ -4519,10 +4523,10 @@ export class SemanticSearchView extends ItemView {
 				const chead = list.createDiv({
 					cls: "semlink-history-group semlink-history-folders-head" + (conversationsCollapsed ? " is-collapsed" : ""),
 				});
+				// Codex 式组头同款：chevron 文字后、hover 显示，计数移除
+				chead.createSpan({ cls: "semlink-history-folder-name", text: t("historyGroupChats") });
 				const cchev = chead.createSpan({ cls: "semlink-history-folder-chev" });
 				setIcon(cchev, conversationsCollapsed ? "chevron-right" : "chevron-down");
-				chead.createSpan({ cls: "semlink-history-folder-name", text: t("historyGroupChats") });
-				chead.createSpan({ cls: "semlink-history-folder-count", text: String(flow.length) });
 				chead.addEventListener("click", () => {
 					conversationsCollapsed = !conversationsCollapsed;
 					render();
