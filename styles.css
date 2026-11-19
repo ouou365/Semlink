@@ -4034,7 +4034,7 @@ body .semlink-msg-user::selection {
     color: var(--text-error);
 }.semlink-msg-stopped {
     color: var(--text-muted);
-    font-style: italic;
+    /* 斜体已去（2026-11-19 用户拍板「不要用斜体」） */
     padding: 4px 0;
 }/* Result cards (rendered inside assistant bubbles) */
 .semlink-search-result {

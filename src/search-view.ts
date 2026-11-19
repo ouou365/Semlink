@@ -2303,6 +2303,9 @@ export class SemanticSearchView extends ItemView {
 	 * Used for both live answers and restored history messages.
 	 */
 	private appendActions(container: HTMLElement, content: string, questionForSave: string, msg?: HistoryMessage): void {
+		// 无正文的回答（用户拍板 2026-11-19）：不显示复制/保存/引用/分享/
+		// 翻译按钮——没有可操作的内容，一排按钮全是死入口。
+		if (!content.trim()) return;
 		// Actions sit below the merged thinking+answer bubble — append to the
 		// turn container.
 		const turn = container.closest(".semlink-msg-turn") || container;
@@ -4708,7 +4711,22 @@ export class SemanticSearchView extends ItemView {
 			// showPin=false (Folders-tab un-filed rows): no pin at all —
 			// pinning belongs to the Time tab, and no sibling row there
 			// shows one, so there is no slot to keep aligned.
+			const info = item.createDiv({ cls: "semlink-history-item-info" });
+			info.createDiv({ cls: "semlink-history-item-title", text: session.title });
+			const date = new Date(session.updatedAt);
+			const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+			// Project 名并入 meta（用户拍板「对话记录中显示对话来自哪个
+			// Project」2026-11-16）；无项目的会话不显示。
+			const projName = session.projectId
+				? this.plugin.settings.projects.find((p) => p.id === session.projectId)?.name ?? null
+				: null;
+			const metaText = projName ? `${timeStr} · ${projName}` : timeStr;
+			if (!compact) {
+				info.createDiv({ cls: "semlink-history-item-meta", text: metaText });
+			}
 			if (showPin) {
+				// 置顶按钮（2026-11-19 用户拍板）：挪到「移出项目」文件夹图标
+				// 的左边——行首不再被 pin 占槽，标题文字可以向左缩进。
 				const pinBtn = item.createEl("button", {
 					cls: "semlink-history-item-pin clickable-icon" + (session.pinned ? " is-pinned" : ""),
 					attr: { "aria-label": t("historyPin") },
@@ -4729,21 +4747,6 @@ export class SemanticSearchView extends ItemView {
 					});
 				}
 			}
-			const info = item.createDiv({ cls: "semlink-history-item-info" });
-			info.createDiv({ cls: "semlink-history-item-title", text: session.title });
-			const date = new Date(session.updatedAt);
-			const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-			// Project 名并入 meta（用户拍板「对话记录中显示对话来自哪个
-			// Project」2026-11-16）；无项目的会话不显示。
-			const projName = session.projectId
-				? this.plugin.settings.projects.find((p) => p.id === session.projectId)?.name ?? null
-				: null;
-			const metaText = projName ? `${timeStr} · ${projName}` : timeStr;
-			if (!compact) {
-				info.createDiv({ cls: "semlink-history-item-meta", text: metaText });
-			}
-			// Pin icon: visible to everyone on hover; for free users clicking
-			// it is a friction point (activation modal), like Folders/search.
 			if (session.projectId) {
 				// 移出项目（真合并归档）：仅绑定会话显示，点击解绑 → 回时间流。
 				const unbindBtn = item.createEl("button", {
