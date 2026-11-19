@@ -594,6 +594,48 @@ ${setting({ name: t("botAppId"), controls: textIn("cli_xxx", "cli_a58f2c91b7d840
 ${setting({ name: t("botAppSecret"), controls: textIn("xxx", "eJx9mZ4Kq2Rp7TwL") })}
 <div class="feishu-prereq">${t("botPrereq")}</div>
 ${setting({ controls: btn(t("saveModalConfirm"), "mod-cta") + btn(t("saveModalCancel")) })}`,
+
+	// ── 输入区锚定弹层（search-view.ts，body 懒创建 + 锚 chip 定位，非 Modal） ──
+	"model-popup": () => {
+		const row = (provider, model, ctx) => `
+<div class="semlink-search-model-popup-row" draggable="true">
+	<div class="semlink-search-model-popup-grip">${ic("grip-vertical")}</div>
+	<span class="semlink-search-model-popup-logo">${LOGOS[logoKey(provider)] || ""}</span>
+	<span class="semlink-search-model-popup-name">${model}</span>
+	<span class="semlink-search-model-popup-ctx">${ctx}</span>
+</div>`;
+		return `
+<div class="semlink-search-model-popup-header">
+	<span class="semlink-search-model-popup-logo">${LOGOS.deepseek || ""}</span>
+	<span class="semlink-search-model-popup-title">DeepSeek: deepseek-chat</span>
+	<span class="semlink-search-model-popup-ctx">128K</span>
+</div>
+${row("DeepSeek", "deepseek-chat", "128K")}
+${row("DeepSeek", "deepseek-reasoner", "128K")}
+${row("Qwen", "qwen-max", "32K")}
+<div class="semlink-search-model-popup-manage">
+	<span class="semlink-search-model-popup-manage-icon">${ic("settings")}</span>
+	<span class="semlink-search-model-popup-manage-label">${t("manageModels")}</span>
+</div>`;
+	},
+
+	"project-popup": () => `
+<div class="semlink-project-popup-row is-active">
+	<span class="semlink-project-popup-name">${t("projectAllNotes")}</span>
+</div>
+<div class="semlink-project-popup-row">
+	<span class="semlink-project-popup-name">知识库精选</span>
+	<span class="semlink-project-popup-meta">2</span>
+	<span class="semlink-project-popup-edit" aria-label="${esc(t("projectEditTitle"))}">${ic("pencil")}</span>
+</div>
+<div class="semlink-project-popup-row">
+	<span class="semlink-project-popup-name">产品文档</span>
+	<span class="semlink-project-popup-meta">1</span>
+	<span class="semlink-project-popup-edit" aria-label="${esc(t("projectEditTitle"))}">${ic("pencil")}</span>
+</div>
+<div class="semlink-project-popup-row is-new">
+	<span class="semlink-project-popup-name">${t("projectNew")}</span>
+</div>`,
 };
 
 // ── 审查页分节定义 ──
@@ -602,6 +644,8 @@ const sections = [
 	{ id: "confirm", group: "通用", name: "确认弹窗 ConfirmModal", file: "confirm-modal.ts", entry: "各处破坏性操作二次确认（许可停用 / 删除 MCP 服务器）", mcls: "", header: [t("mcpDeleteTitle").replace("{name}", "docs-search")], b: () => builders.confirm() },
 	{ id: "save-note", group: "通用", name: "回答存为笔记 SaveNoteModal", file: "save-note-modal.ts", entry: "聊天答案「保存为笔记」", mcls: "smart-vault-save-modal", header: null, b: builders["save-note"] },
 	{ id: "progress", group: "通用", name: "索引进度 ProgressModal", file: "progress-modal.ts", entry: "设置页「查看进度」/ 首次索引；可拖拽移动", mcls: "smart-vault-progress-modal is-draggable", header: null, b: builders.progress },
+	{ id: "model-popup", group: "输入区弹层", name: "选择模型弹层 modelPopup", file: "search-view.ts", entry: "输入卡底行模型选择器；锚触发钮上方展开（头部卡=当前模型，行可拖拽排序）", mcls: "semlink-search-depth-popup semlink-search-model-popup", header: null, b: builders["model-popup"], pop: true },
+	{ id: "project-popup", group: "输入区弹层", name: "选择项目弹层 projectPopup", file: "search-view.ts", entry: "输入卡底行项目 chip；锚 chip 展开切换/编辑/新建（is-active=当前范围）", mcls: "semlink-search-depth-popup semlink-project-popup", header: null, b: builders["project-popup"], pop: true },
 	{ id: "chat-models", group: "模型", name: "模型清单编辑 ChatModelsModal", file: "chat-models-modal.ts", entry: "设置→模型→供应商行「编辑模型」", mcls: "smart-vault-chat-models-modal", header: null, b: builders["chat-models"] },
 	{ id: "add-model", group: "模型", name: "添加/编辑模型 AddModelModal", file: "settings-models.ts", entry: "模型页「＋ 添加」/ 引导第三步", mcls: modalCls("semlink-provider-editor-modal", "smart-vault-settings"), header: ["添加模型"], b: builders["add-model"] },
 	{ id: "key-modal", group: "模型", name: "API Key 配置 KeyModal（默认态）", file: "settings-models.ts", entry: "供应商行 Key 添加 / 铅笔编辑", mcls: modalCls("semlink-provider-editor-modal", "smart-vault-settings", "semlink-key-modal"), header: ["DeepSeek"], b: () => builders["key-modal"]("base") },
@@ -675,6 +719,8 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 /* 静态化弹窗容器：去掉 fixed 全屏，改为流内卡片 */
 .modal-container.rv-static { position: relative; inset: auto; display: block; overflow: visible; height: auto; min-height: 120px; padding: 26px 0; }
 .modal-container.rv-static .modal { margin: 0 auto; }
+/* 锚定弹层静态化：去 fixed/悬浮层级，改为流内卡片（基础规则 position:fixed + z-index:9999） */
+.rv-stage .semlink-search-depth-popup { position: static; z-index: auto; width: max-content; max-width: 100%; margin: 0 auto; }
 .rv-missing-icon { color: var(--text-error); font-weight: 600; }
 `;
 
@@ -692,9 +738,16 @@ const navHtml = groups
 
 const sectionsHtml = sections
 	.map((s) => {
-		const headerHtml = s.header
-			? closeChrome + titleHeader(s.header[0])
-			: closeChrome;
+		const body = s.b();
+		const inner = s.pop
+			? `<div class="${s.mcls}">${body}</div>`
+			: `<div class="modal-container mod-dim rv-static">
+			<div class="modal-bg" style="opacity: 0.85;"></div>
+			<div class="modal${s.mcls ? " " + s.mcls : ""}">
+				${closeChrome}${s.header ? titleHeader(s.header[0]) : ""}
+				<div class="modal-content">${body}</div>
+			</div>
+		</div>`;
 		return `
 <section class="rv-section" id="${s.id}">
 	<header class="rv-sec-head">
@@ -702,18 +755,12 @@ const sectionsHtml = sections
 		<div class="rv-meta">
 			<code>${s.file}</code>
 			<span>入口：${s.entry}</span>
-			${s.mcls ? `<span>modalEl 类：<code>${s.mcls}</code></span>` : `<span>modalEl 类：（无）</span>`}
+			${s.mcls ? `<span>类：<code>${s.mcls}</code></span>` : `<span>modalEl 类：（无）</span>`}
 		</div>
-		<p class="rv-note">${s.header ? "标题栏（titleEl）" : "无标题栏（正文自带 h2/h3 标题）"} · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
+		<p class="rv-note">${s.pop ? "锚定弹层（fixed 定位挂 body，此处静态化展示）" : s.header ? "标题栏（titleEl）" : "无标题栏（正文自带 h2/h3 标题）"} · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
 	</header>
 	<div class="rv-stage">
-		<div class="modal-container mod-dim rv-static">
-			<div class="modal-bg" style="opacity: 0.85;"></div>
-			<div class="modal${s.mcls ? " " + s.mcls : ""}">
-				${headerHtml}
-				<div class="modal-content">${s.b()}</div>
-			</div>
-		</div>
+		${inner}
 	</div>
 </section>`;
 	})
