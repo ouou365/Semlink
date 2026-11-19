@@ -2265,15 +2265,15 @@
 }/* ──── 主区域标签页实例（新标签页主页）────
    历史菜单常显：抽屉以 is-persistent 形态原地驻留为左栏，内容列用
    padding-left 让位；菜单按钮只在显示/收起之间切换，不销毁 DOM。
-   底色（2026-11-19 四改拍板）：对话区恢复原本 #f6f6f6 灰不变；左侧
-   菜单换明显更深的 color-mix 色（见 .semlink-history-drawer.is-persistent）。
+   底色（2026-11-19 六改定稿，用户指定精确色值）：对话区 #f8f8f8、
+   左侧菜单 #ececee（更深一档微冷灰，见 .semlink-history-drawer）。
    深色主题不涂底——跟随 Obsidian 主题。 */
 .theme-light .semlink-search-view.semlink-main-tab {
-    background: #f6f6f6;
-}/* 引导/设置屏：顶栏与页面同灰（原本机制恢复）。 */
+    background: #f8f8f8;
+}/* 引导/设置屏：顶栏与页面同灰（跟随对话区底色）。 */
 .semlink-search-view.semlink-guide-active,
 .semlink-search-view.semlink-settings-active {
-    --sl-bg-grouped: #f6f6f6;
+    --sl-bg-grouped: #f8f8f8;
 }/* 深色设置/引导屏不再定死纯黑：跟随主题底色，与深色首页同色，切换零跳变。
    首页自身不涂底——主区域/弹窗 leaf 露 --background-primary，左右侧栏
    leaf 露核心给的 --background-secondary；屏自己涂 leaf 就得按容器分派
@@ -2304,12 +2304,10 @@
        空隙：main-tab 的 view padding-top 归零，抽屉偏移同步归零；
        侧栏/弹窗浮层不受此规则影响）。 */
     top: 0;
-    /* 菜单底色（2026-11-19 五改定稿，用户三选一拍板）：冷调蓝灰
-       #eef1f5——带 3% 蓝调的冷灰（ChatGPT/Codex 式干净感），比对话区
-       #f6f6f6 略深且色温更冷，层次可辨不刺眼。深色主题不受此值影响
-       （走下方 .theme-dark 规则保持 secondary）。被否记录：纯白 ✗ /
-       secondary 撞色 ✗ / #eaeaea 纯灰发闷 ✗。 */
-    background: #eef1f5;
+    /* 菜单底色（2026-11-19 六改定稿，用户指定精确色值）：#ececee，
+       对话区 #f8f8f8——菜单更深一档的微冷灰。深色主题不受此值影响
+       （走下方 .theme-dark 规则保持 secondary）。 */
+    background: #ececee;
 }
 .theme-dark .semlink-history-drawer.is-persistent {
     /* 深色跟随主题：secondary（侧栏惯例一档），浅色定值不适用 */
