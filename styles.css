@@ -2578,7 +2578,8 @@
     font-size: 11px;
     font-weight: 600;
     color: var(--text-faint);
-    padding: 10px 10px 2px;
+    /* 左 padding 对齐组头 .45rem（2026-11-19 拍板：抽屉各行左缘对齐） */
+    padding: 10px 10px 2px .45rem;
 }/* "展示更多" pager at the bottom of the history list. */
 .semlink-history-more {
     margin: 8px;
@@ -2598,9 +2599,11 @@
 .semlink-history-group-items {
     display: flex;
     flex-direction: column;
-    margin-left: 6px;
-    padding-left: 8px;
-    border-left: 2px solid var(--background-modifier-border);
+    /* 缩进与左边框去除（2026-11-19 拍板：抽屉各行左缘对齐，层级由
+       组头 + 文件夹图标表达） */
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
 }.semlink-history-item {
     display: flex;
     align-items: center;
@@ -5244,9 +5247,8 @@ body .semlink-msg-user::selection {
 /* 树形缩进：每层 body 相对父层缩进 1.5rem 并画一条竖线，子行/子项
     只保留固定基数 padding——竖线始终对齐本层 chevron，嵌套自动对齐。 */
 .semlink-history-folder-body {
-    margin-left: 1.05rem;
-    padding-left: 0.5rem;
-    border-left: 1px solid var(--background-modifier-border);
+    /* 嵌套缩进与左边框去除（2026-11-19 拍板：抽屉各行左缘对齐）；
+       层级由项目行的 folder 图标（开/合）表达 */
 }
 .semlink-history-folder-body > .semlink-history-item {
     border-radius: 6px;
