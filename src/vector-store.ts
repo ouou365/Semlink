@@ -30,6 +30,16 @@ interface PendingRequest {
 	startedAt: number;
 }
 
+/** OPFS 同步句柄竞争（瞬时）：旧文档 worker 释放 SAH 晚于新 worker 抢锁。
+ *  只对这类错误重试，其余 init 失败不重试（大声失败不变）。 */
+function isHandleBusyError(e: unknown): boolean {
+	const msg = e instanceof Error ? e.message : String(e);
+	return (
+		msg.includes("NoModificationAllowedError") ||
+		msg.includes("Access Handles cannot be created")
+	);
+}
+
 export class VectorStore {
 	private dataDir: string;
 	private reqId = 0;
@@ -66,15 +76,68 @@ export class VectorStore {
 		}
 		try {
 			await this.initBrowserWorker(this.browserWorkerUrl);
-		} catch (e) {
-			// 大声失败，绝不静默降级（用户拍板「去掉 sqljs」）：失败原因落
-			// lastBrowserWorkerError 供 stats 透出，异常继续抛——插件加载
-			// 失败比一个静默坏掉的存储层诚实得多。
-			const msg = e instanceof Error ? e.message : String(e);
-			const stack = e instanceof Error ? (e.stack ?? "").slice(0, 600) : "";
-			this.lastBrowserWorkerError = msg + (stack ? " | " + stack.split("\n").slice(1, 4).join(" | ") : "");
-			console.error("[Semlink] OPFS browser worker init failed:", e);
-			throw e;
+			return;
+		} catch (e0) {
+			// OPFS SAH 竞争是**瞬时**错误：app:reload（without saving）不等
+			// onunload 的 close()/terminate() 跑完，旧文档 worker 的同步句柄
+			// 释放晚于新文档 worker 起身抢锁 → createSyncAccessHandle 报
+			// NoModificationAllowedError → 插件整个加载失败（真机 2026-11-19
+			// 连续 reload 实测）。等一等就能拿到句柄——重试不是静默降级，
+			// 是等锁；其余错误不重试，照旧大声失败（用户拍板「去掉 sqljs」）。
+			if (!isHandleBusyError(e0)) {
+				this.recordInitFailure(e0);
+				throw e0;
+			}
+			this.disposeWorker();
+			let last: unknown = e0;
+			const delays = [400, 800, 1600, 3200, 3200];
+			for (let i = 0; i < delays.length; i++) {
+				console.warn(
+					`[Semlink] OPFS 句柄被旧实例占用，${delays[i]}ms 后重试（第 ${i + 1}/${delays.length} 次）`,
+				);
+				await new Promise((r) => window.setTimeout(r, delays[i]));
+				try {
+					await this.initBrowserWorker(this.browserWorkerUrl);
+					console.warn(`[Semlink] OPFS 句柄竞争已自愈（重试第 ${i + 1} 次成功）`);
+					return;
+				} catch (e2) {
+					last = e2;
+					this.disposeWorker();
+					if (!isHandleBusyError(e2)) {
+						this.recordInitFailure(e2);
+						throw e2;
+					}
+				}
+			}
+			// 全部重试失败：大声失败，绝不静默降级（用户拍板「去掉 sqljs」）：
+			// 失败原因落 lastBrowserWorkerError 供 stats 透出，异常继续抛——
+			// 插件加载失败比一个静默坏掉的存储层诚实得多。
+			this.recordInitFailure(last);
+			throw last;
+		}
+	}
+
+	/** init 失败留档（stats 调试响应透出）+ 控制台大声报。 */
+	private recordInitFailure(e: unknown): void {
+		const msg = e instanceof Error ? e.message : String(e);
+		const stack = e instanceof Error ? (e.stack ?? "").slice(0, 600) : "";
+		this.lastBrowserWorkerError = msg + (stack ? " | " + stack.split("\n").slice(1, 4).join(" | ") : "");
+		console.error("[Semlink] OPFS browser worker init failed:", e);
+	}
+
+	/** 丢弃一次失败的 worker 尝试：terminate 释放它已抓到的句柄，并
+	 *  reject/清空其在途 RPC（init 失败时 DB 未打开成功，无数据风险）。 */
+	private disposeWorker(): void {
+		const w = this.browserWorker;
+		this.browserWorker = null;
+		for (const [, p] of this.pending) p.reject(new Error("worker disposed during init retry"));
+		this.pending.clear();
+		if (w) {
+			try {
+				w.terminate();
+			} catch {
+				/* already gone */
+			}
 		}
 	}
 
