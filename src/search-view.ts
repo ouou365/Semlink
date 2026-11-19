@@ -4232,6 +4232,10 @@ export class SemanticSearchView extends ItemView {
 		}
 		this.isGenerating = this.activeRuns.has(session.id);
 		this.setSendButtonState(this.isGenerating ? "stop" : "idle");
+		// 抽屉列表无条件重渲（2026-11-19 用户拍板「当前会话行要有选中色」）：
+		// is-current 是 render 时按 currentSessionId 静态判定的——切会话不落
+		// 盘不触发刷新，高亮会停在旧会话上。
+		this.refreshPersistentMenu();
 		this.inputEl.focus();
 	}
 
@@ -4698,7 +4702,11 @@ export class SemanticSearchView extends ItemView {
 		};
 
 	const renderItem = (container: HTMLElement, session: ChatSession, compact = false, showPin = true): HTMLElement => {
-		const item = container.createDiv({ cls: "semlink-history-item" });
+		// 当前打开的会话行带选中色（2026-11-19 用户拍板）：抽屉里一眼可辨
+		// 「正在看哪条」；切换会话后高亮随 render 跟随。
+		const item = container.createDiv({
+			cls: "semlink-history-item" + (session.id === this.currentSessionId ? " is-current" : ""),
+		});
 		// 后台完成未读点：左槽亮品牌色圆点（此行隐藏 pin 避免重叠），点开即消。
 		if (this.unreadDone.has(session.id)) {
 			item.createDiv({ cls: "semlink-history-item-unread" });

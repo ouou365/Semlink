@@ -2736,17 +2736,15 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
 }/* ──── 主区域标签页实例（新标签页主页）────
    历史菜单常显：抽屉以 is-persistent 形态原地驻留为左栏，内容列用
    padding-left 让位；菜单按钮只在显示/收起之间切换，不销毁 DOM。
-   底色仅浅色主题固定 #f6f6f6，深色主题跟随 Obsidian 主题避免刺眼。 */
+   底色（2026-11-19 六改定稿，用户指定精确色值）：对话区 #f8f8f8、
+   左侧菜单 #ececee（更深一档微冷灰，见 .semlink-history-drawer）。
+   深色主题不涂底——跟随 Obsidian 主题。 */
 .theme-light .semlink-search-view.semlink-main-tab {
-    background: #f6f6f6;
-}/* 引导/设置屏：顶栏与页面同灰。引导屏自己的 sticky 顶条引用
-   var(--sl-bg-grouped)，但该变量只定义在 .semlink-settings-root 上——
-   引导屏取不到就回退白底（--background-primary），与下方灰底页面形成
-   接缝（用户反馈"这个怎么是白底的"）。在视图根上补变量定义，
-   顶条与其余引用处一并取到；深色跟随首页底色（见下方分派规则）。 */
+    background: #f8f8f8;
+}/* 引导/设置屏：顶栏与页面同灰（跟随对话区底色）。 */
 .semlink-search-view.semlink-guide-active,
 .semlink-search-view.semlink-settings-active {
-    --sl-bg-grouped: #f6f6f6;
+    --sl-bg-grouped: #f8f8f8;
 }/* 深色设置/引导屏不再定死纯黑：跟随主题底色，与深色首页同色，切换零跳变。
    首页自身不涂底——主区域/弹窗 leaf 露 --background-primary，左右侧栏
    leaf 露核心给的 --background-secondary；屏自己涂 leaf 就得按容器分派
@@ -2773,13 +2771,18 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     z-index: 50;
     transition: transform 0.25s ease;
     transform: translateX(-100%);
-    /* 常显形态随视图 padding-top 下移 8px：抽屉标题行与视图头部
-       按钮行对齐（浮层抽屉不偏移，从顶部 0 全覆盖）。 */
-    top: 8px;
-    /* 展开态菜单白底（2026-11-18 用户拍板「展开之后颜色要做区分，
-       菜单是白色的」，参考豆包）：--background-primary 与对话区
-       #f6f6f6 灰底拉开层次；浮层抽屉保持 secondary 不变。 */
-    background: var(--background-primary);
+    /* 常显形态与视图头部同贴 leaf 顶（2026-11-19 拍板收紧头部上方
+       空隙：main-tab 的 view padding-top 归零，抽屉偏移同步归零；
+       侧栏/弹窗浮层不受此规则影响）。 */
+    top: 0;
+    /* 菜单底色（2026-11-19 六改定稿，用户指定精确色值）：#ececee，
+       对话区 #f8f8f8——菜单更深一档的微冷灰。深色主题不受此值影响
+       （走下方 .theme-dark 规则保持 secondary）。 */
+    background: #ececee;
+}
+.theme-dark .semlink-history-drawer.is-persistent {
+    /* 深色跟随主题：secondary（侧栏惯例一档），浅色定值不适用 */
+    background: var(--background-secondary);
 }
 .semlink-menu-persistent .semlink-history-drawer.is-persistent {
     transform: translateX(0);
@@ -4502,7 +4505,7 @@ body .semlink-msg-user::selection {
     color: var(--text-error);
 }.semlink-msg-stopped {
     color: var(--text-muted);
-    font-style: italic;
+    /* 斜体已去（2026-11-19 用户拍板「不要用斜体」） */
     padding: 4px 0;
 }/* Result cards (rendered inside assistant bubbles) */
 .semlink-search-result {
@@ -5662,20 +5665,22 @@ body .semlink-msg-user::selection {
 .semlink-history-newfolder:hover{color:var(--text-normal);border-color:var(--interactive-accent)}
 .semlink-history-folder:hover{background:var(--background-modifier-hover)}
 /* Pro history folder tree */
-/* 行左 34px 常驻置顶槽（2026-11-18 用户拍板留足空间）：标题列恒定起点，
-   pin 悬停浮现/已钉常显都落在槽内（absolute 不参与 flex，显隐零位移）。 */
-.semlink-history-item{position:relative;padding-left:34px !important}
+/* 会话行（2026-11-19 拍板：置顶按钮挪到操作组——「移出项目」文件夹
+   图标左边；行首 34px 置顶槽退役，标题文字向左缩进贴齐行 padding。 */
+.semlink-history-item{position:relative;padding-left:.45rem}
 .semlink-history-item .clickable-icon{height:26px;display:flex;align-items:center}
 .semlink-history-item-time{height:26px;display:flex;align-items:center}
-/* pin 绝对定位在左槽内垂直居中；!important 压 Obsidian .clickable-icon
-   的 display 声明（同 semlink-hidden 哲学）。 */
-.semlink-history-item .semlink-history-item-pin{position:absolute;left:5px;top:50%;transform:translateY(-50%);margin:0;flex:none;display:none !important;transition:opacity .12s}
-.semlink-history-item:hover .semlink-history-item-pin{display:flex !important}
-.semlink-history-item .semlink-history-item-pin.is-pinned{display:flex !important;color:var(--interactive-accent)}
-/* 后台完成未读点：左槽品牌色圆点（ZCode「刚完成」语义），点开即消；
-   未读行隐藏 pin（同槽防重叠，hover 也不出——先看答案再钉）。 */
-.semlink-history-item-unread{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--interactive-accent);flex:none}
-.semlink-history-item:has(.semlink-history-item-unread) .semlink-history-item-pin{display:none !important}
+/* pin：流内操作按钮，与 folder/archive 同款 hover 显隐；已钉常显（accent 色）。
+   特异性说明：.semlink-history-folder-body 内的隐藏规则（下方）与 hover
+   同级时后者胜——与旧 absolute 版行为一致（项目内 hover 亦可见）。 */
+.semlink-history-item .semlink-history-item-pin{margin:0;flex:none;display:none;transition:opacity .12s}
+.semlink-history-item:hover .semlink-history-item-pin{display:flex}
+.semlink-history-item .semlink-history-item-pin.is-pinned{display:flex;color:var(--interactive-accent)}
+/* 后台完成未读点：行首品牌色圆点（ZCode「刚完成」语义），点开即消；
+   未读行文字让位（圆点占左槽），hover 也不出 pin——先看答案再钉。 */
+.semlink-history-item-unread{position:absolute;left:5px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--interactive-accent);flex:none}
+.semlink-history-item:has(.semlink-history-item-unread) .semlink-history-item-pin{display:none}
+.semlink-history-item:has(.semlink-history-item-unread){padding-left:24px}
 .semlink-history-item-pin.clickable-icon{background:transparent;box-shadow:none}
 .semlink-history-item-pin.clickable-icon:hover{background:transparent;box-shadow:none}
 .semlink-history-item-pin.clickable-icon:hover{color:var(--text-accent)}
@@ -6032,6 +6037,13 @@ body .semlink-msg-user::selection {
 .semlink-history-folders-head .semlink-history-folder-chev {
 	display: flex;
 	flex-shrink: 0;
+	/* Codex 式（2026-11-19 拍板）：chevron 已挪到文字后，常态隐藏、
+	   行悬停才显示（触屏无 hover 不影响折叠——点击热区是整行） */
+	opacity: 0;
+	transition: opacity 0.12s ease-out;
+}
+.semlink-history-folders-head:hover .semlink-history-folder-chev {
+	opacity: 1;
 }
 .semlink-history-folders-head .semlink-history-folder-chev .svg-icon,
 .semlink-history-folders-head .semlink-history-folder-chev svg {
@@ -6053,6 +6065,30 @@ body .semlink-msg-user::selection {
 .semlink-history-folders-head .semlink-history-folder-add:hover {
 	color: var(--interactive-accent);
 	background: var(--background-modifier-hover);
+}/* 「对话」组头的归档切换图标（2026-11-19 拍板二改）：组头行最右端
+   （margin-left:auto 与 Projects 组的 ⊕ 位置对应），归档态 accent 高亮。 */
+.semlink-history-folders-head .semlink-history-folder-arch {
+	display: flex;
+	flex-shrink: 0;
+	margin-left: auto;
+	color: var(--text-muted);
+	border-radius: 5px;
+	padding: 2px;
+	cursor: pointer;
+}
+.semlink-history-folders-head .semlink-history-folder-arch:hover {
+	color: var(--text-accent);
+}
+.semlink-history-folders-head .semlink-history-folder-arch .svg-icon,
+.semlink-history-folders-head .semlink-history-folder-arch svg {
+	width: 14px;
+	height: 14px;
+}
+.semlink-history-folders-head .semlink-history-folder-arch.is-active {
+	color: var(--interactive-accent);
+}
+.semlink-history-folders-head.is-archived .semlink-history-folder-name {
+	color: var(--interactive-accent);
 }
 .semlink-history-folders-head.is-locked {
 	color: var(--text-faint);
@@ -6159,6 +6195,13 @@ body .semlink-msg-user::selection {
 }
 .semlink-search-view.semlink-main-tab {
     padding-bottom: 0;
+}
+/* 主区域头部贴 leaf 顶（2026-11-19 拍板「红线上面有很多空隙」收紧）：
+   顶部 8px 呼吸只保留给弹窗/侧栏场景；特异性 (0,2,1) 压过上方
+   .workspace-leaf-content .semlink-search-view 的 padding shorthand，
+   不受书写顺序影响。历史抽屉 is-persistent 的 top:8 偏移同步归零。 */
+.workspace-leaf-content .semlink-search-view.semlink-main-tab {
+    padding-top: 0;
 }
 /* 常显菜单展开：视图让出 300px，对话区横向空间随之重算（宽度驱动
    >720px 自动展开，2026-11-18 用户拍板「展开之后要重新计算对话框的
@@ -8454,7 +8497,7 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 <body class="rv theme-light">
 <div class="rv-topbar">
 	<strong>Semlink 弹窗样式审查</strong>
-	<span class="rv-gen-note">v2.3.0 · 30 个渲染态 · 生成于 2026-11-19 01:45 · 样式保真：Obsidian 运行时导出 + styles.css 内联</span>
+	<span class="rv-gen-note">v2.3.0 · 30 个渲染态 · 生成于 2026-11-19 13:29 · 样式保真：Obsidian 运行时导出 + styles.css 内联</span>
 	<button id="rv-theme-toggle" onclick="rvToggleTheme()">🌙 深色</button>
 </div>
 <nav class="rv-sidebar">

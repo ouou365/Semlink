@@ -5220,6 +5220,10 @@ body .semlink-msg-user::selection {
 .semlink-history-item:not(.semlink-history-item-archived) .semlink-history-item-folder{display:none}
 .semlink-history-item:not(.semlink-history-item-archived):hover .semlink-history-item-folder{display:flex}
 .semlink-history-item-info{margin-left:0}
+/* 当前打开的会话行选中色（2026-11-19 用户拍板）：active-hover 底色，
+   需写在 :hover 规则之后——同底色时 current 态不被 hover 态冲掉。 */
+.semlink-history-item.is-current{background:var(--background-modifier-active-hover,var(--background-modifier-hover))}
+.semlink-history-item.is-current:hover{background:var(--background-modifier-active-hover,var(--background-modifier-hover))}
 .semlink-history-folder{display:flex;align-items:center;gap:.3rem;padding:.3rem .45rem;min-height:34px;border-radius:6px;cursor:pointer;color:var(--text-normal);font-weight:500}
 .semlink-history-folder:hover{background:var(--background-modifier-hover)}
 /* 项目组行（2026-11-18 Project 融合进文件夹区）：brain 图标品牌色，
