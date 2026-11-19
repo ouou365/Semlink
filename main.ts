@@ -35,7 +35,6 @@ import { FeishuBot, type FeishuAskHandler } from "./src/feishu-bot";
 import { LicenseManager } from "./src/license";
 import { getLang, setLang, t } from "./src/i18n";
 import { closeAllGuideModals } from "./src/onboarding";
-import logoSvg from "./src/semlink-logo.svg";
 
 /** 录制光标飞行动画时长：合成点击（debug ui 工具）在一次事件里瞬移到
  *  目标点，直接画会让视频里的箭头在点位间跳变——按此时长 ease-out
@@ -437,13 +436,17 @@ export default class SmartVaultPlugin extends Plugin {
 		this.registerEvent(this.app.workspace.on("file-open", () => this.updateNoteShareAction()));
 		this.app.workspace.onLayoutReady(() => this.updateNoteShareAction());
 
-		// Register the custom Semlink logo as a named Obsidian icon so that both
-		// the left ribbon button and the right sidebar tab use the same brand
-		// mark. addIcon() wraps content in a fixed `0 0 100 100` viewBox, but our
-		// logo uses a 1024 coordinate space, so we wrap the extracted inner markup
-		// in a scale group (100/1024 ≈ 0.0977) to map it into that 100x100 box.
-		const logoInner = logoSvg.replace(/^[\s\S]*?<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
-		addIcon("semlink-logo", `<g transform="scale(0.09765625)">${logoInner}</g>`);
+		// Register the custom Semlink logo as a named Obsidian icon so that the
+		// left ribbon button, the sidebar tab and the chat header brand all use
+		// the same brand mark. 2026-11-19 用户拍板：品牌图标整体换成四角星
+		// （sparkle，即原升级入口 ✨ 的星形——该入口随之改用 id-card）。
+		// addIcon() wraps content in a fixed `0 0 100 100` viewBox; the lucide
+		// sparkle path lives in a 24 coordinate space, so we wrap it in a scale
+		// group (100/24 ≈ 4.167) with lucide's stroke attributes on the group.
+		addIcon(
+			"semlink-logo",
+			`<g transform="scale(4.1667)" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/></g>`,
+		);
 
 		this.addRibbonIcon("semlink-logo", "Semlink", () => {
 			void this.activateSearchView();

@@ -24,7 +24,12 @@
 import { App, Component, MarkdownRenderer } from "obsidian";
 import { allLangs, t } from "./i18n";
 import type { HistoryMessage } from "./types";
-import logoSvg from "./semlink-logo.svg";
+
+// 品牌 logo（2026-11-19 拍板：插件 UI 的 semlink-logo 已换四角星 sparkle，
+// 分享页随品牌同步用同一星形；stroke currentColor 继承页面文字色，
+// 引用处自行注入 color 属性染紫色）。与 Obsidian setIcon("sparkle") 同源路径。
+const logoSvg =
+	'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/></svg>';
 
 export type ShareTheme = "light" | "dark";
 

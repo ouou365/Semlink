@@ -37,7 +37,6 @@ import { ShareQrModal } from "./share-modal";
 import { renderSharePage } from "./share-page";
 import { ConfirmModal } from "./confirm-modal";
 import { getLang, t, LANGUAGES, type Lang } from "./i18n";
-import logoSvg from "./semlink-logo.svg";
 import llmIconSvg from "./network-icon.svg";
 import expandIconSvg from "./expand-icon.svg";
 import collapseIconSvg from "./collapse-icon.svg";
@@ -467,7 +466,8 @@ export class SemanticSearchView extends ItemView {
 		// Centered brand (logo + "Semlink" — always stays).
 		const brand = header.createDiv({ cls: "semlink-search-brand-group" });
 		const logoEl = brand.createDiv({ cls: "semlink-search-logo" });
-		setSvgIcon(logoEl, logoSvg);
+		// 走注册的 semlink-logo（2026-11-19 换星形后与 tab/ribbon 同源同更新）
+		setIcon(logoEl, "semlink-logo");
 		brand.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
 		// Right icon group: settings.
 		const rightIcons = header.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
@@ -484,7 +484,10 @@ export class SemanticSearchView extends ItemView {
 		// 按钮创建之前，?. 短路成 no-op：Pro 用户重启/重载后 ✨ 恒显示，
 		// 直到会话内再次 saveSettings 才藏——2026-11-18 用户实测截图）。
 		this.refreshLicenseUI();
-		setIcon(upgradeBtn, "sparkles");
+		// 许可证图标（2026-11-19 拍板）：原 ✨ sparkle 星形让位给品牌 logo，
+		// 入口改用 id-card（证件=许可语义；lucide 无 "license" 图标名，实测
+		// setIcon("license") 为空，id-card 是同库里最贴近的证件形状）。
+		setIcon(upgradeBtn, "id-card");
 		upgradeBtn.addEventListener("click", () => {
 			// ✨ 入口按许可状态分流：免费态 = 升级营销窗；Pro 态 = Eagle 式
 			// About 窗（LicenseModal 的 Pro 分支只有状态行 + 停用，观感近空，
