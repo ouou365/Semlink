@@ -2265,18 +2265,15 @@
 }/* ──── 主区域标签页实例（新标签页主页）────
    历史菜单常显：抽屉以 is-persistent 形态原地驻留为左栏，内容列用
    padding-left 让位；菜单按钮只在显示/收起之间切换，不销毁 DOM。
-   底色（2026-11-19 拍板变更，参考 Codex「侧栏更深」）：对话区回
-   primary 白，左侧菜单用 secondary 灰形成层次（此前 11-18 的
-   「菜单白/对话区灰」方向已由用户反转为「菜单更深」）。深色主题
-   不涂底——跟随 leaf 容器既有底色。 */
+   底色（2026-11-19 四改拍板）：对话区恢复原本 #f6f6f6 灰不变；左侧
+   菜单换明显更深的 color-mix 色（见 .semlink-history-drawer.is-persistent）。
+   深色主题不涂底——跟随 Obsidian 主题。 */
 .theme-light .semlink-search-view.semlink-main-tab {
-    background: var(--background-primary);
-}/* 引导/设置屏：顶栏与页面同底。对话区回白后同步取 primary（此前的
-   #f6f6f6 定死随「对话区灰底」一起退役）；深色跟随首页底色（见下方
-   分派规则）。 */
+    background: #f6f6f6;
+}/* 引导/设置屏：顶栏与页面同灰（原本机制恢复）。 */
 .semlink-search-view.semlink-guide-active,
 .semlink-search-view.semlink-settings-active {
-    --sl-bg-grouped: var(--background-primary);
+    --sl-bg-grouped: #f6f6f6;
 }/* 深色设置/引导屏不再定死纯黑：跟随主题底色，与深色首页同色，切换零跳变。
    首页自身不涂底——主区域/弹窗 leaf 露 --background-primary，左右侧栏
    leaf 露核心给的 --background-secondary；屏自己涂 leaf 就得按容器分派
@@ -2307,10 +2304,12 @@
        空隙：main-tab 的 view padding-top 归零，抽屉偏移同步归零；
        侧栏/弹窗浮层不受此规则影响）。 */
     top: 0;
-    /* 展开态菜单底色（2026-11-19 拍板变更，参考 Codex）：左侧菜单
-       比对话区深一档——secondary 灰底 vs 对话区 primary 白底；浮层
-       抽屉同为 secondary。此拍板覆盖 2026-11-18 的「菜单白底」版。 */
-    background: var(--background-secondary);
+    /* 菜单底色（2026-11-19 三改拍板）：对话区保持原本 #f6f6f6 灰，
+       菜单要与它拉开层次且不能用白/近似白——secondary(#f6f6f6) 与
+       对话区撞色被否，取 secondary 向黑混 5%（≈#eaeaea）深一档；
+       color-mix 随主题变量缩放，深色下同样比对话区深。浮层抽屉
+       保持 secondary 不变。 */
+    background: color-mix(in srgb, var(--background-secondary) 95%, black);
 }
 .semlink-menu-persistent .semlink-history-drawer.is-persistent {
     transform: translateX(0);
