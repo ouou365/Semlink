@@ -463,11 +463,9 @@ export class SemanticSearchView extends ItemView {
 			usageBtn.addEventListener("click", () => new UsageModal(this.app, this.plugin).open());
 		}
 
-		// Centered brand (logo + "Semlink" — always stays).
+		// Centered brand (2026-11-19 拍板：头部不显示 ✨ 图标，只留文字——
+		// 与设置屏「中央只留页面名文字」同一口径；品牌 ✦ 仍活在 tab/ribbon)。
 		const brand = header.createDiv({ cls: "semlink-search-brand-group" });
-		const logoEl = brand.createDiv({ cls: "semlink-search-logo" });
-		// 走注册的 semlink-logo（2026-11-19 换星形后与 tab/ribbon 同源同更新）
-		setIcon(logoEl, "semlink-logo");
 		brand.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
 		// Right icon group: settings.
 		const rightIcons = header.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
