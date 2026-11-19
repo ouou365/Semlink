@@ -5594,11 +5594,12 @@ body .semlink-msg-user::selection {
 .semlink-history-folders-head .semlink-history-folder-add:hover {
 	color: var(--interactive-accent);
 	background: var(--background-modifier-hover);
-}/* 「对话」组头的归档切换图标（2026-11-19 拍板）：文字右边只展示图标，
-   归档态 accent 高亮 + 组名同步着色，一眼可辨当前在归档视图。 */
+}/* 「对话」组头的归档切换图标（2026-11-19 拍板二改）：组头行最右端
+   （margin-left:auto 与 Projects 组的 ⊕ 位置对应），归档态 accent 高亮。 */
 .semlink-history-folders-head .semlink-history-folder-arch {
 	display: flex;
 	flex-shrink: 0;
+	margin-left: auto;
 	color: var(--text-muted);
 	border-radius: 5px;
 	padding: 2px;

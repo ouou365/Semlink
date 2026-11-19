@@ -4562,9 +4562,11 @@ export class SemanticSearchView extends ItemView {
 				});
 				// Codex 式组头同款：chevron 文字后、hover 显示，计数移除
 				chead.createSpan({ cls: "semlink-history-folder-name", text: t("historyGroupChats") });
-				// 归档切换图标（2026-11-19 拍板）：挂在组头文字右边、只展示
-				// 图标；点击只替换对话组内容——上面的 Projects 组保持可见
-				// （原整卡归档视图退役）。归档态图标 accent 高亮。
+				const cchev = chead.createSpan({ cls: "semlink-history-folder-chev" });
+				setIcon(cchev, view === "archive" || !conversationsCollapsed ? "chevron-down" : "chevron-right");
+				// 归档切换图标（2026-11-19 拍板：挪到组头行最右端——与 Projects
+				// 组的 ⊕ 位置对应，margin-left:auto 推右；只展示图标，点击只
+				// 替换对话组内容——上面的 Projects 组保持可见。归档态 accent 高亮。
 				const archToggle = chead.createSpan({
 					cls: "semlink-history-folder-arch clickable-icon" + (view === "archive" ? " is-active" : ""),
 					attr: { "aria-label": t("historyArchiveEntry") },
@@ -4575,8 +4577,6 @@ export class SemanticSearchView extends ItemView {
 					view = view === "archive" ? "main" : "archive";
 					render();
 				});
-				const cchev = chead.createSpan({ cls: "semlink-history-folder-chev" });
-				setIcon(cchev, view === "archive" || !conversationsCollapsed ? "chevron-down" : "chevron-right");
 				chead.addEventListener("click", () => {
 					// 归档态下组头点击 = 退出归档（回到时间流）；否则折叠切换
 					if (view === "archive") {
