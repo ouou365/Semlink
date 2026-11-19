@@ -751,8 +751,6 @@ const zh: Record<keyof typeof en, string> = {
 	usageNoPrice: "在 设置 → 模型 里给模型填写价格即可计算费用；未填价格的模型只统计 tokens",
 	usageProTitle: "用量看板是 Pro 功能",
 	usageProDesc: "用量数据一直在本地记录，升级后即可查看完整统计。",
-	usageClear: "清除本地用量记录",
-	usageClearBtn: "清除",
 	chatModelPrice: "价格（可选，用于用量看板）",
 	chatModelPriceDesc: "美元 / 每百万 tokens",
 	chatModelPriceIn: "输入 $/1M",

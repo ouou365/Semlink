@@ -750,8 +750,6 @@ const t: Record<keyof typeof en, string> = {
 	usageNoPrice: "비용을 보려면 설정 → 모델에서 모델 가격을 입력하세요. 가격 미지정 모델은 토큰만 집계됩니다",
 	usageProTitle: "사용량 대시보드는 Pro 기능입니다",
 	usageProDesc: "사용량은 어느 쪽이든 로컬에 기록됩니다 — 잠금 해제하면 전체 통계를 볼 수 있습니다.",
-	usageClear: "로컬 사용량 데이터 지우기",
-	usageClearBtn: "지우기",
 	chatModelPrice: "가격 (선택 사항, 사용량 대시보드)",
 	chatModelPriceDesc: "100만 토큰당 USD",
 	chatModelPriceIn: "입력 $/1M",

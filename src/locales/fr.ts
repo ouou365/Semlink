@@ -750,8 +750,6 @@ const t: Record<keyof typeof en, string> = {
 	usageNoPrice: "Renseignez les prix des modèles dans Paramètres → Modèles pour voir les coûts ; les modèles sans prix comptent uniquement les tokens",
 	usageProTitle: "Le tableau de bord d'utilisation est une fonctionnalité Pro",
 	usageProDesc: "L'utilisation est enregistrée localement dans tous les cas — débloquez pour voir les statistiques complètes.",
-	usageClear: "Effacer les données d'utilisation locales",
-	usageClearBtn: "Effacer",
 	chatModelPrice: "Tarification (facultatif, tableau de bord d'utilisation)",
 	chatModelPriceDesc: "USD par 1M de tokens",
 	chatModelPriceIn: "Entrée $/1M",

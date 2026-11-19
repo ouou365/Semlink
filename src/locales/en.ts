@@ -749,8 +749,6 @@ const en = {
 	usageNoPrice: "Fill in model prices under Settings → Models to see costs; unpriced models count tokens only",
 	usageProTitle: "The usage dashboard is a Pro feature",
 	usageProDesc: "Usage is recorded locally either way — unlock to see the full statistics.",
-	usageClear: "Clear local usage data",
-	usageClearBtn: "Clear",
 	chatModelPrice: "Pricing (optional, usage dashboard)",
 	chatModelPriceDesc: "USD per 1M tokens",
 	chatModelPriceIn: "Input $/1M",

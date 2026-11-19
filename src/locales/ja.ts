@@ -750,8 +750,6 @@ const t: Record<keyof typeof en, string> = {
 	usageNoPrice: "コストを表示するには 設定 → モデル でモデルの価格を入力してください。価格未設定のモデルはトークン数のみ集計されます",
 	usageProTitle: "使用量ダッシュボードは Pro 機能です",
 	usageProDesc: "使用量はいずれの場合もローカルに記録されています。解放すると完全な統計が表示されます。",
-	usageClear: "ローカルの使用量データを消去",
-	usageClearBtn: "消去",
 	chatModelPrice: "価格（任意、使用量ダッシュボード用）",
 	chatModelPriceDesc: "100 万トークンあたりの USD",
 	chatModelPriceIn: "入力 $/1M",

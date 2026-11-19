@@ -4213,24 +4213,6 @@ export class SemanticSearchView extends ItemView {
 		});
 		this.newChatPillEl = drawerNewChat;
 
-		// ── 用量与统计（2026-11-19 拍板：新对话正下方常驻入口，点击
-		// 对话区切换成统计详情屏；原 gauge 头部按钮已停用，此行为唯一
-		// 活跃入口）。浮层抽屉先收起再进屏，常显 docked 抽屉保持不动
-		// （同设置屏行为）。 ──
-		const usageRow = menuRows.createDiv({ cls: "semlink-history-menu-row" });
-		const usageIcon = usageRow.createSpan({ cls: "semlink-history-menu-row-icon" });
-		setIcon(usageIcon, "gauge");
-		usageRow.createSpan({ cls: "semlink-history-menu-row-label", text: t("usageStatsEntry") });
-		usageRow.addEventListener("click", () => {
-			if (persistent) {
-				this.openUsageScreen();
-			} else {
-				// 浮层抽屉：先收起再进屏，避免抽屉挡住统计画面
-				closeBtn?.click();
-				this.openUsageScreen();
-			}
-		});
-
 		let moreExpanded = false;
 		const moreRow = menuRows.createDiv({ cls: "semlink-history-menu-row" });
 		const moreIcon = moreRow.createSpan({ cls: "semlink-history-menu-row-icon" });
@@ -4244,10 +4226,30 @@ export class SemanticSearchView extends ItemView {
 		const archIcon = archiveEntryRow.createSpan({ cls: "semlink-history-menu-row-icon" });
 		setIcon(archIcon, "archive");
 		archiveEntryRow.createSpan({ cls: "semlink-history-menu-row-label", text: t("historyArchiveEntry") });
+		// ── 用量与统计（2026-11-19 二次拍板：从顶级行收进「更多」子组，
+		// 与归档对话同款次级弱化样式；原 gauge 头部按钮已停用，此行为
+		// 唯一活跃入口）。浮层抽屉先收起再进屏，常显 docked 抽屉保持
+		// 不动（同设置屏行为）。 ──
+		const usageEntryRow = menuRows.createDiv({
+			cls: "semlink-history-menu-row semlink-history-menu-sub semlink-hidden",
+		});
+		const usageIcon = usageEntryRow.createSpan({ cls: "semlink-history-menu-row-icon" });
+		setIcon(usageIcon, "gauge");
+		usageEntryRow.createSpan({ cls: "semlink-history-menu-row-label", text: t("usageStatsEntry") });
+		usageEntryRow.addEventListener("click", () => {
+			if (persistent) {
+				this.openUsageScreen();
+			} else {
+				// 浮层抽屉：先收起再进屏，避免抽屉挡住统计画面
+				closeBtn?.click();
+				this.openUsageScreen();
+			}
+		});
 		moreRow.addEventListener("click", () => {
 			moreExpanded = !moreExpanded;
 			setIcon(moreChev, moreExpanded ? "chevron-down" : "chevron-right");
 			archiveEntryRow.toggleClass("semlink-hidden", !moreExpanded);
+			usageEntryRow.toggleClass("semlink-hidden", !moreExpanded);
 		});
 		archiveEntryRow.addEventListener("click", () => {
 			view = view === "main" ? "archive" : "main";

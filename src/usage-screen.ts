@@ -7,7 +7,6 @@
 // 沿用弹窗时代的既定行为；免费用户的数据本就一直在本地累计，升级后
 // 重渲即见全量。
 
-import { Setting } from "obsidian";
 import type SmartVaultPlugin from "../main";
 import { LicenseModal } from "./license-modal";
 import { t } from "./i18n";
@@ -122,15 +121,5 @@ export function renderUsageDashboard(
 		if (!s.hasAnyPrice && s.models.length > 0) {
 			tableCard.createDiv({ cls: "semlink-usage-hint", text: t("usageNoPrice") });
 		}
-
-		// ── Footer ──
-		new Setting(host)
-			.setName(t("usageClear"))
-			.addButton((btn) =>
-				btn.setButtonText(t("usageClearBtn")).onClick(async () => {
-					await plugin.usageStore.clear();
-					rerender();
-				}),
-			);
 	})();
 }

@@ -752,8 +752,6 @@ const t: Record<keyof typeof en, string> = {
 	usageNoPrice: "Rellena los precios de los modelos en Ajustes → Modelos para ver los costes; los modelos sin precio solo cuentan tokens",
 	usageProTitle: "El panel de uso es una función Pro",
 	usageProDesc: "El uso se registra en local de todas formas — desbloquéalo para ver las estadísticas completas.",
-	usageClear: "Borrar los datos de uso locales",
-	usageClearBtn: "Borrar",
 	chatModelPrice: "Precios (opcional, panel de uso)",
 	chatModelPriceDesc: "USD por 1M de tokens",
 	chatModelPriceIn: "Entrada $/1M",

@@ -750,8 +750,6 @@ const t: Record<keyof typeof en, string> = {
 	usageNoPrice: "Hinterlege unter Einstellungen → Modelle Preise pro Modell, um Kosten zu sehen; Modelle ohne Preis zählen nur Tokens",
 	usageProTitle: "Das Nutzungs-Dashboard ist eine Pro-Funktion",
 	usageProDesc: "Die Nutzung wird ohnehin lokal aufgezeichnet – schalte frei, um die vollständigen Statistiken zu sehen.",
-	usageClear: "Lokale Nutzungsdaten löschen",
-	usageClearBtn: "Löschen",
 	chatModelPrice: "Preise (optional, Nutzungs-Dashboard)",
 	chatModelPriceDesc: "USD pro 1M Tokens",
 	chatModelPriceIn: "Input $/1M",

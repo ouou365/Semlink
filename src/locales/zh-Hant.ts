@@ -750,8 +750,6 @@ const t: Record<keyof typeof en, string> = {
 	usageNoPrice: "在 設定 → 模型 裡為模型填寫價格即可計算費用；未填價格的模型只統計 tokens",
 	usageProTitle: "用量儀表板是 Pro 功能",
 	usageProDesc: "用量資料一直在本機記錄，升級後即可查看完整統計。",
-	usageClear: "清除本機用量記錄",
-	usageClearBtn: "清除",
 	chatModelPrice: "價格（選填，用於用量儀表板）",
 	chatModelPriceDesc: "美元 / 每百萬 tokens",
 	chatModelPriceIn: "輸入 $/1M",

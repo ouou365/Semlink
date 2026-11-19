@@ -325,8 +325,7 @@ ${setting({ controls: btn(t("cancel")) + btn(t("create"), "mod-cta") })}
 		</table>
 		<div class="semlink-usage-hint">${t("usageNoPrice")}</div>
 	</div>
-</div>
-${setting({ name: t("usageClear"), controls: btn(t("usageClearBtn")) })}`;
+</div>`;
 	},
 
 	// 用量与统计详情屏（view 内全屏，非 Modal）：顶条（← 返回 + 居中
