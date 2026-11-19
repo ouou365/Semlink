@@ -1858,12 +1858,38 @@ export class SemanticSearchView extends ItemView {
 					// "stopped" notice instead of an error.
 					if (controller.signal.aborted || (e as { name?: string } | undefined)?.name === "AbortError") {
 						stopAnswerAnim();
+						// 中断保留已生成内容（2026-11-19 用户拍板）：部分思考
+						// 与已流式输出的部分正文都留在气泡里 + 持久化进历史——
+						// 重开/切会话后仍可查看（此前 loadingEl.empty() 全清且
+						// 不落盘，部分思考丢失）。
+						const partialAnswer = streamText.trim();
 						loadingEl.empty();
 						if (liveSteps.length > 0) {
 							const elapsedSec = thinkElapsedSec();
 							this.renderThinking(loadingEl, liveSteps, elapsedSec, this.chatClient.getActiveModelLabel() ?? undefined);
 						}
+						if (partialAnswer) {
+							const partialEl = loadingEl.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
+							await MarkdownRenderer.render(this.app, protectHyphens(partialAnswer), partialEl, "", this);
+							this.makeVaultPathsClickable(partialEl);
+						}
 						loadingEl.createDiv({ cls: "semlink-msg-stopped", text: t("searchStopped") });
+						// 部分内容持久化（任一非空且会话已建才记录；重开会话/
+						// 历史查看时 thinking 折叠面板照常可展开）
+						if ((partialAnswer || liveSteps.length > 0) && runSessionId) {
+						await this.recordAssistantMessage(
+							partialAnswer,
+							liveSteps.length > 0 ? liveSteps : undefined,
+							[],
+							thinkElapsedSec(),
+							[],
+							undefined,
+							undefined,
+							undefined,
+							runSessionId,
+							true, // stopped——历史渲染补「已停止」提示
+						);
+						}
 					} else {
 						const msg = e instanceof Error ? e.message : String(e);
 						stopAnswerAnim();
@@ -4032,6 +4058,7 @@ export class SemanticSearchView extends ItemView {
 		contextBreakdown?: ContextBreakdown,
 		cacheHitRate?: number | null,
 		runSessionId?: string,
+		stopped?: boolean,
 	): Promise<HistoryMessage | null> {
 		// 会话定位：优先调用方传入的运行会话（后台完成时 currentSessionId
 		// 已被主页清空，没有它答案会被静默丢弃——2026-11-18 空页事故根因）。
@@ -4053,6 +4080,8 @@ export class SemanticSearchView extends ItemView {
 			sources,
 			sourceNumbers: sourceNumbers?.filter((n) => Number.isFinite(n)),
 			elapsedSec,
+			// 中断的部分回答标记（2026-11-19）：历史渲染补「已停止」提示
+			stopped: stopped || undefined,
 			// 思考摘要行的「· 模型」后缀数据源（2026-11-18）：落盘当轮真实
 			// 模型，历史恢复如实显示；旧消息无此字段（不加后缀）。
 			model: this.chatClient.getActiveModelLabel() ?? undefined,
@@ -4139,6 +4168,11 @@ export class SemanticSearchView extends ItemView {
 					if (thinking.length > 0) this.renderThinking(bubble, thinking, msg.elapsedSec || 0, msg.model);
 					const answerEl = bubble.createDiv({ cls: "semlink-msg-answer markdown-rendered" });
 					await MarkdownRenderer.render(this.app, protectHyphens(msg.content), answerEl, "", this);
+					// 中断的部分回答（2026-11-19 拍板：部分思考/正文持久化）：
+					// 补「已停止」提示，让短/空正文的中断消息有可读解释。
+					if (msg.stopped) {
+						bubble.createDiv({ cls: "semlink-msg-stopped", text: t("searchStopped") });
+					}
 					if (msg.sources && msg.sources.length > 0) {
 						const usedSources = msg.sources.map((p) => ({ notePath: p, heading: "", contentPreview: "" }));
 						this.makeCitationsClickable(answerEl, msg.sourceNumbers ?? [], usedSources as SearchResult[], msg.content, thinking);

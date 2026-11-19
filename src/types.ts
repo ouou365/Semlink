@@ -636,6 +636,9 @@ export interface HistoryMessage {
 	 *  numbers the model cited) — restored cards keep the real [n]. */
 	sourceNumbers?: number[];
 	elapsedSec?: number;
+	/** 生成被用户中断的部分回答标记（2026-11-19）：历史渲染时补「已停止」
+	 *  提示，让空/短正文的中断消息有可读解释。 */
+	stopped?: boolean;
 	/** 产生本回答的模型标签（如 "deepseek-flash"，2026-11-18 加）。思考折
 	 *  叠条摘要行用它显示「思考了 N 秒 · 模型」；旧消息无此字段——如实
 	 *  不显示（不回退当前激活模型，避免历史张冠李戴）。 */
