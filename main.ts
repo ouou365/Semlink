@@ -25,6 +25,7 @@ import { ShareServer } from "./src/share-server";
 import { NoteShare, attachNoteShareAction } from "./src/note-share";
 import { ChatHistoryStore } from "./src/chat-history";
 import { renderSharePage } from "./src/share-page";
+import logoSvg from "./src/semlink-logo.svg";
 import { VaultWatcher } from "./src/watcher";
 import { SmartVaultSettingTab } from "./src/settings";
 import { ProgressModal } from "./src/progress-modal";
@@ -439,17 +440,19 @@ export default class SmartVaultPlugin extends Plugin {
 		// Register the custom Semlink logo as a named Obsidian icon so that the
 		// left ribbon button, the sidebar tab and the chat header brand all use
 		// the same brand mark. 2026-11-19 用户拍板：品牌图标 = lucide sparkles
-		// 多星，且线宽与 Obsidian 自带图标对标（stroke-width 2 = lucide 默认；
-		// g scale 是 24→100 等比放大，坐标系内 2 渲染粗细与 24 盒的 2 等价，
-		// 同尺寸下视觉线宽与原生 lucide 图标完全一致——1.5 的更细版被否）。
-		// addIcon() wraps content in a fixed `0 0 100 100` viewBox; the lucide
-		// paths live in a 24 coordinate space, so we wrap them in a scale
-		// group (100/24 ≈ 4.167) with lucide's stroke attributes on the group.
+		// Register the custom Semlink logo as a named Obsidian icon so that the
+		// left ribbon button, the sidebar tab and the chat header brand all use
+		// the same brand mark. 品牌 logo 资产独立在 src/semlink-logo.svg
+		// （2026-11-19 拍板 sparkles 多星；stroke-width 2 与 Obsidian 自带
+		// 图标对标——改 logo 形状/线宽只动该文件）。
+		// addIcon() wraps content in a fixed `0 0 100 100` viewBox; the file's
+		// paths live in a 24 coordinate space, so we strip the outer <svg> and
+		// wrap the inner markup in a scale group (100/24 ≈ 4.167) with lucide's
+		// stroke attributes on the group.
+		const logoInner = logoSvg.replace(/^[\s\S]*?<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
 		addIcon(
 			"semlink-logo",
-			// 线条版 sparkles（2026-11-19 用户拍板：实心 → 线条且更细）——
-			// lucide 原路径，stroke-width 从默认 2 收细到 1.5。
-			`<g transform="scale(4.1667)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></g>`,
+			`<g transform="scale(4.1667)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${logoInner}</g>`,
 		);
 
 		this.addRibbonIcon("semlink-logo", "Semlink", () => {
