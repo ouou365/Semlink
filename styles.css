@@ -2634,7 +2634,9 @@
     cursor: pointer;
 }.semlink-history-item:hover {
     background: var(--background-modifier-hover);
-}.semlink-history-item-info {
+}
+/* 悬停色浅色主题定值（2026-11-25 用户拍板：全行统一 #e1e1e3）。 */
+.theme-light .semlink-history-item:hover { background: #e1e1e3; }.semlink-history-item-info {
     flex: 1 1 0;
     min-width: 0;
 }.semlink-history-item-title {
@@ -2731,16 +2733,33 @@
        顶夹行 38px 同引导页 emoji 起线；hero→输入间距与底部余量按
        0.22 : 0.78 分配（min 100/120 防小窗溢出），复现引导页
        emoji→卡片的大留白节奏。 */
-    grid-template-rows: auto 38px auto minmax(100px, 0.22fr) auto minmax(120px, 0.78fr);
+    /* hd 行固定 37px（2026-11-25 用户报「新对话页页头偏下」）：auto 行对
+       wrap-flex 子的 intrinsic 高度会误算成两行（实测 56.64px——brand 被
+       记入第二行，26+2+18+11≈57），header 被 stretch 后文字随行居中偏下
+       10px（brandDelta dy=-10 对引导页基准）。固定 37px 与 compact/引导
+       页头部同高，基线三态归一；header 同步 align-self:start 贴行顶。
+       input 行 auto + 独立 gapInput 弹性间隙行（2026-11-25 用户报「展开
+       把顶部内容顶出去」）：原 minmax(100px,.22fr) 是 fr 行——行高不随
+       footer 内容增长，展开态 footer（348px）从行底向上溢出 248px 把
+       hero 顶出视口。解耦后 footer 永不溢出（行随内容长），hero↔输入框
+       间距由 gapInput 弹性行承担——展开时它先收缩到 0，顶部内容稳住。 */
+    /* gapInput 0.22→0.15fr（2026-11-25 用户拍板「输入框向上移动」）：
+       与引导页卡片起点对齐（720 高窗口实测 56.5→~28px 上间隙）。 */
+    grid-template-rows: 37px 38px auto minmax(0px, 0.15fr) auto auto minmax(120px, 0.78fr);
     grid-template-areas:
         "hd"
         "gap1"
         "hero"
+        "gapInput"
         "input"
         "sugs"
         "gap2";
 }
-.semlink-welcome-center:has(.semlink-search-welcome-home) > .semlink-search-header { grid-area: hd; }
+.semlink-welcome-center:has(.semlink-search-welcome-home) > .semlink-search-header {
+    grid-area: hd;
+    /* 贴行顶（2026-11-25：hd 行固定 37px 配套）——不被行内剩余空间拉伸。 */
+    align-self: start;
+}
 .semlink-welcome-center:has(.semlink-search-welcome-home) > .semlink-search-status { display: none; }
 .semlink-welcome-center:has(.semlink-search-welcome-home) > .semlink-search-messages { display: contents; }
 .semlink-welcome-center .semlink-search-welcome-home { display: contents; }
@@ -2754,7 +2773,12 @@
     padding: 0 20px;
     animation: semlink-welcome-fade 0.3s ease;
 }
-.semlink-welcome-center:has(.semlink-search-welcome-home) > .semlink-search-footer { grid-area: input; }
+.semlink-welcome-center:has(.semlink-search-welcome-home) > .semlink-search-footer {
+    grid-area: input;
+    /* 上松下紧的留白已由 gapInput 弹性间隙行承担（2026-11-25「展开顶出
+       顶部内容」修复）——input 行改 auto 随 footer 内容长，行内无剩余
+       空间，原 align-self:end 失效摘除。 */
+}
 .semlink-welcome-center:has(.semlink-search-welcome-home) .semlink-search-welcome-sugs { grid-area: sugs; }/* The greeting emoji above the text (no background, no animation). */
 .semlink-search-welcome-emoji {
     /* 与引导 hub 的 emoji 同盒模型（普通 div + text-align 居中，44px 字号
@@ -4371,6 +4395,9 @@ body .semlink-msg-user::selection {
 	height: 34px;
 	padding: 0;
 	border: none;
+	/* 右推接管（2026-11-25 展开按钮摘除）：原由 expand-btn 的
+	   margin-left:auto 承担，摘除后移交给发送按钮自身。 */
+	margin-left: auto;
 	/* Circular button (matches the ring + solid square stop icon). */
 	border-radius: 50%;
 	background: var(--interactive-accent);
@@ -4384,44 +4411,9 @@ body .semlink-msg-user::selection {
 }.semlink-search-btn svg {
     width: 18px;
     height: 18px;
-}/* Expanded tall editor: half the window height, content scrolls. The footer
-   grows and the messages area above shrinks to make room. */
-.semlink-search-input.is-expanded {
-    min-height: 35vh;
-    height: 35vh;
-    max-height: 35vh;
-}/* Keyboard hint under the input — hidden by default (JS toggles it in the
-   tall editor), so typing text never fights it for layout space. */
-.semlink-search-input-hint {
-    font-size: 11px;
-    color: var(--text-faint);
-    text-align: right;
-    padding: 2px 2px 0;
-    user-select: none;
-}/* Expand/collapse toggle on the model row, left of the send button.
-   Takes over the far-right push (margin-left:auto); the send button's own
-   auto margin would otherwise split the free space between the two. */
-.semlink-search-expand-btn {
-    margin-left: auto;
-    color: var(--text-normal);
-}.semlink-search-expand-btn:hover {
-    color: var(--text-normal);
-}/* Flat icon: no box-shadow (the shared .semlink-search-icon-btn hover
-   background looks heavy next to the circular send button). The compound
-   selector's specificity (0,2,0) beats the shared hover rule (0,1,1).
-   Hover gets the shared translucent chip tint (theme-adaptive). */
-.semlink-search-icon-btn.semlink-search-expand-btn,
-.semlink-search-icon-btn.semlink-search-expand-btn:focus-visible,
-.semlink-search-icon-btn.semlink-search-expand-btn:active {
-    background-color: transparent;
-    box-shadow: none;
-}.semlink-search-icon-btn.semlink-search-expand-btn:hover {
-    background-color: var(--background-modifier-hover);
-    box-shadow: none;
-}.semlink-search-expand-btn svg {
-    width: 16px;
-    height: 16px;
-}.semlink-search-model {
+}/* 展开功能已摘（2026-11-25 用户拍板「算了去掉这个按钮吧」）：is-expanded
+   高度规则、input-hint、expand-btn 全组规则与按钮 DOM 一并移除。 */
+.semlink-search-model {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -5427,12 +5419,14 @@ body .semlink-msg-user::selection {
 .theme-light .semlink-history-item.is-current,
 .theme-light .semlink-history-item.is-current:hover { background: #e1e1e3; }
 .semlink-history-folder{display:flex;align-items:center;gap:.3rem;padding:.3rem .45rem;min-height:34px;border-radius:6px;cursor:pointer;color:var(--text-normal);font-weight:500}
+/* 悬停色统一 #e1e1e3（2026-11-25 用户拍板）：项目行/组头与会话行/当前
+   会话行同色——浅色主题定值（比抽屉底 #ececee 深一档的中性灰），深色
+   主题继续跟随 Obsidian 变量（与 is-current 的浅色定值口径一致）。 */
 .semlink-history-folder:hover{background:var(--background-modifier-hover)}
-/* 项目组行（2026-11-18 Project 融合进文件夹区）：brain 图标品牌色，
-   当前选中范围行高亮名称。 */
-.semlink-history-project-row .semlink-row-icon svg{color:var(--interactive-accent)}
-.semlink-history-project-row.is-active .semlink-history-folder-name{color:var(--interactive-accent);font-weight:600}
-.semlink-history-project-row.is-active{background:linear-gradient(90deg,rgba(139,108,239,.08),transparent)}
+.theme-light .semlink-history-folder:hover{background:#e1e1e3}
+/* 项目行选中色已删（2026-11-25 用户拍板「项目展开不要有选中色」）：
+   is-active 的紫名加粗 + 渐变底两条规则整体移除——当前检索范围由输入卡
+   chip 表达，行本身不再着色。 */
 .semlink-history-folder-root .semlink-history-folder-name{font-weight:700}
 .semlink-history-folder-root{position:sticky;top:0;z-index:3;background:var(--background-secondary);border-bottom:1px solid var(--background-modifier-border);padding-top:.25rem;padding-bottom:.25rem}
 .semlink-history-folder-chev{display:inline-flex;color:var(--text-muted)}
@@ -5446,8 +5440,10 @@ body .semlink-msg-user::selection {
 /* 树形缩进：每层 body 相对父层缩进 1.5rem 并画一条竖线，子行/子项
     只保留固定基数 padding——竖线始终对齐本层 chevron，嵌套自动对齐。 */
 .semlink-history-folder-body {
-    /* 嵌套缩进与左边框去除（2026-11-19 拍板：抽屉各行左缘对齐）；
-       层级由项目行的 folder 图标（开/合）表达 */
+    /* 项目下会话行左缩进（2026-11-25 用户拍板回归）：20px = 行内衬 7.2 +
+       文件夹图标 16 - 差值 3.2，子行文字与父行文字起点逐像素同列
+       （实测父 33 / 子 28→33），层级随图标可读。 */
+    padding-left: 20px;
 }
 .semlink-history-folder-body > .semlink-history-item {
     border-radius: 6px;
@@ -5811,7 +5807,11 @@ body .semlink-msg-user::selection {
 	font-size: 14px;
 	font-weight: var(--font-semibold);
 	color: var(--text-normal);
-	padding: 8px 12px;
+	/* 左缘对齐内容行（2026-11-25 用户拍板「项目和对话两个字要左侧对齐」）：
+	   前导图标摘除后 12px 横向内衬让组头文字比会话行文字深 5px（实测
+	   18 vs 13）——横内衬收至 .45rem 与 item/folder 同值，文字左缘逐像素
+	   对齐；右侧操作钮（⊕/归档）随内衬右移，组内自洽。 */
+	padding: 8px .45rem;
 	min-height: 36px;
 }
 .semlink-history-folders-head .semlink-history-head-icon {
@@ -5826,6 +5826,7 @@ body .semlink-msg-user::selection {
 .semlink-history-folders-head:hover {
 	background: var(--background-modifier-hover);
 }
+.theme-light .semlink-history-folders-head:hover { background: #e1e1e3; }
 .semlink-history-folders-head .semlink-history-folder-chev {
 	display: flex;
 	flex-shrink: 0;

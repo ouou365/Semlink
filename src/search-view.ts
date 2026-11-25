@@ -38,8 +38,6 @@ import { renderSharePage } from "./share-page";
 import { ConfirmModal } from "./confirm-modal";
 import { getLang, t, LANGUAGES, type Lang } from "./i18n";
 import llmIconSvg from "./network-icon.svg";
-import expandIconSvg from "./expand-icon.svg";
-import collapseIconSvg from "./collapse-icon.svg";
 import { fluentEmojiSvg } from "./fluent-emoji";
 
 export const SEARCH_VIEW_TYPE = "semlink-semantic-search";
@@ -245,6 +243,10 @@ export class SemanticSearchView extends ItemView {
 	private widthRO: ResizeObserver | null = null;
 	private buildingPersistentMenu = false;
 	private persistentMenuRefresh: (() => void) | null = null;
+	/** 浮层抽屉（非 docked）的 render 句柄（2026-11-25）：此前只有 docked
+	 *  常显抽屉有句柄——浮层开着时编辑项目名保存后 refreshPersistentMenu
+	 *  空转，行名停在旧值。关闭抽屉时清 null。 */
+	private drawerFloatRefresh: (() => void) | null = null;
 	/** 抽屉构建时的语言（2026-11-23）：行标签（更多/项目/对话/用量与统计
 	 *  等）在 showHistoryDrawer 构建时经 t() 定格——语言切换后必须整栏
 	 *  重建，refreshLanguage 依此判定。 */
@@ -300,10 +302,6 @@ export class SemanticSearchView extends ItemView {
 	private activeProject: ProjectDef | null = null;
 	private projectChipEl: HTMLElement | null = null;
 	private projectPopupEl: HTMLElement | null = null;
-	/** Input tall mode (half-screen editor for long prompts). */
-	private inputExpanded = false;
-	private expandBtnEl: HTMLElement | null = null;
-	private inputHintEl: HTMLElement | null = null;
 	private activeAskController: AbortController | null = null;
 	/** 多开（2026-11-18）：按会话的运行注册表——会话 id → 助手气泡。
 	 *  回主页后台化的运行继续写自己的气泡；同会话可随时重挂载查看。 */
@@ -729,13 +727,6 @@ export class SemanticSearchView extends ItemView {
 		});
 		this.scrollBottomBtn = scrollBottomBtn;
 		const inputRow = wrapper.createDiv({ cls: "semlink-search-input-row" });
-		// Keyboard hint (Ctrl+Enter newline / Enter send) — visible only while
-		// the input is expanded to the tall editor.
-		this.inputHintEl = wrapper.createDiv({
-			cls: "semlink-search-input-hint",
-			text: t("searchInputHint"),
-		});
-		this.inputHintEl.addClass("semlink-hidden");
 		// Contenteditable input so dropped-note chips can mix INLINE with the
 		// typed text (a plain textarea can only hold text).
 		this.inputEl = inputRow.createDiv({
@@ -825,19 +816,8 @@ export class SemanticSearchView extends ItemView {
 		// 上、不经过 contentEl 冒泡，弹层内部的点击由各自行处理器关闭。
 		this.registerDomEvent(this.contentEl, "click", () => this.hideProjectPopup());
 
-		// Expand/collapse toggle left of the send button: grows the input to
-		// half the screen for long prompts, collapses back on click (and after
-		// every send). Custom icons (outward/inward corner arrows).
-		const expandBtn = modelEl.createEl("button", {
-			cls: "semlink-search-icon-btn semlink-search-expand-btn",
-			attr: { "aria-label": t("searchExpandInput") },
-		});
-		this.expandBtnEl = expandBtn;
-		setSvgIcon(expandBtn, expandIconSvg);
-		expandBtn.addEventListener("click", () => {
-			this.inputExpanded = !this.inputExpanded;
-			this.applyInputExpanded();
-		});
+		// 展开按钮已摘（2026-11-25 用户拍板「算了去掉这个按钮吧」）——
+		// 输入框恒单行，无展开/收起态；发送按钮接管 margin-left:auto 右推。
 
 		// Context-usage ring lives in the model row, immediately LEFT of the
 		// expand/collapse toggle. Hidden until the first message is sent (no
@@ -856,7 +836,8 @@ export class SemanticSearchView extends ItemView {
 			this.contextPctEl = null;
 			this.contextUsageEl = usageEl;
 			usageEl.addClass("semlink-hidden");
-			modelEl.insertBefore(usageEl, expandBtn);
+			// 位置：usage 创建于发送按钮之前（createDiv 默认 append），自然
+			// 落在按钮左侧——原 insertBefore(expandBtn) 随展开按钮摘除。
 
 			// Tooltip with the context breakdown, shown on hover. Created
 			// lazily on document.body so `position: fixed` is never thrown off
@@ -1112,18 +1093,6 @@ export class SemanticSearchView extends ItemView {
 		}
 	}
 
-	/** Sync the input height + toggle icon with this.inputExpanded. */
-	private applyInputExpanded(): void {
-		this.inputEl.toggleClass("is-expanded", this.inputExpanded);
-		// The keyboard hint appears only in the tall editor.
-		if (this.inputHintEl) this.inputHintEl.toggleClass("semlink-hidden", !this.inputExpanded);
-		const btn = this.expandBtnEl;
-		if (!btn) return;
-		setSvgIcon(btn, this.inputExpanded ? collapseIconSvg : expandIconSvg);
-		const label = t(this.inputExpanded ? "searchCollapseInput" : "searchExpandInput");
-		btn.setAttr("aria-label", label);
-	}
-
 	private async runSearch(queryOverride?: string): Promise<void> {
 		// queryOverride: edit-and-regenerate path — the edited question becomes
 		// the new conversation tail (caller has already truncated history/DOM).
@@ -1182,11 +1151,6 @@ export class SemanticSearchView extends ItemView {
 		if (this.contextUsageEl) this.contextUsageEl.removeClass("semlink-hidden");
 		if (!override) {
 			this.clearInputText();
-			// Sending restores the input to its compact height (expand icon back).
-			if (this.inputExpanded) {
-				this.inputExpanded = false;
-				this.applyInputExpanded();
-			}
 		}
 
 		// Snapshot the dropped notes for THIS turn — the attachments array is
@@ -2955,6 +2919,10 @@ export class SemanticSearchView extends ItemView {
 			void this.plugin.saveSettings();
 			if (!project) this.switchProject(saved);
 			this.renderProjectChip();
+			// 抽屉项目行同步重渲（2026-11-25 用户报「保存后左侧项目名没变」
+			// ——编辑/新建只刷了 chip 徽章，抽屉行停在旧名；删除路径本有
+			// render()，此处补齐同款刷新）。
+			this.refreshPersistentMenu();
 		}).open();
 	}
 
@@ -4074,12 +4042,9 @@ export class SemanticSearchView extends ItemView {
 			this.newChatPillEl.setAttr("aria-label", t("searchNewChat"));
 			this.newChatPillEl.querySelector(".semlink-search-newchat-label")?.setText(t("searchNewChat"));
 		}
-		// Input hint (visible while expanded) + drag overlay hint: same
-		// once-at-construction staleness as the pill — refresh here too.
-		this.inputHintEl?.setText(t("searchInputHint"));
+		// Drag overlay hint: same once-at-construction staleness as the pill
+		// — refresh here too.
 		this.dragOverlayEl?.querySelector(".semlink-drag-overlay-text")?.setText(t("dragOverlayHint"));
-		// State-dependent tooltips (expand/collapse, send/stop).
-		this.applyInputExpanded();
 		this.setSendButtonState(this.isGenerating ? "stop" : "idle");
 		// Re-render the welcome screen (greeting, suggestions, stats) only
 		// when the LANGUAGE actually changed — refreshLanguage also runs on
@@ -4601,8 +4566,8 @@ export class SemanticSearchView extends ItemView {
 				// Codex 式组头（2026-11-19 拍板）：chevron 挪到文字后、hover 才
 				// 显示；计数徽章移除（数字统计不再展示）。前导图标对齐菜单行
 				//（2026-11-22 拍板「项目/对话参照新对话/更多」）。
-				const pIcon = phead.createSpan({ cls: "semlink-history-head-icon" });
-				setIcon(pIcon, "folder-closed");
+				// 左侧图标已摘（2026-11-25 用户拍板「去掉项目和对话左侧的图标」
+				// ——对标 Codex 侧栏纯文字行；开合态由 chevron 表达）
 				phead.createSpan({ cls: "semlink-history-folder-name", text: t("projectGroup") });
 				const pchev = phead.createSpan({ cls: "semlink-history-folder-chev" });
 				setIcon(pchev, projectsCollapsed ? "chevron-right" : "chevron-down");
@@ -4634,11 +4599,12 @@ export class SemanticSearchView extends ItemView {
 								+ (pCollapsed ? " is-collapsed" : "")
 								+ (this.activeProject?.id === p.id ? " is-active" : ""),
 						});
-						const icon = row.createSpan({ cls: "semlink-history-folder-chev" });
-						// 文件夹图标 + 开合态区分（2026-11-19 拍板，替代 brain）：
-						// 折叠 = folder-closed（合上），展开 = folder-open（打开）。
+						// 项目行文件夹图标（2026-11-25 用户拍板回归：区分项目与
+						// 项目下的对话行——对话行无图标）+ 开合两态：折叠 =
+						// folder-closed（合上），展开 = folder-open（打开）。
 						// 注意不能用 "folder"——这版 Obsidian 的 lucide 库把 folder
 						// 注册成与 folder-open 同图（实测 CSSOM class 即证）。
+						const icon = row.createSpan({ cls: "semlink-history-folder-chev semlink-history-folder-icon" });
 						setIcon(icon, pCollapsed ? "folder-closed" : "folder-open");
 						row.createSpan({ cls: "semlink-history-folder-name", text: p.name });
 						const pacts = row.createSpan({ cls: "semlink-history-folder-acts" });
@@ -4729,9 +4695,7 @@ export class SemanticSearchView extends ItemView {
 						+ (view === "archive" ? " is-archived" : conversationsCollapsed ? " is-collapsed" : ""),
 				});
 				// Codex 式组头同款：chevron 文字后、hover 显示，计数移除；
-				// 前导图标对齐菜单行（2026-11-22 拍板）。
-				const cIcon = chead.createSpan({ cls: "semlink-history-head-icon" });
-				setIcon(cIcon, "message-square");
+				// 左侧图标已摘（2026-11-25 用户拍板，同项目组口径）。
 				chead.createSpan({ cls: "semlink-history-folder-name", text: t("historyGroupChats") });
 				const cchev = chead.createSpan({ cls: "semlink-history-folder-chev" });
 				setIcon(cchev, view === "archive" || !conversationsCollapsed ? "chevron-down" : "chevron-right");
@@ -4967,6 +4931,9 @@ export class SemanticSearchView extends ItemView {
 			// 会话落盘与许可激活后的刷新都走它。
 			this.persistentMenuRefresh = render;
 		} else {
+			// 浮层抽屉同样登记 render 句柄（2026-11-25）：开着时编辑项目/
+			// 删会话等操作经 refreshPersistentMenu 就地重渲。
+			this.drawerFloatRefresh = render;
 			// rAF 必须取视图所在 window：主窗被遮挡/最小化时主窗 rAF 暂停，
 			// 弹窗里的抽屉会永远停在屏外（点 ☰ 无响应）。
 			this.viewWin.requestAnimationFrame(() => {
@@ -4981,6 +4948,9 @@ export class SemanticSearchView extends ItemView {
 	private closeHistoryDrawer(backdrop: HTMLElement | null, drawer: HTMLElement): void {
 		// 常显菜单不随会话点击/锁定弹窗路径收起——它只由菜单按钮开关。
 		if (drawer.hasClass("is-persistent")) return;
+		// 浮层句柄随关即清（动画 300ms 后 DOM 才移除，但刷新已无意义；
+		// 不清的话下一次 refreshPersistentMenu 会刷到已脱离文档的闭包）。
+		this.drawerFloatRefresh = null;
 		drawer.removeClass("semlink-history-drawer-open");
 		backdrop?.removeClass("semlink-history-backdrop-open");
 		// 视图所在 window 的 timer（主窗后台节流会拖慢弹窗里的移除）
@@ -5108,6 +5078,7 @@ export class SemanticSearchView extends ItemView {
 	/** 会话落盘后刷新常显菜单列表（浮层抽屉每次打开重建，无需此步）。 */
 	private refreshPersistentMenu(): void {
 		if (this.hasPersistentMenu()) this.persistentMenuRefresh?.();
+		else this.drawerFloatRefresh?.();
 	}
 
 	/**
