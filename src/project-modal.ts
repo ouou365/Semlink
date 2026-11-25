@@ -1,12 +1,14 @@
 // ========================================
 // Semlink - Project create/edit modal
 // ========================================
-// Project（检索范围限定）的创建/编辑弹窗：名称 + 知识库文件夹多选 +
-// 内联新建文件夹。仿 ExcludePathsModal 的设置弹窗骨架（复用设置样式）；
-// 文件夹树为全新 UI（vault.getRoot() 递归 TFolder，缩进 + 复选）。
+// Project（检索范围限定）的创建/编辑弹窗。2026-11-22 参考 ZCode 新建项目
+// 弹窗重构：标签在上、输入框通栏；知识范围为虚线选择区；内联新建文件夹
+// 行移除；主按钮深色。2026-11-23 三改（用户拍板，参考钉钉选人面板）：
+// 文件夹选择改为**逐级下钻面板**——点文件夹名进入下一级（右侧「下级」
+// 入口），「< 返回」+ 面包屑回上级；复选框就地勾选当前级；一级含「全选」。
 // 保存回调交还宿主（search-view）：落 settings.projects + 推送视图。
 
-import { App, Modal, Setting, TFolder } from "obsidian";
+import { App, Modal, setIcon, TFolder } from "obsidian";
 import type { ProjectDef } from "./types";
 import { t } from "./i18n";
 
@@ -15,7 +17,12 @@ export class ProjectModal extends Modal {
 	private onSave: (p: ProjectDef) => void;
 	private name = "";
 	private readonly folders = new Set<string>();
-	private readonly folderInput: string[] = [];
+	/** 面板全量文件夹清单（含尾 /，排序）。 */
+	private all: string[] = [];
+	/** 当前浏览的层级（"" = 根，含尾 /）。 */
+	private at = "";
+	private listEl: HTMLElement | null = null;
+	private crumbEl: HTMLElement | null = null;
 
 	constructor(app: App, project: ProjectDef | undefined, onSave: (p: ProjectDef) => void) {
 		super(app);
@@ -29,90 +36,44 @@ export class ProjectModal extends Modal {
 		this.modalEl.addClass("smart-vault-settings");
 		this.modalEl.addClass("semlink-project-modal");
 		const { contentEl } = this;
+
 		contentEl.createEl("h3", { text: this.project ? t("projectEditTitle") : t("projectModalTitle") });
 
-		// ── 名称 ──
-		new Setting(contentEl)
-			.setName(t("projectNameLabel"))
-			.addText((text) => {
-				text.setPlaceholder(t("projectNamePlaceholder")).setValue(this.name);
-				text.inputEl.style.width = "100%";
-				text.onChange((v) => (this.name = v.trim()));
-			});
+		// ── 名称：标签在上、输入框通栏 ──
+		const nameField = contentEl.createDiv({ cls: "semlink-project-field" });
+		nameField.createDiv({ cls: "semlink-project-field-label", text: t("projectNameLabel") });
+		const nameInput = nameField.createEl("input", {
+			cls: "semlink-project-name-input",
+			attr: { type: "text", placeholder: t("projectNamePlaceholder") },
+		});
+		nameInput.value = this.name;
+		nameInput.addEventListener("input", () => (this.name = nameInput.value.trim()));
 
-		// ── 知识范围（文件夹多选） ──
+		// ── 知识范围（逐级下钻选择面板） ──
 		const folderWrap = contentEl.createDiv({ cls: "semlink-project-folders" });
 		folderWrap.createDiv({ cls: "semlink-project-folders-label", text: t("projectSourceFolders") });
-		const listBox = folderWrap.createDiv({ cls: "semlink-project-folder-list" });
-		const hint = folderWrap.createDiv({
-			cls: "semlink-project-folders-hint",
-			text: this.folders.size > 0 ? "" : t("projectChooseFolderHint"),
-		});
-		const refreshHint = (): void => {
-			hint.setText(this.folders.size > 0 ? "" : t("projectChooseFolderHint"));
-		};
 
 		// vault 文件夹清单：递归 TFolder，剪 .obsidian 等点目录，按路径排序
-		const folders: string[] = [];
 		const walk = (f: TFolder, prefix: string): void => {
 			for (const child of f.children) {
 				if (!(child instanceof TFolder)) continue;
 				const path = prefix + child.name;
 				if (!path.startsWith(".")) {
-					folders.push(path + "/");
+					this.all.push(path + "/");
 					walk(child, path + "/");
 				}
 			}
 		};
 		walk(this.app.vault.getRoot(), "");
-		folders.sort((a, b) => a.localeCompare(b));
+		this.all.sort((a, b) => a.localeCompare(b));
 
-		for (const path of folders) {
-			const depth = path.slice(0, -1).split("/").length - 1;
-			const row = listBox.createDiv({ cls: "semlink-project-folder-row" });
-			row.style.paddingLeft = `${8 + depth * 16}px`;
-			const cb = row.createEl("input", { type: "checkbox" });
-			cb.checked = this.folders.has(path);
-			cb.addEventListener("change", () => {
-				if (cb.checked) this.folders.add(path);
-				else this.folders.delete(path);
-				refreshHint();
-			});
-			row.createSpan({ cls: "semlink-project-folder-name", text: path.slice(0, -1).split("/").pop() || path });
-			row.addEventListener("click", (e) => {
-				if (e.target === cb) return;
-				cb.checked = !cb.checked;
-				cb.dispatchEvent(new Event("change"));
-			});
-		}
+		// 面包屑（根时占位保持行高）+ 行列表
+		const panel = folderWrap.createDiv({ cls: "semlink-project-folder-panel" });
+		this.crumbEl = panel.createDiv({ cls: "semlink-project-crumb" });
+		this.listEl = panel.createDiv({ cls: "semlink-project-folder-list" });
+		this.renderLevel();
 
-		// ── 内联新建文件夹 ──
-		const newFolderRow = folderWrap.createDiv({ cls: "semlink-project-newfolder-row" });
-		const nfInput = newFolderRow.createEl("input", {
-			cls: "semlink-project-newfolder-input",
-			attr: { type: "text", placeholder: t("projectNewFolder") },
-		});
-		const nfBtn = newFolderRow.createEl("button", { cls: "semlink-btn-ghost", text: t("projectCreateFolder") });
-		nfBtn.addEventListener("click", async () => {
-			const raw = nfInput.value.trim().replace(/^\/+|\/+$/g, "");
-			if (!raw) return;
-			// 逐级创建（父目录必须先存在；已存在抛错→忽略，仿 save-note-modal）
-			try {
-				let cur = "";
-				for (const seg of raw.split("/")) {
-					cur = cur ? `${cur}/${seg}` : seg;
-					await this.app.vault.createFolder(cur).catch(() => {});
-				}
-			} catch {
-				/* 已存在等错误忽略 */
-			}
-			nfInput.value = "";
-			// 重建清单（新文件夹入列并勾选）
-			this.folders.add(raw + "/");
-			listBox.empty();
-			this.rerenderFolderList(listBox, refreshHint);
-			refreshHint();
-		});
+		// 语义说明行已移除（2026-11-23 用户拍板「去掉这个」）
 
 		// ── 底部：取消 / 创建 ──
 		const footer = contentEl.createDiv({ cls: "semlink-editor-footer is-simple" });
@@ -132,37 +93,98 @@ export class ProjectModal extends Modal {
 		});
 	}
 
-	/** 文件夹清单重渲（新建文件夹后调用）：复用 onOpen 的渲染逻辑。 */
-	private rerenderFolderList(listBox: HTMLElement, refreshHint: () => void): void {
-		// 简化实现：整面板重开代价高，这里仅重画复选列表。
-		// （与 onOpen 内联渲染保持同一结构——提取公共方法反而增加状态同步面。）
-		const folders: string[] = [];
-		const walk = (f: TFolder, prefix: string): void => {
-			for (const child of f.children) {
-				if (!(child instanceof TFolder)) continue;
-				const path = prefix + child.name;
-				if (!path.startsWith(".")) {
-					folders.push(path + "/");
-					walk(child, path + "/");
+	/** 某层的直接子文件夹。 */
+	private childrenOf(prefix: string): string[] {
+		return this.all.filter((f) => f.startsWith(prefix) && f.slice(prefix.length) !== "" &&
+			!f.slice(prefix.length).slice(0, -1).includes("/"));
+	}
+
+	/** 渲染当前层级（at）：面包屑 + 行（复选 + 名称 + 下级入口）。 */
+	private renderLevel(): void {
+		const list = this.listEl;
+		const crumb = this.crumbEl;
+		if (!list || !crumb) return;
+		list.empty();
+		crumb.empty();
+
+		// 面包屑（2026-11-23 用户拍板「只高亮这个区域而不是整行」）：
+		// < 返回 + 路径段包进 crumb-main chip，悬停灰底只盖这个小块。
+		if (this.at !== "") {
+			const main = crumb.createSpan({ cls: "semlink-project-crumb-main" });
+			const back = main.createSpan({ cls: "semlink-project-crumb-back" });
+			setIcon(back, "chevron-left");
+			back.addEventListener("click", () => {
+				const parent = this.at.slice(0, -1).split("/").slice(0, -1).join("/");
+				this.at = parent ? parent + "/" : "";
+				this.renderLevel();
+			});
+			// 路径段（前缀可点返回任意层级）+ 当前级灰显
+			const segs = this.at.slice(0, -1).split("/").filter(Boolean);
+			segs.forEach((seg, i) => {
+				if (i > 0) main.createSpan({ cls: "semlink-project-crumb-sep", text: " / " });
+				const prefix = segs.slice(0, i + 1).join("/") + "/";
+				const isLast = i === segs.length - 1;
+				const segEl = main.createSpan({ cls: "semlink-project-crumb-seg" + (isLast ? " is-current" : ""), text: seg });
+				if (!isLast) {
+					segEl.addEventListener("click", () => { this.at = prefix; this.renderLevel(); });
 				}
-			}
-		};
-		walk(this.app.vault.getRoot(), "");
-		folders.sort((a, b) => a.localeCompare(b));
-		for (const path of folders) {
-			const depth = path.slice(0, -1).split("/").length - 1;
-			const row = listBox.createDiv({ cls: "semlink-project-folder-row" });
-			row.style.paddingLeft = `${8 + depth * 16}px`;
-			const cb = row.createEl("input", { type: "checkbox" });
+			});
+		}
+		// 「全选」chip 居左（2026-11-23 用户拍板）：悬停灰底只盖 chip。
+		if (this.at === "") {
+			const top = this.childrenOf("");
+			const allChecked = top.every((f) => this.folders.has(f));
+			const sel = crumb.createSpan({ cls: "semlink-project-selectall" });
+			const cb = sel.createEl("input", { type: "checkbox" });
+			cb.checked = allChecked;
+			sel.createSpan({ cls: "semlink-project-selectall-label", text: t("projectSelectAll") });
+			cb.addEventListener("change", () => {
+				for (const f of top) {
+					if (cb.checked) this.folders.add(f);
+					else this.folders.delete(f);
+				}
+				this.renderLevel();
+			});
+			sel.addEventListener("click", (e) => {
+				if (e.target === cb) return;
+				cb.checked = !cb.checked;
+				cb.dispatchEvent(new Event("change"));
+			});
+		}
+
+		for (const path of this.childrenOf(this.at)) {
+			const row = list.createDiv({ cls: "semlink-project-folder-row" });
+			row.dataset.path = path;
+			// chip（2026-11-23 用户拍板「只高亮这个区域而不是整行」）：
+			// 复选框 + 名称包进 main chip，悬停灰底只盖这个小块。
+			const main = row.createSpan({ cls: "semlink-project-folder-main" });
+			const cb = main.createEl("input", { type: "checkbox" });
 			cb.checked = this.folders.has(path);
 			cb.addEventListener("change", () => {
 				if (cb.checked) this.folders.add(path);
 				else this.folders.delete(path);
-				refreshHint();
 			});
-			row.createSpan({ cls: "semlink-project-folder-name", text: path.slice(0, -1).split("/").pop() || path });
+			main.createSpan({
+				cls: "semlink-project-folder-name",
+				text: path.slice(0, -1).split("/").pop() || path,
+			});
+			const kids = this.childrenOf(path);
+			let down: HTMLElement | null = null;
+			if (kids.length > 0) {
+				// 「下级」入口（钉钉式）：network 图标 + 文字，悬停整块灰底；
+				// 点进下一级；行其余部分点击=勾选。
+				down = row.createSpan({ cls: "semlink-project-folder-down" });
+				setIcon(down, "network");
+				down.createSpan({ text: t("projectDrillDown") });
+				down.addEventListener("click", (e) => {
+					e.stopPropagation();
+					this.at = path;
+					this.renderLevel();
+				});
+			}
 			row.addEventListener("click", (e) => {
-				if (e.target === cb) return;
+				const t = e.target as HTMLElement;
+				if (t === cb || down?.contains(t)) return;
 				cb.checked = !cb.checked;
 				cb.dispatchEvent(new Event("change"));
 			});

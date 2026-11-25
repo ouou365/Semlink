@@ -205,6 +205,18 @@ const HISTORY_GROUP_KEYS: Record<string, string> = {
 	earlier: "historyGroupEarlier",
 };
 
+/** ZCode 式相对天数（条目行右缘）：今天 → 刚刚；≤30 天 → N 天；
+ *  再往上按 30 天取整折算 N 个月。 */
+function historyDaysAgo(ts: number, now: number): string {
+	const DAY = 86400000;
+	const a = new Date(ts); a.setHours(0, 0, 0, 0);
+	const b = new Date(now); b.setHours(0, 0, 0, 0);
+	const days = Math.round((b.getTime() - a.getTime()) / DAY);
+	if (days <= 0) return t("historyJustNow");
+	if (days <= 30) return t("historyDaysAgoFmt").replace("{n}", String(days));
+	return t("historyMonthsAgoFmt").replace("{n}", String(Math.max(1, Math.floor(days / 30))));
+}
+
 export class SemanticSearchView extends ItemView {
 	private store: VectorStore;
 	private client: EmbeddingClient;
@@ -233,6 +245,10 @@ export class SemanticSearchView extends ItemView {
 	private widthRO: ResizeObserver | null = null;
 	private buildingPersistentMenu = false;
 	private persistentMenuRefresh: (() => void) | null = null;
+	/** 抽屉构建时的语言（2026-11-23）：行标签（更多/项目/对话/用量与统计
+	 *  等）在 showHistoryDrawer 构建时经 t() 定格——语言切换后必须整栏
+	 *  重建，refreshLanguage 依此判定。 */
+	private drawerLang: string | null = null;
 	/** 弹窗宽度联动：当前监听 resize 的弹窗 window（换窗/回侧栏时换绑）。 */
 	private popoutResizeWin: Window | null = null;
 	private readonly onPopoutResize = (): void => this.refreshMainTabUI();
@@ -350,6 +366,10 @@ export class SemanticSearchView extends ItemView {
 	/** 抽屉「用量与统计」详情屏开关（2026-11-19 拍板）：与设置屏同占
 	 *  欢迎区、互斥；点击抽屉菜单行进入，返回条退出恢复对话/主页。 */
 	private usageScreenOpen = false;
+	/** 主页任务清单状态（ZCode 式，2026-11-22）：× 收起（视图生命周期
+	 *  内不再出现）+ 换一批的排除集（当前展示的三个键）。 */
+	private sugDismissed = false;
+	private lastSugKeys = new Set<string>();
 	/** Set when the user skips the guide. With no API key configured the
 	 *  guide is the default landing page on every fresh view open; skipping
 	 *  only dismisses it for the current view session, not forever. */
@@ -372,6 +392,12 @@ export class SemanticSearchView extends ItemView {
 	} | null = null;
 	/** Floating scroll-to-bottom button (footer wrapper top edge). */
 	private scrollBottomBtn: HTMLElement | null = null;
+	/** 回答操作双模式（2026-11-22 用户拍板）：内联行跟随各自气泡（完全
+	 *  展示时），长回答未完全展示 → dock 在消息区与输入卡之间兜底，镜像
+	 *  当前正在读的那个回答的操作。由 syncActionDock 随滚动切换。 */
+	private actionDockEl: HTMLElement | null = null;
+	private actionDockActionsEl: HTMLElement | null = null;
+	private dockMirrorTurn: Element | null = null;
 
 	// Dropped note attachments (vault-relative paths) rendered as inline chips
 	// mixed with the input text.
@@ -559,6 +585,14 @@ export class SemanticSearchView extends ItemView {
 				this.renderWelcome();
 			}, 60_000),
 		);
+
+		// ── 回答操作 dock（2026-11-22 双模式方案） ──
+		// 长回答未完全展示（其内联操作行滚出视口）时在消息区与输入卡之间
+		// 兜底出现，镜像当前正在读的回答的操作；内联行回到视口即隐藏
+		// （跟随模式接管）。内容由 syncActionDock 随滚动切换重建。
+		const actionDock = contentEl.createDiv({ cls: "semlink-search-action-dock semlink-hidden" });
+		this.actionDockEl = actionDock;
+		this.actionDockActionsEl = actionDock.createDiv({ cls: "semlink-search-action-dock-actions" });
 
 		// ── Input footer (bottom, fixed) ──
 		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
@@ -1849,8 +1883,9 @@ export class SemanticSearchView extends ItemView {
 						runSessionId ?? undefined,
 					);
 
-						// Action buttons (icons) below the sources: copy / save /
-						// translate (translate persists onto the recorded message).
+						// Action buttons (icons) below this answer's own bubble:
+						// copy / save / translate (translate persists onto the
+						// recorded message).
 						this.appendActions(loadingEl, answer, query, recordedMsg ?? undefined);
 						if (wasNearBottom) this.scrollToBottom();
 				} catch (e) {
@@ -2299,8 +2334,10 @@ export class SemanticSearchView extends ItemView {
 	}
 
 	/**
-	 * Append copy / save action buttons to an assistant bubble.
-	 * Used for both live answers and restored history messages.
+	 * Append copy / save / cite / share / translate action buttons BELOW an
+	 * assistant answer's own bubble（内联跟随模式：每个回答的操作行在该轮
+	 * 末尾，随气泡归属）。Used for both live answers and restored history
+	 * messages.
 	 */
 	private appendActions(container: HTMLElement, content: string, questionForSave: string, msg?: HistoryMessage): void {
 		// 无正文的回答（用户拍板 2026-11-19）：不显示复制/保存/引用/分享/
@@ -2310,13 +2347,30 @@ export class SemanticSearchView extends ItemView {
 		// turn container.
 		const turn = container.closest(".semlink-msg-turn") || container;
 		const actionsEl = turn.createDiv({ cls: "semlink-msg-actions" });
-		const copyBtn = actionsEl.createEl("button", {
+		this.buildActionButtons(actionsEl, content, questionForSave, msg, turn);
+		// 新内联行入视口即接管 → dock 同步（隐藏或换镜像目标）。
+		this.syncActionDock();
+	}
+
+	/**
+	 * Build copy / save / cite / share / translate buttons into any host.
+	 * `turn` 是这组按钮所属的回答轮——翻译菜单的译文块/恢复原文都插在
+	 * 那个轮的答案之下（内联行传自己的轮，dock 传镜像的目标轮）。
+	 */
+	private buildActionButtons(
+		host: HTMLElement,
+		content: string,
+		questionForSave: string,
+		msg: HistoryMessage | undefined,
+		turn: Element,
+	): void {
+		const copyBtn = host.createEl("button", {
 			cls: "semlink-msg-action",
 			attr: { "aria-label": t("searchCopy") },
 		});
 		setIcon(copyBtn, "copy");
 		copyBtn.addEventListener("click", () => void this.copyAnswer(content));
-		const saveBtn = actionsEl.createEl("button", {
+		const saveBtn = host.createEl("button", {
 			cls: "semlink-msg-action",
 			attr: { "aria-label": t("searchSave") },
 		});
@@ -2324,7 +2378,7 @@ export class SemanticSearchView extends ItemView {
 		saveBtn.addEventListener("click", () => {
 			new SaveNoteModal(this.app, questionForSave, content).open();
 		});
-		const citeBtn = actionsEl.createEl("button", {
+		const citeBtn = host.createEl("button", {
 			cls: "semlink-msg-action",
 			attr: { "aria-label": t("citeToggle"), "aria-pressed": String(this.showCitations) },
 		});
@@ -2334,13 +2388,13 @@ export class SemanticSearchView extends ItemView {
 		citeBtn.addEventListener("click", () => {
 			this.setCitationsVisible(!this.showCitations, citeBtn);
 		});
-		const shareBtn = actionsEl.createEl("button", {
+		const shareBtn = host.createEl("button", {
 			cls: "semlink-msg-action",
 			attr: { "aria-label": t("shareLabel") },
 		});
 		setIcon(shareBtn, "share");
 		shareBtn.addEventListener("click", () => void this.shareSession());
-		const translateBtn = actionsEl.createEl("button", {
+		const translateBtn = host.createEl("button", {
 			cls: "semlink-msg-action",
 			attr: { "aria-label": t("translateAction") },
 		});
@@ -2348,6 +2402,58 @@ export class SemanticSearchView extends ItemView {
 		translateBtn.addEventListener("click", () => {
 			this.openTranslateMenu(translateBtn, turn, content, msg);
 		});
+	}
+
+	/**
+	 * 双模式切换（2026-11-22 用户拍板）：判定「正在读的回答」= **最近一个
+	 * 已开始进入视口的回答轮**（top < 视口下缘的最后一个）——跨轮阅读时
+	 * （上一轮操作行留在视口顶部、中线落在提问区）也能锁定新答案，midY
+	 * 最近启发式会错选上一轮（2026-11-22 用户复测报的 bug）。该轮的内联
+	 * 操作行**完整**可见 → dock 隐藏（跟随模式已覆盖）；行不可见或被消息
+	 * 区下缘裁剪 → dock 显示并镜像该轮的操作。
+	 */
+	private syncActionDock(): void {
+		const dock = this.actionDockEl;
+		const host = this.actionDockActionsEl;
+		if (!dock || !host) return;
+		const viewport = this.messagesEl.getBoundingClientRect();
+		const aTurns = Array.from(this.messagesEl.querySelectorAll(".semlink-msg-turn")).filter((t) =>
+			t.querySelector(".semlink-msg-answer"),
+		) as HTMLElement[];
+		const hide = (): void => {
+			dock.addClass("semlink-hidden");
+			this.dockMirrorTurn = null;
+		};
+		if (aTurns.length === 0) { hide(); return; }
+		// 正在读的回答轮：最近一个 top 已越过视口下缘的回答。
+		let current: HTMLElement | null = null;
+		for (const t of aTurns) {
+			if (t.getBoundingClientRect().top < viewport.bottom) current = t;
+			else break;
+		}
+		const row = current?.querySelector(":scope > .semlink-msg-actions") as HTMLElement | null;
+		const rowFullyVisible = row ? (() => {
+			const rr = row.getBoundingClientRect();
+			// 完整可见才算跟随接管：半截骑在消息区下缘的被裁行不算
+			// （容差 1px 吸收取整误差），否则出现幽灵半钮且无 dock。
+			return rr.top >= viewport.top - 1 && rr.bottom <= viewport.bottom + 1;
+		})() : false;
+		if (!current || rowFullyVisible || !this.currentSessionId) { hide(); return; }
+		dock.removeClass("semlink-hidden");
+		if (this.dockMirrorTurn === current) return;
+		this.dockMirrorTurn = current;
+		host.empty();
+		// 内联行 ↔ 回答消息 1:1 同序（渲染循环即消息序）：镜像行取同序
+		// 的回答数据；流式中的轮尚无落盘消息 → 数据缺失时整栏隐藏。
+		const turnIdx = aTurns.indexOf(current);
+		const aMsgs = this.currentMessages.filter((m) => m.role === "assistant" && m.content.trim());
+		const msg = turnIdx >= 0 ? aMsgs[turnIdx] : undefined;
+		const mIdx = msg ? this.currentMessages.indexOf(msg) : -1;
+		const prev = mIdx > 0 ? this.currentMessages[mIdx - 1] : null;
+		const question = prev && prev.role === "user" ? prev.content : this.firstQuestion;
+		const content = msg?.content ?? "";
+		if (!content.trim()) { hide(); return; }
+		this.buildActionButtons(host, content, question, msg, current);
 	}
 
 	/** Translate action: language picker (same Menu pattern as the UI language
@@ -3472,6 +3578,15 @@ export class SemanticSearchView extends ItemView {
 		// AddModel）不经 openGuideModal 登记，不受影响。
 		closeAllGuideModals();
 		this.pushTrace(`renderWelcome mode=${this.settingsMode ? "settings" : this.usageScreenOpen ? "usage" : this.guideModeActive() ? "guide" : "home"}`);
+		// 离开主页先摘 ZCode 式主页网格开关（2026-11-22）：设置/用量/引导
+		// 分支提前 return、不经过 updateCompactHeader——残留类会把
+		// .semlink-search-messages 变 display:contents，屏幕内容被网格
+		// 0.9fr 夹行裁掉（用户报的设置屏截断严重 bug）。主页分支由尾部
+		// updateCompactHeader 依 -home 标记重新挂上。
+		this.contentEl.removeClass("semlink-welcome-center");
+		// 操作 dock 同步：屏幕切换后消息区重建，内联行清空 → dock 隐藏
+		// （回到会话时随渲染 + updateCompactHeader 恢复）。
+		this.syncActionDock();
 		// Track the greeting slot + language in every mode so the 60s timer
 		// only reacts to real time-slot changes and refreshLanguage only
 		// rebuilds the welcome when the language actually changed.
@@ -3548,8 +3663,7 @@ export class SemanticSearchView extends ItemView {
 				this.renderWelcome();
 			});
 			const brandGroup = corners.createDiv({ cls: "semlink-search-brand-group" });
-			const brand = brandGroup.createDiv({ cls: "semlink-search-logo" });
-			setIcon(brand, "semlink-logo");
+			// logo 去掉（2026-11-22 用户拍板）：引导条中央只留 "Semlink" 文字。
 			brandGroup.createSpan({ cls: "semlink-search-brand", text: "Semlink" });
 			const rightSide = corners.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
 			const langBtn = rightSide.createEl("button", {
@@ -3629,7 +3743,12 @@ export class SemanticSearchView extends ItemView {
 		// i18n string: "emoji line1\nline2" — the leading emoji becomes a
 		// floating badge, the rest the primary greeting, then the care note.
 		const lines = t(key).split("\n");
-		const welcome = this.messagesEl.createDiv({ cls: "semlink-search-welcome" });
+		// ZCode 式主页（2026-11-22 拍板）：问候语 → 输入框 → 任务清单 垂直
+		// 成组居中，输入框落位页面中部吸引提问。-home 标记类 + contentEl
+		// 网格（.semlink-welcome-center）把真实 footer 排进问候语与清单
+		// 之间，DOM 原地不动（display:contents 链，见 styles.css）。
+		const welcome = this.messagesEl.createDiv({ cls: "semlink-search-welcome semlink-search-welcome-home" });
+		const hero = welcome.createDiv({ cls: "semlink-search-welcome-hero" });
 
 		const firstLine = lines[0] || "";
 		const emojiMatch = firstLine.match(/^(\p{Extended_Pictographic})\s*(.*)$/u);
@@ -3638,24 +3757,22 @@ export class SemanticSearchView extends ItemView {
 		if (emoji) {
 			// Fluent flat SVG 优先（用户拍板：苹果原生 emoji 立体阴影太重
 			// ——flat 风格轻盈）；未收录的 emoji 回退系统字形
-			const badge = welcome.createDiv({ cls: "semlink-search-welcome-emoji" });
+			const badge = hero.createDiv({ cls: "semlink-search-welcome-emoji" });
 			const flat = fluentEmojiSvg(emoji);
 			if (flat) setSvgIcon(badge, flat);
 			else badge.setText(emoji);
 		}
-		welcome.createDiv({ cls: "semlink-search-welcome-greeting", text: greetingText });
+		hero.createDiv({ cls: "semlink-search-welcome-greeting", text: greetingText });
 		if (lines[1]) {
-			welcome.createDiv({ cls: "semlink-search-welcome-sub", text: lines[1] });
+			hero.createDiv({ cls: "semlink-search-welcome-sub", text: lines[1] });
 		}
 
-		// Clickable prompt cards: FIXED questions (no LLM). Follow the active
-		// document when one is open, otherwise pick three random examples from
-		// the static pool.
-		const sugRow = welcome.createDiv({ cls: "semlink-search-welcome-sugs" });
-		this.renderFallbackCards(sugRow);
-
-		// Index stats cards (best-effort; never fails the welcome screen).
-		void this.renderWelcomeStats(welcome);
+		// ZCode 式「试试这些任务」清单：纯行 + 换一批/×；× 收起本块
+		// （内存态，视图重载恢复）。索引统计行已删（用户拍板）。
+		if (!this.sugDismissed) {
+			const sugRow = welcome.createDiv({ cls: "semlink-search-welcome-sugs" });
+			this.renderFallbackCards(sugRow);
+		}
 
 		this.updateHomeIconVisibility();
 		// Welcome screen: subtitle/scroll-button states re-evaluated.
@@ -3808,7 +3925,10 @@ export class SemanticSearchView extends ItemView {
 	 *  PiP/语言钮），内容复用 usage-screen.ts 的仪表盘渲染——数据、
 	 *  Pro 门控与弹窗完全同一实现。 */
 	private renderUsageScreen(): void {
-		const corners = this.messagesEl.createDiv({ cls: "semlink-search-header semlink-guide-corners semlink-settings-corners" });
+		// semlink-usage-corners：标题绝对居中（2026-11-22 用户拍板）——
+		// 本屏右侧没有平衡元素（设置屏靠右上按钮组），flex 布局会把标题
+		// 挤到右缘；绝对定位脱流后恒居中，见 styles.css。
+		const corners = this.messagesEl.createDiv({ cls: "semlink-search-header semlink-guide-corners semlink-settings-corners semlink-usage-corners" });
 		const leftSide = corners.createDiv({ cls: "semlink-search-header-side" });
 		const backBtn = leftSide.createEl("button", {
 			cls: "semlink-search-icon-btn clickable-icon",
@@ -3855,41 +3975,58 @@ export class SemanticSearchView extends ItemView {
 	/** Fixed question cards: follow the active document when one is open,
 	 *  otherwise three random examples from the static pool. */
 	private renderFallbackCards(sugRow: HTMLElement): void {
-		// Shuffle the pool and take three — every visit feels fresh.
-		const cards = HOME_SUGGESTION_POOL
-			.map((p) => ({ text: t(p.key), icon: p.icon }))
-			.sort(() => Math.random() - 0.5)
-			.slice(0, 3);
-		for (const card of cards) {
-			const el = sugRow.createDiv({ cls: "semlink-search-welcome-sug" });
-			el.createSpan({ cls: "semlink-search-welcome-sug-icon", text: card.icon });
-			el.createSpan({ cls: "semlink-search-welcome-sug-text", text: card.text });
-			el.addEventListener("click", () => {
-				// A run is already in flight — don't start a second one.
-				if (this.isGenerating) return;
-				this.setInputWithWikilinks(card.text);
-				void this.runSearch();
-			});
-		}
-	}
+		// ZCode 式任务清单（2026-11-22 拍板）：头部「试试这些任务」+
+		// 换一批 + ×；条目去卡片化成纯行。换一批从池里排除当前三个
+		// （6 选 3，剩余恰好 3 个 → 必出全新组合）；× 收起本块（内存态，
+		// 视图重载恢复）。
+		const fillRows = (body: HTMLElement): void => {
+			const pool = HOME_SUGGESTION_POOL.map((p) => ({ key: p.key, text: t(p.key), icon: p.icon }));
+			const fresh = pool.filter((p) => !this.lastSugKeys.has(p.key));
+			const cards = (fresh.length >= 3 ? fresh : pool)
+				.map((p) => ({ p, r: Math.random() }))
+				.sort((a, b) => a.r - b.r)
+				.slice(0, 3)
+				.map((x) => x.p);
+			this.lastSugKeys = new Set(cards.map((c) => c.key));
+			for (const card of cards) {
+				const el = body.createDiv({ cls: "semlink-search-welcome-sug" });
+				el.createSpan({ cls: "semlink-search-welcome-sug-icon", text: card.icon });
+				el.createSpan({ cls: "semlink-search-welcome-sug-text", text: card.text });
+				el.addEventListener("click", () => {
+					// A run is already in flight — don't start a second one.
+					if (this.isGenerating) return;
+					this.setInputWithWikilinks(card.text);
+					void this.runSearch();
+				});
+			}
+		};
 
-	private async renderWelcomeStats(welcome: HTMLElement): Promise<void> {
-		let indexedNotes = 0;
-		let activeChunks = 0;
-		try {
-			const s = await this.store.getStats();
-			indexedNotes = s.indexedNotes;
-			activeChunks = s.activeChunks;
-		} catch {
-			// Index stats are cosmetic — ignore any failure.
-		}
-
-		// Small line: "已索引 N 篇笔记 · X 个片段".
-		welcome.createDiv({
-			cls: "semlink-search-welcome-stats",
-			text: t("searchWelcomeStats")
-				.replace("{notes}", indexedNotes.toLocaleString())
-				.replace("{chunks}", activeChunks.toLocaleString()),
+		const head = sugRow.createDiv({ cls: "semlink-search-welcome-sugs-head" });
+		head.createSpan({ cls: "semlink-search-welcome-sugs-title", text: t("sugTryTitle") });
+		const acts = head.createDiv({ cls: "semlink-search-welcome-sugs-acts" });
+		// 换一批用图标钮（2026-11-22 用户反馈「文字按钮突兀」）：与右侧
+		// × 同款轻量灰阶，悬停提亮；语义保留在 aria-label。
+		const shuffleBtn = acts.createEl("button", {
+			cls: "semlink-search-welcome-sugs-btn clickable-icon",
+			attr: { "aria-label": t("sugShuffle") },
+		});
+		setIcon(shuffleBtn, "refresh-cw");
+		const closeBtn = acts.createEl("button", {
+			cls: "semlink-search-welcome-sugs-btn clickable-icon",
+			attr: { "aria-label": t("sugDismiss") },
+		});
+		setIcon(closeBtn, "x");
+		closeBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.sugDismissed = true;
+			sugRow.remove();
+		});
+		const body = sugRow.createDiv({ cls: "semlink-search-welcome-sugs-body" });
+		fillRows(body);
+		shuffleBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			body.empty();
+			fillRows(body);
 		});
 	}
 
@@ -3950,6 +4087,23 @@ export class SemanticSearchView extends ItemView {
 			this.pushTrace(`refreshLanguage re-render ${this.welcomeLang}->${getLang()}`);
 			this.messagesEl.empty();
 			this.renderWelcome();
+		}
+		// 抽屉多语言（2026-11-23 用户报「切英文后更多/项目/对话仍是中文」）：
+		// 行标签构建时定格，语言变了整栏拆除重建（常显与浮层两种形态）。
+		if (this.drawerLang && getLang() !== this.drawerLang) {
+			const persistent = this.hasPersistentMenu();
+			if (persistent) {
+				this.contentEl.querySelector(":scope > .semlink-history-drawer.is-persistent")?.remove();
+				this.persistentMenuRefresh = null;
+				void this.showHistoryDrawer(true);
+			} else {
+				const floating = this.contentEl.querySelector(":scope > .semlink-history-drawer:not(.is-persistent)");
+				if (floating) {
+					this.contentEl.querySelector(":scope > .semlink-history-backdrop")?.remove();
+					floating.remove();
+					void this.showHistoryDrawer(false);
+				}
+			}
 		}
 	}
 
@@ -4181,7 +4335,8 @@ export class SemanticSearchView extends ItemView {
 						this.makeCitationsClickable(answerEl, msg.sourceNumbers ?? [], usedSources as SearchResult[], msg.content, thinking);
 						this.makeVaultPathsClickable(answerEl);
 					}
-					// Copy / save / translate actions for history answers too.
+					// Copy / save / translate actions for history answers too
+					// （内联在各自气泡下方，随气泡归属）。
 					this.appendActions(bubble, msg.content, lastUserQuery, msg);
 					// 翻译持久化：该消息上次查看的是译文 → 重载仍显示译文
 					// （用户拍板：翻译完成后再进历史，默认显示翻译后的文字）。
@@ -4439,7 +4594,10 @@ export class SemanticSearchView extends ItemView {
 					cls: "semlink-history-group semlink-history-folders-head" + (projectsCollapsed ? " is-collapsed" : ""),
 				});
 				// Codex 式组头（2026-11-19 拍板）：chevron 挪到文字后、hover 才
-				// 显示；计数徽章移除（数字统计不再展示）。
+				// 显示；计数徽章移除（数字统计不再展示）。前导图标对齐菜单行
+				//（2026-11-22 拍板「项目/对话参照新对话/更多」）。
+				const pIcon = phead.createSpan({ cls: "semlink-history-head-icon" });
+				setIcon(pIcon, "folder-closed");
 				phead.createSpan({ cls: "semlink-history-folder-name", text: t("projectGroup") });
 				const pchev = phead.createSpan({ cls: "semlink-history-folder-chev" });
 				setIcon(pchev, projectsCollapsed ? "chevron-right" : "chevron-down");
@@ -4544,8 +4702,9 @@ export class SemanticSearchView extends ItemView {
 							render();
 						});
 						if (!pCollapsed) {
-							const body = list.createDiv({ cls: "semlink-history-folder-body" });
-							for (const session of filed) renderItem(body, session);
+					const body = list.createDiv({ cls: "semlink-history-folder-body" });
+						// 组内行不重复项目名（showProj=false）：组头即项目。
+						for (const session of filed) renderItem(body, session, true, false);
 						}
 					}
 				}
@@ -4564,7 +4723,10 @@ export class SemanticSearchView extends ItemView {
 					cls: "semlink-history-group semlink-history-folders-head"
 						+ (view === "archive" ? " is-archived" : conversationsCollapsed ? " is-collapsed" : ""),
 				});
-				// Codex 式组头同款：chevron 文字后、hover 显示，计数移除
+				// Codex 式组头同款：chevron 文字后、hover 显示，计数移除；
+				// 前导图标对齐菜单行（2026-11-22 拍板）。
+				const cIcon = chead.createSpan({ cls: "semlink-history-head-icon" });
+				setIcon(cIcon, "message-square");
 				chead.createSpan({ cls: "semlink-history-folder-name", text: t("historyGroupChats") });
 				const cchev = chead.createSpan({ cls: "semlink-history-folder-chev" });
 				setIcon(cchev, view === "archive" || !conversationsCollapsed ? "chevron-down" : "chevron-right");
@@ -4615,8 +4777,8 @@ export class SemanticSearchView extends ItemView {
 				if (pinned.length > 0) {
 					list.createDiv({ cls: "semlink-history-group", text: t("historyPinnedGroup") });
 					const pinnedItems = list.createDiv({ cls: "semlink-history-group-items" });
-					// compact: title-only rows in the pinned group
-					for (const session of pinned) renderItem(pinnedItems, session, true);
+					// 置顶组行右缘同样显示相对天数（与时间流一致）
+					for (const session of pinned) renderItem(pinnedItems, session);
 				}
 			}
 			{
@@ -4669,9 +4831,8 @@ export class SemanticSearchView extends ItemView {
 			const item = container.createDiv({ cls: "semlink-history-item semlink-history-item-archived" });
 			const info = item.createDiv({ cls: "semlink-history-item-info" });
 			info.createDiv({ cls: "semlink-history-item-title", text: session.title });
-			const date = new Date(session.updatedAt);
-			const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-			info.createDiv({ cls: "semlink-history-item-meta", text: timeStr });
+			// ZCode 式相对天数右缘（与时间流同款单行）。
+			item.createSpan({ cls: "semlink-history-item-time", text: historyDaysAgo(session.updatedAt, Date.now()) });
 			if (manual) {
 				const restoreBtn = item.createEl("button", {
 					cls: "semlink-history-item-del clickable-icon",
@@ -4701,7 +4862,7 @@ export class SemanticSearchView extends ItemView {
 			});
 		};
 
-	const renderItem = (container: HTMLElement, session: ChatSession, compact = false, showPin = true): HTMLElement => {
+	const renderItem = (container: HTMLElement, session: ChatSession, showPin = true, showProj = true): HTMLElement => {
 		// 当前打开的会话行带选中色（2026-11-19 用户拍板）：抽屉里一眼可辨
 		// 「正在看哪条」；切换会话后高亮随 render 跟随。
 		const item = container.createDiv({
@@ -4722,17 +4883,18 @@ export class SemanticSearchView extends ItemView {
 			// shows one, so there is no slot to keep aligned.
 			const info = item.createDiv({ cls: "semlink-history-item-info" });
 			info.createDiv({ cls: "semlink-history-item-title", text: session.title });
-			const date = new Date(session.updatedAt);
-			const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-			// Project 名并入 meta（用户拍板「对话记录中显示对话来自哪个
-			// Project」2026-11-16）；无项目的会话不显示。
+			// ZCode 式单行（2026-11-22 拍板）：绝对日期行取消，相对天数挪到
+			// 行右缘（hover 时让位给 pin/解绑/归档钮，槽位机制不变）。项目名
+			// （用户拍板 2026-11-16）收进右缘做淡标签——文件夹组内与其组头
+			// 冗余，调用方传 showProj=false 关掉。
 			const projName = session.projectId
 				? this.plugin.settings.projects.find((p) => p.id === session.projectId)?.name ?? null
 				: null;
-			const metaText = projName ? `${timeStr} · ${projName}` : timeStr;
-			if (!compact) {
-				info.createDiv({ cls: "semlink-history-item-meta", text: metaText });
+			const timeEl = item.createSpan({ cls: "semlink-history-item-time" });
+			if (projName && showProj) {
+				timeEl.createSpan({ cls: "semlink-history-item-proj", text: projName });
 			}
+			timeEl.createSpan({ text: historyDaysAgo(session.updatedAt, Date.now()) });
 			if (showPin) {
 				// 置顶按钮（2026-11-19 用户拍板）：挪到「移出项目」文件夹图标
 				// 的左边——行首不再被 pin 占槽，标题文字可以向左缩进。
@@ -4771,7 +4933,7 @@ export class SemanticSearchView extends ItemView {
 				});
 			}
 			const archBtn = item.createEl("button", {
-				cls: "semlink-history-item-del clickable-icon",
+				cls: "semlink-history-item-del semlink-history-item-archive clickable-icon",
 				attr: { "aria-label": t("historyArchiveAction") },
 			});
 			setIcon(archBtn, "archive");
@@ -4781,13 +4943,8 @@ export class SemanticSearchView extends ItemView {
 				void this.history.save();
 				render();
 			});
-			if (compact) {
-				// Pinned rows only: the time is the LAST flow child, pushed to
-				// the right edge (aligned with where 📦 appears); hover swaps
-				// it out for the button group. Row height stays constant (the
-				// always-in-flow pin button anchors it).
-				item.createSpan({ cls: "semlink-history-item-time", text: timeStr });
-			}
+			// 天数槽（行右缘）已随 info 之后统一渲染；hover 时 CSS 把它换成
+			// 按钮组，行高恒定（常驻流的按钮锚定）。
 			item.addEventListener("click", () => {
 				this.closeHistoryDrawer(backdrop, drawer);
 				void this.loadSession(session);
@@ -4796,6 +4953,9 @@ export class SemanticSearchView extends ItemView {
 		};
 
 		render();
+
+		// 记录构建语言：语言切换时 refreshLanguage 依此重建整栏。
+		this.drawerLang = getLang();
 
 		if (persistent) {
 			// 常显菜单：无滑入动画、无遮罩/关闭钮；render 句柄交给视图，
@@ -5332,6 +5492,18 @@ export class SemanticSearchView extends ItemView {
 	 *  brand row above stays untouched). Re-checked on scroll and after any
 	 *  state change (new session / session load). */
 	private updateCompactHeader(): void {
+		// ZCode 式主页网格开关（2026-11-22）：主页标记类在 → contentEl 切
+		// 网格布局（问候语/输入框/清单垂直居中）；离开主页（载入会话、
+		// 首条提问、新对话）自动还原常规纵向流。本方法在每个状态切换点
+		// 都会被调用（loadSession / recordUserMessage / doNewChat /
+		// renderWelcome），是唯一需要的同步点。
+		this.contentEl.toggleClass(
+			"semlink-welcome-center",
+			!!this.messagesEl.querySelector(".semlink-search-welcome-home"),
+		);
+		// 操作钮双模式同步（2026-11-22）：内联行可见 → dock 隐藏（跟随）；
+		// 全部滚出视口 → dock 镜像正在读的回答。滚动监听也走这里。
+		this.syncActionDock();
 		const first = this.messagesEl.querySelector<HTMLElement>(".semlink-msg-user-turn .semlink-msg-user");
 		const compact =
 			!!first && first.getBoundingClientRect().top < this.headerEl.getBoundingClientRect().bottom;
