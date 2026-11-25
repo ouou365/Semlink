@@ -266,6 +266,9 @@ export class SemanticSearchView extends ItemView {
 	private firstQuestionEl!: HTMLElement; // second row: first question in small text
 	private firstQuestionTextEl: HTMLElement | null = null;
 	private firstQuestion = "";       // first user question (header subtitle)
+	/** 主页头部品牌文字元素：会话中固定显示对话标题（2026-11-23 用户拍板
+	 *  「标题固定显示为当前对话的第一个提问」），主页显示品牌名。 */
+	private brandTextEl: HTMLElement | null = null;
 	private headerCompact = false;    // whether the subtitle row is visible
 	private contextRingEl!: HTMLElement | null; // context-usage donut
 	private contextUsageEl!: HTMLElement | null; // wrapper (hidden until first msg)
@@ -502,7 +505,7 @@ export class SemanticSearchView extends ItemView {
 		// Centered brand (2026-11-19 拍板：头部不显示 ✨ 图标，只留文字——
 		// 与设置屏「中央只留页面名文字」同一口径；品牌 ✦ 仍活在 tab/ribbon)。
 		const brand = header.createDiv({ cls: "semlink-search-brand-group" });
-		brand.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
+		this.brandTextEl = brand.createDiv({ cls: "semlink-search-brand", text: "Semlink" });
 		// Right icon group: settings.
 		const rightIcons = header.createDiv({ cls: "semlink-search-header-side semlink-search-header-right" });
 		this.headerRightIconsEl = rightIcons;
@@ -5503,6 +5506,15 @@ export class SemanticSearchView extends ItemView {
 			"semlink-welcome-center",
 			!!this.messagesEl.querySelector(".semlink-search-welcome-home"),
 		);
+		// 头部标题（2026-11-23 用户拍板「对话内容页的标题固定显示为当前
+		// 对话的第一个提问」）：会话中品牌位固定显示对话标题，主页恢复
+		// 品牌名；长标题由 brand 自带 ellipsis 截断。
+		if (this.brandTextEl) {
+			const title = this.currentSessionId && this.firstQuestion ? this.firstQuestion : "Semlink";
+			if (this.brandTextEl.textContent !== title) {
+				this.brandTextEl.setText(title);
+			}
+		}
 		// 操作钮双模式同步（2026-11-22）：内联行可见 → dock 隐藏（跟随）；
 		// 全部滚出视口 → dock 镜像正在读的回答。滚动监听也走这里。
 		this.syncActionDock();

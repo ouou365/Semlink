@@ -2391,8 +2391,17 @@
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
-}.semlink-search-header--compact .semlink-search-first-question {
-    display: block;
+}
+/* 品牌位标题化（2026-11-23 用户拍板「标题固定显示为当前对话的第一个
+   提问」）：品牌文字本身已固定显示对话标题，compact 的「首问顶替品牌」
+   机制冗余且两种居中机制有水平偏差（用户报「标题的位置会偏移」）——
+   恢复品牌组显示、隐藏首问行，标题恒在品牌位精确居中、滚动零跳动。
+   三类选择器压过上方两条 compact 规则（同特异性会因书写顺序靠后输）。 */
+.semlink-search-header.semlink-search-header--compact .semlink-search-brand-group {
+    display: flex;
+}
+.semlink-search-header.semlink-search-header--compact .semlink-search-first-question {
+    display: none;
 }/* 紧凑头部：首问直接顶替品牌组（logo+Semlink）且并入同一行——
    头部从两行收成一行，滚动读长回答时省出一整行高度给内容。 */
 /* compact 锁单行：头部的 wrap 是为欢迎态服务的（首问整行折到品牌下方），
