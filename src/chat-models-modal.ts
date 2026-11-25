@@ -33,7 +33,7 @@ export class ChatModelsModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		contentEl.createEl("h2", { text: `${t("chatModels")} — ${this.provider.name}` });
+		this.setTitle(`${t("chatModels")} — ${this.provider.name}`);
 
 		const models = this.provider.models;
 

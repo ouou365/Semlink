@@ -63,9 +63,6 @@
 }
 .smart-vault-progress-modal .modal-content {
     padding: 20px;
-}.smart-vault-progress-modal h2 {
-    margin-bottom: 16px;
-    font-size: 18px;
 }.smart-vault-progress-modal .progress-section {
     margin-bottom: 20px;
 }.smart-vault-progress-modal .progress-bar-container {
@@ -1653,13 +1650,6 @@
     max-height: 300px;
     overflow-y: auto;
     padding-right: 2px;
-}/* 编辑弹窗（TypingMind 式极简配置）：标题居中，高级选项折叠（缩进 + 左
-   竖线），footer 删除在左、关闭在右。 */
-.semlink-provider-editor-modal .modal-title {
-    text-align: center;
-    font-size: 16px;
-    font-weight: 700;
-    padding-top: 6px;
 }/* API Key 行：已保存态 = 掩码输入框（只读）+ 铅笔/竖点按钮 */
 .smart-vault-settings .semlink-editor-key-row {
     display: flex;
@@ -2330,7 +2320,13 @@
 }/* Header (top) */
 .semlink-search-header {
     display: flex;
-    flex-wrap: wrap;
+    /* 头部锁单行（2026-11-25 用户报「标题太长把首行按钮挤换行」）：
+       会话中品牌位固定显示对话标题（2026-11-23 拍板），长标题按
+       flex-basis（=全文宽）参与换行判定，发生在 min-width 收缩之前，
+       会把右侧图标组挤到第二行。旧的 wrap 为「首问整行折到品牌下方」
+       的欢迎态服务，该行已永久隐藏，wrap 再无用途；标题改由品牌组
+       收缩 + ellipsis 截断。 */
+    flex-wrap: nowrap;
     align-items: center;
     gap: 2px 8px;
     /* 头部窄化（2026-11-18 用户拍板「顶部改窄一点」）：10/8→6/5，
@@ -2353,7 +2349,10 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    flex: 0 0 auto;
+    /* 0 1 auto：短标题保持自然宽（左右两侧 flex:1 等分、品牌居中）；
+       长标题允许收缩——收缩全落在本组（两侧 basis=0 无可缩量），组内
+       文字经 min-width:0 + ellipsis 截断，图标组不再被挤出/换行。 */
+    flex: 0 1 auto;
     min-width: 0;
 }.semlink-search-logo {
     display: flex;
@@ -2404,13 +2403,6 @@
     display: none;
 }/* 紧凑头部：首问直接顶替品牌组（logo+Semlink）且并入同一行——
    头部从两行收成一行，滚动读长回答时省出一整行高度给内容。 */
-/* compact 锁单行：头部的 wrap 是为欢迎态服务的（首问整行折到品牌下方），
-   但 flex 换行按假想宽度（flex-basis）判定，发生在 min-width 收缩之前——
-   长标题（basis=auto=全文宽）会把右侧图标组挤到第二行。compact 锁
-   nowrap 后标题经 min-width:0 收缩 + ellipsis 吃掉图标以外的全部宽度。 */
-.semlink-search-header--compact {
-    flex-wrap: nowrap;
-}
 .semlink-search-header--compact .semlink-search-brand-group {
     display: none;
 }

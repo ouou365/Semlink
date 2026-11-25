@@ -128,12 +128,10 @@ const builders = {
 <div class="semlink-confirm-row">${btn(t("confirmCancel"))}${btn(t("mcpDeleteAction"), "mod-warning")}</div>`,
 
 	"save-note": () => `
-<h3>${t("saveModalTitle")}</h3>
 ${setting({ name: t("saveModalPath"), desc: t("saveModalPathDesc"), controls: textIn("Semlink/回答-xxx.md", "Semlink/回答-20261119-153012.md") })}
-${setting({ controls: btn(t("saveModalConfirm"), "mod-cta") + btn(t("saveModalCancel")) })}`,
+${setting({ controls: btn(t("saveModalCancel")) + btn(t("saveModalConfirm"), "mod-cta") })}`,
 
 	progress: () => `
-<h2>${t("progressTitle")}</h2>
 <p class="progress-phase">${t("phaseCurrent")}: ${t("phaseEmbedding")}</p>
 <div class="progress-stats">731 / 842 (86.8%)</div>
 <div class="detail-grid">
@@ -149,7 +147,6 @@ ${setting({ controls: btn(t("saveModalConfirm"), "mod-cta") + btn(t("saveModalCa
 <div class="btn-group">${setting({ controls: btn(t("btnResume"), "mod-cta") })}</div>`,
 
 	"chat-models": () => `
-<h2>${t("chatModels")} — DeepSeek</h2>
 ${setting({
 		name: t("chatModelId"),
 		controls: textIn("model-id", "deepseek-chat") + textIn("200000", "128K") + extraBtn("trash", t("chatDeleteModel")),
@@ -474,7 +471,6 @@ attachments/private/</textarea>
 			{ path: "docs/", depth: 0, checked: false },
 		];
 		return `
-<h3>${t("projectEditTitle")}</h3>
 ${setting({ name: t("projectNameLabel"), controls: textIn(t("projectNamePlaceholder"), "知识库精选") })}
 <div class="semlink-project-folders">
 	<div class="semlink-project-folders-label">${t("projectSourceFolders")}</div>
@@ -564,7 +560,6 @@ ${setting({ name: t("projectNameLabel"), controls: textIn(t("projectNamePlacehol
 </div>`,
 
 	share: () => `
-<h3>${t("shareTitle")}</h3>
 <div class="semlink-share-hint">${t("shareHint")}</div>
 <div class="semlink-share-row">
 	<span class="semlink-share-url">http://192.168.1.20:18333/s/Kx7qZb2mNp</span>
@@ -579,7 +574,6 @@ ${setting({ name: t("projectNameLabel"), controls: textIn(t("projectNamePlacehol
 <button class="semlink-share-revoke">${t("shareRevoke")}</button>`,
 
 	"share-qr-progress": () => `
-<h3>${t("shareTitle")}</h3>
 <div class="semlink-share-progress">
 	<div class="semlink-share-progress-icon">${ic("loader-2")}</div>
 	<div class="semlink-share-progress-text">${t("shareNoteRendering")} 12/48</div>
@@ -600,12 +594,11 @@ ${setting({ name: t("projectNameLabel"), controls: textIn(t("projectNamePlacehol
 <button class="semlink-btn-block semlink-shareq-revoke">${t("shareRevoke")}</button>`,
 
 	"feishu-bot": () => `
-<h3>${t("botAddManual")}</h3>
 ${setting({ name: t("botName"), controls: textIn("Semlink", "产品知识库机器人") })}
 ${setting({ name: t("botAppId"), controls: textIn("cli_xxx", "cli_a58f2c91b7d84003") })}
 ${setting({ name: t("botAppSecret"), controls: textIn("xxx", "eJx9mZ4Kq2Rp7TwL") })}
 <div class="feishu-prereq">${t("botPrereq")}</div>
-${setting({ controls: btn(t("saveModalConfirm"), "mod-cta") + btn(t("saveModalCancel")) })}`,
+${setting({ controls: btn(t("saveModalCancel")) + btn(t("saveModalConfirm"), "mod-cta") })}`,
 
 	// ── 输入区锚定弹层（search-view.ts，body 懒创建 + 锚 chip 定位，非 Modal） ──
 	"model-popup": () => {
@@ -654,11 +647,11 @@ ${row("Qwen", "qwen-max", "32K")}
 const modalCls = (...c) => c.filter(Boolean).join(" ");
 const sections = [
 	{ id: "confirm", group: "通用", name: "确认弹窗 ConfirmModal", file: "confirm-modal.ts", entry: "各处破坏性操作二次确认（许可停用 / 删除 MCP 服务器）", mcls: "", header: [t("mcpDeleteTitle").replace("{name}", "docs-search")], b: () => builders.confirm() },
-	{ id: "save-note", group: "通用", name: "回答存为笔记 SaveNoteModal", file: "save-note-modal.ts", entry: "聊天答案「保存为笔记」", mcls: "smart-vault-save-modal", header: null, b: builders["save-note"] },
-	{ id: "progress", group: "通用", name: "索引进度 ProgressModal", file: "progress-modal.ts", entry: "设置页「查看进度」/ 首次索引；可拖拽移动", mcls: "smart-vault-progress-modal is-draggable", header: null, b: builders.progress },
+	{ id: "save-note", group: "通用", name: "回答存为笔记 SaveNoteModal", file: "save-note-modal.ts", entry: "聊天答案「保存为笔记」", mcls: "smart-vault-save-modal", header: [t("saveModalTitle")], b: builders["save-note"] },
+	{ id: "progress", group: "通用", name: "索引进度 ProgressModal", file: "progress-modal.ts", entry: "设置页「查看进度」/ 首次索引；可拖拽移动", mcls: "smart-vault-progress-modal is-draggable", header: [t("progressTitle")], b: builders.progress },
 	{ id: "model-popup", group: "输入区弹层", name: "选择模型弹层 modelPopup", file: "search-view.ts", entry: "输入卡底行模型选择器；锚触发钮上方展开（头部卡=当前模型，行可拖拽排序）", mcls: "semlink-search-depth-popup semlink-search-model-popup", header: null, b: builders["model-popup"], pop: true },
 	{ id: "project-popup", group: "输入区弹层", name: "选择项目弹层 projectPopup", file: "search-view.ts", entry: "输入卡底行项目 chip；锚 chip 展开切换/编辑/新建（is-active=当前范围）", mcls: "semlink-search-depth-popup semlink-project-popup", header: null, b: builders["project-popup"], pop: true },
-	{ id: "chat-models", group: "模型", name: "模型清单编辑 ChatModelsModal", file: "chat-models-modal.ts", entry: "设置→模型→供应商行「编辑模型」", mcls: "smart-vault-chat-models-modal", header: null, b: builders["chat-models"] },
+	{ id: "chat-models", group: "模型", name: "模型清单编辑 ChatModelsModal", file: "chat-models-modal.ts", entry: "设置→模型→供应商行「编辑模型」", mcls: "smart-vault-chat-models-modal", header: [`${t("chatModels")} — DeepSeek`], b: builders["chat-models"] },
 	{ id: "add-model", group: "模型", name: "添加/编辑模型 AddModelModal", file: "settings-models.ts", entry: "模型页「＋ 添加」/ 引导第三步", mcls: modalCls("semlink-provider-editor-modal", "smart-vault-settings"), header: ["添加模型"], b: builders["add-model"] },
 	{ id: "key-modal", group: "模型", name: "API Key 配置 KeyModal（默认态）", file: "settings-models.ts", entry: "供应商行 Key 添加 / 铅笔编辑", mcls: modalCls("semlink-provider-editor-modal", "smart-vault-settings", "semlink-key-modal"), header: ["DeepSeek"], b: () => builders["key-modal"]("base") },
 	{ id: "key-modal-adv", group: "模型", name: "KeyModal（高级展开 + 校验错误态）", file: "settings-models.ts", entry: "同上；高级选项展开 / 测试失败反馈", mcls: modalCls("semlink-provider-editor-modal", "smart-vault-settings", "semlink-key-modal"), header: ["DeepSeek"], b: () => builders["key-modal"]("adv") },
@@ -675,14 +668,14 @@ const sections = [
 	{ id: "mcp-config-json", group: "MCP", name: "MCP 服务器配置（JSON 视图）", file: "settings.ts", entry: "同上；分段控件切到 JSON", mcls: modalCls("semlink-mcp-edit-modal", "semlink-mcp-client-modal", "smart-vault-settings"), header: [t("mcpNew")], b: () => builders["mcp-config"]("json") },
 	{ id: "mcp-share", group: "MCP", name: "Semlink MCP 分享 McpShareModal", file: "settings.ts", entry: "工具页「接入其他客户端」", mcls: modalCls("semlink-mcp-edit-modal", "smart-vault-settings"), header: [t("mcpShareTitle")], b: builders["mcp-share"] },
 	{ id: "exclude-paths", group: "知识库", name: "排除路径编辑 ExcludePathsModal", file: "settings.ts", entry: "设置→知识库→Index 面板「编辑」", mcls: modalCls("semlink-mcp-edit-modal", "smart-vault-settings"), header: [t("excludePaths")], b: builders["exclude-paths"] },
-	{ id: "project", group: "知识库", name: "项目创建/编辑 ProjectModal", file: "project-modal.ts", entry: "搜索行「项目」下拉的新建/编辑", mcls: modalCls("smart-vault-settings", "semlink-project-modal"), header: null, b: builders.project },
+	{ id: "project", group: "知识库", name: "项目创建/编辑 ProjectModal", file: "project-modal.ts", entry: "搜索行「项目」下拉的新建/编辑", mcls: modalCls("smart-vault-settings", "semlink-project-modal"), header: [t("projectEditTitle")], b: builders.project },
 	{ id: "fetch-models", group: "引导", name: "拉取模型清单 GuideFetchModelsModal", file: "onboarding.ts", entry: "引导第 2 步「获取模型」", mcls: modalCls("semlink-guide-series-modal", "smart-vault-settings"), header: [t("guideFetchModels")], b: builders["fetch-models"] },
 	{ id: "embed-brand", group: "引导", name: "嵌入模型选择（品牌→模型） EmbedModelPickModal", file: "onboarding.ts", entry: "嵌入流第二级；行点击原地展开供应商", mcls: "semlink-guide-series-modal", header: ["BAAI"], b: builders["embed-brand"] },
 	{ id: "embed-variant", group: "引导", name: "嵌入变体确认 EmbedVariantPickModal", file: "onboarding.ts", entry: "嵌入流第三级；同名模型变体选定", mcls: "semlink-guide-series-modal", header: ["Siliconflow"], b: builders["embed-variant"] },
-	{ id: "share", group: "分享", name: "会话分享链接 ShareModal", file: "share-modal.ts", entry: "侧栏会话「分享」", mcls: "semlink-share-modal", header: null, b: builders.share },
-	{ id: "share-qr-progress", group: "分享", name: "笔记分享·渲染中 ShareQrModal(progress)", file: "share-modal.ts", entry: "笔记分享点击后长渲染期间的进度态", mcls: modalCls("semlink-share-modal", "smart-vault-settings"), header: null, b: builders["share-qr-progress"] },
+	{ id: "share", group: "分享", name: "会话分享链接 ShareModal", file: "share-modal.ts", entry: "侧栏会话「分享」", mcls: "semlink-share-modal", header: [t("shareTitle")], b: builders.share },
+	{ id: "share-qr-progress", group: "分享", name: "笔记分享·渲染中 ShareQrModal(progress)", file: "share-modal.ts", entry: "笔记分享点击后长渲染期间的进度态", mcls: modalCls("semlink-share-modal", "smart-vault-settings"), header: [t("shareTitle")], b: builders["share-qr-progress"] },
 	{ id: "share-qr", group: "分享", name: "笔记分享·二维码详情 ShareQrModal", file: "share-modal.ts", entry: "渲染完成 / 已共享列表点入", mcls: modalCls("semlink-share-modal", "smart-vault-settings"), header: null, b: builders["share-qr"] },
-	{ id: "feishu-bot", group: "机器人", name: "手动添加飞书机器人 AddFeishuBotModal", file: "feishu-bot-modal.ts", entry: "设置→机器人→「手动填写」", mcls: "smart-vault-feishu-modal", header: null, b: builders["feishu-bot"] },
+	{ id: "feishu-bot", group: "机器人", name: "手动添加飞书机器人 AddFeishuBotModal", file: "feishu-bot-modal.ts", entry: "设置→机器人→「手动填写」", mcls: "smart-vault-feishu-modal", header: [t("botAddManual")], b: builders["feishu-bot"] },
 ];
 
 // ── CSS 组装 ──

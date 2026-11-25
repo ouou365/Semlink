@@ -40,5 +40,47 @@
     ]
    }
   }
+ },
+ {
+  "at": "2026-11-25T10:47:04.087Z",
+  "machine": "ouzhongyuandeMac-mini.local",
+  "corpus": {
+   "notes": 1130,
+   "chunks": 65025
+  },
+  "perf": {
+   "grep": {
+    "min": 54,
+    "all": [
+     67,
+     61,
+     54
+    ]
+   },
+   "keyword": {
+    "min": 496,
+    "all": [
+     496,
+     601,
+     512
+    ]
+   },
+   "search": {
+    "min": 851,
+    "all": [
+     851,
+     896,
+     888
+    ]
+   },
+   "semantic": {
+    "min": 507,
+    "all": [
+     618,
+     507,
+     554
+    ]
+   }
+  }
  }
 ]

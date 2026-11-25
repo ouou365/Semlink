@@ -35,8 +35,7 @@ export class ProjectModal extends Modal {
 		this.modalEl.addClass("smart-vault-settings");
 		this.modalEl.addClass("semlink-project-modal");
 		const { contentEl } = this;
-
-		contentEl.createEl("h3", { text: this.project ? t("projectEditTitle") : t("projectModalTitle") });
+		this.setTitle(this.project ? t("projectEditTitle") : t("projectModalTitle"));
 
 		// ── 名称：标签在上、输入框通栏 ──
 		const nameField = contentEl.createDiv({ cls: "semlink-project-field" });

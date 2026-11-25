@@ -28,7 +28,7 @@ export class SaveNoteModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: t("saveModalTitle") });
+		this.setTitle(t("saveModalTitle"));
 
 		new Setting(contentEl)
 			.setName(t("saveModalPath"))
@@ -43,10 +43,10 @@ export class SaveNoteModal extends Modal {
 			);
 
 		new Setting(contentEl)
+			.addButton((btn) => btn.setButtonText(t("saveModalCancel")).onClick(() => this.close()))
 			.addButton((btn) =>
 				btn.setButtonText(t("saveModalConfirm")).setClass("mod-cta").onClick(() => void this.save())
-			)
-			.addButton((btn) => btn.setButtonText(t("saveModalCancel")).onClick(() => this.close()));
+			);
 	}
 
 	private async save(): Promise<void> {

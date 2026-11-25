@@ -37,7 +37,7 @@ export class ShareModal extends Modal {
 	onOpen(): void {
 		this.modalEl.addClass("semlink-share-modal");
 		this.contentEl.empty();
-		this.contentEl.createEl("h3", { text: t("shareTitle") });
+		this.setTitle(t("shareTitle"));
 		this.contentEl.createDiv({ cls: "semlink-share-hint", text: t("shareHint") });
 
 		for (const url of this.opts.urls) {
@@ -110,7 +110,7 @@ export class ShareQrModal extends Modal {
 	/** Progress mode: spinner + label, updated live while chunks render. */
 	private renderProgress(): void {
 		this.contentEl.empty();
-		this.contentEl.createEl("h3", { text: t("shareTitle") });
+		this.setTitle(t("shareTitle"));
 		const wrap = this.contentEl.createDiv({ cls: "semlink-share-progress" });
 		const icon = wrap.createDiv({ cls: "semlink-share-progress-icon" });
 		setIcon(icon, "loader-2");
@@ -131,7 +131,7 @@ export class ShareQrModal extends Modal {
 	/** Rendering failed — swap the spinner for the error and a close button. */
 	setError(message: string): void {
 		this.contentEl.empty();
-		this.contentEl.createEl("h3", { text: t("shareTitle") });
+		this.setTitle(t("shareTitle"));
 		this.contentEl.createDiv({ cls: "semlink-share-progress is-error", text: `${t("searchError")} ${message}` });
 		const closeBtn = this.contentEl.createEl("button", { cls: "semlink-btn-secondary semlink-btn-block", text: t("cancel") });
 		closeBtn.addEventListener("click", () => this.close());
@@ -149,6 +149,8 @@ export class ShareQrModal extends Modal {
 	}
 
 	private renderContent(url: string): void {
+		this.setTitle("");
+
 		this.contentEl.empty();
 		this.progressTextEl = null;
 

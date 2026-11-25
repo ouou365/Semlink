@@ -534,9 +534,6 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
 }
 .smart-vault-progress-modal .modal-content {
     padding: 20px;
-}.smart-vault-progress-modal h2 {
-    margin-bottom: 16px;
-    font-size: 18px;
 }.smart-vault-progress-modal .progress-section {
     margin-bottom: 20px;
 }.smart-vault-progress-modal .progress-bar-container {
@@ -2124,13 +2121,6 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     max-height: 300px;
     overflow-y: auto;
     padding-right: 2px;
-}/* 编辑弹窗（TypingMind 式极简配置）：标题居中，高级选项折叠（缩进 + 左
-   竖线），footer 删除在左、关闭在右。 */
-.semlink-provider-editor-modal .modal-title {
-    text-align: center;
-    font-size: 16px;
-    font-weight: 700;
-    padding-top: 6px;
 }/* API Key 行：已保存态 = 掩码输入框（只读）+ 铅笔/竖点按钮 */
 .smart-vault-settings .semlink-editor-key-row {
     display: flex;
@@ -3049,7 +3039,8 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     font-size: 11px;
     font-weight: 600;
     color: var(--text-faint);
-    padding: 10px 10px 2px;
+    /* 左 padding 对齐组头 .45rem（2026-11-19 拍板：抽屉各行左缘对齐） */
+    padding: 10px 10px 2px .45rem;
 }/* "展示更多" pager at the bottom of the history list. */
 .semlink-history-more {
     margin: 8px;
@@ -3069,9 +3060,11 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
 .semlink-history-group-items {
     display: flex;
     flex-direction: column;
-    margin-left: 6px;
-    padding-left: 8px;
-    border-left: 2px solid var(--background-modifier-border);
+    /* 缩进与左边框去除（2026-11-19 拍板：抽屉各行左缘对齐，层级由
+       组头 + 文件夹图标表达） */
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
 }.semlink-history-item {
     display: flex;
     align-items: center;
@@ -5715,9 +5708,8 @@ body .semlink-msg-user::selection {
 /* 树形缩进：每层 body 相对父层缩进 1.5rem 并画一条竖线，子行/子项
     只保留固定基数 padding——竖线始终对齐本层 chevron，嵌套自动对齐。 */
 .semlink-history-folder-body {
-    margin-left: 1.05rem;
-    padding-left: 0.5rem;
-    border-left: 1px solid var(--background-modifier-border);
+    /* 嵌套缩进与左边框去除（2026-11-19 拍板：抽屉各行左缘对齐）；
+       层级由项目行的 folder 图标（开/合）表达 */
 }
 .semlink-history-folder-body > .semlink-history-item {
     border-radius: 6px;
@@ -8501,7 +8493,7 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 <body class="rv theme-light">
 <div class="rv-topbar">
 	<strong>Semlink 弹窗样式审查</strong>
-	<span class="rv-gen-note">v2.3.0 · 30 个渲染态 · 生成于 2026-11-19 13:35 · 样式保真：Obsidian 运行时导出 + styles.css 内联</span>
+	<span class="rv-gen-note">v2.3.0 · 30 个渲染态 · 生成于 2026-11-22 09:32 · 样式保真：Obsidian 运行时导出 + styles.css 内联</span>
 	<button id="rv-theme-toggle" onclick="rvToggleTheme()">🌙 深色</button>
 </div>
 <nav class="rv-sidebar">
@@ -8579,17 +8571,16 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 			<span>入口：聊天答案「保存为笔记」</span>
 			<span>类：<code>smart-vault-save-modal</code></span>
 		</div>
-		<p class="rv-note">无标题栏（正文自带 h2/h3 标题） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
+		<p class="rv-note">标题栏（titleEl） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
 	</header>
 	<div class="rv-stage">
 		<div class="modal-container mod-dim rv-static">
 			<div class="modal-bg" style="opacity: 0.85;"></div>
 			<div class="modal smart-vault-save-modal">
-				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div><div class="modal-header"><div class="modal-title">保存回答</div></div>
 				<div class="modal-content">
-<h3>保存回答</h3>
 <div class="setting-item"><div class="setting-item-info"><div class="setting-item-name">保存路径</div><div class="setting-item-description">笔记在知识库中的路径，父目录会自动创建</div></div><div class="setting-item-control"><input type="text" placeholder="Semlink/回答-xxx.md" value="Semlink/回答-20261119-153012.md"></div></div>
-<div class="setting-item"><div class="setting-item-info"></div><div class="setting-item-control"><button class="mod-cta">保存</button><button>取消</button></div></div></div>
+<div class="setting-item"><div class="setting-item-info"></div><div class="setting-item-control"><button>取消</button><button class="mod-cta">保存</button></div></div></div>
 			</div>
 		</div>
 	</div>
@@ -8603,15 +8594,14 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 			<span>入口：设置页「查看进度」/ 首次索引；可拖拽移动</span>
 			<span>类：<code>smart-vault-progress-modal is-draggable</code></span>
 		</div>
-		<p class="rv-note">无标题栏（正文自带 h2/h3 标题） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
+		<p class="rv-note">标题栏（titleEl） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
 	</header>
 	<div class="rv-stage">
 		<div class="modal-container mod-dim rv-static">
 			<div class="modal-bg" style="opacity: 0.85;"></div>
 			<div class="modal smart-vault-progress-modal is-draggable">
-				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div><div class="modal-header"><div class="modal-title">Semlink 索引进度</div></div>
 				<div class="modal-content">
-<h2>Semlink 索引进度</h2>
 <p class="progress-phase">当前阶段: 嵌入向量</p>
 <div class="progress-stats">731 / 842 (86.8%)</div>
 <div class="detail-grid">
@@ -8714,15 +8704,14 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 			<span>入口：设置→模型→供应商行「编辑模型」</span>
 			<span>类：<code>smart-vault-chat-models-modal</code></span>
 		</div>
-		<p class="rv-note">无标题栏（正文自带 h2/h3 标题） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
+		<p class="rv-note">标题栏（titleEl） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
 	</header>
 	<div class="rv-stage">
 		<div class="modal-container mod-dim rv-static">
 			<div class="modal-bg" style="opacity: 0.85;"></div>
 			<div class="modal smart-vault-chat-models-modal">
-				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div><div class="modal-header"><div class="modal-title">模型列表 — DeepSeek</div></div>
 				<div class="modal-content">
-<h2>模型列表 — DeepSeek</h2>
 <div class="setting-item"><div class="setting-item-info"><div class="setting-item-name">模型 ID</div></div><div class="setting-item-control"><input type="text" placeholder="model-id" value="deepseek-chat"><input type="text" placeholder="200000" value="128K"><div class="clickable-icon extra-setting-button" aria-label="删除模型"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-trash-2"><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></div></div></div>
 <div class="setting-item semlink-model-price-row"><div class="setting-item-info"><div class="setting-item-name">价格（可选，用于用量看板）</div><div class="setting-item-description">美元 / 每百万 tokens</div></div><div class="setting-item-control"><input type="text" placeholder="输入 $/1M" value="0.27"><input type="text" placeholder="输出 $/1M" value="1.1"></div></div>
 <div class="setting-item"><div class="setting-item-info"></div><div class="setting-item-control"><button class="mod-cta">添加模型</button><button>完成</button></div></div></div>
@@ -9243,31 +9232,7 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
 				<div class="modal-content">
 <div class="semlink-license-about">
-	<div class="semlink-license-about-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" class="svg-icon" viewBox="0 0 100 100"><g transform="scale(0.09765625)">
- <g transform="translate(512 512) scale(1.125) translate(-512 -512)">
-  <!-- 外层立方体轮廓（正六边形，去掉三条直径对角线）—— 中景 -->
-  <path d="M512 72 L893 292 L893 732 L512 952 L131 732 L131 292 Z"
-        fill="none" stroke="currentColor" stroke-width="48" stroke-linejoin="round" stroke-linecap="round"/>
-
-  <!-- 6 条连接线：外顶点 → 小立方体顶点（不进入内部）—— 中景 -->
-  <g stroke="currentColor" stroke-width="48" stroke-linecap="round">
-    <line x1="512" y1="72" x2="512" y2="288"/>
-    <line x1="893" y1="292" x2="706" y2="400"/>
-    <line x1="893" y1="732" x2="706" y2="624"/>
-    <line x1="512" y1="952" x2="512" y2="736"/>
-    <line x1="131" y1="732" x2="318" y2="624"/>
-    <line x1="131" y1="292" x2="318" y2="400"/>
-  </g>
-
-  <!-- 小立方体线框（空心）—— 近景，最粗 -->
-  <path d="M512 288 L706 400 L706 624 L512 736 L318 624 L318 400 Z"
-        fill="none" stroke="currentColor" stroke-width="58" stroke-linejoin="round" stroke-linecap="round"/>
-
-  <!-- 小立方体内部对角线（已删除朝上/左下/右下的中心 3 段，仅保留向"下/右上/左上"三段）—— 近景，最粗 -->
-  <path d="M512 512 L512 736 M706 400 L512 512 M318 400 L512 512"
-        fill="none" stroke="currentColor" stroke-width="58" stroke-linejoin="round" stroke-linecap="round"/>
- </g>
-</g></svg></div>
+	<div class="semlink-license-about-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" class="svg-icon" viewBox="0 0 100 100"><g transform="scale(0.09765625)"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></g></svg></div>
 	<div class="semlink-license-about-name">Semlink</div>
 	<div class="semlink-license-about-tagline">让你的 Obsidian 知识库思考、协作、行动。</div>
 	<div class="semlink-license-about-version">版本 2.3.0</div>
@@ -9460,15 +9425,14 @@ attachments/private/</textarea>
 			<span>入口：搜索行「项目」下拉的新建/编辑</span>
 			<span>类：<code>smart-vault-settings semlink-project-modal</code></span>
 		</div>
-		<p class="rv-note">无标题栏（正文自带 h2/h3 标题） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
+		<p class="rv-note">标题栏（titleEl） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
 	</header>
 	<div class="rv-stage">
 		<div class="modal-container mod-dim rv-static">
 			<div class="modal-bg" style="opacity: 0.85;"></div>
 			<div class="modal smart-vault-settings semlink-project-modal">
-				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div><div class="modal-header"><div class="modal-title">编辑项目</div></div>
 				<div class="modal-content">
-<h3>编辑项目</h3>
 <div class="setting-item"><div class="setting-item-info"><div class="setting-item-name">项目名称</div></div><div class="setting-item-control"><input type="text" placeholder="新项目" value="知识库精选"></div></div>
 <div class="semlink-project-folders">
 	<div class="semlink-project-folders-label">知识范围（文件夹）</div>
@@ -9634,15 +9598,14 @@ attachments/private/</textarea>
 			<span>入口：侧栏会话「分享」</span>
 			<span>类：<code>semlink-share-modal</code></span>
 		</div>
-		<p class="rv-note">无标题栏（正文自带 h2/h3 标题） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
+		<p class="rv-note">标题栏（titleEl） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
 	</header>
 	<div class="rv-stage">
 		<div class="modal-container mod-dim rv-static">
 			<div class="modal-bg" style="opacity: 0.85;"></div>
 			<div class="modal semlink-share-modal">
-				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div><div class="modal-header"><div class="modal-title">局域网分享</div></div>
 				<div class="modal-content">
-<h3>局域网分享</h3>
 <div class="semlink-share-hint">在同一网络的任意浏览器打开下方链接。链接为只读。</div>
 <div class="semlink-share-row">
 	<span class="semlink-share-url">http://192.168.1.20:18333/s/Kx7qZb2mNp</span>
@@ -9668,15 +9631,14 @@ attachments/private/</textarea>
 			<span>入口：笔记分享点击后长渲染期间的进度态</span>
 			<span>类：<code>semlink-share-modal smart-vault-settings</code></span>
 		</div>
-		<p class="rv-note">无标题栏（正文自带 h2/h3 标题） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
+		<p class="rv-note">标题栏（titleEl） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
 	</header>
 	<div class="rv-stage">
 		<div class="modal-container mod-dim rv-static">
 			<div class="modal-bg" style="opacity: 0.85;"></div>
 			<div class="modal semlink-share-modal smart-vault-settings">
-				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div><div class="modal-header"><div class="modal-title">局域网分享</div></div>
 				<div class="modal-content">
-<h3>局域网分享</h3>
 <div class="semlink-share-progress">
 	<div class="semlink-share-progress-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-loader-2"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg></div>
 	<div class="semlink-share-progress-text">正在生成分享页 12/48</div>
@@ -9727,20 +9689,19 @@ attachments/private/</textarea>
 			<span>入口：设置→机器人→「手动填写」</span>
 			<span>类：<code>smart-vault-feishu-modal</code></span>
 		</div>
-		<p class="rv-note">无标题栏（正文自带 h2/h3 标题） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
+		<p class="rv-note">标题栏（titleEl） · 生成器 gen_modal_review.mjs · 样式 = Obsidian 实测基础样式 + styles.css 原样内联</p>
 	</header>
 	<div class="rv-stage">
 		<div class="modal-container mod-dim rv-static">
 			<div class="modal-bg" style="opacity: 0.85;"></div>
 			<div class="modal smart-vault-feishu-modal">
-				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
+				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div><div class="modal-header"><div class="modal-title">手动填写</div></div>
 				<div class="modal-content">
-<h3>手动填写</h3>
 <div class="setting-item"><div class="setting-item-info"><div class="setting-item-name">机器人名称</div></div><div class="setting-item-control"><input type="text" placeholder="Semlink" value="产品知识库机器人"></div></div>
 <div class="setting-item"><div class="setting-item-info"><div class="setting-item-name">App ID</div></div><div class="setting-item-control"><input type="text" placeholder="cli_xxx" value="cli_a58f2c91b7d84003"></div></div>
 <div class="setting-item"><div class="setting-item-info"><div class="setting-item-name">App Secret</div></div><div class="setting-item-control"><input type="text" placeholder="xxx" value="eJx9mZ4Kq2Rp7TwL"></div></div>
 <div class="feishu-prereq">流程：扫码创建应用（自动预置权限与 im.message.receive_v1 事件订阅）→ 在飞书里给机器人发送 /bind 验证码完成绑定，无需在开放平台后台手动配置</div>
-<div class="setting-item"><div class="setting-item-info"></div><div class="setting-item-control"><button class="mod-cta">保存</button><button>取消</button></div></div></div>
+<div class="setting-item"><div class="setting-item-info"></div><div class="setting-item-control"><button>取消</button><button class="mod-cta">保存</button></div></div></div>
 			</div>
 		</div>
 	</div>

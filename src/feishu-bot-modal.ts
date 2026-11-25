@@ -23,7 +23,7 @@ export class AddFeishuBotModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h3", { text: t("botAddManual") });
+		this.setTitle(t("botAddManual"));
 
 		let name = "Feishu Bot";
 		let appId = "";
@@ -36,6 +36,7 @@ export class AddFeishuBotModal extends Modal {
 		contentEl.createDiv({ cls: "feishu-prereq", text: t("botPrereq") });
 
 		new Setting(contentEl)
+			.addButton((btn) => btn.setButtonText(t("saveModalCancel")).onClick(() => this.close()))
 			.addButton((btn) =>
 				btn.setButtonText(t("saveModalConfirm")).setClass("mod-cta").onClick(async () => {
 					if (!appId || !appSecret) {
@@ -60,8 +61,7 @@ export class AddFeishuBotModal extends Modal {
 					this.onAdded?.();
 					this.close();
 				})
-			)
-			.addButton((btn) => btn.setButtonText(t("saveModalCancel")).onClick(() => this.close()));
+			);
 	}
 
 	onClose() {

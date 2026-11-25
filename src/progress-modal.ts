@@ -63,7 +63,7 @@ export class ProgressModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: t("progressTitle") });
+		this.setTitle(t("progressTitle"));
 
 		// Phase
 		this.phaseEl = contentEl.createEl("p", { cls: "progress-phase" });
