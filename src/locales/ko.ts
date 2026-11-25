@@ -780,7 +780,6 @@ const t: Record<keyof typeof en, string> = {
 	projectRemoveSession: "프로젝트에서 해제",
 	projectDeleteTitle: "프로젝트 삭제",
 	projectDeleteBody: "삭제 후 해당 세션은 전체 라이브러리 검색으로 되돌아갑니다.",
-	projectAllNotes: "All notes",
 	projectNewFolder: "New folder",
 	projectCreateFolder: "Create",
 	projectDeleted: "deleted project",

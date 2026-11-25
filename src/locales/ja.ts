@@ -780,7 +780,6 @@ const t: Record<keyof typeof en, string> = {
 	projectRemoveSession: "プロジェクトから解除",
 	projectDeleteTitle: "プロジェクトを削除",
 	projectDeleteBody: "削除後、参照していたセッションは全庫検索にフォールバックします。",
-	projectAllNotes: "すべてのノート",
 	projectNewFolder: "新規フォルダー",
 	projectCreateFolder: "创建",
 	projectDeleted: "削除されたプロジェクト",

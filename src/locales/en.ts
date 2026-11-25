@@ -779,7 +779,6 @@ const en = {
 	projectRemoveSession: "Remove from project",
 	projectDeleteTitle: "Delete project",
 	projectDeleteBody: "Sessions referencing it fall back to full-vault retrieval.",
-	projectAllNotes: "All notes",
 	projectNewFolder: "New folder",
 	projectCreateFolder: "Create",
 	projectDeleted: "deleted project",

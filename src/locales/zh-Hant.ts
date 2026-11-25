@@ -780,7 +780,6 @@ const t: Record<keyof typeof en, string> = {
 	projectRemoveSession: "移出專案",
 	projectDeleteTitle: "刪除專案",
 	projectDeleteBody: "刪除後，引用它的會話將回退為全庫檢索。",
-	projectAllNotes: "全部筆記",
 	projectNewFolder: "新建資料夾",
 	projectCreateFolder: "创建",
 	projectDeleted: "已刪除專案",

@@ -781,7 +781,6 @@ const zh: Record<keyof typeof en, string> = {
 	projectRemoveSession: "移出项目",
 	projectDeleteTitle: "删除项目",
 	projectDeleteBody: "删除后，引用它的会话将回退为全库检索。",
-	projectAllNotes: "全部笔记",
 	projectNewFolder: "新建文件夹",
 	projectCreateFolder: "创建",
 	projectDeleted: "已删除项目",

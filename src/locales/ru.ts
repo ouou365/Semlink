@@ -781,7 +781,6 @@ const t: Record<keyof typeof en, string> = {
 	projectRemoveSession: "Убрать из проекта",
 	projectDeleteTitle: "Удалить проект",
 	projectDeleteBody: "Сессии, ссылающиеся на него, вернутся к поиску по всей базе.",
-	projectAllNotes: "All notes",
 	projectNewFolder: "New folder",
 	projectCreateFolder: "Create",
 	projectDeleted: "deleted project",

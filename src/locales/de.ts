@@ -780,7 +780,6 @@ const t: Record<keyof typeof en, string> = {
 	projectRemoveSession: "Aus Projekt entfernen",
 	projectDeleteTitle: "Projekt löschen",
 	projectDeleteBody: "Sitzungen, die es referenzieren, fallen auf die Volltextsuche zurück.",
-	projectAllNotes: "All notes",
 	projectNewFolder: "New folder",
 	projectCreateFolder: "Create",
 	projectDeleted: "deleted project",

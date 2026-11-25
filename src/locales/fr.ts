@@ -780,7 +780,6 @@ const t: Record<keyof typeof en, string> = {
 	projectRemoveSession: "Retirer du projet",
 	projectDeleteTitle: "Supprimer le projet",
 	projectDeleteBody: "Les sessions qui y font référence reviendront à la recherche globale.",
-	projectAllNotes: "All notes",
 	projectNewFolder: "New folder",
 	projectCreateFolder: "Create",
 	projectDeleted: "deleted project",

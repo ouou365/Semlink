@@ -806,9 +806,17 @@ export class SemanticSearchView extends ItemView {
 		// 切换/新建/编辑；弹层仿 modelPopup（body 懒创建 + repatriate 迁窗）。
 		// loadSession 会把 activeProject 同步回会话绑定项目，chip 即会话
 		// 归属标识。
-		this.projectChipEl = modelEl.createDiv({ cls: "semlink-project-chip" });
-		this.projectChipEl.addEventListener("click", (e) => {
+		const projectChip = modelEl.createDiv({ cls: "semlink-project-chip" });
+		this.projectChipEl = projectChip;
+		projectChip.addEventListener("click", (e) => {
 			e.stopPropagation();
+			// 已选项目且鼠标悬停在 chip 上（图标呈 ✕）→ 点击=取消范围回
+			// 全库（2026-11-25 用户拍板：弹层「全部笔记」行摘除后，取消
+			// 入口移到 chip 本体——悬停变 ✕、点击清除）；否则开选择弹层。
+			if (this.activeProject && projectChip.matches(":hover")) {
+				this.switchProject(null);
+				return;
+			}
 			this.toggleProjectPopup();
 		});
 		this.renderProjectChip();
@@ -2796,6 +2804,10 @@ export class SemanticSearchView extends ItemView {
 		this.projectChipEl.empty();
 		const icon = this.projectChipEl.createSpan({ cls: "semlink-project-chip-icon" });
 		setIcon(icon, "folder");
+		// 已选项目的悬停 ✕（2026-11-25 用户拍板）：文件夹图标换关闭图标，
+		// 点击 chip 即取消范围回全库（显隐由 CSS :hover 切换，无 JS 监听）。
+		const xIcon = this.projectChipEl.createSpan({ cls: "semlink-project-chip-x" });
+		setIcon(xIcon, "x");
 		this.projectChipEl.createSpan({
 			cls: "semlink-project-chip-text",
 			text: this.activeProject ? this.activeProject.name : t("projectChoose"),
@@ -2828,14 +2840,8 @@ export class SemanticSearchView extends ItemView {
 		this.repatriateToCurrentWindow(popup);
 		popup.empty();
 
-		// 全部笔记（无项目 = 全库检索）
-		const allRow = popup.createDiv({ cls: "semlink-project-popup-row" });
-		allRow.createSpan({ cls: "semlink-project-popup-name", text: t("projectAllNotes") });
-		allRow.toggleClass("is-active", this.activeProject === null);
-		allRow.addEventListener("click", () => {
-			this.hideProjectPopup();
-			this.switchProject(null);
-		});
+		// 「全部笔记」行已摘（2026-11-25 用户拍板）：取消范围入口移到
+		// chip 本体（悬停变 ✕、点击清除）。
 
 		// 已有项目行：名称 + 文件夹数 + 编辑钮
 		for (const p of this.plugin.settings.projects) {

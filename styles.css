@@ -2743,9 +2743,17 @@
        footer 内容增长，展开态 footer（348px）从行底向上溢出 248px 把
        hero 顶出视口。解耦后 footer 永不溢出（行随内容长），hero↔输入框
        间距由 gapInput 弹性行承担——展开时它先收缩到 0，顶部内容稳住。 */
-    /* gapInput 0.22→0.15fr（2026-11-25 用户拍板「输入框向上移动」）：
-       与引导页卡片起点对齐（720 高窗口实测 56.5→~28px 上间隙）。 */
-    grid-template-rows: 37px 38px auto minmax(0px, 0.15fr) auto auto minmax(120px, 0.78fr);
+    /* gapInput 固定 18px（2026-11-25 用户拍板「间隙太大，参照引导页」）：
+       引导页 hub 容器就是固定 gap:18px——弹性 fr 在大窗膨胀（992 窗实测
+       91px）。固定值三窗口观感一致；展开态让位改由 gap2 承担（改纯弹性
+       minmax(0,.78fr)，底部留白自然伸缩，内容永不溢出）。 */
+    /* align-content:start（2026-11-25 用户报「间隙太大」二段根因）：grid
+       默认 stretch 会把 auto 行均匀拉伸填满剩余空间——大窗口下 hero/
+       footer/sugs 行全被撑高（992 窗实测 150/148/170），多余高度全落在
+       副标题之下（18+37=55px）。start 后各行回归内容高，剩余空间全归
+       底部 gap2 弹性行——hero↔输入框恒 18px 同引导页。 */
+    align-content: start;
+    grid-template-rows: 37px 38px auto 18px auto auto minmax(0px, 0.78fr);
     grid-template-areas:
         "hd"
         "gap1"
@@ -8149,6 +8157,20 @@ body .semlink-msg-user::selection {
 .semlink-project-chip.is-active {
     color: var(--text-normal);
 }
+/* 已选项目：悬停把文件夹图标换成 ✕（2026-11-25 用户拍板——点击 chip
+   即取消范围回全库，弹层「全部笔记」行随之摘除）。双图标叠放由 :hover
+   切显隐，无 JS 监听；未选项目（无 ✕ 节点）不受影响。 */
+.semlink-project-chip .semlink-project-chip-x {
+    display: none;
+    color: var(--text-muted);
+}
+.semlink-project-chip.is-active:hover .semlink-project-chip-icon {
+    display: none;
+}
+.semlink-project-chip.is-active:hover .semlink-project-chip-x {
+    display: inline-flex;
+    color: var(--text-normal);
+}
 .semlink-project-chip-text {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -8185,8 +8207,9 @@ body .semlink-msg-user::selection {
     background: var(--background-modifier-hover);
 }
 .semlink-project-popup-row.is-active {
+    /* 仅文字色标识（2026-11-25 用户拍板「鼠标不悬停就不要显示灰色」）：
+       常驻灰底摘除，悬停底色归 :hover 规则。 */
     color: var(--text-accent);
-    background: var(--background-modifier-hover);
 }
 .semlink-project-popup-row.is-new {
     color: var(--text-muted);
