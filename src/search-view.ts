@@ -4444,7 +4444,9 @@ export class SemanticSearchView extends ItemView {
 		this.newChatPillEl = drawerNewChat;
 
 		let moreExpanded = false;
-		const moreRow = menuRows.createDiv({ cls: "semlink-history-menu-row" });
+		// 「更多」入口（2026-11-23 用户拍板暂时隐藏）：独立类名供 CSS
+		// display:none（见 styles.css），恢复时删掉那条规则即可。
+		const moreRow = menuRows.createDiv({ cls: "semlink-history-menu-row semlink-history-menu-more" });
 		const moreIcon = moreRow.createSpan({ cls: "semlink-history-menu-row-icon" });
 		setIcon(moreIcon, "layout-grid");
 		moreRow.createSpan({ cls: "semlink-history-menu-row-label", text: t("historyMore") });

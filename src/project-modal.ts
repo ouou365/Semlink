@@ -2,10 +2,9 @@
 // Semlink - Project create/edit modal
 // ========================================
 // Project（检索范围限定）的创建/编辑弹窗。2026-11-22 参考 ZCode 新建项目
-// 弹窗重构：标签在上、输入框通栏；知识范围为虚线选择区；内联新建文件夹
-// 行移除；主按钮深色。2026-11-23 三改（用户拍板，参考钉钉选人面板）：
-// 文件夹选择改为**逐级下钻面板**——点文件夹名进入下一级（右侧「下级」
-// 入口），「< 返回」+ 面包屑回上级；复选框就地勾选当前级；一级含「全选」。
+// 弹窗重构：标签在上、输入框通栏；知识范围为下钻选择面板（2026-11-23）；
+// 内联新建文件夹行移除（用户拍板）；主按钮用标准 accent 色（用户拍板
+// 「参考自定义供应商的创建按钮」，2026-11-23 从深色改回）。
 // 保存回调交还宿主（search-view）：落 settings.projects + 推送视图。
 
 import { App, Modal, setIcon, TFolder } from "obsidian";
@@ -108,16 +107,17 @@ export class ProjectModal extends Modal {
 		crumb.empty();
 
 		// 面包屑（2026-11-23 用户拍板「只高亮这个区域而不是整行」）：
-		// < 返回 + 路径段包进 crumb-main chip，悬停灰底只盖这个小块。
+		// < 返回 + 路径段包进 crumb-main chip，悬停灰底只盖这个小块；
+		// 点击 chip 任意位置=返回上一级（点路径段=跳对应层级）。
 		if (this.at !== "") {
 			const main = crumb.createSpan({ cls: "semlink-project-crumb-main" });
-			const back = main.createSpan({ cls: "semlink-project-crumb-back" });
-			setIcon(back, "chevron-left");
-			back.addEventListener("click", () => {
+			main.addEventListener("click", () => {
 				const parent = this.at.slice(0, -1).split("/").slice(0, -1).join("/");
 				this.at = parent ? parent + "/" : "";
 				this.renderLevel();
 			});
+			const back = main.createSpan({ cls: "semlink-project-crumb-back" });
+			setIcon(back, "chevron-left");
 			// 路径段（前缀可点返回任意层级）+ 当前级灰显
 			const segs = this.at.slice(0, -1).split("/").filter(Boolean);
 			segs.forEach((seg, i) => {
@@ -126,7 +126,11 @@ export class ProjectModal extends Modal {
 				const isLast = i === segs.length - 1;
 				const segEl = main.createSpan({ cls: "semlink-project-crumb-seg" + (isLast ? " is-current" : ""), text: seg });
 				if (!isLast) {
-					segEl.addEventListener("click", () => { this.at = prefix; this.renderLevel(); });
+					segEl.addEventListener("click", (e) => {
+						e.stopPropagation();
+						this.at = prefix;
+						this.renderLevel();
+					});
 				}
 			});
 		}

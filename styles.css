@@ -2528,6 +2528,11 @@
     cursor: pointer;
     white-space: nowrap;
 }
+/* 「更多」入口暂时隐藏（2026-11-23 用户拍板；恢复时删除本条即可）。
+   「用量与统计」子行随折叠态默认隐藏，不受影响。 */
+.semlink-history-menu-row.semlink-history-menu-more {
+    display: none;
+}
 .semlink-history-menu-row:hover {
     background: var(--background-modifier-hover);
 }
@@ -8403,11 +8408,4 @@ body .semlink-msg-user::selection {
     font-size: 12px;
     text-align: center;
     margin-top: 8px;
-}
-.semlink-project-modal .semlink-btn-primary {
-    background: var(--text-normal);
-    color: var(--background-primary);
-}
-.semlink-project-modal .semlink-btn-primary:hover {
-    opacity: 0.85;
 }
