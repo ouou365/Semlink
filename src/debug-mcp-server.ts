@@ -36,11 +36,11 @@ export type DebugSqlRunner = (query: string) => Promise<unknown>;
 /** debug 面板五件套的 runner 束（2026-11-18）：logs/sqlwrite/runtrace/
  * queuefailures/dbstate——一个对象收口，不再拉长构造器位置参数链。 */
 export interface DebugDebugRunner {
-	logs(args?: { clear?: boolean }): unknown | Promise<unknown>;
+	logs(args?: { clear?: boolean }): unknown;
 	sqlwrite(args?: { sql?: string }): Promise<unknown>;
 	runtrace(): unknown;
-	queuefailures(): Promise<unknown> | unknown;
-	dbstate(): Promise<unknown> | unknown;
+	queuefailures(): unknown;
+	dbstate(): unknown;
 }
 
 export type DebugUiRunner = (opts?: {

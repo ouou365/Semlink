@@ -178,9 +178,9 @@ export function renderStackedBars(
 				x: padL + slot * i, y: padT, width: slot, height: plotH,
 				fill: "transparent", class: "semlink-usage-hoverzone",
 			});
-			zone.addEventListener("mouseenter", (ev) => opts.onHover?.(bar, ev as MouseEvent));
-			zone.addEventListener("mousemove", (ev) => opts.onHover?.(bar, ev as MouseEvent));
-			zone.addEventListener("mouseleave", (ev) => opts.onHover?.(null, ev as MouseEvent));
+			zone.addEventListener("mouseenter", (ev) => opts.onHover?.(bar, ev));
+			zone.addEventListener("mousemove", (ev) => opts.onHover?.(bar, ev));
+			zone.addEventListener("mouseleave", (ev) => opts.onHover?.(null, ev));
 			frame.svg.appendChild(zone);
 		}
 		if (total <= 0) continue;

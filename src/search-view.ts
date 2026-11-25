@@ -2705,7 +2705,9 @@ export class SemanticSearchView extends ItemView {
 				const source = renderedLi ?? temp;
 				while (source.firstChild) target.appendChild(source.firstChild);
 			} else {
-				const frag = temp.ownerDocument!.createDocumentFragment();
+				// createFragment（全局，主文档）替代 temp.ownerDocument.createDocumentFragment：
+				// 跨文档 appendChild 由 DOM 规范自动 adopt，replaceWith 插入行为不变。
+				const frag = createFragment();
 				while (temp.firstChild) frag.appendChild(temp.firstChild);
 				target.replaceWith(frag);
 			}
@@ -2888,10 +2890,10 @@ export class SemanticSearchView extends ItemView {
 		const pr = popup.getBoundingClientRect();
 		if (pr.top < 8) {
 			popup.style.removeProperty("bottom");
-			popup.style.top = "8px";
+			popup.setCssProps({ top: "8px" });
 		} else if (pr.bottom > vh - 8) {
 			popup.style.removeProperty("top");
-			popup.style.bottom = "8px";
+			popup.setCssProps({ bottom: "8px" });
 		}
 		if (pr.left + pr.width > vw - 8) {
 			popup.style.left = Math.max(8, vw - pr.width - 8) + "px";

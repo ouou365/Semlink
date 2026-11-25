@@ -171,7 +171,7 @@ export class Scheduler {
 		// 用户的 search RPC 只能在间隙里排队（僵持的另一源头，2026-11-18）。
 		const storedMtimesMap = new Map(await this.store.getAllNoteMtimeEntries());
 		for (const pendingPath of pendingPaths) {
-			const file = this.findFileFlexible(pendingPath) as TFile | null;
+			const file = this.findFileFlexible(pendingPath);
 			if (!file || !("stat" in file)) continue;
 			const stored = storedMtimesMap.get(pendingPath) ?? null;
 			if (stored !== null && file.stat.mtime <= stored) {

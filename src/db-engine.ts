@@ -1564,7 +1564,7 @@ export class DbEngine {
 		try {
 			// 新文件先建 OPFS 句柄：shim 对无句柄路径落 memoryFiles（内存），
 			// 重启即失——缓存必须真落 OPFS 才能跨启动存活。
-			ensureFileSync("vectors.cache");
+			void ensureFileSync("vectors.cache");
 			const ids = this.allVectorIds;
 			const paths = this.allVectorPaths;
 			const metaJson = Buffer.from(JSON.stringify({ ids, paths }), "utf8");
@@ -2015,9 +2015,10 @@ export class DbEngine {
 			const frows = this.db!.exec(sql, fparams);
 			if (frows.length === 0 || frows[0].values.length === 0) return [];
 			return frows[0].values.map((row) => ({
-				path: String(row[0] ?? ""),
+				// 列值类型含 Uint8Array（SQLType），实际是 TEXT/INTEGER 列——收窄后 String()
+				path: String(row[0] as string | number | null ?? ""),
 				matchCount: Number(row[1] ?? 0),
-				preview: String(row[2] ?? ""),
+				preview: String(row[2] as string | number | null ?? ""),
 			}));
 		}
 		const like = `%${pattern}%`;

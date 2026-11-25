@@ -16,19 +16,23 @@ import { probeSqliteBytes } from "./db-engine";
 // ── 环形日志钩子（2026-11-18 debug 面板）：console.error/warn 与未处理
 // rejection 镜像进 worker ring——`logs` 工具远程可读，生产环境不再黑洞。
 {
-	const origError = console.error.bind(console);
-	const origWarn = console.warn.bind(console);
-	console.error = (...args: unknown[]) => {
+	// worker 编译目标无 DOM lib，console 落 any——本地最小类型收口（行为不变；
+	// 不用 .bind：strictBindCallApply 关闭时 bind 返回 any，console 方法无 this 依赖）
+	type WorkerConsoleFn = (...a: unknown[]) => void;
+	const con = console as unknown as { error: WorkerConsoleFn; warn: WorkerConsoleFn };
+	const origError: WorkerConsoleFn = con.error;
+	const origWarn: WorkerConsoleFn = con.warn;
+	con.error = (...args: unknown[]) => {
 		workerLogPush("console-error", args.map((a) => (a instanceof Error ? `${a.message} | ${(a.stack ?? "").split("\n").slice(1, 4).join(" | ")}` : typeof a === "string" ? a : JSON.stringify(a))).join(" "));
 		origError(...args);
 	};
-	console.warn = (...args: unknown[]) => {
+	con.warn = (...args: unknown[]) => {
 		workerLogPush("console-warn", args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));
 		origWarn(...args);
 	};
 	const selfAny = self as unknown as { addEventListener?: (t: string, cb: (ev: PromiseRejectionEvent | ErrorEvent) => void) => void };
 	selfAny.addEventListener?.("unhandledrejection", (ev) => {
-		const r = (ev as PromiseRejectionEvent).reason;
+		const r = (ev as PromiseRejectionEvent).reason as unknown;
 		workerLogPush("unhandled", r instanceof Error ? `${r.message} | ${(r.stack ?? "").split("\n").slice(1, 4).join(" | ")}` : String(r));
 	});
 	selfAny.addEventListener?.("error", (ev) => {
@@ -153,7 +157,8 @@ selfAsAny.onmessage = async (e: MessageEvent) => {
 		try {
 			await initBrowserFs("semlink-db");
 			await ensureFileSync("chat-history.json");
-			const bytes = new TextEncoder().encode(String(args?.[0] ?? ""));
+			// chatHistoryWrite 载荷实为 JSON 字符串——收窄后 String()（行为不变）
+			const bytes = new TextEncoder().encode(String(args?.[0] as string | number | undefined ?? ""));
 			writeFileSync("chat-history.json", bytes);
 			selfAsAny.postMessage({ reqId, result: { bytes: bytes.length } });
 		} catch (err) {

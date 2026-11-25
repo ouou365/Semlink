@@ -306,7 +306,7 @@ export class ToolCore {
 		}
 		// 超限淘汰：Map 保持插入序，从最旧开始丢
 		while (ToolCore.contentCacheChars + text.length > ToolCore.CONTENT_CACHE_CHAR_CAP && cache.size > 0) {
-			const oldestKey = cache.keys().next().value;
+			const oldestKey = Array.from(cache.keys())[0];
 			if (oldestKey === undefined) break;
 			const evicted = cache.get(oldestKey)!;
 			ToolCore.contentCacheChars -= evicted.text.length;
@@ -328,7 +328,7 @@ export class ToolCore {
 		let i = 0;
 		const worker = async (): Promise<void> => {
 			while (i < files.length) {
-				const f = files[i++]!;
+				const f = files[i++];
 				const hit = ToolCore.contentCache.get(f.path);
 				if (!hit || hit.mtime !== f.stat.mtime) {
 					try {
@@ -340,7 +340,7 @@ export class ToolCore {
 						/* 文件在扫描间隙消失 */
 					}
 				}
-				if (i % 32 === 0) await new Promise((r) => setTimeout(r, 0));
+				if (i % 32 === 0) await new Promise((r) => window.setTimeout(r, 0));
 			}
 		};
 		await Promise.all(Array.from({ length: 8 }, () => worker()));

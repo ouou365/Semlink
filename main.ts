@@ -1288,12 +1288,15 @@ export default class SmartVaultPlugin extends Plugin {
 		const view = leaves[0]?.view as SemanticSearchView | undefined;
 		const win = (view?.contentEl?.ownerDocument?.defaultView ?? window) as Window;
 		const doc = win.document;
-		const AsyncFunction = Object.getPrototypeOf(async () => 0).constructor as new (
-			...args: string[]
-		) => (...bindings: unknown[]) => Promise<unknown>;
+		const AsyncFunction = (Object.getPrototypeOf(async () => 0) as {
+			constructor: new (...args: string[]) => (...bindings: unknown[]) => Promise<unknown>;
+		}).constructor;
 		try {
 			// require("obsidian")：esbuild CJS 产物里 obsidian 是 external——
 			// 运行时就是用它加载的，此处复用同一通道拿模块命名空间。
+			//（不能改 await import()：target es2022 支持 dynamic-import，esbuild
+			// 会原样保留裸模块名，运行时 "Failed to resolve module specifier"。）
+			// eslint-disable-next-line @typescript-eslint/no-require-imports -- external 运行时通道，esbuild 不打包（配方见 release.md §一.4）
 			const obsidianMod = require("obsidian") as unknown;
 			const fn = new AsyncFunction(
 				"view", "plugin", "app", "obsidian", "win", "doc", "workspace", "vault",

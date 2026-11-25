@@ -65,16 +65,15 @@ function markActive(item: MenuItem): void {
 /** 柱 hover tooltip：body 挂载 + fixed 定位（transform 祖先免疫），跟
  *  context-tooltip 同一思路，显示日期 + 分段明细（色点/名称/数值）。 */
 function makeTipHandler(doc: Document): (bar: StackBar | null, ev: MouseEvent) => void {
-	const tip = doc.body.createDiv({ cls: "semlink-usage-tip" });
-	tip.style.display = "none";
+	const tip = doc.body.createDiv({ cls: "semlink-usage-tip semlink-hidden" });
 	return (bar, ev) => {
 		if (!bar || bar.segs.every((seg) => seg.value <= 0)) {
-			tip.style.display = "none";
+			tip.addClass("semlink-hidden");
 			return;
 		}
 		const win = doc.defaultView;
 		if (!win) return;
-		tip.style.display = "block";
+		tip.removeClass("semlink-hidden");
 		tip.empty();
 		tip.createDiv({ cls: "semlink-usage-tip-title", text: bar.label });
 		for (const seg of bar.segs) {
@@ -155,10 +154,11 @@ async function exportCsv(plugin: SmartVaultPlugin): Promise<void> {
 
 	// 兜底（无 remote 的环境）：blob 下载。
 	const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
-	const a = document.createElement("a");
+	const a = document.body.createEl("a");
 	a.href = url;
 	a.download = name;
 	a.click();
+	a.remove();
 	window.setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
