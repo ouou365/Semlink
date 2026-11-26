@@ -293,15 +293,12 @@ ${setting({ controls: btn(t("cancel")) + btn(t("create"), "mod-cta") })}
 	},
 
 	usage: () => {
-		const card = (v, l) => `<div class="semlink-usage-card"><div class="semlink-usage-card-value">${v}</div><div class="semlink-usage-card-label">${l}</div></div>`;
+		// 用量看板重设计（2026-11-22 ZCode 风格）后的同构 mock：筛选 chips +
+		// 堆叠图两视图 + Pro 门控——键全部取自现役 locale（旧
+		// usageThisMonth/usageTotal 等卡片键已随重设计删除）。
+		const chip = (label, active) => `<span class="semlink-usage-chip${active ? " is-active" : ""}">${label}</span>`;
 		return `
 <h2>${t("usageTitle")}</h2>
-<div class="semlink-usage-cards">
-	${card("$4.21", t("usageThisMonth"))}
-	${card("$18.60", t("usageTotal"))}
-	${card("612", t("usageRequestsMonth"))}
-	${card("2.4M → 890.5k", t("usageTokens"))}
-</div>
 <div class="semlink-usage-body semlink-usage-locked">
 	<div class="semlink-usage-gate">
 		<div class="semlink-usage-gate-title">${t("usageProTitle")}</div>
@@ -309,18 +306,30 @@ ${setting({ controls: btn(t("cancel")) + btn(t("create"), "mod-cta") })}
 		<button class="mod-cta">${t("unlockPro")}</button>
 	</div>
 	<div class="semlink-usage-section">
-		<div class="semlink-usage-section-title">${t("usageLast30")}</div>
+		<div class="semlink-usage-section-title">${t("usageFilterTime")}</div>
+		<div class="semlink-usage-chips">
+			${chip(t("usageLast7"), true)}
+			${chip(t("usageLast30"))}
+			${chip(t("usageMonth"))}
+			${chip(t("usageAll"))}
+		</div>
+	</div>
+	<div class="semlink-usage-section">
+		<div class="semlink-usage-section-title">${t("usageStackByInOut")}</div>
 		<div class="semlink-usage-chart">${usageBars.map((h) => `<div class="semlink-usage-bar" style="height:${h}%"></div>`).join("")}</div>
 	</div>
 	<div class="semlink-usage-section">
-		<div class="semlink-usage-section-title">${t("usageByModel")}</div>
+		<div class="semlink-usage-section-title">${t("usageStackByModel")}</div>
+		<div class="semlink-usage-chart">${[...usageBars].reverse().map((h) => `<div class="semlink-usage-bar" style="height:${h}%"></div>`).join("")}</div>
+	</div>
+	<div class="semlink-usage-section">
+		<div class="semlink-usage-section-title">${t("usageRequestsTotal")}</div>
 		<table class="semlink-usage-table">
-			<tr><th>${t("usageModel")}</th><th>${t("usageReqs")}</th><th>${t("usageTokensIn")}</th><th>${t("usageTokensOut")}</th><th>${t("usageCost")}</th></tr>
-			<tr><td>deepseek-chat</td><td>214</td><td>980.2k</td><td>312.4k</td><td class="semlink-usage-cost">$1.42</td></tr>
-			<tr><td>deepseek-reasoner</td><td>96</td><td>540.9k</td><td>187.1k</td><td class="semlink-usage-cost">$1.08</td></tr>
-			<tr><td>qwen-max</td><td>58</td><td>212.3k</td><td>88.7k</td><td class="semlink-usage-cost">$0.94</td></tr>
+			<tr><th>${t("usageFilterModel")}</th><th>${t("usageTokensIn")}</th><th>${t("usageTokensOut")}</th></tr>
+			<tr><td>deepseek-chat</td><td>980.2k</td><td>312.4k</td></tr>
+			<tr><td>deepseek-reasoner</td><td>540.9k</td><td>187.1k</td></tr>
 		</table>
-		<div class="semlink-usage-hint">${t("usageNoPrice")}</div>
+		<div class="semlink-usage-hint">${t("usageEmpty")}</div>
 	</div>
 </div>`;
 	},
@@ -626,7 +635,7 @@ ${row("Qwen", "qwen-max", "32K")}
 
 	"project-popup": () => `
 <div class="semlink-project-popup-row is-active">
-	<span class="semlink-project-popup-name">${t("projectAllNotes")}</span>
+	<span class="semlink-project-popup-name">默认研究组</span>
 </div>
 <div class="semlink-project-popup-row">
 	<span class="semlink-project-popup-name">知识库精选</span>

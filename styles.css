@@ -2578,8 +2578,9 @@
     padding: 6px;
     /* ZCode 式（2026-11-22 用户拍板）：滚动条不占布局宽——隐藏原生滚
        动条，滚轮/触控板照常滚（底部内容截半行即滚动暗示）。列表右缘
-       与头部图标恒对齐，有无滚动条内容位置零跳动。 */
-    scrollbar-width: none;
+       与头部图标恒对齐，有无滚动条内容位置零跳动。隐藏由下方
+       ::-webkit-scrollbar { display:none } 承担（Electron=Chromium；
+       标准属性 scrollbar-width 在新版会反压 webkit 定制，见复活声明）。 */
 }
 .semlink-history-list::-webkit-scrollbar { display: none; }.semlink-history-empty {
     padding: 30px 14px;
@@ -2720,38 +2721,38 @@
    警告）——updateCompactHeader 以同一谓词 toggle 本类，类存在 ⟺ 标记
    存在，且它是全部状态切换点的唯一同步点（设置屏截断、会话气泡顶置
    两个回归的治本机制保留在同一谓词上）。 */
-/* 主页网格门控不用 :has（社区审查性能警告）：.semlink-welcome-center 类
-   本身就由 updateCompactHeader 以同一谓词（欢迎区含 welcome-home 元素）
-   toggle——类存在 ⟺ :has 成立，直接以类为条件即可。 */
-.semlink-welcome-center {
+/* 主页网格（2026-11-26 架构改版，社区审查 :has 与 display:contents 双
+   警告清零）：网格容器从 contentEl 下沉到 welcome-home——display:contents
+   链（messages + home 双提升）让 hero/sugs 越过两层包装参与 contentEl
+   网格，审查器点名该特性；现改为 footer 在主页态由 updateCompactHeader
+   借居 welcome-home（grid area input），网格行序列原样下沉：hero 上方
+   38px 夹行同引导页 emoji 起线；hero→输入 18px（gapInput，2026-11-25
+   「间隙太大，参照引导页」拍板：引导 hub 就是固定 18px，弹性 fr 在大窗
+   膨胀 91px）；底部余量全归 gap2 弹性行（minmax(0,.78fr)，2026-11-25
+   align-content:start 配套——stretch 会把 auto 行撑高、留白堆副标题下）；
+   展开态 footer 溢出防护由 input 行 auto 随内容长 + gap2 先收缩承担。
+   离开主页（updateCompactHeader 以 welcome-home 存在性 toggle 本类）时
+   footer 归位 contentEl 原槽位，网格随 welcome DOM 一起拆除。 */
+.semlink-welcome-center > .semlink-search-status { display: none; }
+.semlink-welcome-center > .semlink-search-messages {
+    /* 主页态清内衬：display:contents 时代 messages 不生成盒（padding 不
+       生效），改盒后 12/6px 内衬会把网格内容推离左缘——hero/输入卡/清单
+       与头部、内容区左缘对齐（对话态内衬不受影响）。 */
+    padding: 0;
+}
+.semlink-welcome-center .semlink-search-welcome-home {
+    flex: 1 1 auto;
     display: grid;
-    /* 夹行（2026-11-23 用户拍板「欢迎语和输入框参照引导页调整」）：
-       顶夹行 38px 同引导页 emoji 起线；hero→输入间距与底部余量按
-       0.22 : 0.78 分配（min 100/120 防小窗溢出），复现引导页
-       emoji→卡片的大留白节奏。 */
-    /* hd 行固定 37px（2026-11-25 用户报「新对话页页头偏下」）：auto 行对
-       wrap-flex 子的 intrinsic 高度会误算成两行（实测 56.64px——brand 被
-       记入第二行，26+2+18+11≈57），header 被 stretch 后文字随行居中偏下
-       10px（brandDelta dy=-10 对引导页基准）。固定 37px 与 compact/引导
-       页头部同高，基线三态归一；header 同步 align-self:start 贴行顶。
-       input 行 auto + 独立 gapInput 弹性间隙行（2026-11-25 用户报「展开
-       把顶部内容顶出去」）：原 minmax(100px,.22fr) 是 fr 行——行高不随
-       footer 内容增长，展开态 footer（348px）从行底向上溢出 248px 把
-       hero 顶出视口。解耦后 footer 永不溢出（行随内容长），hero↔输入框
-       间距由 gapInput 弹性行承担——展开时它先收缩到 0，顶部内容稳住。 */
-    /* gapInput 固定 18px（2026-11-25 用户拍板「间隙太大，参照引导页」）：
-       引导页 hub 容器就是固定 gap:18px——弹性 fr 在大窗膨胀（992 窗实测
-       91px）。固定值三窗口观感一致；展开态让位改由 gap2 承担（改纯弹性
-       minmax(0,.78fr)，底部留白自然伸缩，内容永不溢出）。 */
-    /* align-content:start（2026-11-25 用户报「间隙太大」二段根因）：grid
-       默认 stretch 会把 auto 行均匀拉伸填满剩余空间——大窗口下 hero/
-       footer/sugs 行全被撑高（992 窗实测 150/148/170），多余高度全落在
-       副标题之下（18+37=55px）。start 后各行回归内容高，剩余空间全归
-       底部 gap2 弹性行——hero↔输入框恒 18px 同引导页。 */
+    /* 中和基类 .semlink-search-welcome 的盒属性（display:contents 时代不
+       生成盒、全部失效；改盒后 38/20px 内衬、6px 行距、center 对齐会
+       叠加进网格几何——间距已全部由模板行显式表达，基类值一并清零） */
+    padding: 0;
+    gap: 0;
+    align-items: stretch;
     align-content: start;
-    grid-template-rows: 37px 38px auto 18px auto auto minmax(0px, 0.78fr);
+    grid-template-columns: minmax(0px, 1fr);
+    grid-template-rows: 38px auto 18px auto auto minmax(0px, 0.78fr);
     grid-template-areas:
-        "hd"
         "gap1"
         "hero"
         "gapInput"
@@ -2759,14 +2760,6 @@
         "sugs"
         "gap2";
 }
-.semlink-welcome-center > .semlink-search-header {
-    grid-area: hd;
-    /* 贴行顶（2026-11-25：hd 行固定 37px 配套）——不被行内剩余空间拉伸。 */
-    align-self: start;
-}
-.semlink-welcome-center > .semlink-search-status { display: none; }
-.semlink-welcome-center > .semlink-search-messages { display: contents; }
-.semlink-welcome-center .semlink-search-welcome-home { display: contents; }
 .semlink-welcome-center .semlink-search-welcome-hero {
     grid-area: hero;
     display: flex;
@@ -2777,11 +2770,8 @@
     padding: 0 20px;
     animation: semlink-welcome-fade 0.3s ease;
 }
-.semlink-welcome-center > .semlink-search-footer {
+.semlink-welcome-center .semlink-search-welcome-home .semlink-search-footer {
     grid-area: input;
-    /* 上松下紧的留白已由 gapInput 弹性间隙行承担（2026-11-25「展开顶出
-       顶部内容」修复）——input 行改 auto 随 footer 内容长，行内无剩余
-       空间，原 align-self:end 失效摘除。 */
 }
 .semlink-welcome-center .semlink-search-welcome-sugs { grid-area: sugs; }/* The greeting emoji above the text (no background, no animation). */
 .semlink-search-welcome-emoji {
@@ -3617,12 +3607,15 @@
     font-size: 12px;
     color: var(--text-muted);
     cursor: pointer;
-    text-decoration: underline transparent;
-    transition: color 0.12s ease, text-decoration-color 0.12s ease;
+    /* 下划线悬停现形（2026-11-26 弃用 underline+transparent 色过渡——
+       社区审查器点名 text-decoration 部分支持特性）：none→underline 切换
+       不参与布局（下划线不占排版空间），仅失去 0.12s 颜色渐显。 */
+    text-decoration: none;
+    transition: color 0.12s ease;
 }.semlink-search-welcome .semlink-guide-index-reconfig-link:hover,
 .semlink-guide-index-reconfig-link:hover {
     color: var(--text-normal);
-    text-decoration-color: currentColor;
+    text-decoration: underline;
 }.semlink-guide-index-timeitem {
     font-variant-numeric: tabular-nums;
 }/* Step-3 embedding/chat sections stack. */
@@ -4787,16 +4780,22 @@ body .semlink-msg-user::selection {
     margin: 6px 0 0;
     padding: 4px 8px;
 }/* 悬挂缩进（思考行/工具行/运行行统一）：文本列 27px =
-   8px 行内距 + 14px 图标 + 5px 间距；首行 text-indent 回拉 19px
-   从图标列起，换行续行落在文本列。必须在基础规则的 padding
-   shorthand 之后——同优先级靠文件序取胜，放前面会被
-   padding: 2px/4px 8px 覆盖，图标被 text-indent 拉到盒外遭
-   overflow:hidden 裁掉（实测踩坑）。 */
+   8px 行内距 + 14px 图标 + 5px 间距；首行图标以 margin-left 回拉 19px
+   落图标列（2026-11-26 弃用容器 text-indent 首行回拉——社区审查器点名
+   css-text-indent 特性；负外边距对「行首图标 + 后随文本」等价：图标
+   移入内衬区，文本贴图标后沿，换行续行同样落在文本列，且不影响容器内
+   其他行首）。 */
 .semlink-thinking-thought,
 .semlink-tool-call-summary,
 .semlink-tool-call.is-pending {
     padding-left: 27px;
-    text-indent: -19px;
+}
+.semlink-thinking-thought > .semlink-row-icon,
+.semlink-tool-call-summary > .semlink-row-icon,
+.semlink-tool-call.is-pending > .semlink-row-icon,
+.semlink-live-reasoning > .semlink-row-icon,
+.semlink-thinking-segment > summary > .semlink-row-icon {
+    margin-left: -19px;
 }/* 思考段（💭 打包自动折叠，2026-11-18）：ZCode 式标题行「思考 · 持续了
    N 秒」（关段时补时长）——无行图标，不做首行回拉缩进；段内思考行
    纯文本（不重复 brain 图标），40px 缩进表达从属。段默认折叠（live
@@ -4814,10 +4813,8 @@ body .semlink-msg-user::selection {
     white-space: nowrap;
     margin: 0;
     padding: 3px 4px;
-    /* brain 图标列与工具行同栏（8px 起）：悬挂缩进必须在 padding
-       之后（同优先级靠文件序，踩坑见 hanging-indent 注释） */
+    /* brain 图标列与工具行同栏（8px 起）：图标回拉见悬挂缩进注释 */
     padding-left: 27px;
-    text-indent: -19px;
     border-radius: 3px;
     user-select: text;
 }
@@ -4835,9 +4832,8 @@ body .semlink-msg-user::selection {
 .semlink-thinking-segment .semlink-thinking-thought {
     /* 段内思考行与标题文字列（27px）左对齐——思考/请求/返回一条基线。
        不限定 [open]：存档会话的段默认折叠态，限定会让规则永不命中
-       （内容裸在 8px 列，2026-11-18 实测）。 */
+       （内容裸在 8px 列，2026-11-18 实测）。段内行无图标，无需回拉。 */
     padding-left: 27px;
-    text-indent: 0;
 }/* 运行中流光：文本 span 用 background-clip:text 上渐变（faint 基底
    + normal 高光带），背景每次循环左移恰一个渐变周期（-200%）成
    无缝扫光；只挂文本 span——SVG 图标 stroke 走 currentColor，整行
@@ -4875,10 +4871,8 @@ body .semlink-msg-user::selection {
     padding: 4px 8px;
     /* 与思考体文本列（27px = 8px 行距 + 14px 图标 + 5px 间距）对齐：
        流式思考正文不贴左缘，整面板一条文本栏。行首 brain 图标与完成态
-       thought 行同款（prefixRowIcon 结构）——text-indent 回拉必须在
-       padding 之后（同优先级靠文件序，踩坑见 hanging-indent 注释）。 */
+       thought 行同款（prefixRowIcon 结构），图标回拉见悬挂缩进注释。 */
     padding-left: 27px;
-    text-indent: -19px;
 }.semlink-live-reasoning::after {
     content: "▍";
     color: var(--text-faint);
@@ -5235,14 +5229,10 @@ body .semlink-msg-user::selection {
     font-size: 13px;
 }/* ──── Lint-clean show/hide & temp-layer utilities ────
    Elements are toggled via these classes instead of inline display/styles
-   (keeps the Obsidian no-static-styles-assignment lint happy). Declared at
-   the END of the file so the single-class specificity wins ties with the
-   base rules (e.g. .semlink-drag-overlay's display:flex). */
-.semlink-hidden {
-    /* !important 根治"元素自身 display 规则（0-2-0+）压掉本工具类"的
-       特异性战争（save-btn/hintRow 先后踩过）——hidden 即 hidden */
-    display: none !important;
-}.semlink-copy-layer {
+   (keeps the Obsidian no-static-styles-assignment lint happy). 显示/隐藏
+   工具类已迁到文件最末尾（.semlink-hidden.semlink-hidden 双类 0-2-0 +
+   文件序取胜，2026-11-26 弃 !important——社区审查器 CSS lint 逐条点名）。 */
+.semlink-copy-layer {
     position: fixed;
     opacity: 0;
     pointer-events: none;
@@ -6898,12 +6888,13 @@ body .semlink-msg-user::selection {
     border-radius: 0;
     margin-bottom: 0;
 }/* 滑块行紧凑排布（用户拍板"数值调到标题的右边，行高缩窄"——RAG 高级
-   选项五条）：两行网格——第一行 标题 | 数值（.slider-value 经 control
-   的 display:contents 提升为网格项），第二行滑杆铺满。窄栏下 Obsidian
-   默认把 setting-item 竖排（数值独占一行）且内衬大，这里一并收掉。 */
+   选项五条）：两行网格——第一行标题，第二行滑杆铺满（2026-11-26 改：
+   control 自身作第二行网格项，弃用 display:contents 提升——社区审查器
+   点名该特性；.slider-value 数值元素已无任何渲染源，配套死规则一并
+   摘除）。窄栏下 Obsidian 默认把 setting-item 竖排且内衬大，收掉。 */
 .smart-vault-settings .semlink-collapse-body .setting-item {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr;
     row-gap: 2px;
     align-items: center;
     padding: 8px 0;
@@ -6911,15 +6902,11 @@ body .semlink-msg-user::selection {
     grid-column: 1;
     grid-row: 1;
 }.smart-vault-settings .semlink-collapse-body .setting-item-control {
-    display: contents;
-}.smart-vault-settings .semlink-collapse-body .slider-value {
-    grid-column: 2;
-    grid-row: 1;
-    justify-self: end;
-}.smart-vault-settings .semlink-collapse-body .setting-item-control .slider,
-.smart-vault-settings .semlink-collapse-body input.slider {
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 2;
+    width: 100%;
+}.smart-vault-settings .semlink-collapse-body .setting-item-control .slider,
+.smart-vault-settings .semlink-collapse-body .setting-item-control input.slider {
     width: 100%;
 }/* 排除路径弹窗：右对齐实时计数（「将排除 {n} 条路径」） */
 .semlink-exclude-count {
@@ -8051,9 +8038,9 @@ body .semlink-msg-user::selection {
     opacity: 1;
     visibility: visible;
     transform: translateX(-50%) translateY(0);
-    /* 创建时自带 .semlink-hidden（display:none !important，0-1-0）；显隐
-       只切 is-shown 不摘基类，这里同为 !important 靠特异性（0-2-0）反压。 */
-    display: flex !important;
+    /* 显隐由 opacity/visibility 承担（2026-11-26 起创建时不再挂
+       .semlink-hidden——本规则原 display:flex !important 为反压工具类
+       而设，随 !important 清零一并摘除）；隐藏态不可交互（visibility）。 */
 }
 .semlink-scroll-bottom-btn:hover {
     /* 悬停轻微变色（2026-11-23 用户拍板）：图标略加深 + 边框微深，
@@ -8069,18 +8056,20 @@ body .semlink-msg-user::selection {
     height: 14px;
 }
 
-/* 焦点环/边框全清除：focus ring 满宽贴卡片边缘，视觉上像卡片边框 */
+/* 焦点环/边框全清除：focus ring 满宽贴卡片边缘，视觉上像卡片边框
+   （2026-11-26 弃 !important——本组特异性 0-2-1/0-3-0 已压过 Obsidian
+   的输入框阴影与主题边框规则，真机 focus 实测 computed 三值均 none） */
 .semlink-msg-user-turn .semlink-msg-edit-input,
 .semlink-msg-user-turn .semlink-msg-edit-input:focus,
 .semlink-msg-user-turn .semlink-msg-edit-input:focus-visible {
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
+    border: none;
+    outline: none;
+    box-shadow: none;
 }
 .semlink-msg-user-turn.is-editing .semlink-msg-bubble {
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
+    border: none;
+    outline: none;
+    box-shadow: none;
 }
 
 /* 编辑态：白底上的拖拽选择恢复淡紫高亮（气泡的白色 ::selection
@@ -8436,4 +8425,13 @@ body .semlink-msg-user::selection {
     font-size: 12px;
     text-align: center;
     margin-top: 8px;
+}
+/* ──── 全局显隐工具类（收尾追加保证文件序取胜，见 5240s 工具类注释）── */
+.semlink-hidden.semlink-hidden {
+    /* 双类 0-2-0 + 文件序末尾：同特异性平局靠本规则靠后取胜（如
+       .semlink-drag-overlay 的 display:flex、action-dock 基础 flex）；
+       2026-11-26 弃 display:none !important（审查器 CSS lint 逐条点名），
+       「hidden 即 hidden」语义由双类特异性 + 文件序共同保障——凡自带
+       0-3-0+ display 规则的元素不得用本工具类隐藏（改专用状态类）。 */
+    display: none;
 }

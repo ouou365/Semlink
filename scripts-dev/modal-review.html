@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Semlink 弹窗样式审查（2.3.0）</title>
+<title>Semlink 弹窗样式审查（2.4.1）</title>
 <style>
 /* ═══ 1. Obsidian 基础变量（:root/body/theme-light/theme-dark，运行时实测导出） ═══ */
 :root { --xfa-unfocused-field-background: url("data:image/svg+xml;charset=UTF-8,<svg width='1px' height='1px' xmlns='http://www.w3.org/2000/svg'><rect width='100%' height='100%' style='fill:rgba(0, 54, 255, 0.13);'/></svg>"); --xfa-focus-outline: auto; }
@@ -2765,12 +2765,8 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
        空隙：main-tab 的 view padding-top 归零，抽屉偏移同步归零；
        侧栏/弹窗浮层不受此规则影响）。 */
     top: 0;
-    /* 菜单底色（2026-11-19 六改定稿，用户指定精确色值）：#ececee，
-       对话区 #f8f8f8——菜单更深一档的微冷灰。深色主题不受此值影响
-       （走下方 .theme-dark 规则保持 secondary）。 */
-    background: #ececee;
 }
-.theme-dark .semlink-history-drawer.is-persistent {
+.theme-dark .semlink-history-drawer {
     /* 深色跟随主题：secondary（侧栏惯例一档），浅色定值不适用 */
     background: var(--background-secondary);
 }
@@ -2795,7 +2791,13 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
 }/* Header (top) */
 .semlink-search-header {
     display: flex;
-    flex-wrap: wrap;
+    /* 头部锁单行（2026-11-25 用户报「标题太长把首行按钮挤换行」）：
+       会话中品牌位固定显示对话标题（2026-11-23 拍板），长标题按
+       flex-basis（=全文宽）参与换行判定，发生在 min-width 收缩之前，
+       会把右侧图标组挤到第二行。旧的 wrap 为「首问整行折到品牌下方」
+       的欢迎态服务，该行已永久隐藏，wrap 再无用途；标题改由品牌组
+       收缩 + ellipsis 截断。 */
+    flex-wrap: nowrap;
     align-items: center;
     gap: 2px 8px;
     /* 头部窄化（2026-11-18 用户拍板「顶部改窄一点」）：10/8→6/5，
@@ -2818,7 +2820,10 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     display: flex;
     align-items: center;
     gap: 8px;
-    flex: 0 0 auto;
+    /* 0 1 auto：短标题保持自然宽（左右两侧 flex:1 等分、品牌居中）；
+       长标题允许收缩——收缩全落在本组（两侧 basis=0 无可缩量），组内
+       文字经 min-width:0 + ellipsis 截断，图标组不再被挤出/换行。 */
+    flex: 0 1 auto;
     min-width: 0;
 }.semlink-search-logo {
     display: flex;
@@ -2856,17 +2861,19 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
-}.semlink-search-header--compact .semlink-search-first-question {
-    display: block;
+}
+/* 品牌位标题化（2026-11-23 用户拍板「标题固定显示为当前对话的第一个
+   提问」）：品牌文字本身已固定显示对话标题，compact 的「首问顶替品牌」
+   机制冗余且两种居中机制有水平偏差（用户报「标题的位置会偏移」）——
+   恢复品牌组显示、隐藏首问行，标题恒在品牌位精确居中、滚动零跳动。
+   三类选择器压过上方两条 compact 规则（同特异性会因书写顺序靠后输）。 */
+.semlink-search-header.semlink-search-header--compact .semlink-search-brand-group {
+    display: flex;
+}
+.semlink-search-header.semlink-search-header--compact .semlink-search-first-question {
+    display: none;
 }/* 紧凑头部：首问直接顶替品牌组（logo+Semlink）且并入同一行——
    头部从两行收成一行，滚动读长回答时省出一整行高度给内容。 */
-/* compact 锁单行：头部的 wrap 是为欢迎态服务的（首问整行折到品牌下方），
-   但 flex 换行按假想宽度（flex-basis）判定，发生在 min-width 收缩之前——
-   长标题（basis=auto=全文宽）会把右侧图标组挤到第二行。compact 锁
-   nowrap 后标题经 min-width:0 收缩 + ellipsis 吃掉图标以外的全部宽度。 */
-.semlink-search-header--compact {
-    flex-wrap: nowrap;
-}
 .semlink-search-header--compact .semlink-search-brand-group {
     display: none;
 }
@@ -2931,8 +2938,11 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     left: 0;
     top: 0;
     bottom: 0;
-    width: 300px;
-    background: var(--background-secondary);
+    width: 280px;
+    /* 菜单底色（用户指定精确色值，2026-11-22 扩到全部形态）：#ececee，
+       对话区 #f8f8f8——菜单更深一档的微冷灰。常显/浮层抽屉一致；
+       深色主题不受此值影响（走下方 .theme-dark 规则保持 secondary）。 */
+    background: #ececee;
     border-right: 1px solid var(--background-modifier-border);
     z-index: 1000;
     display: flex;
@@ -2968,17 +2978,20 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
 .semlink-history-head-btn.is-active {
     color: var(--text-normal);
 }
-/* 菜单行（2026-11-18 二次拍板，参考豆包侧栏）：新对话/更多平铺行——
-   无框图标+文字，hover 浅底；「更多」行带右箭头行内展开归档入口 */
+/* 菜单行（2026-11-18 二次拍板，参考豆包侧栏；2026-11-22 对齐 ZCode：
+   行高加大 + 组下分隔线）：新对话/更多平铺行——无框图标+文字，hover
+   浅底；「更多」行带右箭头行内展开归档入口 */
 .semlink-history-menu-rows {
-    padding: 8px 8px 2px;
+    padding: 8px 8px 6px;
+    /* ZCode 式分隔线：菜单组与列表区之间的通栏细线 */
+    border-bottom: 1px solid var(--background-modifier-border);
     flex-shrink: 0;
 }
 .semlink-history-menu-row {
     display: flex;
     align-items: center;
     gap: 9px;
-    padding: 6px 10px;
+    padding: 8px 10px;
     border-radius: 8px;
     /* 加粗加大（2026-11-18 用户拍板，对齐豆包侧栏观感） */
     font-size: 14px;
@@ -2986,6 +2999,11 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     color: var(--text-normal);
     cursor: pointer;
     white-space: nowrap;
+}
+/* 「更多」入口暂时隐藏（2026-11-23 用户拍板；恢复时删除本条即可）。
+   「用量与统计」子行随折叠态默认隐藏，不受影响。 */
+.semlink-history-menu-row.semlink-history-menu-more {
+    display: none;
 }
 .semlink-history-menu-row:hover {
     background: var(--background-modifier-hover);
@@ -3029,7 +3047,13 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     flex: 1 1 0;
     overflow-y: auto;
     padding: 6px;
-}.semlink-history-empty {
+    /* ZCode 式（2026-11-22 用户拍板）：滚动条不占布局宽——隐藏原生滚
+       动条，滚轮/触控板照常滚（底部内容截半行即滚动暗示）。列表右缘
+       与头部图标恒对齐，有无滚动条内容位置零跳动。隐藏由下方
+       ::-webkit-scrollbar { display:none } 承担（Electron=Chromium；
+       标准属性 scrollbar-width 在新版会反压 webkit 定制，见复活声明）。 */
+}
+.semlink-history-list::-webkit-scrollbar { display: none; }.semlink-history-empty {
     padding: 30px 14px;
     text-align: center;
     color: var(--text-muted);
@@ -3068,12 +3092,15 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
 }.semlink-history-item {
     display: flex;
     align-items: center;
-    padding: 6px 4px;
+    /* 行高紧凑（2026-11-23 用户拍板）：7px→4px 纵向内衬，单行约 40→34px。 */
+    padding: 4px 4px;
     border-radius: 6px;
     cursor: pointer;
 }.semlink-history-item:hover {
     background: var(--background-modifier-hover);
-}.semlink-history-item-info {
+}
+/* 悬停色浅色主题定值（2026-11-25 用户拍板：全行统一 #e1e1e3）。 */
+.theme-light .semlink-history-item:hover { background: #e1e1e3; }.semlink-history-item-info {
     flex: 1 1 0;
     min-width: 0;
 }.semlink-history-item-title {
@@ -3082,10 +3109,6 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}.semlink-history-item-meta {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 2px;
 }.semlink-history-item-del {
     display: inline-flex;
     align-items: center;
@@ -3131,7 +3154,10 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
        对称预留——那会把消息内容整体推右 ~ gutter+padding，左边缘与
        头部/输入卡错开（用户反馈：对话区左移与输入框左缘对齐）。
        左内距 12px = 输入卡（input-wrapper）左内衬，两列左缘精确对齐。 */
-    padding: 0 6px 8px 12px;
+    /* 底部内距归零（2026-11-22 用户拍板「距离底部的高度应该是一样的」）：
+       内联跟随行与 dock 的图标行距输入卡同一高度（均 = footer 的
+       padding-top 10px）——12px 内距会让内联行比 dock 低一截。 */
+    padding: 0 6px 0 12px;
     scrollbar-gutter: stable;
     /* Obsidian's global CSS disables text selection in places; force it back
        on for the conversation so messages can be selected & copied. */
@@ -3155,7 +3181,70 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
 }@keyframes semlink-welcome-fade {
     from { opacity: 0; }
     to { opacity: 1; }
-}/* The greeting emoji above the text (no background, no animation). */
+}/* ── ZCode 式主页（2026-11-22 拍板）：问候语 → 输入框 → 任务清单
+   垂直成组居中，输入框落位页面中部吸引提问。display:contents 链把
+   hero/清单提升为 contentEl 的网格项，真实 footer 原地参与网格——
+   DOM 不动、会话态零影响。开关由 updateCompactHeader 随主页标记类
+   （.semlink-search-welcome-home）同步。
+
+   门控历史：曾用 :has() 守卫（2026-11-22 二改）让网格跟随标记类真实
+   存在、防 JS 同步点漏掉残留网格布局；2026-11-26 摘除（社区审查性能
+   警告）——updateCompactHeader 以同一谓词 toggle 本类，类存在 ⟺ 标记
+   存在，且它是全部状态切换点的唯一同步点（设置屏截断、会话气泡顶置
+   两个回归的治本机制保留在同一谓词上）。 */
+/* 主页网格（2026-11-26 架构改版，社区审查 :has 与 display:contents 双
+   警告清零）：网格容器从 contentEl 下沉到 welcome-home——display:contents
+   链（messages + home 双提升）让 hero/sugs 越过两层包装参与 contentEl
+   网格，审查器点名该特性；现改为 footer 在主页态由 updateCompactHeader
+   借居 welcome-home（grid area input），网格行序列原样下沉：hero 上方
+   38px 夹行同引导页 emoji 起线；hero→输入 18px（gapInput，2026-11-25
+   「间隙太大，参照引导页」拍板：引导 hub 就是固定 18px，弹性 fr 在大窗
+   膨胀 91px）；底部余量全归 gap2 弹性行（minmax(0,.78fr)，2026-11-25
+   align-content:start 配套——stretch 会把 auto 行撑高、留白堆副标题下）；
+   展开态 footer 溢出防护由 input 行 auto 随内容长 + gap2 先收缩承担。
+   离开主页（updateCompactHeader 以 welcome-home 存在性 toggle 本类）时
+   footer 归位 contentEl 原槽位，网格随 welcome DOM 一起拆除。 */
+.semlink-welcome-center > .semlink-search-status { display: none; }
+.semlink-welcome-center > .semlink-search-messages {
+    /* 主页态清内衬：display:contents 时代 messages 不生成盒（padding 不
+       生效），改盒后 12/6px 内衬会把网格内容推离左缘——hero/输入卡/清单
+       与头部、内容区左缘对齐（对话态内衬不受影响）。 */
+    padding: 0;
+}
+.semlink-welcome-center .semlink-search-welcome-home {
+    flex: 1 1 auto;
+    display: grid;
+    /* 中和基类 .semlink-search-welcome 的盒属性（display:contents 时代不
+       生成盒、全部失效；改盒后 38/20px 内衬、6px 行距、center 对齐会
+       叠加进网格几何——间距已全部由模板行显式表达，基类值一并清零） */
+    padding: 0;
+    gap: 0;
+    align-items: stretch;
+    align-content: start;
+    grid-template-columns: minmax(0px, 1fr);
+    grid-template-rows: 38px auto 18px auto auto minmax(0px, 0.78fr);
+    grid-template-areas:
+        "gap1"
+        "hero"
+        "gapInput"
+        "input"
+        "sugs"
+        "gap2";
+}
+.semlink-welcome-center .semlink-search-welcome-hero {
+    grid-area: hero;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    padding: 0 20px;
+    animation: semlink-welcome-fade 0.3s ease;
+}
+.semlink-welcome-center .semlink-search-welcome-home .semlink-search-footer {
+    grid-area: input;
+}
+.semlink-welcome-center .semlink-search-welcome-sugs { grid-area: sugs; }/* The greeting emoji above the text (no background, no animation). */
 .semlink-search-welcome-emoji {
     /* 与引导 hub 的 emoji 同盒模型（普通 div + text-align 居中，44px 字号
        × 1.2 行盒）——flex 盒恰好 44px，会吃掉 emoji→问候语之间与引导页
@@ -3186,31 +3275,77 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     color: var(--text-muted);
     max-width: 360px;
     line-height: 1.5;
-}/* Clickable example prompt cards — one click starts a search. */
+}/* ZCode 式「试试这些任务」清单（2026-11-22 拍板）：去卡片化——头部
+   标题 + 换一批/×，条目为纯行（hover 浅底）。 */
 .semlink-search-welcome-sugs {
     display: flex;
     flex-direction: column;
-    /* 副标题 → 建议卡：与引导 hub 的 tagline→卡片 18px 节奏一致 */
-    margin-top: 12px;
-    gap: 8px;
+    /* 与输入卡左右缘对齐（2026-11-23 用户拍板）：宽度规则逐条镜像
+       footer——侧栏 560 / 主区域 min(1080, 100%-32)（见下方 main-tab
+       覆盖），左右内衬 12px 同 footer；行内衬 10px 使文字与输入占位
+       文字（wrapper 6 + input 4）逐像素对齐。 */
     width: 100%;
-    max-width: 300px;
+    max-width: 560px;
+    margin: 14px auto 0;
+    padding: 0 12px;
+}
+/* 主区域/弹窗实例：跟随 footer 的 1080 加宽。 */
+.semlink-search-view.semlink-main-tab .semlink-search-welcome-sugs {
+    max-width: min(1080px, calc(100% - 32px));
+}
+.semlink-search-welcome-sugs-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 6px 4px;
+}
+.semlink-search-welcome-sugs-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.semlink-search-welcome-sugs-acts {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+.semlink-search-welcome-sugs-btn {
+    display: inline-flex;
+    align-items: center;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-faint);
+    font-size: 11.5px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 6px;
+}
+.semlink-search-welcome-sugs-btn:hover {
+    color: var(--text-normal);
+    background: var(--background-modifier-hover);
+}
+.semlink-search-welcome-sugs-btn svg {
+    width: 13px;
+    height: 13px;
+}
+.semlink-search-welcome-sugs-body {
+    display: flex;
+    flex-direction: column;
 }.semlink-search-welcome-sug {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 14px;
-    border: 1px solid var(--background-modifier-border);
+    padding: 8px 10px;
     border-radius: 8px;
-    background: var(--background-primary);
     font-size: 13px;
     color: var(--text-muted);
     cursor: pointer;
     text-align: left;
-    transition: transform 0.12s ease;
-}/* Leading emoji badge on each prompt card. */
+}/* Leading emoji badge on each prompt row. */
 .semlink-search-welcome-sug-icon {
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1;
     flex-shrink: 0;
 }.semlink-search-welcome-sug-text {
@@ -3226,16 +3361,8 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
 }.semlink-search-welcome-sug:hover {
-    /* 紫色边框高亮已去（用户拍板"去掉悬停紫色边框"）：悬停反馈保留
-       背景/文字提亮 + 上浮 1px，边框恒为中性分隔线色。 */
     background: var(--background-modifier-hover);
     color: var(--text-normal);
-    transform: translateY(-1px);
-}/* Index stats as a small muted line: "已索引 N 篇笔记 · X 个片段". */
-.semlink-search-welcome-stats {
-    font-size: 12px;
-    color: var(--text-faint);
-    margin-top: 2px;
 }/* ── First-run onboarding guide (inside the welcome block) ── */
 .semlink-guide {
     position: relative;
@@ -3272,18 +3399,35 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     /* 显式拉伸：messages 列容器里某处改变了交叉轴行为 */
     align-self: stretch;
     width: calc(100% + 12px);
-    /* 左右内边距清零：条外沿已与主页头部框（view padding 12px 处）对齐，
-       .semlink-search-header 自带的 12px 横向内边距会让引导/设置屏图标
-       比主页图标多缩进 12px——清零后两侧图标与主页菜单/设置按钮逐像素
-       对齐（滚动条 gutter 两侧等宽，对称性不受影响）。 */
-    padding-left: 0;
-    padding-right: 0;
+    /* 左右内距 6px（2026-11-22 用户拍板「引导/设置页按钮位置像新对话页」）：
+       原 0 值是视图根 12px 内距时代的对齐参数——主区域标签页实例的视图根
+       内距清零后，-6px 外扩 + 0 内距使图标比主页头部（内距 12px）左/右各
+       偏 6px；补 6px 内距后两侧图标与主页头部逐像素对齐（侧栏 leaf 的
+       视图根 12px 内距下同样成立：12 + (-6) + 6 = 12 = 12 + 12 - 12 + 6）。 */
+    padding-left: 6px;
+    padding-right: 6px;
 }
 /* 弹窗/主区域实例：限宽规则 .semlink-main-tab .semlink-search-header
    （max-width: 100%-32px）会误伤复用该类的引导条，导致条右侧短 44px、
    品牌左偏 22px——引导条自己按 calc(100%+12px) 定宽，必须豁免。 */
 .semlink-search-view.semlink-main-tab .semlink-search-header.semlink-guide-corners {
+    /* 2026-11-22 用户拍板「引导/设置页按钮位置和宽度像新对话一样」：
+       内距按实测校准——主页 ☰ 在视图盒 +328 / 齿轮右缘 +740（完整内距
+       链：抽屉 300 + 视图根 12/12 + gutter），corners 盒的几何与主页
+       头部不同源，直接用 22px / 3px 内距对齐到同一坐标，宽窄窗通用。 */
     max-width: none;
+    margin-left: 0;
+    margin-right: 0;
+    left: 0;
+    padding-left: 16px;
+    padding-right: 22px;
+}
+/* 引导态（guide-active）的消息盒几何与设置态不同（560 限宽 + gutter
+   历史规则），经验校准：引导条按钮对齐主页头部（☰ +328 / 齿轮右缘
+   +740）。 */
+.semlink-search-view.semlink-guide-active .semlink-search-header.semlink-guide-corners {
+    padding-left: 0;
+    padding-right: 6px;
 }/* Guide mode: the welcome block hosts only the guide — flow top-down
  * instead of the usual vertical centering. */
 .semlink-search-welcome.semlink-search-welcome-guide {
@@ -3329,6 +3473,15 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
 .semlink-search-welcome.semlink-usage-screen,
 .semlink-search-header.semlink-settings-corners {
     animation: semlink-settings-enter 0.15s ease-out;
+}
+/* 用量统计屏标题绝对居中（2026-11-22 用户拍板）：本屏右侧没有平衡
+   元素（设置屏靠右上按钮组对称），flex 布局把标题挤到右缘——绝对
+   定位脱流后恒居中；限宽防长标题压到左侧返回钮。 */
+.semlink-search-header.semlink-usage-corners .semlink-search-brand-group {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: calc(100% - 88px);
 }
 @keyframes semlink-settings-enter {
     from {
@@ -3925,12 +4078,15 @@ body.is-screenshotting ::-webkit-scrollbar { display: none; }
     font-size: 12px;
     color: var(--text-muted);
     cursor: pointer;
-    text-decoration: underline transparent;
-    transition: color 0.12s ease, text-decoration-color 0.12s ease;
+    /* 下划线悬停现形（2026-11-26 弃用 underline+transparent 色过渡——
+       社区审查器点名 text-decoration 部分支持特性）：none→underline 切换
+       不参与布局（下划线不占排版空间），仅失去 0.12s 颜色渐显。 */
+    text-decoration: none;
+    transition: color 0.12s ease;
 }.semlink-search-welcome .semlink-guide-index-reconfig-link:hover,
 .semlink-guide-index-reconfig-link:hover {
     color: var(--text-normal);
-    text-decoration-color: currentColor;
+    text-decoration: underline;
 }.semlink-guide-index-timeitem {
     font-variant-numeric: tabular-nums;
 }/* Step-3 embedding/chat sections stack. */
@@ -4387,11 +4543,13 @@ body .semlink-msg-user::selection {
     gap: 8px;
     width: 100%;
     max-width: 100%;
-    /* ONE white card for thinking + answer (sources stays its own card). */
+    /* ONE white card for thinking + answer (sources stays its own card).
+       2026-11-23 二改（用户拍板「边框参照 ZCode 输入卡」）：ZCode 卡是
+       无边线大圆角白卡——跟随：圆角 8 → 16px，边框保持 none。 */
     background: var(--background-primary);
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 8px;
-    padding: 10px 12px;
+    border: none;
+    border-radius: 16px;
+    padding: 12px 16px;
 }.semlink-msg-loading {
     color: var(--text-muted);
     cursor: pointer;
@@ -4618,7 +4776,10 @@ body .semlink-msg-user::selection {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    border-radius: 8px;
+    /* 常显 hairline 边框（2026-11-23 用户拍板，参照 ZCode 输入卡）：
+       浅灰描边 + 大圆角，白底在 #f8f8f8 页面上成卡。 */
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 12px;
     background: var(--background-primary);
     padding: 6px;
     width: 100%;
@@ -4626,8 +4787,11 @@ body .semlink-msg-user::selection {
        .semlink-search-view 顶缘（top:-16px 落在 overflow:hidden 之外），
        视觉上永远消失。 */
     position: relative;
-}.semlink-search-input-wrapper:focus-within {
-    border-color: var(--interactive-accent);
+}
+/* 聚焦态不再变紫（2026-11-23 用户拍板「不要显示紫色边框」）：边框恒
+   为中性 hairline（覆盖旧 focus-within accent 规则的语义）。 */
+.semlink-search-input-wrapper:focus-within {
+    border-color: var(--background-modifier-border);
 }/* Drag highlight on the whole input wrapper (subtle border tint, no dashed
    outline — the user found the dotted rectangle distracting). */
 .semlink-search-input-wrapper.semlink-attach-bar-drag {
@@ -4699,6 +4863,9 @@ body .semlink-msg-user::selection {
 	height: 34px;
 	padding: 0;
 	border: none;
+	/* 右推接管（2026-11-25 展开按钮摘除）：原由 expand-btn 的
+	   margin-left:auto 承担，摘除后移交给发送按钮自身。 */
+	margin-left: auto;
 	/* Circular button (matches the ring + solid square stop icon). */
 	border-radius: 50%;
 	background: var(--interactive-accent);
@@ -4712,44 +4879,9 @@ body .semlink-msg-user::selection {
 }.semlink-search-btn svg {
     width: 18px;
     height: 18px;
-}/* Expanded tall editor: half the window height, content scrolls. The footer
-   grows and the messages area above shrinks to make room. */
-.semlink-search-input.is-expanded {
-    min-height: 35vh;
-    height: 35vh;
-    max-height: 35vh;
-}/* Keyboard hint under the input — hidden by default (JS toggles it in the
-   tall editor), so typing text never fights it for layout space. */
-.semlink-search-input-hint {
-    font-size: 11px;
-    color: var(--text-faint);
-    text-align: right;
-    padding: 2px 2px 0;
-    user-select: none;
-}/* Expand/collapse toggle on the model row, left of the send button.
-   Takes over the far-right push (margin-left:auto); the send button's own
-   auto margin would otherwise split the free space between the two. */
-.semlink-search-expand-btn {
-    margin-left: auto;
-    color: var(--text-normal);
-}.semlink-search-expand-btn:hover {
-    color: var(--text-normal);
-}/* Flat icon: no box-shadow (the shared .semlink-search-icon-btn hover
-   background looks heavy next to the circular send button). The compound
-   selector's specificity (0,2,0) beats the shared hover rule (0,1,1).
-   Hover gets the shared translucent chip tint (theme-adaptive). */
-.semlink-search-icon-btn.semlink-search-expand-btn,
-.semlink-search-icon-btn.semlink-search-expand-btn:focus-visible,
-.semlink-search-icon-btn.semlink-search-expand-btn:active {
-    background-color: transparent;
-    box-shadow: none;
-}.semlink-search-icon-btn.semlink-search-expand-btn:hover {
-    background-color: var(--background-modifier-hover);
-    box-shadow: none;
-}.semlink-search-expand-btn svg {
-    width: 16px;
-    height: 16px;
-}.semlink-search-model {
+}/* 展开功能已摘（2026-11-25 用户拍板「算了去掉这个按钮吧」）：is-expanded
+   高度规则、input-hint、expand-btn 全组规则与按钮 DOM 一并移除。 */
+.semlink-search-model {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -5095,7 +5227,6 @@ body .semlink-msg-user::selection {
     /* 左侧竖线随块整体缩进到标题文字列（27px）——线与「思考/持续了」
        的文字起点同一条线；JSON 文本在线内右侧 8px 起排（引用块样式）。 */
     margin: 0 0 0 27px;
-    padding: 5px 8px 5px 6px;
     padding: 5px 8px 5px 10px;
     /* Left rule instead of a background block: request/response content
        reads as an indented continuation of the tool row, not a card. */
@@ -5120,16 +5251,22 @@ body .semlink-msg-user::selection {
     margin: 6px 0 0;
     padding: 4px 8px;
 }/* 悬挂缩进（思考行/工具行/运行行统一）：文本列 27px =
-   8px 行内距 + 14px 图标 + 5px 间距；首行 text-indent 回拉 19px
-   从图标列起，换行续行落在文本列。必须在基础规则的 padding
-   shorthand 之后——同优先级靠文件序取胜，放前面会被
-   padding: 2px/4px 8px 覆盖，图标被 text-indent 拉到盒外遭
-   overflow:hidden 裁掉（实测踩坑）。 */
+   8px 行内距 + 14px 图标 + 5px 间距；首行图标以 margin-left 回拉 19px
+   落图标列（2026-11-26 弃用容器 text-indent 首行回拉——社区审查器点名
+   css-text-indent 特性；负外边距对「行首图标 + 后随文本」等价：图标
+   移入内衬区，文本贴图标后沿，换行续行同样落在文本列，且不影响容器内
+   其他行首）。 */
 .semlink-thinking-thought,
 .semlink-tool-call-summary,
 .semlink-tool-call.is-pending {
     padding-left: 27px;
-    text-indent: -19px;
+}
+.semlink-thinking-thought > .semlink-row-icon,
+.semlink-tool-call-summary > .semlink-row-icon,
+.semlink-tool-call.is-pending > .semlink-row-icon,
+.semlink-live-reasoning > .semlink-row-icon,
+.semlink-thinking-segment > summary > .semlink-row-icon {
+    margin-left: -19px;
 }/* 思考段（💭 打包自动折叠，2026-11-18）：ZCode 式标题行「思考 · 持续了
    N 秒」（关段时补时长）——无行图标，不做首行回拉缩进；段内思考行
    纯文本（不重复 brain 图标），40px 缩进表达从属。段默认折叠（live
@@ -5147,10 +5284,8 @@ body .semlink-msg-user::selection {
     white-space: nowrap;
     margin: 0;
     padding: 3px 4px;
-    /* brain 图标列与工具行同栏（8px 起）：悬挂缩进必须在 padding
-       之后（同优先级靠文件序，踩坑见 hanging-indent 注释） */
+    /* brain 图标列与工具行同栏（8px 起）：图标回拉见悬挂缩进注释 */
     padding-left: 27px;
-    text-indent: -19px;
     border-radius: 3px;
     user-select: text;
 }
@@ -5168,9 +5303,8 @@ body .semlink-msg-user::selection {
 .semlink-thinking-segment .semlink-thinking-thought {
     /* 段内思考行与标题文字列（27px）左对齐——思考/请求/返回一条基线。
        不限定 [open]：存档会话的段默认折叠态，限定会让规则永不命中
-       （内容裸在 8px 列，2026-11-18 实测）。 */
+       （内容裸在 8px 列，2026-11-18 实测）。段内行无图标，无需回拉。 */
     padding-left: 27px;
-    text-indent: 0;
 }/* 运行中流光：文本 span 用 background-clip:text 上渐变（faint 基底
    + normal 高光带），背景每次循环左移恰一个渐变周期（-200%）成
    无缝扫光；只挂文本 span——SVG 图标 stroke 走 currentColor，整行
@@ -5208,10 +5342,8 @@ body .semlink-msg-user::selection {
     padding: 4px 8px;
     /* 与思考体文本列（27px = 8px 行距 + 14px 图标 + 5px 间距）对齐：
        流式思考正文不贴左缘，整面板一条文本栏。行首 brain 图标与完成态
-       thought 行同款（prefixRowIcon 结构）——text-indent 回拉必须在
-       padding 之后（同优先级靠文件序，踩坑见 hanging-indent 注释）。 */
+       thought 行同款（prefixRowIcon 结构），图标回拉见悬挂缩进注释。 */
     padding-left: 27px;
-    text-indent: -19px;
 }.semlink-live-reasoning::after {
     content: "▍";
     color: var(--text-faint);
@@ -5468,13 +5600,55 @@ body .semlink-msg-user::selection {
     word-break: break-word;
     color: var(--text-normal);
 }/* Answer action buttons (copy / save) */
+/* ── 回答操作行（2026-11-22 用户拍板「按钮跟随它自己的气泡框下面」）：
+   内联在每个回答轮末尾，随气泡归属；无背景无吸底。 */
 .semlink-msg-actions {
     display: flex;
     gap: 6px;
     /* No own margin: as a turn sibling (below the sources card) the turn's
        flex gap provides the spacing. */
     margin-top: 0;
-}.semlink-msg-action {
+}
+/* ── 回答操作 dock（2026-11-22 双模式方案） ──
+   长回答未完全展示（内联行滚出视口）时兜底出现在消息区与输入卡之间，
+   镜像正在读的回答的操作；内联回到视口即隐藏。透明无背景，左缘与
+   回答气泡对齐（28px = 消息区内距 12 + contentEl 结构偏移 16）。
+   底部内距归零（2026-11-22 用户拍板）：图标行底缘与 ↓ 回到底部钮的
+   底缘平齐。 */
+.semlink-search-action-dock {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    /* stretch 撑满父容器交叉轴——否则 shrink-to-fit + 居中会让图标
+       悬在窗口中央，max-width/margin 的居中列镜像失效。左内距 12px
+       （2026-11-23 用户拍板「按钮组靠左对齐」）：与消息区内距同值，
+       图标左缘与回答气泡左缘对齐（旧 28px 是失效的旧校准，缩进 16px）。 */
+    align-self: stretch;
+    padding: 4px 12px 0 12px;
+}
+/* 主区域/弹窗实例：dock 镜像消息容器的 1080 居中列 + 12px 内距——
+   图标左缘与回答气泡左缘逐像素对齐（2026-11-22 用户拍板，宽窗下
+   不再贴窗口左缘）。侧栏 leaf 用上方 28px 默认（结构偏移不同）。
+   width:100% 必须显式声明：margin:auto 会吸收自由空间、抑制
+   align-self:stretch 的伸展，导致 shrink-to-fit 居中。 */
+.semlink-search-view.semlink-main-tab .semlink-search-action-dock {
+    width: 100%;
+    max-width: min(1080px, calc(100% - 32px));
+    margin-left: auto;
+    margin-right: auto;
+    padding: 4px 12px 0 12px;
+}
+.semlink-search-action-dock.semlink-hidden { display: none; }
+.semlink-search-view.semlink-settings-active .semlink-search-action-dock,
+.semlink-search-view.semlink-guide-active .semlink-search-action-dock { display: none; }
+.semlink-welcome-center > .semlink-search-action-dock { display: none; }
+.semlink-search-action-dock-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+.semlink-msg-action {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -5526,14 +5700,10 @@ body .semlink-msg-user::selection {
     font-size: 13px;
 }/* ──── Lint-clean show/hide & temp-layer utilities ────
    Elements are toggled via these classes instead of inline display/styles
-   (keeps the Obsidian no-static-styles-assignment lint happy). Declared at
-   the END of the file so the single-class specificity wins ties with the
-   base rules (e.g. .semlink-drag-overlay's display:flex). */
-.semlink-hidden {
-    /* !important 根治"元素自身 display 规则（0-2-0+）压掉本工具类"的
-       特异性战争（save-btn/hintRow 先后踩过）——hidden 即 hidden */
-    display: none !important;
-}.semlink-copy-layer {
+   (keeps the Obsidian no-static-styles-assignment lint happy). 显示/隐藏
+   工具类已迁到文件最末尾（.semlink-hidden.semlink-hidden 双类 0-2-0 +
+   文件序取胜，2026-11-26 弃 !important——社区审查器 CSS lint 逐条点名）。 */
+.semlink-copy-layer {
     position: fixed;
     opacity: 0;
     pointer-events: none;
@@ -5577,7 +5747,16 @@ body .semlink-msg-user::selection {
 }.semlink-history-item-lock {
     color: var(--text-faint);
     pointer-events: none;
-}/* License / upgrade modal. */
+}
+/* 锁图标 hover 才显示（2026-11-22 用户拍板「靠右边」）：静息态锁定行
+   与普通行同构（.semlink-history-item-archived 的 65% 降透明 + 点击
+   Notice 已表达锁定语义），天数列全表对齐齐右缘；hover 时锁与删除钮
+   出现在天数让出的右槽。双类选择器压过下方
+   `.semlink-history-item .clickable-icon` 的 display:flex（同特异性
+   但靠后，级联会赢）。 */
+.semlink-history-item .semlink-history-item-lock.semlink-history-item-lock{display:none}
+.semlink-history-item:hover .semlink-history-item-lock.semlink-history-item-lock{display:flex}
+/* License / upgrade modal. */
 .semlink-license-subhead {
     margin: 16px 0 6px;
     font-weight: var(--font-bold);
@@ -5668,19 +5847,29 @@ body .semlink-msg-user::selection {
    同级时后者胜——与旧 absolute 版行为一致（项目内 hover 亦可见）。 */
 .semlink-history-item .semlink-history-item-pin{margin:0;flex:none;display:none;transition:opacity .12s}
 .semlink-history-item:hover .semlink-history-item-pin{display:flex}
-.semlink-history-item .semlink-history-item-pin.is-pinned{display:flex;color:var(--interactive-accent)}
+.semlink-history-item .semlink-history-item-pin.is-pinned{display:flex;color:var(--text-normal)}
 /* 后台完成未读点：行首品牌色圆点（ZCode「刚完成」语义），点开即消；
    未读行文字让位（圆点占左槽），hover 也不出 pin——先看答案再钉。 */
 .semlink-history-item-unread{position:absolute;left:5px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--interactive-accent);flex:none}
-.semlink-history-item:has(.semlink-history-item-unread) .semlink-history-item-pin{display:none}
-.semlink-history-item:has(.semlink-history-item-unread){padding-left:24px}
+.semlink-history-item.is-unread .semlink-history-item-pin{display:none}
+.semlink-history-item.is-unread{padding-left:24px}
 .semlink-history-item-pin.clickable-icon{background:transparent;box-shadow:none}
 .semlink-history-item-pin.clickable-icon:hover{background:transparent;box-shadow:none}
-.semlink-history-item-pin.clickable-icon:hover{color:var(--text-accent)}
-.semlink-history-item-time{margin-left:auto;flex:none;font-size:.72rem;color:var(--text-faint);white-space:nowrap;padding-right:.25rem}
+.semlink-history-item-pin.clickable-icon:hover{color:var(--text-normal)}
+/* 归档钮对齐置顶钮的灰阶（2026-11-22 用户拍板）：基态 muted、hover
+   提亮为 text-normal——原先沿用 del 类的 text-faint 偏浅。 */
+.semlink-history-item-archive{color:var(--text-muted)}
+.semlink-history-item-archive.clickable-icon:hover{color:var(--text-normal)}
+.semlink-history-item-time{margin-left:auto;flex:none;font-size:.72rem;color:var(--text-muted);white-space:nowrap;padding-right:.25rem}
+/* 项目名淡标签：天数左侧的小一号灰字（搜索平铺/置顶组里区分来源；
+   文件夹组内由调用方关闭）。 */
+.semlink-history-item-proj{max-width:7em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-faint);font-size:.64rem;margin-right:.45rem}
 .semlink-history-item:hover .semlink-history-item-time{display:none}
-.semlink-history-item:not(.semlink-history-item-archived) .semlink-history-item-del{display:none}
-.semlink-history-item:not(.semlink-history-item-archived):hover .semlink-history-item-del{display:flex}
+/* 删除/恢复钮对全部行统一 hover 才占位（2026-11-22 用户拍板）：锁定行
+   此前 trash 以 opacity:0 常驻占 22px，天数+锁悬在离右缘一截的死空间
+   ——现在静息态收起，天数+锁齐右缘，与未锁定行的天数列同缘。 */
+.semlink-history-item .semlink-history-item-del{display:none}
+.semlink-history-item:hover .semlink-history-item-del{display:flex}
 .semlink-history-item:not(.semlink-history-item-archived) .semlink-history-item-folder{display:none}
 .semlink-history-item:not(.semlink-history-item-archived):hover .semlink-history-item-folder{display:flex}
 .semlink-history-item-info{margin-left:0}
@@ -5688,13 +5877,20 @@ body .semlink-msg-user::selection {
    需写在 :hover 规则之后——同底色时 current 态不被 hover 态冲掉。 */
 .semlink-history-item.is-current{background:var(--background-modifier-active-hover,var(--background-modifier-hover))}
 .semlink-history-item.is-current:hover{background:var(--background-modifier-active-hover,var(--background-modifier-hover))}
+/* 选中色定值（2026-11-22 用户拍板）：浅色主题 #e1e1e3——比抽屉底色
+   #ececee 深一档的中性灰，替换带紫调的 active-hover；深色主题不适用，
+   继续跟随 Obsidian 变量。 */
+.theme-light .semlink-history-item.is-current,
+.theme-light .semlink-history-item.is-current:hover { background: #e1e1e3; }
 .semlink-history-folder{display:flex;align-items:center;gap:.3rem;padding:.3rem .45rem;min-height:34px;border-radius:6px;cursor:pointer;color:var(--text-normal);font-weight:500}
+/* 悬停色统一 #e1e1e3（2026-11-25 用户拍板）：项目行/组头与会话行/当前
+   会话行同色——浅色主题定值（比抽屉底 #ececee 深一档的中性灰），深色
+   主题继续跟随 Obsidian 变量（与 is-current 的浅色定值口径一致）。 */
 .semlink-history-folder:hover{background:var(--background-modifier-hover)}
-/* 项目组行（2026-11-18 Project 融合进文件夹区）：brain 图标品牌色，
-   当前选中范围行高亮名称。 */
-.semlink-history-project-row .semlink-row-icon svg{color:var(--interactive-accent)}
-.semlink-history-project-row.is-active .semlink-history-folder-name{color:var(--interactive-accent);font-weight:600}
-.semlink-history-project-row.is-active{background:linear-gradient(90deg,rgba(139,108,239,.08),transparent)}
+.theme-light .semlink-history-folder:hover{background:#e1e1e3}
+/* 项目行选中色已删（2026-11-25 用户拍板「项目展开不要有选中色」）：
+   is-active 的紫名加粗 + 渐变底两条规则整体移除——当前检索范围由输入卡
+   chip 表达，行本身不再着色。 */
 .semlink-history-folder-root .semlink-history-folder-name{font-weight:700}
 .semlink-history-folder-root{position:sticky;top:0;z-index:3;background:var(--background-secondary);border-bottom:1px solid var(--background-modifier-border);padding-top:.25rem;padding-bottom:.25rem}
 .semlink-history-folder-chev{display:inline-flex;color:var(--text-muted)}
@@ -5708,8 +5904,10 @@ body .semlink-msg-user::selection {
 /* 树形缩进：每层 body 相对父层缩进 1.5rem 并画一条竖线，子行/子项
     只保留固定基数 padding——竖线始终对齐本层 chevron，嵌套自动对齐。 */
 .semlink-history-folder-body {
-    /* 嵌套缩进与左边框去除（2026-11-19 拍板：抽屉各行左缘对齐）；
-       层级由项目行的 folder 图标（开/合）表达 */
+    /* 项目下会话行左缩进（2026-11-25 用户拍板回归）：20px = 行内衬 7.2 +
+       文件夹图标 16 - 差值 3.2，子行文字与父行文字起点逐像素同列
+       （实测父 33 / 子 28→33），层级随图标可读。 */
+    padding-left: 20px;
 }
 .semlink-history-folder-body > .semlink-history-item {
     border-radius: 6px;
@@ -5720,30 +5918,78 @@ body .semlink-msg-user::selection {
 .semlink-history-folder.is-drop{background:var(--background-modifier-hover);outline:2px dashed var(--interactive-accent);outline-offset:-2px}
 .semlink-history-folder-body .semlink-history-item-pin{display:none}
 .semlink-confirm-row{display:flex;justify-content:flex-end;gap:.5rem;margin-top:.8rem}
-/* ── Pro usage & cost dashboard ── */
+/* ── Pro usage dashboard（DeepSeek 风格：筛选条 + 大数字统计卡 + SVG 图表）── */
 
-.semlink-usage-modal .modal-content{padding:1.1rem 1.2rem}
-.semlink-usage-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.6rem;margin-bottom:1rem}
-.semlink-usage-card{border:1px solid var(--background-modifier-border);border-radius:10px;padding:.7rem .8rem}
-.semlink-usage-card-value{font-size:1.15rem;font-weight:700;color:var(--text-normal)}
-.semlink-usage-card-label{font-size:.72rem;color:var(--text-muted);margin-top:.15rem}
+/* 容器查询作用域：用量屏渲染在窄侧栏（不在 .semlink-settings-root 内），
+   弹窗语境同理——各自量自身宽度，窄容器降级布局。 */
+.semlink-search-welcome.semlink-usage-screen{container-type:inline-size;container-name:usage}
+.semlink-usage-modal .modal-content{padding:1.1rem 1.2rem;container-type:inline-size;container-name:usage}
+
+/* 筛选条：chip 下拉 + 清除链接 + 导出胶囊 */
+.semlink-usage-toolbar{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;margin-bottom:1rem}
+.semlink-usage-chip{display:inline-flex;align-items:center;gap:.45rem;border:1px solid var(--background-modifier-border);background:var(--background-primary);border-radius:999px;padding:.32rem .7rem;font-size:.78rem;cursor:pointer;color:var(--text-normal)}
+.semlink-usage-chip:hover{background:var(--background-modifier-hover)}
+.semlink-usage-chip-label{color:var(--text-muted)}
+.semlink-usage-chip-divider{width:1px;height:.85rem;background:var(--background-modifier-border)}
+.semlink-usage-chip-value{font-weight:600;max-width:12rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.semlink-usage-chip-icon{display:inline-flex;color:var(--text-muted)}
+.semlink-usage-chip-icon svg{width:12px;height:12px}
+.semlink-usage-clear{background:none;border:none;box-shadow:none;color:var(--text-muted);font-size:.78rem;text-decoration:underline;cursor:pointer;padding:0 .2rem}
+.semlink-usage-clear:hover{color:var(--text-normal)}
+.semlink-usage-export{margin-left:auto;background:var(--text-normal);color:var(--background-primary);border:none;border-radius:999px;padding:.4rem 1.1rem;font-size:.82rem;font-weight:600;cursor:pointer}
+.semlink-usage-export:hover{opacity:.85}
+
+/* 大数字统计卡 */
+.semlink-usage-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-bottom:1rem}
+.semlink-usage-card{background:var(--background-secondary);border-radius:14px;padding:.85rem 1rem;min-width:0}
+.semlink-usage-card-label{font-size:.75rem;color:var(--text-muted)}
+.semlink-usage-card-value{font-size:1.35rem;font-weight:700;color:var(--text-normal);margin-top:.2rem;overflow-wrap:anywhere}
+.semlink-usage-card-unit{font-size:.8rem;font-weight:400;color:var(--text-muted);margin-left:.25rem}
+
+/* 图卡（主图 / 按模型双卡共用）：标题行 + 指标切换 + SVG */
+.semlink-usage-chartcard{background:var(--background-secondary);border-radius:14px;padding:1rem 1.1rem .7rem;margin-bottom:1rem}
+.semlink-usage-chartcard-head{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-bottom:.4rem;flex-wrap:wrap}
+.semlink-usage-chartcard-title{display:flex;align-items:baseline;gap:.45rem;min-width:0}
+.semlink-usage-chartcard-name{font-weight:700;font-size:.92rem;color:var(--text-normal)}
+.semlink-usage-chartcard-value{font-size:.85rem;color:var(--text-muted);overflow-wrap:anywhere}
+.semlink-usage-seg{display:inline-flex;background:var(--background-primary);border-radius:999px;padding:2px}
+.semlink-usage-seg-btn{border:none;background:transparent;border-radius:999px;padding:.22rem .7rem;font-size:.75rem;color:var(--text-muted);cursor:pointer;white-space:nowrap}
+.semlink-usage-seg-btn.is-active{background:var(--background-modifier-hover);color:var(--text-normal);font-weight:600}
+.semlink-usage-chart{width:100%}
+.semlink-usage-svg{display:block;width:100%;height:auto}
+.semlink-usage-gridline{stroke:var(--background-modifier-border);stroke-width:1}
+.semlink-usage-axis{fill:var(--text-muted);font-size:10px}
+
+/* 按模型分区：标题 + 请求面积图 / tokens 堆叠柱双卡 */
+.semlink-usage-section{margin-bottom:1.2rem}
+.semlink-usage-modeltitle{font-weight:700;font-size:.92rem;color:var(--text-normal);margin:0 0 .45rem}
+.semlink-usage-modelgrid{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
+.semlink-usage-modelgrid .semlink-usage-chartcard{margin-bottom:0}
+
+/* 柱 hover tooltip：body 挂载 + fixed，不拦截指针 */
+.semlink-usage-tip{position:fixed;z-index:9999;display:flex;flex-direction:column;gap:.25rem;background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:10px;box-shadow:var(--shadow-s);padding:.5rem .7rem;font-size:.75rem;pointer-events:none;min-width:8rem}
+.semlink-usage-tip-title{font-weight:700;color:var(--text-normal);margin-bottom:.15rem}
+.semlink-usage-tip-row{display:flex;align-items:center;gap:.4rem}
+.semlink-usage-tip-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.semlink-usage-tip-name{color:var(--text-muted);flex:1;margin-right:.8rem;max-width:12rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.semlink-usage-tip-val{color:var(--text-normal);font-weight:600;font-variant-numeric:tabular-nums}
+
+/* Pro 门控：模糊统计区 + 居中升级按钮 */
 .semlink-usage-body{position:relative}
+.semlink-usage-body.semlink-usage-locked > .semlink-usage-chartcard,
 .semlink-usage-body.semlink-usage-locked > .semlink-usage-section{filter:blur(6px);pointer-events:none;user-select:none}
 .semlink-usage-gate{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;text-align:center}
 .semlink-usage-gate-title{font-weight:700;color:var(--text-normal)}
 .semlink-usage-gate-desc{font-size:.8rem;color:var(--text-muted);max-width:22rem}
-.semlink-usage-section{margin-bottom:1rem}
-.semlink-usage-section-title{font-size:.8rem;font-weight:700;color:var(--text-muted);margin-bottom:.45rem}
-.semlink-usage-chart{display:flex;align-items:flex-end;gap:2px;height:72px}
-.semlink-usage-bar{flex:1;background:var(--interactive-accent);opacity:.75;border-radius:2px 2px 0 0;min-height:2px}
-.semlink-usage-bar:hover{opacity:1}
-.semlink-usage-table{width:100%;border-collapse:collapse;font-size:.83rem}
-.semlink-usage-table th{text-align:left;color:var(--text-muted);font-size:.72rem;padding:.3rem .4rem;border-bottom:1px solid var(--background-modifier-border)}
-.semlink-usage-table td{padding:.32rem .4rem;border-bottom:1px solid var(--background-modifier-border)}
-.semlink-usage-table td:first-child{font-family:var(--font-monospace);font-size:.78rem}
-.semlink-usage-cost{font-weight:700}
-.semlink-usage-empty{color:var(--text-muted);font-size:.85rem;padding:.6rem 0}
-.semlink-usage-hint{font-size:.75rem;color:var(--text-muted);margin-top:.5rem}
+
+.semlink-usage-empty{color:var(--text-muted);font-size:.85rem;padding:.8rem 0}
+
+/* 窄容器（侧边栏）：统计卡单列，模型分区双卡转单列 */
+@container usage (max-width: 520px) {
+	.semlink-usage-cards{grid-template-columns:1fr}
+	.semlink-usage-modelgrid{grid-template-columns:1fr}
+	.semlink-usage-card-value{font-size:1.5rem}
+}
 .semlink-model-price-row .setting-item-control input{width:6.5rem}
 .semlink-model-price-row .setting-item-name{font-size:.8rem;color:var(--text-muted)}
 .semlink-model-price-row .setting-item-description{font-size:.72rem}/* 引导完成彩带：覆盖消息区的临时画布，不拦截点击 */
@@ -6016,20 +6262,35 @@ body .semlink-msg-user::selection {
 .semlink-history-folders-head {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 9px;
 	cursor: pointer;
-	border-radius: 6px;
-	/* 覆盖 .semlink-history-group 的小字灰字——组头是正常行：
-	    与文件夹行同字号同色，计数徽章与新建按钮在右侧。 */
-	font-size: .88rem;
-	font-weight: 500;
+	border-radius: 8px;
+	/* 对齐菜单行观感（2026-11-22 用户拍板「项目/对话参照新对话/更多」）：
+	   14px 加粗正常色 + 前导图标 + hover 底色，与上方两行同规格；
+	   padding 12px 使图标左缘与菜单行图标（容器 8 + 行 10）逐像素对齐。 */
+	font-size: 14px;
+	font-weight: var(--font-semibold);
 	color: var(--text-normal);
-	padding: .3rem .45rem;
-	min-height: 34px;
+	/* 左缘对齐内容行（2026-11-25 用户拍板「项目和对话两个字要左侧对齐」）：
+	   前导图标摘除后 12px 横向内衬让组头文字比会话行文字深 5px（实测
+	   18 vs 13）——横内衬收至 .45rem 与 item/folder 同值，文字左缘逐像素
+	   对齐；右侧操作钮（⊕/归档）随内衬右移，组内自洽。 */
+	padding: 8px .45rem;
+	min-height: 36px;
+}
+.semlink-history-folders-head .semlink-history-head-icon {
+	display: inline-flex;
+	flex: none;
+	color: var(--text-muted);
+}
+.semlink-history-folders-head .semlink-history-head-icon svg {
+	width: 16px;
+	height: 16px;
 }
 .semlink-history-folders-head:hover {
 	background: var(--background-modifier-hover);
 }
+.theme-light .semlink-history-folders-head:hover { background: #e1e1e3; }
 .semlink-history-folders-head .semlink-history-folder-chev {
 	display: flex;
 	flex-shrink: 0;
@@ -6172,8 +6433,8 @@ body .semlink-msg-user::selection {
 }
 /* 设置屏豁免 1080 限宽（用户拍板"左右空间充分利用"）：设置布局自带
    菜单列+面板的两栏宽度管理，1080+margin auto 会在宽窗左侧拖出大空白
-   且压住 Model 双列。 */
-.semlink-search-view.semlink-main-tab.semlink-settings-active .semlink-search-header,
+   且压住 Model 双列。2026-11-22：header 移出豁免名单——顶栏跟随主页
+   头部的 1080 居中列（引导/设置页按钮位置像新对话页，用户拍板）。 */
 .semlink-search-view.semlink-main-tab.semlink-settings-active .semlink-search-status,
 .semlink-search-view.semlink-main-tab.semlink-settings-active .semlink-search-messages {
     max-width: none;
@@ -6206,7 +6467,7 @@ body .semlink-msg-user::selection {
    padding-left，致对话区左段被菜单遮挡（DEV-2 同款顺序陷阱，实测
    踩实：computed padding-left 停在 12px）。 */
 .workspace-leaf-content .semlink-search-view.semlink-menu-persistent {
-    padding-left: 300px;
+    padding-left: 280px;
     transition: padding-left 0.25s ease;
 }/* 排队卡片的 Steer（插队优先）按钮 */
 .semlink-queue-steer {
@@ -7098,12 +7359,13 @@ body .semlink-msg-user::selection {
     border-radius: 0;
     margin-bottom: 0;
 }/* 滑块行紧凑排布（用户拍板"数值调到标题的右边，行高缩窄"——RAG 高级
-   选项五条）：两行网格——第一行 标题 | 数值（.slider-value 经 control
-   的 display:contents 提升为网格项），第二行滑杆铺满。窄栏下 Obsidian
-   默认把 setting-item 竖排（数值独占一行）且内衬大，这里一并收掉。 */
+   选项五条）：两行网格——第一行标题，第二行滑杆铺满（2026-11-26 改：
+   control 自身作第二行网格项，弃用 display:contents 提升——社区审查器
+   点名该特性；.slider-value 数值元素已无任何渲染源，配套死规则一并
+   摘除）。窄栏下 Obsidian 默认把 setting-item 竖排且内衬大，收掉。 */
 .smart-vault-settings .semlink-collapse-body .setting-item {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr;
     row-gap: 2px;
     align-items: center;
     padding: 8px 0;
@@ -7111,15 +7373,11 @@ body .semlink-msg-user::selection {
     grid-column: 1;
     grid-row: 1;
 }.smart-vault-settings .semlink-collapse-body .setting-item-control {
-    display: contents;
-}.smart-vault-settings .semlink-collapse-body .slider-value {
-    grid-column: 2;
-    grid-row: 1;
-    justify-self: end;
-}.smart-vault-settings .semlink-collapse-body .setting-item-control .slider,
-.smart-vault-settings .semlink-collapse-body input.slider {
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 2;
+    width: 100%;
+}.smart-vault-settings .semlink-collapse-body .setting-item-control .slider,
+.smart-vault-settings .semlink-collapse-body .setting-item-control input.slider {
     width: 100%;
 }/* 排除路径弹窗：右对齐实时计数（「将排除 {n} 条路径」） */
 .semlink-exclude-count {
@@ -8234,8 +8492,8 @@ body .semlink-msg-user::selection {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
     border: 1px solid var(--background-modifier-border);
     background: var(--background-primary);
@@ -8251,34 +8509,38 @@ body .semlink-msg-user::selection {
     opacity: 1;
     visibility: visible;
     transform: translateX(-50%) translateY(0);
-    /* 创建时自带 .semlink-hidden（display:none !important，0-1-0）；显隐
-       只切 is-shown 不摘基类，这里同为 !important 靠特异性（0-2-0）反压。 */
-    display: flex !important;
+    /* 显隐由 opacity/visibility 承担（2026-11-26 起创建时不再挂
+       .semlink-hidden——本规则原 display:flex !important 为反压工具类
+       而设，随 !important 清零一并摘除）；隐藏态不可交互（visibility）。 */
 }
 .semlink-scroll-bottom-btn:hover {
-    color: var(--interactive-accent);
-    border-color: var(--interactive-accent);
+    /* 悬停轻微变色（2026-11-23 用户拍板）：图标略加深 + 边框微深，
+       不再变紫。 */
+    color: var(--text-normal);
+    border-color: var(--background-modifier-border-hover);
 }
 .semlink-scroll-bottom-btn .semlink-scroll-bottom-icon {
     display: inline-flex;
 }
 .semlink-scroll-bottom-btn svg {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
 }
 
-/* 焦点环/边框全清除：focus ring 满宽贴卡片边缘，视觉上像卡片边框 */
+/* 焦点环/边框全清除：focus ring 满宽贴卡片边缘，视觉上像卡片边框
+   （2026-11-26 弃 !important——本组特异性 0-2-1/0-3-0 已压过 Obsidian
+   的输入框阴影与主题边框规则，真机 focus 实测 computed 三值均 none） */
 .semlink-msg-user-turn .semlink-msg-edit-input,
 .semlink-msg-user-turn .semlink-msg-edit-input:focus,
 .semlink-msg-user-turn .semlink-msg-edit-input:focus-visible {
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
+    border: none;
+    outline: none;
+    box-shadow: none;
 }
 .semlink-msg-user-turn.is-editing .semlink-msg-bubble {
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
+    border: none;
+    outline: none;
+    box-shadow: none;
 }
 
 /* 编辑态：白底上的拖拽选择恢复淡紫高亮（气泡的白色 ::selection
@@ -8350,6 +8612,20 @@ body .semlink-msg-user::selection {
 .semlink-project-chip.is-active {
     color: var(--text-normal);
 }
+/* 已选项目：悬停把文件夹图标换成 ✕（2026-11-25 用户拍板——点击 chip
+   即取消范围回全库，弹层「全部笔记」行随之摘除）。双图标叠放由 :hover
+   切显隐，无 JS 监听；未选项目（无 ✕ 节点）不受影响。 */
+.semlink-project-chip .semlink-project-chip-x {
+    display: none;
+    color: var(--text-muted);
+}
+.semlink-project-chip.is-active:hover .semlink-project-chip-icon {
+    display: none;
+}
+.semlink-project-chip.is-active:hover .semlink-project-chip-x {
+    display: inline-flex;
+    color: var(--text-normal);
+}
 .semlink-project-chip-text {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -8386,8 +8662,9 @@ body .semlink-msg-user::selection {
     background: var(--background-modifier-hover);
 }
 .semlink-project-popup-row.is-active {
+    /* 仅文字色标识（2026-11-25 用户拍板「鼠标不悬停就不要显示灰色」）：
+       常驻灰底摘除，悬停底色归 :hover 规则。 */
     color: var(--text-accent);
-    background: var(--background-modifier-hover);
 }
 .semlink-project-popup-row.is-new {
     color: var(--text-muted);
@@ -8415,31 +8692,199 @@ body .semlink-msg-user::selection {
     width: 13px;
     height: 13px;
 }
-/* 创建/编辑弹窗：文件夹多选列表 */
-.semlink-project-folders {
-    margin-top: 4px;
+/* 创建/编辑弹窗：ZCode 式（2026-11-22 用户拍板）——标签在上、通栏
+   输入、虚线知识范围选择区、无内联新建文件夹、深色主按钮（同导出钮） */
+.semlink-project-modal {
+    width: 540px;
 }
+.semlink-project-modal .modal-content {
+    padding: 20px 24px;
+}
+.semlink-project-modal h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0 0 18px;
+}
+.semlink-project-field {
+    margin-bottom: 18px;
+}
+.semlink-project-field-label,
 .semlink-project-folders-label {
-    font-weight: var(--font-semibold);
-    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-normal);
+    margin-bottom: 8px;
+}
+.semlink-project-name-input {
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    font-size: 14px;
+}
+.semlink-project-name-input:focus {
+    border-color: var(--interactive-accent);
+    outline: none;
+}
+.semlink-project-folders {
+    margin-bottom: 4px;
 }
 .semlink-project-folder-list {
-    max-height: 260px;
+    /* 固定 5 行高（2026-11-23 用户拍板）：行 = 7px×2 内衬 + ~18px 行盒
+       ≈ 32px，5 行 160px + 上下内衬 8px——不足 5 行时面板不收缩。 */
+    height: 168px;
     overflow-y: auto;
+    padding: 4px 6px;
+}
+/* 折叠 chevron（2026-11-23 一版，被下钻面板取代——保留类防残留样式） */
+.semlink-project-folder-chev,
+.semlink-project-folder-children { display: none; }
+/* 面板壳（虚线选择区）：面包屑 + 行列表一体（2026-11-23 用户拍板，
+   参考钉钉选人面板的逐级下钻交互）。 */
+.semlink-project-folder-panel {
+    /* 实线边框（2026-11-23 用户拍板「边框改成实线」）：原虚线。 */
     border: 1px solid var(--background-modifier-border);
     border-radius: 8px;
-    padding: 4px 0;
+    background: var(--background-primary);
+}
+/* 按钮区上方的分割线去掉（2026-11-23 用户拍板）：仅项目弹窗范围。 */
+.semlink-project-modal .semlink-editor-footer {
+    border-top: none;
+    padding-top: 0;
+}
+/* 面包屑：< 返回 + 可点路径段（当前级灰显不可点） */
+.semlink-project-crumb {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 36px;
+    padding: 0 8px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+.semlink-project-crumb:empty {
+    display: none;
+}
+.semlink-project-crumb-back {
+    display: inline-flex;
+    justify-content: center;
+    /* 槽宽 21px = 复选框实际渲染宽（含边框），使路径文字与名称列对齐 */
+    width: 21px;
+    flex: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    margin-right: 0;
+}
+.semlink-project-crumb-back:hover {
+    color: var(--text-normal);
+}
+.semlink-project-crumb-back svg {
+    width: 13px;
+    height: 13px;
+}
+.semlink-project-crumb-path {
+    /* 路径紧跟返回箭头居左（2026-11-23 用户拍板「移动到左侧」） */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.semlink-project-crumb-seg {
+    cursor: pointer;
+    color: var(--text-muted);
+}
+.semlink-project-crumb-seg:not(.is-current):hover {
+    color: var(--text-normal);
+    text-decoration: underline;
+}
+.semlink-project-crumb-seg.is-current {
+    color: var(--text-normal);
+    cursor: default;
+}
+.semlink-project-crumb-sep {
+    color: var(--text-faint);
 }
 .semlink-project-folder-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 3px 8px;
+    padding: 4px 6px;
     cursor: pointer;
     font-size: 13px;
 }
-.semlink-project-folder-row:hover {
+/* 行悬停灰底只盖「复选框+名称」chip（2026-11-23 用户拍板
+   「只高亮这个区域而不是整行」）；悬停「下级」入口时左侧 chip 不
+   跟着高亮（2026-11-23 用户拍板，:has 排除下级悬停态）。 */
+.semlink-project-folder-row:hover:not(.is-down-hover) .semlink-project-folder-main {
     background: var(--background-modifier-hover);
+}
+/* chip：复选框 + 名称（文件夹行）或 < 返回 + 路径（面包屑），共用
+   内衬 + 圆角 + 悬停灰底。 */
+.semlink-project-folder-main,
+.semlink-project-crumb-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    min-width: 0;
+}
+.semlink-project-crumb-main {
+    gap: 8px;
+    /* 左对齐（2026-11-23 用户拍板）：内距 12px 使返回箭头落在下方复选框
+       列（列表 6 + 行 6 + chip 8 = 20px），箭头槽 15px 同复选框宽，
+       gap 8px 使路径文字落在名称列。 */
+    padding-left: 12px;
+}
+.semlink-project-crumb-main:hover {
+    background: var(--background-modifier-hover);
+}
+/* 「全选」居左（2026-11-23 用户拍板）：复选框 + 文字；悬停整块灰底
+   （2026-11-23 追加拍板），内衬成按钮块与「下级」一致。 */
+.semlink-project-selectall {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex: none;
+    /* 复选框与下方文件夹列左对齐（2026-11-23 用户拍板）：crumb 内距 8
+       + chip 左内距 12 = 20px = 列表内距 6 + 行内距 6 + 文件夹 chip 内距 8。 */
+    padding: 3px 8px 3px 12px;
+    border-radius: 6px;
+}
+.semlink-project-selectall:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+.semlink-project-selectall input,
+.semlink-project-selectall-label {
+    cursor: pointer;
+}
+/* 「下级」入口（钉钉式）：network 图标 + 文字；内衬成按钮块，悬停
+   整块灰底（2026-11-23 用户拍板）。 */
+.semlink-project-folder-down {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: 12px;
+    flex: none;
+    /* 居右（2026-11-23 用户拍板）：右侧内衬收窄，文字贴近面板右缘。 */
+    padding: 3px 4px 3px 8px;
+    border-radius: 6px;
+}
+.semlink-project-folder-down:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+.semlink-project-folder-down svg {
+    width: 13px;
+    height: 13px;
 }
 .semlink-project-folder-name {
     overflow: hidden;
@@ -8450,15 +8895,16 @@ body .semlink-msg-user::selection {
     color: var(--text-faint);
     font-size: 12px;
     text-align: center;
-    padding: 14px 0 6px;
-}
-.semlink-project-newfolder-row {
-    display: flex;
-    gap: 6px;
     margin-top: 8px;
 }
-.semlink-project-newfolder-input {
-    flex: 1;
+/* ──── 全局显隐工具类（收尾追加保证文件序取胜，见 5240s 工具类注释）── */
+.semlink-hidden.semlink-hidden {
+    /* 双类 0-2-0 + 文件序末尾：同特异性平局靠本规则靠后取胜（如
+       .semlink-drag-overlay 的 display:flex、action-dock 基础 flex）；
+       2026-11-26 弃 display:none !important（审查器 CSS lint 逐条点名），
+       「hidden 即 hidden」语义由双类特异性 + 文件序共同保障——凡自带
+       0-3-0+ display 规则的元素不得用本工具类隐藏（改专用状态类）。 */
+    display: none;
 }
 
 /* ═══ 4. 审查页自身 ═══ */
@@ -8493,7 +8939,7 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 <body class="rv theme-light">
 <div class="rv-topbar">
 	<strong>Semlink 弹窗样式审查</strong>
-	<span class="rv-gen-note">v2.3.0 · 30 个渲染态 · 生成于 2026-11-22 09:32 · 样式保真：Obsidian 运行时导出 + styles.css 内联</span>
+	<span class="rv-gen-note">v2.4.1 · 30 个渲染态 · 生成于 2026-11-26 03:39 · 样式保真：Obsidian 运行时导出 + styles.css 内联</span>
 	<button id="rv-theme-toggle" onclick="rvToggleTheme()">🌙 深色</button>
 </div>
 <nav class="rv-sidebar">
@@ -8678,7 +9124,7 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 	<div class="rv-stage">
 		<div class="semlink-search-depth-popup semlink-project-popup">
 <div class="semlink-project-popup-row is-active">
-	<span class="semlink-project-popup-name">全部笔记</span>
+	<span class="semlink-project-popup-name">默认研究组</span>
 </div>
 <div class="semlink-project-popup-row">
 	<span class="semlink-project-popup-name">知识库精选</span>
@@ -9095,12 +9541,6 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 				<div class="modal-header-button mod-raised clickable-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></div>
 				<div class="modal-content">
 <h2>用量与成本</h2>
-<div class="semlink-usage-cards">
-	<div class="semlink-usage-card"><div class="semlink-usage-card-value">$4.21</div><div class="semlink-usage-card-label">本月费用</div></div>
-	<div class="semlink-usage-card"><div class="semlink-usage-card-value">$18.60</div><div class="semlink-usage-card-label">累计费用</div></div>
-	<div class="semlink-usage-card"><div class="semlink-usage-card-value">612</div><div class="semlink-usage-card-label">本月请求</div></div>
-	<div class="semlink-usage-card"><div class="semlink-usage-card-value">2.4M → 890.5k</div><div class="semlink-usage-card-label">累计 tokens（入 → 出）</div></div>
-</div>
 <div class="semlink-usage-body semlink-usage-locked">
 	<div class="semlink-usage-gate">
 		<div class="semlink-usage-gate-title">用量看板是 Pro 功能</div>
@@ -9108,18 +9548,30 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 		<button class="mod-cta">升级 Pro</button>
 	</div>
 	<div class="semlink-usage-section">
-		<div class="semlink-usage-section-title">近 30 天</div>
+		<div class="semlink-usage-section-title">时间维度</div>
+		<div class="semlink-usage-chips">
+			<span class="semlink-usage-chip is-active">近 7 天</span>
+			<span class="semlink-usage-chip">近 30 天</span>
+			<span class="semlink-usage-chip">本月</span>
+			<span class="semlink-usage-chip">全部</span>
+		</div>
+	</div>
+	<div class="semlink-usage-section">
+		<div class="semlink-usage-section-title">输入 · 输出</div>
 		<div class="semlink-usage-chart"><div class="semlink-usage-bar" style="height:62%"></div><div class="semlink-usage-bar" style="height:75%"></div><div class="semlink-usage-bar" style="height:80%"></div><div class="semlink-usage-bar" style="height:55%"></div><div class="semlink-usage-bar" style="height:92%"></div><div class="semlink-usage-bar" style="height:32%"></div><div class="semlink-usage-bar" style="height:96%"></div><div class="semlink-usage-bar" style="height:29%"></div><div class="semlink-usage-bar" style="height:92%"></div><div class="semlink-usage-bar" style="height:53%"></div><div class="semlink-usage-bar" style="height:81%"></div><div class="semlink-usage-bar" style="height:73%"></div><div class="semlink-usage-bar" style="height:64%"></div><div class="semlink-usage-bar" style="height:87%"></div><div class="semlink-usage-bar" style="height:42%"></div><div class="semlink-usage-bar" style="height:95%"></div><div class="semlink-usage-bar" style="height:18%"></div><div class="semlink-usage-bar" style="height:95%"></div><div class="semlink-usage-bar" style="height:43%"></div><div class="semlink-usage-bar" style="height:87%"></div><div class="semlink-usage-bar" style="height:65%"></div><div class="semlink-usage-bar" style="height:72%"></div><div class="semlink-usage-bar" style="height:82%"></div><div class="semlink-usage-bar" style="height:52%"></div><div class="semlink-usage-bar" style="height:93%"></div><div class="semlink-usage-bar" style="height:28%"></div><div class="semlink-usage-bar" style="height:96%"></div><div class="semlink-usage-bar" style="height:32%"></div><div class="semlink-usage-bar" style="height:91%"></div><div class="semlink-usage-bar" style="height:56%"></div></div>
 	</div>
 	<div class="semlink-usage-section">
 		<div class="semlink-usage-section-title">按模型</div>
+		<div class="semlink-usage-chart"><div class="semlink-usage-bar" style="height:56%"></div><div class="semlink-usage-bar" style="height:91%"></div><div class="semlink-usage-bar" style="height:32%"></div><div class="semlink-usage-bar" style="height:96%"></div><div class="semlink-usage-bar" style="height:28%"></div><div class="semlink-usage-bar" style="height:93%"></div><div class="semlink-usage-bar" style="height:52%"></div><div class="semlink-usage-bar" style="height:82%"></div><div class="semlink-usage-bar" style="height:72%"></div><div class="semlink-usage-bar" style="height:65%"></div><div class="semlink-usage-bar" style="height:87%"></div><div class="semlink-usage-bar" style="height:43%"></div><div class="semlink-usage-bar" style="height:95%"></div><div class="semlink-usage-bar" style="height:18%"></div><div class="semlink-usage-bar" style="height:95%"></div><div class="semlink-usage-bar" style="height:42%"></div><div class="semlink-usage-bar" style="height:87%"></div><div class="semlink-usage-bar" style="height:64%"></div><div class="semlink-usage-bar" style="height:73%"></div><div class="semlink-usage-bar" style="height:81%"></div><div class="semlink-usage-bar" style="height:53%"></div><div class="semlink-usage-bar" style="height:92%"></div><div class="semlink-usage-bar" style="height:29%"></div><div class="semlink-usage-bar" style="height:96%"></div><div class="semlink-usage-bar" style="height:32%"></div><div class="semlink-usage-bar" style="height:92%"></div><div class="semlink-usage-bar" style="height:55%"></div><div class="semlink-usage-bar" style="height:80%"></div><div class="semlink-usage-bar" style="height:75%"></div><div class="semlink-usage-bar" style="height:62%"></div></div>
+	</div>
+	<div class="semlink-usage-section">
+		<div class="semlink-usage-section-title">API 请求次数</div>
 		<table class="semlink-usage-table">
-			<tr><th>模型</th><th>请求</th><th>输入 tokens</th><th>输出 tokens</th><th>费用</th></tr>
-			<tr><td>deepseek-chat</td><td>214</td><td>980.2k</td><td>312.4k</td><td class="semlink-usage-cost">$1.42</td></tr>
-			<tr><td>deepseek-reasoner</td><td>96</td><td>540.9k</td><td>187.1k</td><td class="semlink-usage-cost">$1.08</td></tr>
-			<tr><td>qwen-max</td><td>58</td><td>212.3k</td><td>88.7k</td><td class="semlink-usage-cost">$0.94</td></tr>
+			<tr><th>模型</th><th>输入 tokens</th><th>输出 tokens</th></tr>
+			<tr><td>deepseek-chat</td><td>980.2k</td><td>312.4k</td></tr>
+			<tr><td>deepseek-reasoner</td><td>540.9k</td><td>187.1k</td></tr>
 		</table>
-		<div class="semlink-usage-hint">在 设置 → 模型 里给模型填写价格即可计算费用；未填价格的模型只统计 tokens</div>
+		<div class="semlink-usage-hint">还没有用量记录——发起一次对话后这里会出现统计</div>
 	</div>
 </div></div>
 			</div>
@@ -9148,12 +9600,6 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 <div class="semlink-search-welcome semlink-usage-screen">
 	
 <h2>用量与成本</h2>
-<div class="semlink-usage-cards">
-	<div class="semlink-usage-card"><div class="semlink-usage-card-value">$4.21</div><div class="semlink-usage-card-label">本月费用</div></div>
-	<div class="semlink-usage-card"><div class="semlink-usage-card-value">$18.60</div><div class="semlink-usage-card-label">累计费用</div></div>
-	<div class="semlink-usage-card"><div class="semlink-usage-card-value">612</div><div class="semlink-usage-card-label">本月请求</div></div>
-	<div class="semlink-usage-card"><div class="semlink-usage-card-value">2.4M → 890.5k</div><div class="semlink-usage-card-label">累计 tokens（入 → 出）</div></div>
-</div>
 <div class="semlink-usage-body semlink-usage-locked">
 	<div class="semlink-usage-gate">
 		<div class="semlink-usage-gate-title">用量看板是 Pro 功能</div>
@@ -9161,18 +9607,30 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 		<button class="mod-cta">升级 Pro</button>
 	</div>
 	<div class="semlink-usage-section">
-		<div class="semlink-usage-section-title">近 30 天</div>
+		<div class="semlink-usage-section-title">时间维度</div>
+		<div class="semlink-usage-chips">
+			<span class="semlink-usage-chip is-active">近 7 天</span>
+			<span class="semlink-usage-chip">近 30 天</span>
+			<span class="semlink-usage-chip">本月</span>
+			<span class="semlink-usage-chip">全部</span>
+		</div>
+	</div>
+	<div class="semlink-usage-section">
+		<div class="semlink-usage-section-title">输入 · 输出</div>
 		<div class="semlink-usage-chart"><div class="semlink-usage-bar" style="height:62%"></div><div class="semlink-usage-bar" style="height:75%"></div><div class="semlink-usage-bar" style="height:80%"></div><div class="semlink-usage-bar" style="height:55%"></div><div class="semlink-usage-bar" style="height:92%"></div><div class="semlink-usage-bar" style="height:32%"></div><div class="semlink-usage-bar" style="height:96%"></div><div class="semlink-usage-bar" style="height:29%"></div><div class="semlink-usage-bar" style="height:92%"></div><div class="semlink-usage-bar" style="height:53%"></div><div class="semlink-usage-bar" style="height:81%"></div><div class="semlink-usage-bar" style="height:73%"></div><div class="semlink-usage-bar" style="height:64%"></div><div class="semlink-usage-bar" style="height:87%"></div><div class="semlink-usage-bar" style="height:42%"></div><div class="semlink-usage-bar" style="height:95%"></div><div class="semlink-usage-bar" style="height:18%"></div><div class="semlink-usage-bar" style="height:95%"></div><div class="semlink-usage-bar" style="height:43%"></div><div class="semlink-usage-bar" style="height:87%"></div><div class="semlink-usage-bar" style="height:65%"></div><div class="semlink-usage-bar" style="height:72%"></div><div class="semlink-usage-bar" style="height:82%"></div><div class="semlink-usage-bar" style="height:52%"></div><div class="semlink-usage-bar" style="height:93%"></div><div class="semlink-usage-bar" style="height:28%"></div><div class="semlink-usage-bar" style="height:96%"></div><div class="semlink-usage-bar" style="height:32%"></div><div class="semlink-usage-bar" style="height:91%"></div><div class="semlink-usage-bar" style="height:56%"></div></div>
 	</div>
 	<div class="semlink-usage-section">
 		<div class="semlink-usage-section-title">按模型</div>
+		<div class="semlink-usage-chart"><div class="semlink-usage-bar" style="height:56%"></div><div class="semlink-usage-bar" style="height:91%"></div><div class="semlink-usage-bar" style="height:32%"></div><div class="semlink-usage-bar" style="height:96%"></div><div class="semlink-usage-bar" style="height:28%"></div><div class="semlink-usage-bar" style="height:93%"></div><div class="semlink-usage-bar" style="height:52%"></div><div class="semlink-usage-bar" style="height:82%"></div><div class="semlink-usage-bar" style="height:72%"></div><div class="semlink-usage-bar" style="height:65%"></div><div class="semlink-usage-bar" style="height:87%"></div><div class="semlink-usage-bar" style="height:43%"></div><div class="semlink-usage-bar" style="height:95%"></div><div class="semlink-usage-bar" style="height:18%"></div><div class="semlink-usage-bar" style="height:95%"></div><div class="semlink-usage-bar" style="height:42%"></div><div class="semlink-usage-bar" style="height:87%"></div><div class="semlink-usage-bar" style="height:64%"></div><div class="semlink-usage-bar" style="height:73%"></div><div class="semlink-usage-bar" style="height:81%"></div><div class="semlink-usage-bar" style="height:53%"></div><div class="semlink-usage-bar" style="height:92%"></div><div class="semlink-usage-bar" style="height:29%"></div><div class="semlink-usage-bar" style="height:96%"></div><div class="semlink-usage-bar" style="height:32%"></div><div class="semlink-usage-bar" style="height:92%"></div><div class="semlink-usage-bar" style="height:55%"></div><div class="semlink-usage-bar" style="height:80%"></div><div class="semlink-usage-bar" style="height:75%"></div><div class="semlink-usage-bar" style="height:62%"></div></div>
+	</div>
+	<div class="semlink-usage-section">
+		<div class="semlink-usage-section-title">API 请求次数</div>
 		<table class="semlink-usage-table">
-			<tr><th>模型</th><th>请求</th><th>输入 tokens</th><th>输出 tokens</th><th>费用</th></tr>
-			<tr><td>deepseek-chat</td><td>214</td><td>980.2k</td><td>312.4k</td><td class="semlink-usage-cost">$1.42</td></tr>
-			<tr><td>deepseek-reasoner</td><td>96</td><td>540.9k</td><td>187.1k</td><td class="semlink-usage-cost">$1.08</td></tr>
-			<tr><td>qwen-max</td><td>58</td><td>212.3k</td><td>88.7k</td><td class="semlink-usage-cost">$0.94</td></tr>
+			<tr><th>模型</th><th>输入 tokens</th><th>输出 tokens</th></tr>
+			<tr><td>deepseek-chat</td><td>980.2k</td><td>312.4k</td></tr>
+			<tr><td>deepseek-reasoner</td><td>540.9k</td><td>187.1k</td></tr>
 		</table>
-		<div class="semlink-usage-hint">在 设置 → 模型 里给模型填写价格即可计算费用；未填价格的模型只统计 tokens</div>
+		<div class="semlink-usage-hint">还没有用量记录——发起一次对话后这里会出现统计</div>
 	</div>
 </div>
 </div>
@@ -9235,7 +9693,7 @@ body.rv { background: var(--background-primary); color: var(--text-normal); font
 	<div class="semlink-license-about-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" class="svg-icon" viewBox="0 0 100 100"><g transform="scale(0.09765625)"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></g></svg></div>
 	<div class="semlink-license-about-name">Semlink</div>
 	<div class="semlink-license-about-tagline">让你的 Obsidian 知识库思考、协作、行动。</div>
-	<div class="semlink-license-about-version">版本 2.3.0</div>
+	<div class="semlink-license-about-version">版本 2.4.1</div>
 	<div class="semlink-license-about-rows">
 		<div class="semlink-license-about-row"><span class="semlink-license-about-rowlabel">状态</span><span class="semlink-license-about-rowvalue is-green">已激活</span></div>
 		<div class="semlink-license-about-row"><span class="semlink-license-about-rowlabel">方案</span><span class="semlink-license-about-rowvalue">永久授权</span></div>
@@ -9435,7 +9893,7 @@ attachments/private/</textarea>
 				<div class="modal-content">
 <div class="setting-item"><div class="setting-item-info"><div class="setting-item-name">项目名称</div></div><div class="setting-item-control"><input type="text" placeholder="新项目" value="知识库精选"></div></div>
 <div class="semlink-project-folders">
-	<div class="semlink-project-folders-label">知识范围（文件夹）</div>
+	<div class="semlink-project-folders-label">知识范围</div>
 	<div class="semlink-project-folder-list">
 		
 		<div class="semlink-project-folder-row" style="padding-left:8px">

@@ -393,6 +393,9 @@ export class SemanticSearchView extends ItemView {
 	} | null = null;
 	/** Floating scroll-to-bottom button (footer wrapper top edge). */
 	private scrollBottomBtn: HTMLElement | null = null;
+	/** 输入卡（主页网格借居：updateCompactHeader 随主页态在 contentEl 与
+	 *  welcome-home 间搬移，见 2026-11-26 display:contents 清除改造）。 */
+	private footerEl: HTMLElement | null = null;
 	/** 回答操作双模式（2026-11-22 用户拍板）：内联行跟随各自气泡（完全
 	 *  展示时），长回答未完全展示 → dock 在消息区与输入卡之间兜底，镜像
 	 *  当前正在读的那个回答的操作。由 syncActionDock 随滚动切换。 */
@@ -597,6 +600,7 @@ export class SemanticSearchView extends ItemView {
 
 		// ── Input footer (bottom, fixed) ──
 		const footer = contentEl.createDiv({ cls: "semlink-search-footer" });
+		this.footerEl = footer;
 
 		// 模型选择器（原独立工具栏行）：现在直接挂到输入卡底部行左端——
 		// 工具栏整行删除，把一行高度还给内容。创建于卡片之后移动过去。
@@ -718,7 +722,7 @@ export class SemanticSearchView extends ItemView {
 		// 回到底部浮动钮（Flova 式 ↓）：长对话上滚离开底部时出现，骑跨
 		// wrapper 上缘居中；点击平滑回底。显隐由 updateCompactHeader 驱动。
 		const scrollBottomBtn = wrapper.createDiv({
-			cls: "semlink-scroll-bottom-btn semlink-hidden",
+			cls: "semlink-scroll-bottom-btn",
 			attr: { "aria-label": t("scrollBottom") },
 		});
 		setIcon(scrollBottomBtn.createSpan({ cls: "semlink-scroll-bottom-icon" }), "arrow-down");
@@ -3754,6 +3758,14 @@ export class SemanticSearchView extends ItemView {
 		}
 
 		this.updateHomeIconVisibility();
+		// 主页网格借居 footer（2026-11-26 display:contents 清除改造）：网格
+		// 容器下沉到 welcome-home 后，输入卡作为 grid area input 参与——
+		// 归位由 updateCompactHeader 随主页态统一处理（本行先借居，随后
+		// updateCompactHeader 的同一谓词逻辑会确认/保持）。
+		const homeGrid = this.messagesEl.querySelector(".semlink-search-welcome-home");
+		if (homeGrid && this.footerEl && this.footerEl.parentElement !== homeGrid) {
+			homeGrid.appendChild(this.footerEl);
+		}
 		// Welcome screen: subtitle/scroll-button states re-evaluated.
 		this.updateCompactHeader();
 	}
@@ -5487,6 +5499,18 @@ export class SemanticSearchView extends ItemView {
 			"semlink-welcome-center",
 			!!this.messagesEl.querySelector(".semlink-search-welcome-home"),
 		);
+		// 输入卡借居/归位（2026-11-26 display:contents 清除改造，与上方谓词
+		// 同源）：主页态 footer 借居 welcome-home 参与 grid（area input）；
+		// 离开主页（会话/设置/引导/用量各切换点都会经过本方法）回到
+		// contentEl 原槽位（action-dock 之前）。幂等：仅在父级不符时搬移。
+		const homeGrid = this.messagesEl.querySelector(".semlink-search-welcome-home");
+		if (this.footerEl) {
+			if (homeGrid) {
+				if (this.footerEl.parentElement !== homeGrid) homeGrid.appendChild(this.footerEl);
+			} else if (this.footerEl.parentElement !== this.contentEl) {
+				this.contentEl.insertBefore(this.footerEl, this.actionDockEl);
+			}
+		}
 		// 头部标题（2026-11-23 用户拍板「对话内容页的标题固定显示为当前
 		// 对话的第一个提问」）：会话中品牌位固定显示对话标题，主页恢复
 		// 品牌名；长标题由 brand 自带 ellipsis 截断。
