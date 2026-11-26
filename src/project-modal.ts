@@ -179,6 +179,12 @@ export class ProjectModal extends Modal {
 				down = row.createSpan({ cls: "semlink-project-folder-down" });
 				setIcon(down, "network");
 				down.createSpan({ text: t("projectDrillDown") });
+				// 悬停「下级」时行级类接管排除态（2026-11-23 拍板：下级悬停
+				// 不高亮左侧 chip）——原 :has(.…-down:hover) 换成类切换
+				// （社区审查 :has 性能警告）；mouseenter/leave 不随内部子元素
+				// 移动重触发。
+				down.addEventListener("mouseenter", () => row.addClass("is-down-hover"));
+				down.addEventListener("mouseleave", () => row.removeClass("is-down-hover"));
 				down.addEventListener("click", (e) => {
 					e.stopPropagation();
 					this.at = path;

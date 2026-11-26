@@ -4843,9 +4843,11 @@ export class SemanticSearchView extends ItemView {
 		// 当前打开的会话行带选中色（2026-11-19 用户拍板）：抽屉里一眼可辨
 		// 「正在看哪条」；切换会话后高亮随 render 跟随。
 		const item = container.createDiv({
-			cls: "semlink-history-item" + (session.id === this.currentSessionId ? " is-current" : ""),
+			cls: "semlink-history-item" + (session.id === this.currentSessionId ? " is-current" : "")
+				+ (this.unreadDone.has(session.id) ? " is-unread" : ""),
 		});
 		// 后台完成未读点：左槽亮品牌色圆点（此行隐藏 pin 避免重叠），点开即消。
+		// 行级 is-unread 类与圆点同源同刻（替代 :has 圆点选择器，审查性能警告）。
 		if (this.unreadDone.has(session.id)) {
 			item.createDiv({ cls: "semlink-history-item-unread" });
 		}

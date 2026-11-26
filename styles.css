@@ -2715,11 +2715,15 @@
    DOM 不动、会话态零影响。开关由 updateCompactHeader 随主页标记类
    （.semlink-search-welcome-home）同步。
 
-   :has() 守卫（2026-11-22 二改）：每条网格规则都要求主页标记类真实
-   在 DOM 里——JS 同步点漏掉的后台运行会话恢复等路径，标记一消失网格
-   自动失效，会话/设置/用量/引导永不残留网格布局（设置屏截断、会话
-   气泡顶置两个回归的治本修复）。 */
-.semlink-welcome-center:has(.semlink-search-welcome-home) {
+   门控历史：曾用 :has() 守卫（2026-11-22 二改）让网格跟随标记类真实
+   存在、防 JS 同步点漏掉残留网格布局；2026-11-26 摘除（社区审查性能
+   警告）——updateCompactHeader 以同一谓词 toggle 本类，类存在 ⟺ 标记
+   存在，且它是全部状态切换点的唯一同步点（设置屏截断、会话气泡顶置
+   两个回归的治本机制保留在同一谓词上）。 */
+/* 主页网格门控不用 :has（社区审查性能警告）：.semlink-welcome-center 类
+   本身就由 updateCompactHeader 以同一谓词（欢迎区含 welcome-home 元素）
+   toggle——类存在 ⟺ :has 成立，直接以类为条件即可。 */
+.semlink-welcome-center {
     display: grid;
     /* 夹行（2026-11-23 用户拍板「欢迎语和输入框参照引导页调整」）：
        顶夹行 38px 同引导页 emoji 起线；hero→输入间距与底部余量按
@@ -2755,15 +2759,15 @@
         "sugs"
         "gap2";
 }
-.semlink-welcome-center:has(.semlink-search-welcome-home) > .semlink-search-header {
+.semlink-welcome-center > .semlink-search-header {
     grid-area: hd;
     /* 贴行顶（2026-11-25：hd 行固定 37px 配套）——不被行内剩余空间拉伸。 */
     align-self: start;
 }
-.semlink-welcome-center:has(.semlink-search-welcome-home) > .semlink-search-status { display: none; }
-.semlink-welcome-center:has(.semlink-search-welcome-home) > .semlink-search-messages { display: contents; }
+.semlink-welcome-center > .semlink-search-status { display: none; }
+.semlink-welcome-center > .semlink-search-messages { display: contents; }
 .semlink-welcome-center .semlink-search-welcome-home { display: contents; }
-.semlink-welcome-center:has(.semlink-search-welcome-home) .semlink-search-welcome-hero {
+.semlink-welcome-center .semlink-search-welcome-hero {
     grid-area: hero;
     display: flex;
     flex-direction: column;
@@ -2773,13 +2777,13 @@
     padding: 0 20px;
     animation: semlink-welcome-fade 0.3s ease;
 }
-.semlink-welcome-center:has(.semlink-search-welcome-home) > .semlink-search-footer {
+.semlink-welcome-center > .semlink-search-footer {
     grid-area: input;
     /* 上松下紧的留白已由 gapInput 弹性间隙行承担（2026-11-25「展开顶出
        顶部内容」修复）——input 行改 auto 随 footer 内容长，行内无剩余
        空间，原 align-self:end 失效摘除。 */
 }
-.semlink-welcome-center:has(.semlink-search-welcome-home) .semlink-search-welcome-sugs { grid-area: sugs; }/* The greeting emoji above the text (no background, no animation). */
+.semlink-welcome-center .semlink-search-welcome-sugs { grid-area: sugs; }/* The greeting emoji above the text (no background, no animation). */
 .semlink-search-welcome-emoji {
     /* 与引导 hub 的 emoji 同盒模型（普通 div + text-align 居中，44px 字号
        × 1.2 行盒）——flex 盒恰好 44px，会吃掉 emoji→问候语之间与引导页
@@ -4759,7 +4763,6 @@ body .semlink-msg-user::selection {
     /* 左侧竖线随块整体缩进到标题文字列（27px）——线与「思考/持续了」
        的文字起点同一条线；JSON 文本在线内右侧 8px 起排（引用块样式）。 */
     margin: 0 0 0 27px;
-    padding: 5px 8px 5px 6px;
     padding: 5px 8px 5px 10px;
     /* Left rule instead of a background block: request/response content
        reads as an indented continuation of the tool row, not a card. */
@@ -5173,7 +5176,7 @@ body .semlink-msg-user::selection {
 .semlink-search-action-dock.semlink-hidden { display: none; }
 .semlink-search-view.semlink-settings-active .semlink-search-action-dock,
 .semlink-search-view.semlink-guide-active .semlink-search-action-dock { display: none; }
-.semlink-welcome-center:has(.semlink-search-welcome-home) > .semlink-search-action-dock { display: none; }
+.semlink-welcome-center > .semlink-search-action-dock { display: none; }
 .semlink-search-action-dock-actions {
     display: flex;
     align-items: center;
@@ -5387,8 +5390,8 @@ body .semlink-msg-user::selection {
 /* 后台完成未读点：行首品牌色圆点（ZCode「刚完成」语义），点开即消；
    未读行文字让位（圆点占左槽），hover 也不出 pin——先看答案再钉。 */
 .semlink-history-item-unread{position:absolute;left:5px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--interactive-accent);flex:none}
-.semlink-history-item:has(.semlink-history-item-unread) .semlink-history-item-pin{display:none}
-.semlink-history-item:has(.semlink-history-item-unread){padding-left:24px}
+.semlink-history-item.is-unread .semlink-history-item-pin{display:none}
+.semlink-history-item.is-unread{padding-left:24px}
 .semlink-history-item-pin.clickable-icon{background:transparent;box-shadow:none}
 .semlink-history-item-pin.clickable-icon:hover{background:transparent;box-shadow:none}
 .semlink-history-item-pin.clickable-icon:hover{color:var(--text-normal)}
@@ -8354,7 +8357,7 @@ body .semlink-msg-user::selection {
 /* 行悬停灰底只盖「复选框+名称」chip（2026-11-23 用户拍板
    「只高亮这个区域而不是整行」）；悬停「下级」入口时左侧 chip 不
    跟着高亮（2026-11-23 用户拍板，:has 排除下级悬停态）。 */
-.semlink-project-folder-row:hover:not(:has(.semlink-project-folder-down:hover)) .semlink-project-folder-main {
+.semlink-project-folder-row:hover:not(.is-down-hover) .semlink-project-folder-main {
     background: var(--background-modifier-hover);
 }
 /* chip：复选框 + 名称（文件夹行）或 < 返回 + 路径（面包屑），共用
