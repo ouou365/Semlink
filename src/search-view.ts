@@ -912,6 +912,12 @@ export class SemanticSearchView extends ItemView {
 			this.refreshMainTabUI();
 			this.adoptLeafWindow();
 		}));
+		// 冷启动尾部补一次头部/布局同步（2026-11-28 用户报「主页输入卡沉底」）：
+		// onOpen 里 renderWelcome（565 行附近）先于 footer 创建（602 行附近）
+		// 执行——主页网格的 footer 借居在 welcome 渲染时 this.footerEl 还是
+		// null，冷启动直落主页时没有任何后续 updateCompactHeader 调用，
+		// 输入卡滞留在 contentEl 底部。此刻全部元素已建齐，幂等补同步。
+		this.updateCompactHeader();
 	}
 
 	/** 视图记录的所在文档（adoptLeafWindow 用它判断整叶迁移）。 */
