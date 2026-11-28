@@ -4634,41 +4634,63 @@ export class SemanticSearchView extends ItemView {
 						setIcon(icon, pCollapsed ? "folder-closed" : "folder-open");
 						row.createSpan({ cls: "semlink-history-folder-name", text: p.name });
 						const pacts = row.createSpan({ cls: "semlink-history-folder-acts" });
-						const edit = pacts.createSpan({
+						// 行操作组（2026-11-28 用户拍板「项目行右侧 = 新建对话 +
+						// 更多」，编辑/删除收进更多菜单）：新建对话 = chip 切到
+						// 该项目 + 开新会话（首条消息即落此项目）。
+						const newChatBtn = pacts.createSpan({
 							cls: "semlink-history-folder-act",
-							attr: { "aria-label": t("projectEditTitle") },
+							attr: { "aria-label": t("searchNewChat") },
 						});
-						setIcon(edit, "pencil");
-						edit.addEventListener("click", (e) => {
+						setIcon(newChatBtn, "message-square-plus");
+						newChatBtn.addEventListener("click", (e) => {
 							e.stopPropagation();
-							this.openProjectModal(p);
+							this.switchProject(p);
+							this.closeHistoryDrawer(backdrop, drawer);
+							// 会话中 switchProject 已自管新开（生成中走确认框）——
+							// 此处只在主页态补一次新会话，避免双重重置。
+							if (this.currentMessages.length > 0 || this.isGenerating) return;
+							this.newChatFromUi();
 						});
-						const del = pacts.createSpan({
+						const more = pacts.createSpan({
 							cls: "semlink-history-folder-act",
-							attr: { "aria-label": t("projectDeleteTitle") },
+							attr: { "aria-label": t("historyMore") },
 						});
-						setIcon(del, "trash-2");
-						del.addEventListener("click", (e) => {
+						setIcon(more, "ellipsis");
+						more.addEventListener("click", (e) => {
 							e.stopPropagation();
-							new ConfirmModal(this.app, t("projectDeleteTitle"), t("projectDeleteBody"), () => {
-								const plist = this.plugin.settings.projects;
-								const at = plist.findIndex((x) => x.id === p.id);
-								if (at >= 0) plist.splice(at, 1);
-								void this.plugin.saveSettings();
-								// 引用它的会话全部解绑 → 回时间流；当前范围命中
-								// 则 chip 回全库（不强制打断当前会话）。
-								for (const s of this.history.list()) {
-									if (s.projectId === p.id) {
-										this.history.updateSession(s.id, { projectId: "" });
-									}
-								}
-								void this.history.save();
-								if (this.activeProject?.id === p.id) {
-									this.activeProject = null;
-									this.renderProjectChip();
-								}
-								render();
-							}).open();
+							const menu = new Menu();
+							// 官网同款 DOM 菜单形态（与翻译菜单同口径，见 2440 注释；
+							// macOS 原生 popup 查不到、E2E 不可测）
+							menu.setUseNativeMenu(false);
+							menu.addItem((item) => {
+								item.setTitle(t("projectEditTitle")).setIcon("pencil").onClick(() => {
+									this.openProjectModal(p);
+								});
+							});
+							menu.addItem((item) => {
+								item.setTitle(t("projectDeleteTitle")).setIcon("trash-2").onClick(() => {
+									new ConfirmModal(this.app, t("projectDeleteTitle"), t("projectDeleteBody"), () => {
+										const plist = this.plugin.settings.projects;
+										const at = plist.findIndex((x) => x.id === p.id);
+										if (at >= 0) plist.splice(at, 1);
+										void this.plugin.saveSettings();
+										// 引用它的会话全部解绑 → 回时间流；当前范围命中
+										// 则 chip 回全库（不强制打断当前会话）。
+										for (const s of this.history.list()) {
+											if (s.projectId === p.id) {
+												this.history.updateSession(s.id, { projectId: "" });
+											}
+										}
+										void this.history.save();
+										if (this.activeProject?.id === p.id) {
+											this.activeProject = null;
+											this.renderProjectChip();
+										}
+										render();
+									}).open();
+								});
+							});
+							menu.showAtMouseEvent(e);
 						});
 						// 行点击=折叠/展开（归档容器语义；范围切换在输入卡 chip）
 						row.addEventListener("click", () => {
